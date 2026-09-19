@@ -5,6 +5,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const recordStatus = document.getElementById('recording-status');
     const toggleDescSub = document.getElementById('toggle-desc-sub');
 
+    const linkOpenSidepanel = document.getElementById('link-open-sidepanel');
+    const scopeWarningBox = document.getElementById('scope-warning-box');
+    const scopeWarningText = document.getElementById('scope-warning-text');
+    const btnScopeWarningAction = document.getElementById('btn-scope-warning-action');
+
     const settingsToggle = document.getElementById('settings-toggle');
     const settingsContent = document.getElementById('settings-content');
 
@@ -22,13 +27,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const endpointsList = document.getElementById('endpoints-list');
     const lblEndpointCount = document.getElementById('lbl-endpoint-count');
     const btnClearEndpoints = document.getElementById('btn-clear-endpoints');
+    const btnImportHar = document.getElementById('btn-import-har');
+    const inputImportHar = document.getElementById('input-import-har');
+
+    const inputEndpointSearch = document.getElementById('input-endpoint-search');
+    const chkSelectAll = document.getElementById('chk-select-all');
+    const lblSelectedCount = document.getElementById('lbl-selected-count');
 
     const btnSyncSwazz = document.getElementById('btn-sync-swazz');
+    const btnExportHar = document.getElementById('btn-export-har');
     const syncStatus = document.getElementById('sync-status');
     const inputNewProjectName = document.getElementById('input-new-project-name');
     const btnCreateProject = document.getElementById('btn-create-project');
     const lblCreateProjectError = document.getElementById('lbl-create-project-error');
     const btnCrawlTab = document.getElementById('btn-crawl-tab');
+    const tabCaptured = document.getElementById('tab-captured');
+    const tabIgnored = document.getElementById('tab-ignored');
+    const capturedHeader = document.getElementById('captured-header');
+    const searchBar = document.querySelector('.endpoints-search-bar');
+    const listContainer = document.querySelector('.endpoints-list-container');
+    const ignoredView = document.getElementById('ignored-view');
+    const ignoredList = document.getElementById('ignored-list');
+    const ignoredEmptyState = document.getElementById('ignored-empty-state');
+    const inputIgnoredSearch = document.getElementById('input-ignored-search');
+    const btnAddAllIgnored = document.getElementById('btn-add-all-ignored');
+    const btnClearIgnored = document.getElementById('btn-clear-ignored');
+    const lblIgnoredCountTab = document.getElementById('lbl-ignored-count-tab');
+    const lblEndpointCountTab = document.getElementById('lbl-endpoint-count-tab');
     const crawlStatusMsg = document.getElementById('crawl-status-msg');
 
     let isRecording = false;
@@ -38,6 +63,58 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeSwazzUrl = "http://localhost:5173";
     let activeProjectId = null;
     let projectsList = [];
+    let droppedOutOfScope = 0;
+    let droppedNoScope = 0;
+    let lastDroppedHost = "";
+    let droppedHosts = {};
+    let ignoredSearchQuery = "";
+    let activeView = "captured";
+
+    const selectedKeys = new Set();
+    const unselectedKeys = new Set();
+    const expandedKeys = new Set();
+    let searchQuery = "";
+
+    // popup.html and sidepanel.html are the same document, so work out which
+    // surface we are on and show the control that belongs to it. Without this the
+    // side panel had no way to close itself.
+    const isSidePanel = /sidepanel\.html$/.test(window.location.pathname);
+    const btnCloseSidepanel = document.getElementById('btn-close-sidepanel');
+
+    if (isSidePanel) {
+        if (linkOpenSidepanel) linkOpenSidepanel.classList.add('hidden');
+        if (btnCloseSidepanel) {
+            btnCloseSidepanel.classList.remove('hidden');
+            btnCloseSidepanel.addEventListener('click', () => {
+                // Closing the side panel document closes the panel itself.
+                window.close();
+            });
+        }
+    } else if (btnCloseSidepanel) {
+        btnCloseSidepanel.classList.add('hidden');
+    }
+
+    // Open in side panel (C5).
+    // chrome.sidePanel.open() only works inside a user gesture, and an await
+    // before it ends that gesture — so the window id is resolved up front and
+    // the click handler calls open() synchronously.
+    let currentWindowId = null;
+    if (chrome.windows && chrome.windows.getCurrent) {
+        chrome.windows.getCurrent().then(w => { currentWindowId = w && w.id; }).catch(() => {});
+    }
+    if (linkOpenSidepanel && !isSidePanel) {
+        if (!chrome.sidePanel || typeof chrome.sidePanel.open !== 'function') {
+            linkOpenSidepanel.style.display = 'none';
+        } else {
+            linkOpenSidepanel.addEventListener('click', (e) => {
+                e.preventDefault();
+                const opts = currentWindowId != null ? { windowId: currentWindowId } : {};
+                Promise.resolve(chrome.sidePanel.open(opts))
+                    .then(() => window.close())
+                    .catch(err => console.error("Failed to open side panel:", err));
+            });
+        }
+    }
 
     // Collapsible Settings
     settingsToggle.addEventListener('click', () => {
@@ -51,6 +128,10 @@ document.addEventListener('DOMContentLoaded', () => {
             'recording', 
             'targetDomains', 
             'capturedRequests', 
+            'droppedOutOfScope',
+            'droppedNoScope',
+            'lastDroppedHost',
+            'droppedHosts',
             'token', 
             'swazzUrl', 
             'projectId',
@@ -61,6 +142,10 @@ document.addEventListener('DOMContentLoaded', () => {
             isRecording = !!state.recording;
             targetDomains = state.targetDomains || [];
             capturedRequests = state.capturedRequests || {};
+            droppedOutOfScope = state.droppedOutOfScope || 0;
+            droppedNoScope = state.droppedNoScope || 0;
+            lastDroppedHost = state.lastDroppedHost || "";
+            droppedHosts = state.droppedHosts || {};
             updateCrawlUI(state.crawlState);
             activeToken = state.token || null;
             activeSwazzUrl = state.swazzUrl || "http://localhost:5173";
@@ -69,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Sync toggle
             toggleRecord.checked = isRecording;
             updateRecordingUI();
+            updateScopeWarningUI();
 
             // Sync settings form
             inputSwazzUrl.value = activeSwazzUrl;
@@ -85,11 +171,14 @@ document.addEventListener('DOMContentLoaded', () => {
             cardActiveProject.textContent = state.projectName || (activeProjectId ? `Project ID: ${activeProjectId.slice(0, 8)}...` : 'None Selected');
             cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
 
-            // Sync sync button disabled state
-            updateSyncButtonState();
-
-            // Render endpoints list
+            // Render endpoints first: it seeds the default selection that the
+            // Sync and HAR buttons key off, so updating them before this would
+            // leave both disabled until the next storage change.
             renderEndpoints();
+
+            // Sync sync & export buttons state
+            updateSyncButtonState();
+            renderIgnoredHosts();
 
             // Load projects dropdown
             if (activeToken) {
@@ -113,11 +202,137 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Scope warning UI (C2)
+    function updateScopeWarningUI() {
+        if (!scopeWarningBox) return;
+
+        if (isRecording && targetDomains.length === 0) {
+            scopeWarningBox.classList.remove('hidden');
+            scopeWarningText.textContent = "Recording is on but scope is empty — nothing will be captured";
+            btnScopeWarningAction.textContent = "Use current tab";
+            btnScopeWarningAction.onclick = () => {
+                addActiveTabToScope();
+            };
+        } else if (droppedOutOfScope > 0) {
+            scopeWarningBox.classList.remove('hidden');
+            const hostCount = Object.keys(droppedHosts).length;
+            scopeWarningText.textContent = hostCount > 0
+                ? `${droppedOutOfScope} requests ignored across ${hostCount} domain${hostCount === 1 ? '' : 's'}`
+                : `${droppedOutOfScope} requests ignored (out of scope)`;
+            // Offering only the most recent host hid every other domain behind it,
+            // so send the user to the list where they can see and pick all of them.
+            btnScopeWarningAction.textContent = "Review domains";
+            btnScopeWarningAction.onclick = () => {
+                setActiveView('ignored');
+            };
+        } else {
+            scopeWarningBox.classList.add('hidden');
+        }
+    }
+
+    function addDomainToScope(host) {
+        const clean = host.trim().toLowerCase();
+        if (!clean) return;
+        if (!targetDomains.includes(clean)) {
+            targetDomains.push(clean);
+            inputDomains.value = targetDomains.join(', ');
+            cardActiveDomains.textContent = `Domains: ${targetDomains.join(', ')}`;
+        }
+        // Only clear what this host accounted for; other ignored domains stay
+        // visible so they are not silently forgotten.
+        const forgiven = droppedHosts[clean] || 0;
+        if (droppedHosts[clean]) delete droppedHosts[clean];
+        droppedOutOfScope = Math.max(0, droppedOutOfScope - forgiven);
+        if (lastDroppedHost === clean) lastDroppedHost = "";
+
+        chrome.storage.local.set({
+            targetDomains,
+            droppedOutOfScope,
+            lastDroppedHost,
+            droppedHosts
+        });
+        updateScopeWarningUI();
+        updateSyncButtonState();
+        renderIgnoredHosts();
+    }
+
+    function setActiveView(view) {
+        activeView = view;
+        const isIgnored = view === 'ignored';
+        if (tabCaptured) tabCaptured.classList.toggle('active', !isIgnored);
+        if (tabIgnored) tabIgnored.classList.toggle('active', isIgnored);
+        if (capturedHeader) capturedHeader.classList.toggle('hidden', isIgnored);
+        if (searchBar) searchBar.classList.toggle('hidden', isIgnored);
+        if (listContainer) listContainer.classList.toggle('hidden', isIgnored);
+        if (ignoredView) ignoredView.classList.toggle('hidden', !isIgnored);
+        if (isIgnored) renderIgnoredHosts();
+    }
+
+    function renderIgnoredHosts() {
+        if (!ignoredList) return;
+        const entries = Object.keys(droppedHosts)
+            .filter(h => !ignoredSearchQuery || h.toLowerCase().includes(ignoredSearchQuery))
+            .map(h => ({ host: h, count: droppedHosts[h] }))
+            .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host));
+
+        if (lblIgnoredCountTab) lblIgnoredCountTab.textContent = Object.keys(droppedHosts).length;
+
+        ignoredList.innerHTML = '';
+        if (entries.length === 0) {
+            if (ignoredEmptyState) ignoredEmptyState.style.display = 'flex';
+            return;
+        }
+        if (ignoredEmptyState) ignoredEmptyState.style.display = 'none';
+
+        entries.forEach(({ host, count }) => {
+            const row = document.createElement('div');
+            row.className = 'ignored-item';
+
+            const meta = document.createElement('div');
+            meta.className = 'ignored-meta';
+
+            const hostSpan = document.createElement('span');
+            hostSpan.className = 'ignored-host';
+            hostSpan.textContent = host;
+            hostSpan.title = host;
+
+            const countSpan = document.createElement('span');
+            countSpan.className = 'ignored-count';
+            countSpan.textContent = `${count} request${count === 1 ? '' : 's'}`;
+
+            meta.appendChild(hostSpan);
+            meta.appendChild(countSpan);
+
+            const addBtn = document.createElement('button');
+            addBtn.className = 'btn btn-ghost btn-sm';
+            addBtn.textContent = '+ Scope';
+            addBtn.addEventListener('click', () => addDomainToScope(host));
+
+            row.appendChild(meta);
+            row.appendChild(addBtn);
+            ignoredList.appendChild(row);
+        });
+    }
+
+    function addActiveTabToScope() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs && tabs[0] && tabs[0].url) {
+                try {
+                    const tabUrl = new URL(tabs[0].url);
+                    if (tabUrl.protocol.startsWith('http')) {
+                        addDomainToScope(tabUrl.host);
+                    }
+                } catch (e) {}
+            }
+        });
+    }
+
     // Toggle recording
     toggleRecord.addEventListener('change', (e) => {
         isRecording = e.target.checked;
         chrome.storage.local.set({ recording: isRecording });
         updateRecordingUI();
+        updateScopeWarningUI();
     });
 
     // Update domains in storage
@@ -128,6 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         targetDomains = domains;
         chrome.storage.local.set({ targetDomains: domains });
         cardActiveDomains.textContent = domains.length > 0 ? `Domains: ${domains.join(', ')}` : 'Scope: Empty';
+        updateScopeWarningUI();
         updateSyncButtonState();
     });
 
@@ -212,13 +428,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             const newProjectId = data.id;
 
-            // Clear input
             inputNewProjectName.value = '';
-
-            // Reload projects and select the newly created one
             await fetchProjects();
             
-            // Set as active
             activeProjectId = newProjectId;
             selectProject.value = newProjectId;
             
@@ -259,7 +471,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             projectsList = data.projects || [];
 
-            // Populate select list
             selectProject.innerHTML = '<option value="">-- Select Swazz Project --</option>';
             projectsList.forEach(p => {
                 const opt = document.createElement('option');
@@ -271,7 +482,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectProject.appendChild(opt);
             });
 
-            // Update active project name in storage if changed
             if (activeProjectId) {
                 const activeP = projectsList.find(p => p.id === activeProjectId);
                 if (activeP) {
@@ -296,7 +506,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tabUrl = new URL(tabs[0].url);
                 const host = tabUrl.host;
                 
-                // Exclude chrome/extension settings pages
                 if (tabUrl.protocol.startsWith('http')) {
                     helperCurrentTab.textContent = 'Suggest active tab: ';
                     const strong = document.createElement('strong');
@@ -307,13 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     helperCurrentTab.appendChild(strong);
 
                     strong.addEventListener('click', () => {
-                        if (!targetDomains.includes(host)) {
-                            targetDomains.push(host);
-                            inputDomains.value = targetDomains.join(', ');
-                            chrome.storage.local.set({ targetDomains });
-                            cardActiveDomains.textContent = `Domains: ${targetDomains.join(', ')}`;
-                            updateSyncButtonState();
-                        }
+                        addDomainToScope(host);
                     });
                 }
             } catch (e) {}
@@ -324,17 +527,103 @@ document.addEventListener('DOMContentLoaded', () => {
     btnClearEndpoints.addEventListener('click', () => {
         if (confirm("Are you sure you want to clear all recorded endpoints?")) {
             capturedRequests = {};
-            chrome.storage.local.set({ capturedRequests: {} });
+            selectedKeys.clear();
+            unselectedKeys.clear();
+            expandedKeys.clear();
+            droppedOutOfScope = 0;
+            droppedHosts = {};
+            droppedNoScope = 0;
+            lastDroppedHost = "";
+            chrome.storage.local.set({
+                capturedRequests: {},
+                droppedHosts: {},
+                droppedOutOfScope: 0,
+                droppedNoScope: 0,
+                lastDroppedHost: ""
+            });
             renderEndpoints();
+            renderIgnoredHosts();
+            updateScopeWarningUI();
+            updateSyncButtonState();
         }
     });
 
-    // Render list of captured endpoints
-    function renderEndpoints() {
-        const keys = Object.keys(capturedRequests);
-        lblEndpointCount.textContent = keys.length;
+    // Helper to get selected captured requests map (C3)
+    function getSelectedRequests() {
+        const selected = {};
+        for (const k of Object.keys(capturedRequests)) {
+            if (selectedKeys.has(k)) {
+                selected[k] = capturedRequests[k];
+            }
+        }
+        return selected;
+    }
 
-        if (keys.length === 0) {
+    // Search filter input (C3)
+    if (inputEndpointSearch) {
+        inputEndpointSearch.addEventListener('input', (e) => {
+            searchQuery = (e.target.value || '').toLowerCase().trim();
+            renderEndpoints();
+        });
+    }
+
+    // Select all checkbox (C3)
+    if (chkSelectAll) {
+        chkSelectAll.addEventListener('change', () => {
+            const allKeys = Object.keys(capturedRequests);
+            if (chkSelectAll.checked) {
+                allKeys.forEach(k => {
+                    selectedKeys.add(k);
+                    unselectedKeys.delete(k);
+                });
+            } else {
+                allKeys.forEach(k => {
+                    selectedKeys.delete(k);
+                    unselectedKeys.add(k);
+                });
+            }
+            renderEndpoints();
+            updateSyncButtonState();
+        });
+    }
+
+    // Render list of captured endpoints (C3, C4)
+    function renderEndpoints() {
+        const allKeys = Object.keys(capturedRequests);
+        lblEndpointCount.textContent = allKeys.length;
+        if (lblEndpointCountTab) lblEndpointCountTab.textContent = allKeys.length;
+
+        // Auto-select newly captured keys
+        allKeys.forEach(k => {
+            if (!unselectedKeys.has(k) && !selectedKeys.has(k)) {
+                selectedKeys.add(k);
+            }
+        });
+
+        // Filter keys by search query
+        const filteredKeys = allKeys.filter(k => {
+            if (!searchQuery) return true;
+            const req = capturedRequests[k];
+            if (!req) return false;
+            const methodMatch = (req.method || '').toLowerCase().includes(searchQuery);
+            const pathMatch = (req.path || '').toLowerCase().includes(searchQuery);
+            return methodMatch || pathMatch;
+        });
+
+        let selectedCount = 0;
+        allKeys.forEach(k => {
+            if (selectedKeys.has(k)) selectedCount++;
+        });
+        if (lblSelectedCount) {
+            lblSelectedCount.textContent = `(${selectedCount} selected)`;
+        }
+
+        if (chkSelectAll) {
+            chkSelectAll.checked = allKeys.length > 0 && selectedCount === allKeys.length;
+            chkSelectAll.indeterminate = selectedCount > 0 && selectedCount < allKeys.length;
+        }
+
+        if (allKeys.length === 0) {
             emptyState.style.display = 'flex';
             endpointsList.innerHTML = '';
             return;
@@ -344,43 +633,128 @@ document.addEventListener('DOMContentLoaded', () => {
         endpointsList.innerHTML = '';
 
         // Sort by timestamp desc
-        const sorted = keys.map(k => capturedRequests[k])
-            .sort((a, b) => b.lastCaptured - a.lastCaptured);
+        const sorted = filteredKeys.map(k => capturedRequests[k])
+            .sort((a, b) => (b.lastCaptured || 0) - (a.lastCaptured || 0));
 
         sorted.forEach(req => {
             const item = document.createElement('div');
             item.className = 'endpoint-item';
 
-            const methodClass = req.method.toLowerCase();
+            const methodClass = (req.method || 'get').toLowerCase();
             const statusClass = req.status || 'needs_work';
             const statusLabel = statusClass === 'well_covered' ? 'Covered' : 'Needs variations';
 
             const itemRow = document.createElement('div');
             itemRow.className = 'item-row';
 
-            const itemMeta = document.createElement('div');
-            itemMeta.className = 'item-meta';
+            const itemHeader = document.createElement('div');
+            itemHeader.className = 'endpoint-item-header';
+
+            // Checkbox (C3)
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.className = 'endpoint-select-chk';
+            chk.checked = selectedKeys.has(req.key);
+            chk.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (chk.checked) {
+                    selectedKeys.add(req.key);
+                    unselectedKeys.delete(req.key);
+                } else {
+                    selectedKeys.delete(req.key);
+                    unselectedKeys.add(req.key);
+                }
+                renderEndpoints();
+                updateSyncButtonState();
+            });
+            itemHeader.appendChild(chk);
+
+            // Delete ✕ button (C3)
+            const btnDel = document.createElement('button');
+            btnDel.className = 'btn-delete-endpoint';
+            btnDel.title = 'Delete endpoint';
+            btnDel.textContent = '✕';
+            btnDel.addEventListener('click', (e) => {
+                e.stopPropagation();
+                delete capturedRequests[req.key];
+                selectedKeys.delete(req.key);
+                unselectedKeys.delete(req.key);
+                expandedKeys.delete(req.key);
+                chrome.storage.local.set({ capturedRequests }, () => {
+                    renderEndpoints();
+                    updateSyncButtonState();
+                });
+            });
+            itemHeader.appendChild(btnDel);
+
+            // Expand/collapse arrow (C4)
+            const expandToggle = document.createElement('span');
+            expandToggle.className = 'endpoint-expand-toggle' + (expandedKeys.has(req.key) ? ' open' : '');
+            expandToggle.textContent = '▶';
+            itemHeader.appendChild(expandToggle);
 
             const methodBadge = document.createElement('span');
             methodBadge.className = `badge-method ${methodClass}`;
             methodBadge.textContent = req.method;
+            itemHeader.appendChild(methodBadge);
 
             const pathSpan = document.createElement('span');
             pathSpan.className = 'item-path';
             pathSpan.title = req.exampleUrl;
             pathSpan.textContent = req.path;
+            itemHeader.appendChild(pathSpan);
 
-            itemMeta.appendChild(methodBadge);
-            itemMeta.appendChild(pathSpan);
+            itemRow.appendChild(itemHeader);
+
+            // Right side: status chips (C4) + coverage badge
+            const rightSide = document.createElement('div');
+            rightSide.style.display = 'flex';
+            rightSide.style.alignItems = 'center';
+            rightSide.style.gap = '6px';
+            rightSide.style.flexShrink = '0';
+
+            // Response status chips (C4)
+            if (req.statuses && Object.keys(req.statuses).length > 0) {
+                const chipsContainer = document.createElement('div');
+                chipsContainer.className = 'status-chips-container';
+                for (const sCode of Object.keys(req.statuses)) {
+                    const sCount = req.statuses[sCode];
+                    const chip = document.createElement('span');
+                    const codeNum = parseInt(sCode, 10);
+                    let chipClass = 'sother';
+                    if (codeNum >= 200 && codeNum < 300) chipClass = 's2xx';
+                    else if (codeNum >= 300 && codeNum < 400) chipClass = 's3xx';
+                    else if (codeNum >= 400 && codeNum < 500) chipClass = 's4xx';
+                    else if (codeNum >= 500) chipClass = 's5xx';
+
+                    chip.className = `badge-status-chip ${chipClass}`;
+                    chip.textContent = `${sCode} ×${sCount}`;
+                    chipsContainer.appendChild(chip);
+                }
+                rightSide.appendChild(chipsContainer);
+            }
 
             const statusBadge = document.createElement('span');
             statusBadge.className = `badge-status ${statusClass}`;
             statusBadge.textContent = statusLabel;
+            rightSide.appendChild(statusBadge);
 
-            itemRow.appendChild(itemMeta);
-            itemRow.appendChild(statusBadge);
+            itemRow.appendChild(rightSide);
             item.appendChild(itemRow);
 
+            // Row click toggles expansion
+            itemRow.style.cursor = 'pointer';
+            itemRow.addEventListener('click', (e) => {
+                if (e.target === chk || e.target === btnDel) return;
+                if (expandedKeys.has(req.key)) {
+                    expandedKeys.delete(req.key);
+                } else {
+                    expandedKeys.add(req.key);
+                }
+                renderEndpoints();
+            });
+
+            // Recommendation string
             if (req.recommendation) {
                 const rec = document.createElement('div');
                 rec.className = 'item-recommendation';
@@ -388,37 +762,155 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.appendChild(rec);
             }
 
+            // Expandable details (C4)
+            const isExpanded = expandedKeys.has(req.key);
+            const detailsContainer = document.createElement('div');
+            detailsContainer.className = 'item-expandable-details' + (isExpanded ? '' : ' hidden');
+
+            // Query keys
+            const queryKeysSection = document.createElement('div');
+            queryKeysSection.className = 'item-detail-section';
+            const qkLabel = document.createElement('span');
+            qkLabel.className = 'item-detail-label';
+            qkLabel.textContent = `Captured Query Parameters (${(req.queryKeys || []).length}):`;
+            const qkValue = document.createElement('div');
+            qkValue.className = 'item-detail-value';
+            qkValue.textContent = (req.queryKeys && req.queryKeys.length > 0) ? req.queryKeys.join(', ') : '(none)';
+            queryKeysSection.appendChild(qkLabel);
+            queryKeysSection.appendChild(qkValue);
+            detailsContainer.appendChild(queryKeysSection);
+
+            // Body sample
+            const bodySample = (req.bodyVariations && req.bodyVariations.length > 0) ? req.bodyVariations[0] : (req.lastResponse && req.lastResponse.bodySample ? req.lastResponse.bodySample : "");
+            if (bodySample) {
+                const bodySection = document.createElement('div');
+                bodySection.className = 'item-detail-section';
+                const bodyLabel = document.createElement('span');
+                bodyLabel.className = 'item-detail-label';
+                bodyLabel.textContent = 'Body Sample:';
+                const bodyValue = document.createElement('div');
+                bodyValue.className = 'item-detail-value';
+                bodyValue.textContent = bodySample.length > 500 ? bodySample.slice(0, 500) + '...' : bodySample;
+                bodySection.appendChild(bodyLabel);
+                bodySection.appendChild(bodyValue);
+                detailsContainer.appendChild(bodySection);
+            }
+
+            item.appendChild(detailsContainer);
             endpointsList.appendChild(item);
         });
     }
 
-    // Check if we can enable Sync button
+    // Check if we can enable Sync and Export buttons (A3, C3)
     function updateSyncButtonState() {
         const hasProject = !!activeProjectId;
         const hasToken = !!activeToken;
-        const hasEndpoints = Object.keys(capturedRequests).length > 0;
+        const selectedMap = getSelectedRequests();
+        const selectedCount = Object.keys(selectedMap).length;
+        const hasSelected = selectedCount > 0;
 
-        btnSyncSwazz.disabled = !(hasProject && hasToken && hasEndpoints);
+        btnSyncSwazz.disabled = !(hasProject && hasToken && hasSelected);
+        if (btnExportHar) {
+            btnExportHar.disabled = !hasSelected;
+        }
     }
 
-    // Sync to Swazz Dashboard action
+    // HAR Export Action (A2, A3, C3)
+    if (btnExportHar) {
+        btnExportHar.addEventListener('click', () => {
+            const selectedMap = getSelectedRequests();
+            const reqCount = Object.keys(selectedMap).length;
+            if (reqCount === 0) {
+                showSyncStatus("No endpoints selected to export.", "error");
+                return;
+            }
+
+            try {
+                const result = window.SwazzHar.downloadHar(selectedMap, targetDomains);
+                showSyncStatus(`⬇ Exported ${result.entries} requests → ${result.filename}`, "success");
+            } catch (err) {
+                console.error("HAR export failed:", err);
+                showSyncStatus(`❌ Export error: ${err.message}`, "error");
+            }
+        });
+    }
+
+    // HAR Import Action (A4)
+    if (btnImportHar && inputImportHar) {
+        btnImportHar.addEventListener('click', () => {
+            inputImportHar.click();
+        });
+
+        inputImportHar.addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const importedMap = window.SwazzHar.parseHarIntoRequests(reader.result);
+                    const importedKeys = Object.keys(importedMap);
+                    if (importedKeys.length === 0) {
+                        showSyncStatus("No endpoints found in HAR.", "error");
+                        return;
+                    }
+
+                    const merged = window.SwazzHar.mergeCapturedRequests(capturedRequests, importedMap);
+                    capturedRequests = merged;
+                    importedKeys.forEach(k => {
+                        selectedKeys.add(k);
+                        unselectedKeys.delete(k);
+                    });
+
+                    chrome.storage.local.set({ capturedRequests: merged }, () => {
+                        renderEndpoints();
+                        updateSyncButtonState();
+                        showSyncStatus(`📂 Imported ${importedKeys.length} endpoints from HAR!`, "success");
+                    });
+                } catch (err) {
+                    console.error("HAR import failed:", err);
+                    showSyncStatus(`❌ Import error: ${err.message}`, "error");
+                } finally {
+                    inputImportHar.value = '';
+                }
+            };
+            reader.onerror = () => {
+                showSyncStatus("❌ Failed to read HAR file.", "error");
+                inputImportHar.value = '';
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    // Sync to Swazz Dashboard action (acting on selected subset, C3)
     btnSyncSwazz.addEventListener('click', async () => {
         if (!activeProjectId || !activeToken) return;
 
-        const reqCount = Object.keys(capturedRequests).length;
-        if (reqCount > 5000) {
-            const proceed = confirm(`Warning: You have captured ${reqCount} requests. Exporting more than 5000 requests may result in slow parsing or timeouts. Do you want to proceed?`);
-            if (!proceed) {
-                showSyncStatus("Sync cancelled.", "info");
-                return;
-            }
+        const selectedMap = getSelectedRequests();
+        const reqCount = Object.keys(selectedMap).length;
+        if (reqCount === 0) {
+            showSyncStatus("No endpoints selected to sync.", "error");
+            return;
         }
 
         btnSyncSwazz.disabled = true;
         showSyncStatus("Generating HAR log...", "info");
 
-        // 1. Build standard HAR payload from captured requests
-        const harPayload = buildHarPayload(capturedRequests);
+        // 1. Build standard HAR payload from selected requests
+        const harPayload = window.SwazzHar.buildHarPayload(selectedMap);
+
+        // Warn on the entry count, not the endpoint count: each endpoint fans out
+        // across its query x body variations, so a few dozen endpoints can become
+        // thousands of entries.
+        const entryCount = harPayload.log.entries.length;
+        if (entryCount > 5000) {
+            const proceed = confirm(`Warning: ${reqCount} selected endpoints expand to ${entryCount} HAR entries. Sending more than 5000 may result in slow parsing or timeouts. Do you want to proceed?`);
+            if (!proceed) {
+                showSyncStatus("Sync cancelled.", "info");
+                btnSyncSwazz.disabled = false;
+                return;
+            }
+        }
 
         try {
             // 2. Parse HAR payload into Swazz Endpoints using coordinator
@@ -468,7 +960,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
 
                 if (matchIndex >= 0) {
-                    // Update schema and params if matched
                     mergedEndpoints[matchIndex] = mergeEndpointDefs(mergedEndpoints[matchIndex], newEp);
                 } else {
                     mergedEndpoints.push(newEp);
@@ -477,15 +968,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentConfig.endpoints = mergedEndpoints;
 
-            // Auto-fill base_url and swagger_url from the captured traffic domain
-            // so the runner can start scanning without manual configuration
             let capturedBaseUrl = parseData.basePath || null;
             if (!capturedBaseUrl) {
-                // Fall back to the first target domain if parser didn't return basePath
                 try {
                     const stored = await new Promise(r => chrome.storage.local.get(['targetDomains'], r));
                     const domains = stored.targetDomains || [];
-                    if (domains.length > 0) capturedBaseUrl = `https://${domains[0]}`;
+                    if (domains.length > 0) {
+                        // Take the scheme from traffic we actually saw; assuming
+                        // https made the runner fail the TLS handshake against a
+                        // plain-http local target.
+                        const sample = Object.values(capturedRequests)[0];
+                        let scheme = 'https';
+                        try {
+                            if (sample && sample.exampleUrl) {
+                                scheme = new URL(sample.exampleUrl).protocol.replace(':', '');
+                            } else if (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(domains[0])) {
+                                scheme = 'http';
+                            }
+                        } catch {}
+                        capturedBaseUrl = `${scheme}://${domains[0]}`;
+                    }
                 } catch {}
             }
 
@@ -493,10 +995,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!currentConfig.base_url) {
                     currentConfig.base_url = capturedBaseUrl;
                 }
-                // swagger_url is required by the runner to start a scan.
-                // If not already set, point it to the base URL so the runner
-                // has a valid target. The user can override it to an actual
-                // OpenAPI spec URL in project settings.
                 if (!currentConfig.swagger_url) {
                     currentConfig.swagger_url = capturedBaseUrl;
                 }
@@ -554,7 +1052,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper to merge endpoint definitions
     function mergeEndpointDefs(oldEp, newEp) {
-        // Merge request body schema properties
         const mergedSchema = { ...oldEp.schema };
         if (newEp.schema && newEp.schema.properties) {
             mergedSchema.properties = {
@@ -564,7 +1061,6 @@ document.addEventListener('DOMContentLoaded', () => {
             mergedSchema.type = "object";
         }
 
-        // Merge headers, query params, etc.
         return {
             ...oldEp,
             schema: mergedSchema,
@@ -579,96 +1075,38 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Helper to build standard HAR log structure from captured requests
-    function buildHarPayload(requestsMap) {
-        const entries = [];
-        const keys = Object.keys(requestsMap);
-
-        keys.forEach(k => {
-            const req = requestsMap[k];
-            try {
-                const urlObj = new URL(req.exampleUrl);
-
-                // Construct standard query string items
-                const queryParams = [];
-                urlObj.searchParams.forEach((value, name) => {
-                    queryParams.push({ name, value });
-                });
-
-                // Map headers
-                const headerItems = Object.entries(req.headers || {}).map(([name, value]) => ({ name, value }));
-                // Parse common content types
-                let mimeType = "application/json";
-                
-                // Generate entries for each unique body or query variation captured
-                // This tells the Go parser to look at all forms of the request!
-                const bodyList = req.bodyVariations.length > 0 ? req.bodyVariations : [""];
-                const queryList = req.queryVariations.length > 0 ? req.queryVariations : [urlObj.search];
-
-                queryList.forEach(q => {
-                    bodyList.forEach(b => {
-                        const variantUrl = new URL(urlObj.origin + urlObj.pathname + q);
-                        const vQueryParams = [];
-                        variantUrl.searchParams.forEach((val, name) => {
-                            vQueryParams.push({ name, value: val });
-                        });
-
-                        entries.push({
-                            startedDateTime: new Date(req.lastCaptured).toISOString(),
-                            time: 10,
-                            request: {
-                                method: req.method,
-                                url: variantUrl.href,
-                                httpVersion: "HTTP/1.1",
-                                cookies: [],
-                                headers: headerItems,
-                                queryString: vQueryParams,
-                                postData: b ? {
-                                    mimeType: mimeType,
-                                    text: b
-                                } : undefined,
-                                headersSize: -1,
-                                bodySize: b ? b.length : -1
-                            },
-                            response: {
-                                status: 200,
-                                statusText: "OK",
-                                httpVersion: "HTTP/1.1",
-                                cookies: [],
-                                headers: [],
-                                content: { size: 0, mimeType: "application/json" },
-                                redirectURL: "",
-                                headersSize: -1,
-                                bodySize: -1
-                            },
-                            cache: {},
-                            timings: { send: 0, wait: 10, receive: 0 }
-                        });
-                    });
-                });
-            } catch (e) {
-                console.error("Skipping malformed URL during HAR generation:", req.exampleUrl, e);
-            }
-        });
-
-        return {
-            log: {
-                version: "1.2",
-                creator: {
-                    name: "Swazz Extension Capturer",
-                    version: "1.0.0"
-                },
-                entries: entries
-            }
-        };
-    }
-
-    // Set up chrome storage listener for live updates
+    // Storage listener for live updates
     chrome.storage.onChanged.addListener((changes) => {
+        if (changes.droppedHosts) {
+            droppedHosts = changes.droppedHosts.newValue || {};
+            renderIgnoredHosts();
+            updateScopeWarningUI();
+        }
         if (changes.capturedRequests) {
             capturedRequests = changes.capturedRequests.newValue || {};
             renderEndpoints();
             updateSyncButtonState();
+        }
+        if (changes.recording) {
+            isRecording = !!changes.recording.newValue;
+            toggleRecord.checked = isRecording;
+            updateRecordingUI();
+            updateScopeWarningUI();
+        }
+        if (changes.targetDomains) {
+            targetDomains = changes.targetDomains.newValue || [];
+            inputDomains.value = targetDomains.join(', ');
+            cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
+            updateScopeWarningUI();
+            updateSyncButtonState();
+        }
+        if (changes.droppedOutOfScope !== undefined) {
+            droppedOutOfScope = changes.droppedOutOfScope.newValue || 0;
+            updateScopeWarningUI();
+        }
+        if (changes.lastDroppedHost !== undefined) {
+            lastDroppedHost = changes.lastDroppedHost.newValue || "";
+            updateScopeWarningUI();
         }
         if (changes.token || changes.swazzUrl) {
             loadState();
@@ -692,7 +1130,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isCurrentlyCrawling = res.crawlState && res.crawlState.crawling;
                 
                 if (isCurrentlyCrawling) {
-                    // STOP CRAWL
                     const crawlState = res.crawlState || {};
                     crawlState.crawling = false;
                     chrome.storage.local.set({ crawlState }, () => {
@@ -701,7 +1138,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // START CRAWL
                 if (!isRecording) {
                     showCrawlStatus("Please enable Traffic Recording first!", "error");
                     return;
@@ -783,7 +1219,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getDomainCookies(domain) {
-        const cleanDomain = domain.split(':')[0];
+        // stripPort understands IPv6 brackets and pasted URLs; split(':') did not
+        // and handed chrome.cookies a '[' for an address like [::1]:8080.
+        const scopeApi = (typeof window !== 'undefined' && window.SwazzScope) || {};
+        const stripHost = scopeApi.stripPort || ((d) => String(d).split(':')[0]);
+        const cleanDomain = stripHost(domain).replace(/^\[|\]$/g, '');
         return new Promise((resolve) => {
             if (!chrome.cookies) {
                 console.warn("chrome.cookies API not available");
@@ -792,6 +1232,41 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.cookies.getAll({ domain: cleanDomain }, (cookies) => {
                 resolve(cookies || []);
             });
+        });
+    }
+
+    // View tabs (captured / ignored)
+    if (tabCaptured) tabCaptured.addEventListener('click', () => setActiveView('captured'));
+    if (tabIgnored) tabIgnored.addEventListener('click', () => setActiveView('ignored'));
+
+    if (inputIgnoredSearch) {
+        inputIgnoredSearch.addEventListener('input', (e) => {
+            ignoredSearchQuery = (e.target.value || '').toLowerCase().trim();
+            renderIgnoredHosts();
+        });
+    }
+
+    if (btnAddAllIgnored) {
+        btnAddAllIgnored.addEventListener('click', () => {
+            const hosts = Object.keys(droppedHosts);
+            if (hosts.length === 0) return;
+            if (!confirm(`Add all ${hosts.length} ignored domains to scope? Only do this for systems you are authorized to test.`)) return;
+            hosts.forEach(h => addDomainToScope(h));
+        });
+    }
+
+    if (btnClearIgnored) {
+        btnClearIgnored.addEventListener('click', () => {
+            droppedHosts = {};
+            droppedOutOfScope = 0;
+            lastDroppedHost = "";
+            chrome.storage.local.set({
+                droppedHosts: {},
+                droppedOutOfScope: 0,
+                lastDroppedHost: ""
+            });
+            renderIgnoredHosts();
+            updateScopeWarningUI();
         });
     }
 

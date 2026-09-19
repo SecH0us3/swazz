@@ -470,7 +470,7 @@ You can specify WebSocket targets in `swagger_urls`:
    ```
 
 2. **Recorded Browser Traffic (HAR / Swazz Extension)**:
-   If no formal AsyncAPI schema exists, you can record real-world WebSocket traffic using your browser's DevTools or the Swazz Chrome Extension and export it as a `.har` file:
+   If no formal AsyncAPI schema exists, you can record real-world WebSocket traffic using your browser's DevTools, or with the [Swazz browser extension](/browser_extension) and its **⬇ HAR** button, and export it as a `.har` file:
    ```json
    {
      "swagger_urls": [

@@ -164,7 +164,7 @@ export function TrafficCaptureTab() {
                             <div className="traffic-capture-step-content">
                                 <span className="traffic-capture-step-title">Add target domain to scope</span>
                                 <span className="traffic-capture-step-desc">
-                                    Open the extension popup, turn on recording, and browse your target website.
+                                    Open the extension popup and set <strong>Target Domains</strong> under Connection &amp; Scope Settings &mdash; click the suggested active-tab host to add it in one click. Scope is required: with an empty list nothing is recorded. Then turn on recording and browse your target website.
                                 </span>
                             </div>
                         </div>
@@ -175,6 +175,16 @@ export function TrafficCaptureTab() {
                                 <span className="traffic-capture-step-title">Fuzzing Recommendations</span>
                                 <span className="traffic-capture-step-desc">
                                     The extension warns you if you send identical payloads, recommending you submit different inputs to help Swazz learn validation rules.
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="traffic-capture-step">
+                            <div className="traffic-capture-step-number">5</div>
+                            <div className="traffic-capture-step-content">
+                                <span className="traffic-capture-step-title">Send the capture to Swazz</span>
+                                <span className="traffic-capture-step-desc">
+                                    Use <strong>🚀 Sync to Swazz Dashboard</strong> to merge the captured endpoints straight into a project, which needs the token above and a selected project. Or use <strong>⬇ HAR</strong> to download the capture as a standard HTTP Archive file &mdash; that works with no token and no project, and you can upload it later from the sidebar or from Project Settings → API Specifications.
                                 </span>
                             </div>
                         </div>

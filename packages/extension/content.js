@@ -1,14 +1,30 @@
-// Inject the MAIN world script (inject.js) into the page context
-try {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('inject.js');
-    script.onload = function() {
-        this.remove();
-    };
-    (document.head || document.documentElement).appendChild(script);
-} catch (e) {
-    console.error("Swazz content script: failed to inject helper", e);
-}
+// Helpers from scope.js. scope.js is a separate manifest entry, so if it ever
+// fails to load these would be undefined and the highlighter and crawler would
+// die with a TypeError — fall back to local equivalents instead.
+const SwazzScopeApi = (typeof window !== 'undefined' && window.SwazzScope) ||
+    (typeof globalThis !== 'undefined' && globalThis.SwazzScope) || {};
+
+const stripPort = SwazzScopeApi.stripPort || function (hostOrTarget) {
+    if (!hostOrTarget) return '';
+    const v = hostOrTarget.trim().toLowerCase();
+    if (v.startsWith('[')) {
+        const end = v.indexOf(']');
+        if (end !== -1) return v.substring(0, end + 1);
+    }
+    return v.split(':')[0];
+};
+
+const isDomainTargeted = SwazzScopeApi.isDomainTargeted || function (host, targets) {
+    if (!targets || targets.length === 0) return false;
+    const cleanHost = stripPort(host);
+    return targets.some(t => {
+        const target = stripPort(t);
+        if (!target) return false;
+        return cleanHost === target || cleanHost.endsWith('.' + target);
+    });
+};
+
+const isAuthOriginAllowed = SwazzScopeApi.isAuthOriginAllowed;
 
 // Listen for messages from the page's MAIN world context
 window.addEventListener('message', (event) => {
@@ -21,15 +37,20 @@ window.addEventListener('message', (event) => {
 });
 
 // Auto-sync token when visiting the Swazz Dashboard page
+let lastSyncedToken = null;
+
 function checkAndSyncDashboardToken() {
-    const host = window.location.host;
-    if (host === 'localhost:5173' || host === 'swazz.secmy.app' || host.endsWith('.swazz.secmy.app')) {
+    const isAllowed = typeof isAuthOriginAllowed === 'function' 
+        ? isAuthOriginAllowed(window.location.href)
+        : (window.location.host === 'localhost:5173' || (window.location.protocol === 'https:' && (window.location.host === 'swazz.secmy.app' || window.location.host.endsWith('.swazz.secmy.app'))));
+    if (isAllowed) {
         try {
             // Check token in local storage
             const token = localStorage.getItem('swazz_token');
             const profileStr = localStorage.getItem('swazz:user_profile');
             
-            if (token) {
+            if (token && token !== lastSyncedToken) {
+                lastSyncedToken = token;
                 let userProfile = null;
                 try {
                     userProfile = profileStr ? JSON.parse(profileStr) : null;
@@ -58,11 +79,30 @@ if (document.readyState === 'loading') {
     checkAndSyncDashboardToken();
 }
 
-// Listen for storage changes to sync token reactively
+// The storage event only fires in OTHER tabs, never in the one that wrote the
+// value — so logging in on this very tab never triggered it and the token was
+// only ever picked up if it already existed at page load. Keep the listener for
+// the cross-tab case and poll this tab as well.
 window.addEventListener('storage', (e) => {
     if (e.key === 'swazz_token' || e.key === 'swazz:user_profile') {
         checkAndSyncDashboardToken();
     }
+});
+
+if (typeof isAuthOriginAllowed !== 'function' || isAuthOriginAllowed(window.location.href)) {
+    setInterval(checkAndSyncDashboardToken, 2000);
+    window.addEventListener('focus', checkAndSyncDashboardToken);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkAndSyncDashboardToken();
+    });
+}
+
+// The dashboard's "Auto-Sync with Extension" button dispatches this event. It is
+// handled here in the isolated world rather than in the page, so a hostile site
+// cannot reach the listener at all; background.js re-checks the sender origin.
+window.addEventListener('swazz-handshake', () => {
+    lastSyncedToken = null; // explicit user action: always resend
+    checkAndSyncDashboardToken();
 });
 
 
@@ -72,29 +112,6 @@ window.addEventListener('storage', (e) => {
 
 let mutationObserver = null;
 let injectedStyles = null;
-
-function stripPort(hostOrTarget) {
-    if (!hostOrTarget) return '';
-    const s = hostOrTarget.trim().toLowerCase();
-    if (s.startsWith('[')) {
-        const closingBracketIndex = s.indexOf(']');
-        if (closingBracketIndex !== -1) {
-            return s.substring(0, closingBracketIndex + 1);
-        }
-    }
-    return s.split(':')[0];
-}
-
-function isDomainTargeted(host, targetDomains) {
-    if (!targetDomains || targetDomains.length === 0) return false;
-    const cleanHost = stripPort(host);
-    return targetDomains.some(target => {
-        const t = stripPort(target);
-        if (!t) return false;
-        // Only allow exact match or subdomain (not substring to prevent spoofing)
-        return cleanHost === t || cleanHost.endsWith('.' + t);
-    });
-}
 
 function injectHighlighterStyles() {
     if (injectedStyles) return;

@@ -8,11 +8,16 @@
     "activeTab",
     "cookies",
     "scripting",
-    "webNavigation"
+    "webNavigation",
+    "sidePanel",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -23,24 +28,40 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_start"
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "scope.js",
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["main_world.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "inject.js"
+      ],
       "run_at": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "main_world.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
     }
   ],
   "background": {
     "service_worker": "background.js"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["inject.js"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }

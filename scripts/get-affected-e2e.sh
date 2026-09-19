@@ -57,6 +57,12 @@ while IFS= read -r file; do
       break
       ;;
 
+    # Browser extension: capture -> HAR download -> dashboard upload round trip
+    packages/extension/*)
+      SPECS+=("tests/e2e/extension-har.spec.ts")
+      HAS_UI_CHANGES=true
+      ;;
+
     # Changes directly to E2E spec files
     tests/e2e/*.spec.ts)
       SPECS+=("$file")
