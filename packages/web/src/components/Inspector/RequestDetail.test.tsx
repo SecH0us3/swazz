@@ -532,5 +532,18 @@ describe('RequestDetail Component', () => {
             ruleId: 'swazz/sqli',
             level: 'error',
         }));
+
+        // Click question mark button next to AI button
+        const helpBtns = screen.getAllByTitle(/How AI Works in Swazz/i);
+        expect(helpBtns.length).toBeGreaterThan(0);
+        fireEvent.click(helpBtns[0]);
+
+        // Modal should appear
+        expect(screen.getByText(/Swazz AI Engine/i)).toBeTruthy();
+        expect(screen.getByText(/Tier 1 \(Default\): Chrome Built-in AI/i)).toBeTruthy();
+
+        // Close modal
+        fireEvent.click(screen.getByRole('button', { name: /Got it/i }));
+        expect(screen.queryByText(/Tier 1 \(Default\): Chrome Built-in AI/i)).toBeNull();
     });
 });

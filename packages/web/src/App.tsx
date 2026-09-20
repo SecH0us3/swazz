@@ -566,8 +566,22 @@ export default function App() {
             let analysisData: any = null;
             const scanId = (current as any).scan_id || (current as any).scanId || useAppStore.getState().liveRunId || useAppStore.getState().loadedRunId;
 
-            // Tier 1: Cloudflare Workers AI via Edge API
-            if (finding.id && scanId) {
+            // Tier 1 (Default): Chrome Built-in AI (Prompt API / Gemini Nano on-device)
+            const chromeResult = await explainFindingWithChromeAI({
+                ruleId: finding.ruleId,
+                level: finding.level,
+                message: finding.message,
+                evidence: finding.evidence,
+                endpoint: current.endpoint,
+                target_url: current.resolvedPath || current.endpoint,
+                code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload),
+            });
+            if (chromeResult) {
+                analysisData = chromeResult;
+            }
+
+            // Tier 2 (Cloud Fallback): Cloudflare Workers AI via Edge API
+            if (!analysisData && finding.id && scanId) {
                 try {
                     const res = await fetch(`${PROXY_URL}/api/scans/${scanId}/findings/${finding.id}/ai-analyze`, {
                         method: 'POST',
@@ -583,23 +597,7 @@ export default function App() {
                 }
             }
 
-            // Tier 2: Chrome Built-in AI (Prompt API / Gemini Nano on-device)
-            if (!analysisData) {
-                const chromeResult = await explainFindingWithChromeAI({
-                    ruleId: finding.ruleId,
-                    level: finding.level,
-                    message: finding.message,
-                    evidence: finding.evidence,
-                    endpoint: current.endpoint,
-                    target_url: current.resolvedPath || current.endpoint,
-                    code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload),
-                });
-                if (chromeResult) {
-                    analysisData = chromeResult;
-                }
-            }
-
-            // Tier 3: Algorithmic Rule-based Synthesis (CyberNova pattern)
+            // Tier 3 (Offline Rules Fallback): Algorithmic Rule-based Synthesis (CyberNova pattern)
             if (!analysisData) {
                 analysisData = getAlgorithmicFindingAnalysis({
                     ruleId: finding.ruleId,

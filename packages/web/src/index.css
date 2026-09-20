@@ -6868,6 +6868,206 @@ kbd {
 
 .ai-insights-actions {
   margin-top: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ai-info-help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  padding: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.ai-info-help-btn:hover {
+  color: var(--accent-light);
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+/* ─── AI Engine Info Modal ─────────────────────────────────── */
+
+.ai-info-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ai-info-status-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+}
+
+.ai-info-status-card.active {
+  border-color: rgba(34, 211, 160, 0.4);
+  background: rgba(34, 211, 160, 0.08);
+}
+
+.ai-info-status-card.inactive {
+  border-color: var(--border-default);
+  background: var(--bg-surface);
+}
+
+.ai-info-status-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.ai-info-status-text {
+  flex: 1;
+}
+
+.ai-info-status-title {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.ai-info-status-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.ai-info-privacy-callout {
+  padding: var(--space-3);
+  background: rgba(2, 132, 199, 0.08);
+  border-left: 3px solid var(--accent-light);
+  border-radius: var(--radius-sm);
+}
+
+.ai-info-privacy-title {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--accent-light);
+  margin-bottom: var(--space-1);
+}
+
+.ai-info-privacy-text {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ai-info-section-title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ai-info-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ai-info-tier-card {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.ai-info-tier-card.tier-primary {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.ai-info-tier-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+
+.ai-info-tier-name {
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+}
+
+.ai-info-tier-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ai-info-tier-desc code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--bg-surface);
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+  color: var(--accent-light);
+}
+
+.ai-info-setup-toggle-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.ai-info-setup-toggle-btn {
+  color: var(--accent-light);
+  font-size: var(--font-size-xs);
+}
+
+.ai-info-setup-box {
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ai-info-setup-step {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.ai-info-setup-step strong {
+  color: var(--text-primary);
+}
+
+.ai-info-setup-code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--bg-app);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-default);
+  color: var(--accent-light);
+  word-break: break-all;
+}
+
+.ai-info-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
 }
 
 /* AI Remediation Tab Styles */

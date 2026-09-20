@@ -9,6 +9,7 @@ import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
 import { tokenizeCode } from '../../utils/syntaxHighlight.js';
 import { FormattedMarkdown } from '../Shared/FormattedMarkdown.js';
+import { AiEngineInfoModal } from '../Shared/AiEngineInfoModal.js';
 
 function tryParseEmbeddedJson(val: any): any {
     if (val === null || val === undefined) return val;
@@ -222,6 +223,7 @@ export function RequestDetail({
     const [mainTab, setMainTab] = useState<'findings' | 'request' | 'poc'>('request');
     const [pocLang, setPocLang] = useState<'curl' | 'python' | 'typescript' | 'go'>('curl');
     const [analyzingFindingId, setAnalyzingFindingId] = useState<string | null>(null);
+    const [showAiInfoModal, setShowAiInfoModal] = useState(false);
 
     const handleAnalyzeFinding = async (finding: AnalysisFinding) => {
         if (!onAnalyzeFinding) return;
@@ -610,6 +612,15 @@ export function RequestDetail({
                                                      '🛠️ Rule-based (Local)'}
                                                 </span>
                                             )}
+                                            <button
+                                                type="button"
+                                                className="ai-info-help-btn"
+                                                onClick={() => setShowAiInfoModal(true)}
+                                                title="How AI Works in Swazz (Local On-Device & Fallback)"
+                                                aria-label="How AI Works in Swazz"
+                                            >
+                                                ?
+                                            </button>
                                             {finding.ai_relevance != null && (
                                                 <span className={`alert-badge ${finding.ai_relevance ? 'badge-error' : 'badge-success'}`}>
                                                     {finding.ai_relevance ? 'True Positive' : 'False Positive'}
@@ -667,7 +678,16 @@ export function RequestDetail({
                                             onClick={() => handleAnalyzeFinding(finding)}
                                             disabled={analyzingFindingId === (finding.id || finding.ruleId)}
                                         >
-                                            {analyzingFindingId === (finding.id || finding.ruleId) ? 'Analyzing with Workers AI...' : '✨ Explain & Remediate with AI'}
+                                            {analyzingFindingId === (finding.id || finding.ruleId) ? 'Analyzing with AI...' : '✨ Explain & Remediate with AI'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="ai-info-help-btn"
+                                            onClick={() => setShowAiInfoModal(true)}
+                                            title="How AI Works in Swazz (Local On-Device & Fallback)"
+                                            aria-label="How AI Works in Swazz"
+                                        >
+                                            ?
                                         </button>
                                     </div>
                                 )}
@@ -970,6 +990,9 @@ export function RequestDetail({
                 </div>
                 )}
             </div>
+            {showAiInfoModal && (
+                <AiEngineInfoModal onClose={() => setShowAiInfoModal(false)} />
+            )}
         </div>
     );
 }
