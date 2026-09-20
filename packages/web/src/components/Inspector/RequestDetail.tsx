@@ -8,6 +8,7 @@ import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
 import { tokenizeCode } from '../../utils/syntaxHighlight.js';
+import { FormattedMarkdown } from '../Shared/FormattedMarkdown.js';
 
 function tryParseEmbeddedJson(val: any): any {
     if (val === null || val === undefined) return val;
@@ -626,13 +627,17 @@ export function RequestDetail({
                                         {finding.ai_explanation && (
                                             <div className="ai-insights-block">
                                                 <strong className="ai-insights-label">Explanation</strong>
-                                                <div className="ai-insights-text">{finding.ai_explanation}</div>
+                                                <div className="ai-insights-text">
+                                                    <FormattedMarkdown content={finding.ai_explanation} />
+                                                </div>
                                             </div>
                                         )}
                                         {finding.ai_remediation && (
                                             <div className="ai-insights-block">
                                                 <strong className="ai-insights-label">Remediation</strong>
-                                                <div className="ai-insights-text">{finding.ai_remediation}</div>
+                                                <div className="ai-insights-text">
+                                                    <FormattedMarkdown content={finding.ai_remediation} />
+                                                </div>
                                             </div>
                                         )}
                                         {finding.ai_proposed_patch && (

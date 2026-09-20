@@ -6804,7 +6804,62 @@ kbd {
 
 .ai-insights-text {
   white-space: pre-wrap;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.ai-insights-text strong,
+.ai-insights-text b,
+.ai-markdown-bold {
+  font-weight: 700;
   color: var(--text-primary);
+}
+
+.ai-insights-text code,
+.ai-markdown-code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  color: var(--accent-light);
+}
+
+.ai-insights-text em,
+.ai-markdown-italic {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.ai-markdown-pre {
+  margin: var(--space-2) 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  overflow-x: auto;
+}
+
+.ai-markdown-code-block {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+[data-theme="light"] .ai-insights-text code,
+[data-theme="light"] .ai-markdown-code {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #0369a1;
+}
+
+[data-theme="light"] .ai-markdown-pre {
+  background: #f8f9fa;
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .ai-insights-code {

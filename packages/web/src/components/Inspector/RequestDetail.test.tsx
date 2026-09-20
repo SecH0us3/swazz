@@ -182,6 +182,52 @@ describe('RequestDetail Component', () => {
         expect(screen.getByText('⚡ Gemini Nano (On-Device)')).toBeTruthy();
     });
 
+    it('renders markdown bold and inline code in AI explanation and remediation', () => {
+        const markdownResult = {
+            ...mockResult,
+            analyzerFindings: [
+                {
+                    ruleId: 'swazz/oob-interaction',
+                    level: 'error',
+                    message: 'OOB interaction detected',
+                    ai_status: 'completed',
+                    ai_relevance: true,
+                    ai_confidence: 85,
+                    ai_model: 'algorithmic-rules (local)',
+                    ai_explanation: '**Root Cause Analysis:** Potential SSRF at `/users`.',
+                    ai_remediation: '1. **Egress Network Filtering**: Restrict outbound connections.',
+                } as any
+            ]
+        };
+
+        render(
+            <RequestDetail
+                result={markdownResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+                onTriage={mockOnTriage}
+            />
+        );
+
+        const findingsTab = screen.getByRole('tab', { name: /Alerts & Findings/i });
+        fireEvent.click(findingsTab);
+
+        const boldExplanation = screen.getByText('Root Cause Analysis:');
+        expect(boldExplanation.tagName.toLowerCase()).toBe('strong');
+        expect(boldExplanation.className).toContain('ai-markdown-bold');
+
+        const codeEndpoint = screen.getByText('/users');
+        expect(codeEndpoint.tagName.toLowerCase()).toBe('code');
+        expect(codeEndpoint.className).toContain('ai-markdown-code');
+
+        const boldRemediation = screen.getByText('Egress Network Filtering');
+        expect(boldRemediation.tagName.toLowerCase()).toBe('strong');
+        expect(boldRemediation.className).toContain('ai-markdown-bold');
+    });
+
     it('switches between Mutation Diff and Raw Request views', () => {
         render(
             <RequestDetail
