@@ -18,6 +18,7 @@ interface HistoryPageProps {
     onExport: (runId: string | null, baseUrl?: string) => void;
     onExportHTML: (runId: string | null) => void;
     onExportMD: (runId: string | null) => void;
+    onExportExecutiveSummary?: (runId: string) => void;
 }
 
 function formatDate(epoch: number): string {
@@ -38,6 +39,7 @@ export function HistoryPage({
     onExport,
     onExportHTML,
     onExportMD,
+    onExportExecutiveSummary,
 }: HistoryPageProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const loadedRunId = useAppStore(state => state.loadedRunId);
@@ -325,6 +327,7 @@ export function HistoryPage({
                                                                     if (format === 'html') onExportHTML(r.id);
                                                                     else if (format === 'md') onExportMD(r.id);
                                                                     else if (format === 'json') onExport(r.id, r.baseUrl);
+                                                                    else if (format === 'summary' && onExportExecutiveSummary) onExportExecutiveSummary(r.id);
                                                                     e.target.value = '';
                                                                 }}
                                                                 value=""
@@ -333,6 +336,7 @@ export function HistoryPage({
                                                                 <option value="html" disabled={!gateReportExports.unlocked}>{gateReportExports.unlocked ? 'HTML' : 'HTML 🔒'}</option>
                                                                 <option value="md" disabled={!gateReportExports.unlocked}>{gateReportExports.unlocked ? 'Markdown' : 'Markdown 🔒'}</option>
                                                                 <option value="json">JSON</option>
+                                                                <option value="summary">AI Summary ✨</option>
                                                             </select>
                                                             <svg 
                                                                 width="10" 

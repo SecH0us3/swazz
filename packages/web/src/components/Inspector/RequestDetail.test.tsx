@@ -315,6 +315,39 @@ describe('RequestDetail Component', () => {
         expect(navigator.clipboard.writeText).toHaveBeenCalled();
     });
 
+    it('generates adaptive AI PoC script when Adaptive AI mode is selected', async () => {
+        render(
+            <RequestDetail
+                result={{
+                    ...mockResult,
+                    analyzerFindings: [{
+                        ruleId: 'swazz/crlf-injection',
+                        message: 'CRLF injection header split',
+                        level: 'error'
+                    }]
+                }}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+            />
+        );
+
+        const pocTab = screen.getByRole('tab', { name: /Live Replay & PoC Export/i });
+        fireEvent.click(pocTab);
+
+        const adaptiveModeBtn = screen.getByRole('button', { name: /⚡ Adaptive AI/i });
+        fireEvent.click(adaptiveModeBtn);
+
+        expect(await screen.findByText(/Deterministic Regression Script/i)).toBeTruthy();
+
+        await vi.waitFor(() => {
+            const el = document.querySelector('.poc-code-pre');
+            expect(el).toBeTruthy();
+            expect(el?.textContent?.length).toBeGreaterThan(0);
+        });
+    });
+
     it('handles replay request successfully and updates live response', async () => {
         const mockReplay = vi.fn().mockResolvedValue({
             status: 201,

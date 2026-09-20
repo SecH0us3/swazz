@@ -95,4 +95,29 @@ describe('MainWorkspace Component — WAF Check Tab', () => {
         const wafTabBtn = screen.getByTestId('tab-waf');
         expect(wafTabBtn).toHaveClass('active');
     });
+
+    it('opens ExecutiveSummaryModal when AI Executive Summary is clicked from export menu', async () => {
+        useAppStore.setState({ loadedRunId: 'run-abc' });
+        const mockGetExecutiveSummary = vi.fn().mockResolvedValue({
+            summary: '### Security Posture: OPTIMAL\nAll endpoints secure.',
+            model: 'chrome-gemini-nano (on-device)'
+        });
+
+        render(
+            <MainWorkspace
+                {...defaultProps}
+                getRunExecutiveSummary={mockGetExecutiveSummary}
+            />
+        );
+
+        const exportContainer = document.querySelector('.workspace-export-dropdown-container');
+        expect(exportContainer).toBeTruthy();
+        fireEvent.mouseEnter(exportContainer!);
+
+        const aiSummaryBtn = screen.getByRole('button', { name: /AI Executive Summary/i });
+        expect(aiSummaryBtn).toBeInTheDocument();
+        fireEvent.click(aiSummaryBtn);
+
+        expect(await screen.findByText(/Executive Summary \(AI Audit Assessment\)/i)).toBeInTheDocument();
+    });
 });

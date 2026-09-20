@@ -251,7 +251,7 @@ export default function App() {
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
 
-    const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD } = useRunHistory({
+    const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD, getRunExecutiveSummary } = useRunHistory({
         runs,
         queryResults,
         getRunResults,
@@ -970,6 +970,7 @@ export default function App() {
                     handleExport={handleExport}
                     handleExportHTML={handleExportHTML}
                     handleExportMD={handleExportMD}
+                    getRunExecutiveSummary={getRunExecutiveSummary}
                     handleLoadRun={handleLoadRun}
                     handleDeleteRun={handleDeleteRun}
                     queryResults={queryResults}

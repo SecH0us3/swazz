@@ -229,6 +229,7 @@ describe('useRunHistory', () => {
         const mdContent = mockBlobConstructor.mock.calls[0]?.[0]?.[0] || '';
         expect(mdContent).toContain('# 🛡️ Swazz API Fuzzer Report');
         expect(mdContent).toContain('CRLF injection vulnerability detected');
+        expect(mdContent).toContain('Security Posture');
         expect(mdContent).toContain('### /users');
 
         expect(window.URL.createObjectURL).toHaveBeenCalled();

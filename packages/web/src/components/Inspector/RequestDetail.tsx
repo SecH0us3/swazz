@@ -7,6 +7,7 @@ import React, { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
+import { generateAdaptivePoc, type AdaptivePocResult } from '../../services/adaptivePocService.js';
 import { tokenizeCode } from '../../utils/syntaxHighlight.js';
 import { FormattedMarkdown } from '../Shared/FormattedMarkdown.js';
 import { AiEngineInfoModal } from '../Shared/AiEngineInfoModal.js';
@@ -222,6 +223,9 @@ export function RequestDetail({
     const hasFindings = result.analyzerFindings && result.analyzerFindings.length > 0;
     const [mainTab, setMainTab] = useState<'findings' | 'request' | 'poc'>('request');
     const [pocLang, setPocLang] = useState<'curl' | 'python' | 'typescript' | 'go'>('curl');
+    const [pocMode, setPocMode] = useState<'template' | 'adaptive'>('template');
+    const [adaptiveCache, setAdaptiveCache] = useState<Record<string, AdaptivePocResult>>({});
+    const [generatingAdaptive, setGeneratingAdaptive] = useState(false);
     const [analyzingFindingId, setAnalyzingFindingId] = useState<string | null>(null);
     const [showAiInfoModal, setShowAiInfoModal] = useState(false);
 
@@ -238,6 +242,8 @@ export function RequestDetail({
 
     useEffect(() => {
         setMainTab('request');
+        setPocMode('template');
+        setAdaptiveCache({});
     }, [result.id]);
 
     const isMultiIdentity = config?.settings?.bola_testing || Object.keys(config?.auth_identities || {}).length > 0;
@@ -313,6 +319,57 @@ export function RequestDetail({
         setLiveResponse(result.responseBody);
         setLiveHeaders(result.responseHeaders || {});
     }, [result, baseUrl]);
+
+    useEffect(() => {
+        if (mainTab !== 'poc' || pocMode !== 'adaptive' || adaptiveCache[pocLang]) {
+            return;
+        }
+
+        let active = true;
+        setGeneratingAdaptive(true);
+        const firstFinding = result.analyzerFindings?.[0];
+
+        generateAdaptivePoc({
+            method: result.method,
+            url: initialUrl,
+            headers: result.requestHeaders,
+            body: result.payload,
+            language: pocLang,
+            ruleId: firstFinding?.ruleId,
+            message: firstFinding?.message,
+            level: firstFinding?.level,
+            evidence: firstFinding?.evidence,
+        }).then(res => {
+            if (active) {
+                setAdaptiveCache(prev => ({ ...prev, [pocLang]: res }));
+                setGeneratingAdaptive(false);
+            }
+        }).catch(() => {
+            if (active) {
+                setGeneratingAdaptive(false);
+            }
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [mainTab, pocMode, pocLang, result.id, initialUrl]);
+
+    const getActivePocCode = (): string => {
+        const reqOpts = {
+            method: result.method,
+            url: initialUrl,
+            headers: result.requestHeaders,
+            body: result.payload,
+        };
+        if (pocMode === 'adaptive') {
+            return adaptiveCache[pocLang]?.code || '';
+        }
+        if (pocLang === 'curl') return generateCurl(reqOpts);
+        if (pocLang === 'python') return generatePython(reqOpts);
+        if (pocLang === 'typescript') return generateTypeScript(reqOpts);
+        return generateGo(reqOpts);
+    };
 
     const matchingEndpoint = config?.endpoints.find(
         (ep) => ep.path === result.endpoint && ep.method.toUpperCase() === result.method.toUpperCase()
@@ -699,75 +756,98 @@ export function RequestDetail({
                 {mainTab === 'poc' && (
                     <div className="poc-container">
                         <div className="poc-header">
-                            <div className="poc-lang-tabs">
-                                <button
-                                    className={`btn btn-sm ${pocLang === 'curl' ? 'btn-primary' : 'btn-ghost'}`}
-                                    onClick={() => setPocLang('curl')}
+                            <div className="poc-header-left">
+                                <div className="poc-lang-tabs">
+                                    <button
+                                        className={`btn btn-sm ${pocLang === 'curl' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setPocLang('curl')}
+                                    >
+                                        cURL
+                                    </button>
+                                    <button
+                                        className={`btn btn-sm ${pocLang === 'python' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setPocLang('python')}
+                                    >
+                                        Python
+                                    </button>
+                                    <button
+                                        className={`btn btn-sm ${pocLang === 'typescript' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setPocLang('typescript')}
+                                    >
+                                        TypeScript
+                                    </button>
+                                    <button
+                                        className={`btn btn-sm ${pocLang === 'go' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setPocLang('go')}
+                                    >
+                                        Go
+                                    </button>
+                                </div>
+                                <div className="poc-mode-tabs">
+                                    <button
+                                        type="button"
+                                        className={`poc-mode-tab ${pocMode === 'template' ? 'active' : ''}`}
+                                        onClick={() => setPocMode('template')}
+                                    >
+                                        📄 Template
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`poc-mode-tab ${pocMode === 'adaptive' ? 'active' : ''}`}
+                                        onClick={() => setPocMode('adaptive')}
+                                    >
+                                        ⚡ Adaptive AI
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="poc-header-actions">
+                                <button 
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => {
+                                        const code = getActivePocCode();
+                                        copy(code, 'poc');
+                                    }}
                                 >
-                                    cURL
-                                </button>
-                                <button
-                                    className={`btn btn-sm ${pocLang === 'python' ? 'btn-primary' : 'btn-ghost'}`}
-                                    onClick={() => setPocLang('python')}
-                                >
-                                    Python
-                                </button>
-                                <button
-                                    className={`btn btn-sm ${pocLang === 'typescript' ? 'btn-primary' : 'btn-ghost'}`}
-                                    onClick={() => setPocLang('typescript')}
-                                >
-                                    TypeScript
-                                </button>
-                                <button
-                                    className={`btn btn-sm ${pocLang === 'go' ? 'btn-primary' : 'btn-ghost'}`}
-                                    onClick={() => setPocLang('go')}
-                                >
-                                    Go
+                                    {copied === 'poc' ? '✓ Copied' : '📋 Copy Exploit Script'}
                                 </button>
                             </div>
-                            <button 
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => {
-                                    const reqOpts = {
-                                        method: result.method,
-                                        url: initialUrl,
-                                        headers: result.requestHeaders,
-                                        body: result.payload,
-                                    };
-                                    let code = '';
-                                    if (pocLang === 'curl') code = generateCurl(reqOpts);
-                                    else if (pocLang === 'python') code = generatePython(reqOpts);
-                                    else if (pocLang === 'typescript') code = generateTypeScript(reqOpts);
-                                    else if (pocLang === 'go') code = generateGo(reqOpts);
-                                    copy(code, 'poc');
-                                }}
-                            >
-                                {copied === 'poc' ? '✓ Copied' : '📋 Copy Exploit Script'}
-                            </button>
                         </div>
+
+                        {pocMode === 'adaptive' && (
+                            <div className="poc-adaptive-banner">
+                                <span className="poc-adaptive-badge">
+                                    {adaptiveCache[pocLang] && !adaptiveCache[pocLang].simulated
+                                        ? '⚡ Gemini Nano (Defensive QA Regression Test)'
+                                        : '🛠️ Deterministic Regression Script'}
+                                </span>
+                                {generatingAdaptive && (
+                                    <span className="poc-generating-indicator">
+                                        <span className="spinner-sm" /> Generating script with on-device AI...
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
                         <div className="poc-code-wrapper">
-                            <pre className="poc-code-pre">
-                                <code>
-                                    {(() => {
-                                        const reqOpts = {
-                                            method: result.method,
-                                            url: initialUrl,
-                                            headers: result.requestHeaders,
-                                            body: result.payload,
-                                        };
-                                        let code: string;
-                                        if (pocLang === 'curl') code = generateCurl(reqOpts);
-                                        else if (pocLang === 'python') code = generatePython(reqOpts);
-                                        else if (pocLang === 'typescript') code = generateTypeScript(reqOpts);
-                                        else code = generateGo(reqOpts);
-                                        return tokenizeCode(code, 'code').map((tok, i) =>
-                                            tok.className
-                                                ? <span key={i} className={tok.className}>{tok.text}</span>
-                                                : <React.Fragment key={i}>{tok.text}</React.Fragment>
-                                        );
-                                    })()}
-                                </code>
-                            </pre>
+                            {generatingAdaptive && !adaptiveCache[pocLang] ? (
+                                <div className="poc-loading-state">
+                                    <span className="spinner-sm" />
+                                    <span>Generating adaptive regression test script with on-device AI...</span>
+                                </div>
+                            ) : (
+                                <pre className="poc-code-pre">
+                                    <code>
+                                        {(() => {
+                                            const code = getActivePocCode();
+                                            return tokenizeCode(code, 'code').map((tok, i) =>
+                                                tok.className
+                                                    ? <span key={i} className={tok.className}>{tok.text}</span>
+                                                    : <React.Fragment key={i}>{tok.text}</React.Fragment>
+                                            );
+                                        })()}
+                                    </code>
+                                </pre>
+                            )}
                         </div>
                     </div>
                 )}

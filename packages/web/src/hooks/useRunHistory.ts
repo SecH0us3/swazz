@@ -7,6 +7,7 @@ import type { RunStats } from '../types.js';
 import type { ResultSummary } from './useRunner.js';
 import type { QueryOptions } from './useDb.js';
 import { useAppStore } from '../store/appStore.js';
+import { generateExecutiveSummary } from '../services/executiveSummaryService.js';
 
 interface UseRunHistoryProps {
     runs: any[];
@@ -81,6 +82,26 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         showToast(`Exported ${rows.length.toLocaleString()} results`, 'success');
     };
 
+    const buildSummaryInput = (findings: ClientFinding[], rows: ResultSummary[], stats: RunStats | null, startedAt: number, completedAt: number) => {
+        const durationSec = completedAt && startedAt ? Math.max(0, Math.floor((completedAt - startedAt) / 1000)) : 0;
+        const topFindings = findings.slice(0, 10).map(f => ({
+            ruleId: f.ruleId,
+            level: f.level,
+            endpoint: f.endpoint,
+            owaspCategory: f.owaspCategory && f.owaspCategory.length > 0 ? f.owaspCategory : f.owaspApiCategory,
+        }));
+        return {
+            totalRequests: stats?.totalRequests || rows.length,
+            durationSec,
+            totalEndpoints: stats?.progress?.totalEndpoints || new Set(findings.map(f => f.endpoint)).size || 1,
+            findingsCount: findings.length,
+            errorsCount: findings.filter(f => f.level === 'error').length,
+            warningsCount: findings.filter(f => f.level === 'warning').length,
+            notesCount: findings.filter(f => f.level === 'note').length,
+            topFindings,
+        };
+    };
+
     const handleExportHTML = async (runId: string | null) => {
         if (!runId) {
             showToast('No active run or selected history to export', 'error');
@@ -95,7 +116,16 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
 
             const rows = await getRunResults(runId);
             const findings = classifyResults(rows);
-            const htmlContent = generateHTMLReport(findings, stats, startedAt, completedAt);
+
+            let execSummary = '';
+            try {
+                const summaryRes = await generateExecutiveSummary(buildSummaryInput(findings, rows, stats, startedAt, completedAt));
+                execSummary = summaryRes.summary;
+            } catch {
+                // fallback handled inside service
+            }
+
+            const htmlContent = generateHTMLReport(findings, stats, startedAt, completedAt, execSummary);
 
             const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -124,7 +154,16 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
 
             const rows = await getRunResults(runId);
             const findings = classifyResults(rows);
-            const mdContent = generateMarkdownReport(findings, stats, startedAt, completedAt);
+
+            let execSummary = '';
+            try {
+                const summaryRes = await generateExecutiveSummary(buildSummaryInput(findings, rows, stats, startedAt, completedAt));
+                execSummary = summaryRes.summary;
+            } catch {
+                // fallback handled inside service
+            }
+
+            const mdContent = generateMarkdownReport(findings, stats, startedAt, completedAt, '1.0.0', execSummary);
 
             const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -139,8 +178,21 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         }
     };
 
+    const getRunExecutiveSummary = async (runId: string) => {
+        const runData = runs.find(r => r.id === runId);
+        const startedAt = runData ? runData.startedAt : Date.now();
+        const completedAt = runData ? runData.completedAt : Date.now();
+        const stats = runData ? runData.stats : null;
+
+        const rows = await getRunResults(runId);
+        const findings = classifyResults(rows);
+        const summaryInput = buildSummaryInput(findings, rows, stats, startedAt, completedAt);
+        return generateExecutiveSummary(summaryInput);
+    };
+
     return {
         handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD,
+        getRunExecutiveSummary,
         queryResults,
     };
 }
@@ -423,7 +475,7 @@ function classifyResults(rows: ResultSummary[]): ClientFinding[] {
     return findings;
 }
 
-function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, startedAt: number, completedAt: number): string {
+function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, startedAt: number, completedAt: number, executiveSummary?: string): string {
     const timestampStr = formatDateTime(new Date());
     let duration = 0;
     if (completedAt && startedAt) {
@@ -726,6 +778,15 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
             <div class="stat-card"><span class="stat-value" style="color: var(--warning)">${warnings}</span><span class="stat-label">Warnings</span></div>
             <div class="stat-card"><span class="stat-value">${totalEndpoints}</span><span class="stat-label">Endpoints</span></div>
         </div>
+        ${executiveSummary ? `
+        <div class="executive-summary-section" style="margin-bottom: 2rem; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 0.75rem; padding: 1.5rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                <h2 style="margin: 0; font-size: 1.25rem; color: var(--primary);">✨ Executive Security Summary (AI Audit Assessment)</h2>
+                <span class="badge" style="background: rgba(56, 189, 248, 0.2); color: var(--primary);">On-Device AI</span>
+            </div>
+            <div style="color: #cbd5e1; font-size: 0.9375rem; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(executiveSummary)}</div>
+        </div>
+        ` : ''}
 
         <h2>OWASP API Security Top 10 (2023)</h2>
         <div class="owasp-section">
@@ -761,7 +822,7 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
 </html>`;
 }
 
-function generateMarkdownReport(findings: ClientFinding[], stats: RunStats | null, startedAt: number, completedAt: number, version: string = '1.0.0'): string {
+function generateMarkdownReport(findings: ClientFinding[], stats: RunStats | null, startedAt: number, completedAt: number, version: string = '1.0.0', executiveSummary?: string): string {
     let errors = 0;
     let warnings = 0;
     let notes = 0;
@@ -783,6 +844,10 @@ function generateMarkdownReport(findings: ClientFinding[], stats: RunStats | nul
     sb += `**Generated At**: ${new Date().toISOString()}\n\n`;
 
     sb += `## 📊 Executive Summary\n\n`;
+    if (executiveSummary) {
+        sb += `${executiveSummary}\n\n`;
+        sb += `### 📈 Scan Metrics\n\n`;
+    }
     sb += `| Metric | Value |\n`;
     sb += `| --- | --- |\n`;
     sb += `| Total Requests | ${totalRequests} |\n`;
