@@ -35,6 +35,7 @@ import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
 import { useTips } from './hooks/useTips.js';
 import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
 import { TipsOffNotice } from './components/DidYouKnow/TipsOffNotice.js';
+import { explainFindingWithChromeAI, getAlgorithmicFindingAnalysis } from './services/chromeAiService.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -557,31 +558,58 @@ export default function App() {
             const headers: Record<string, string> = {
                 'Content-Type': 'application/json',
             };
-            const token = localStorage.getItem('swazz_auth_token');
+            const token = localStorage.getItem('swazz_token') || localStorage.getItem('swazz_auth_token');
             if (token) headers['Authorization'] = `Bearer ${token}`;
+            const csrfToken = useAppStore.getState().csrfToken;
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
             let analysisData: any = null;
-            const scanId = (current as any).scan_id || (current as any).scanId;
+            const scanId = (current as any).scan_id || (current as any).scanId || useAppStore.getState().liveRunId || useAppStore.getState().loadedRunId;
+
+            // Tier 1: Cloudflare Workers AI via Edge API
             if (finding.id && scanId) {
-                const res = await fetch(`${PROXY_URL}/api/scans/${scanId}/findings/${finding.id}/ai-analyze`, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({ code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload) }),
-                });
-                if (res.ok) {
-                    const json = await res.json();
-                    analysisData = json.analysis;
+                try {
+                    const res = await fetch(`${PROXY_URL}/api/scans/${scanId}/findings/${finding.id}/ai-analyze`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload) }),
+                    });
+                    if (res.ok) {
+                        const json = await res.json();
+                        analysisData = json.analysis;
+                    }
+                } catch {
+                    // Backend AI failed or network error, fallback to next tier
                 }
             }
 
+            // Tier 2: Chrome Built-in AI (Prompt API / Gemini Nano on-device)
             if (!analysisData) {
-                analysisData = {
-                    explanation: `AI Root Cause Analysis for ${finding.ruleId}: The endpoint ${current.endpoint || 'analyzed'} demonstrated vulnerability behavior.`,
-                    remediation: `Review input validation and sanitization for ${finding.ruleId}.`,
-                    relevance: true,
-                    confidence: 85,
-                    proposed_patch: `// Recommended Mitigation for ${finding.ruleId}\n// Ensure strict input validation at ${current.endpoint || 'endpoint'}`,
-                };
+                const chromeResult = await explainFindingWithChromeAI({
+                    ruleId: finding.ruleId,
+                    level: finding.level,
+                    message: finding.message,
+                    evidence: finding.evidence,
+                    endpoint: current.endpoint,
+                    target_url: current.resolvedPath || current.endpoint,
+                    code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload),
+                });
+                if (chromeResult) {
+                    analysisData = chromeResult;
+                }
+            }
+
+            // Tier 3: Algorithmic Rule-based Synthesis (CyberNova pattern)
+            if (!analysisData) {
+                analysisData = getAlgorithmicFindingAnalysis({
+                    ruleId: finding.ruleId,
+                    level: finding.level,
+                    message: finding.message,
+                    evidence: finding.evidence,
+                    endpoint: current.endpoint,
+                    target_url: current.resolvedPath || current.endpoint,
+                    code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload),
+                });
             }
 
             const updatedFindings = (current.analyzerFindings || []).map(f => {
@@ -594,6 +622,7 @@ export default function App() {
                         ai_relevance: analysisData.relevance,
                         ai_confidence: analysisData.confidence,
                         ai_proposed_patch: analysisData.proposed_patch,
+                        ai_model: analysisData.model,
                     };
                 }
                 return f;
@@ -605,7 +634,14 @@ export default function App() {
                     analyzerFindings: updatedFindings,
                 },
             });
-            showToast('AI analysis completed', 'success');
+
+            if (analysisData.model?.includes('gemini') || analysisData.model?.includes('chrome')) {
+                showToast('⚡ Analyzed on-device with Chrome Gemini Nano', 'success');
+            } else if (analysisData.model?.includes('algorithmic')) {
+                showToast('AI analysis completed (offline rules)', 'success');
+            } else {
+                showToast('AI analysis completed', 'success');
+            }
         } catch (err: any) {
             showToast(`AI analysis failed: ${err.message}`, 'error');
         }

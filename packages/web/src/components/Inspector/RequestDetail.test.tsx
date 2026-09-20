@@ -146,6 +146,42 @@ describe('RequestDetail Component', () => {
         expect(mockOnTriage).toHaveBeenCalledWith('res-123', 'false_positive');
     });
 
+    it('renders on-device badge when ai_model is chrome gemini nano', () => {
+        const onDeviceResult = {
+            ...mockResult,
+            analyzerFindings: [
+                {
+                    ruleId: 'swazz/cors-misconfig',
+                    level: 'warning',
+                    message: 'CORS wildcard found',
+                    ai_status: 'completed',
+                    ai_relevance: true,
+                    ai_confidence: 88,
+                    ai_model: 'chrome-gemini-nano (on-device)',
+                    ai_explanation: 'Origin allows any domain',
+                    ai_remediation: 'Whitelist origins',
+                } as any
+            ]
+        };
+
+        render(
+            <RequestDetail
+                result={onDeviceResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+                onTriage={mockOnTriage}
+            />
+        );
+
+        const findingsTab = screen.getByRole('tab', { name: /Alerts & Findings/i });
+        fireEvent.click(findingsTab);
+
+        expect(screen.getByText('⚡ Gemini Nano (On-Device)')).toBeTruthy();
+    });
+
     it('switches between Mutation Diff and Raw Request views', () => {
         render(
             <RequestDetail

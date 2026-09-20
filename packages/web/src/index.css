@@ -6778,6 +6778,19 @@ kbd {
   font-size: var(--font-size-md);
 }
 
+.badge-ai-model {
+  background: var(--bg-tertiary);
+  color: var(--accent-light);
+  border: 1px solid var(--border-default);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  letter-spacing: 0.02em;
+}
+
 .ai-insights-block {
   margin-bottom: var(--space-3);
 }

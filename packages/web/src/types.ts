@@ -58,6 +58,7 @@ export interface AnalysisFinding {
     ai_proposed_patch?: string;
     pr_link?: string;
     ai_confidence?: number;
+    ai_model?: string;
 }
 
 export interface ChainingRule {

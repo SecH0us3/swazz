@@ -602,6 +602,13 @@ export function RequestDetail({
                                     <div className="ai-insights-section">
                                         <div className="ai-insights-header">
                                             <span className="ai-insights-title">✨ AI Insights</span>
+                                            {finding.ai_model && (
+                                                <span className="badge badge-ai-model" title={finding.ai_model}>
+                                                    {finding.ai_model.includes('gemini') || finding.ai_model.includes('chrome') ? '⚡ Gemini Nano (On-Device)' :
+                                                     finding.ai_model.includes('llama') ? '☁️ Llama 3.2 (Workers AI)' :
+                                                     '🛠️ Rule-based (Local)'}
+                                                </span>
+                                            )}
                                             {finding.ai_relevance != null && (
                                                 <span className={`alert-badge ${finding.ai_relevance ? 'badge-error' : 'badge-success'}`}>
                                                     {finding.ai_relevance ? 'True Positive' : 'False Positive'}
