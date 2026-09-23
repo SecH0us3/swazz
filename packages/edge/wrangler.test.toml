@@ -1,0 +1,86 @@
+name = "swazz-api"
+main = "src/index.ts"
+compatibility_date = "2026-04-28"
+compatibility_flags = ["nodejs_compat"]
+logpush = true
+
+alias = { "@swazz/shared" = "../shared/src/features.ts" }
+
+routes = [
+  { pattern = "swazz.secmy.app/api*", zone_name = "secmy.app" }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "swazz_db"
+database_id = "0b09f6b6-8188-4172-9710-04c3798553af"
+
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "swazz-reports"
+
+[[kv_namespaces]]
+binding = "SESSION_CACHE"
+id = "12a1d05930f94f3698557707a85874ba"
+preview_id = "2ef7afd5df23486c8430f03b3068ce59"
+
+[[durable_objects.bindings]]
+name = "COORDINATOR_DO"
+class_name = "RunnerCoordinator"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["RunnerCoordinator"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["SwazzContainer"]
+
+[[migrations]]
+tag = "v3"
+deleted_classes = ["SwazzContainer"]
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+
+[vars]
+AUTH_ENABLED = "true"
+PASSWORD_AUTH_ENABLED = "false"
+LIMIT_ANONYMOUS = "true"
+ALLOWED_ORIGINS = "*"
+TURNSTILE_SITE_KEY = "0x4AAAAAADry7cDPHW8cvNuC"
+NODE_ENV = "production"
+
+[triggers]
+crons = [ "* * * * *" ]
+
+[[queues.producers]]
+binding = "SCAN_QUEUE"
+queue = "swazz-scan-queue"
+
+[[queues.consumers]]
+queue = "swazz-scan-queue"
+max_batch_size = 1
+max_batch_timeout = 0
+
+[[queues.producers]]
+binding = "FINDINGS_QUEUE"
+queue = "swazz-findings-queue"
+
+[[queues.consumers]]
+queue = "swazz-findings-queue"
+max_batch_size = 100
+max_batch_timeout = 2
+
+[[send_email]]
+name = "SEND_EMAIL"
+allowed_sender_addresses = ["notifications@secmy.app", "swazz@secmy.app"]
+
+
+
+

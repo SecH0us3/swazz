@@ -10,7 +10,7 @@ import path from "node:path";
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: path.resolve(__dirname, "./wrangler.toml") },
+      wrangler: { configPath: path.resolve(__dirname, "./wrangler.test.toml") },
       miniflare: {
         compatibilityDate: "2026-06-10",
         d1Databases: ["DB"],
