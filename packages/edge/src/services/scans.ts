@@ -44,7 +44,8 @@ export interface IScansService {
     body: { code_context?: string },
     userId: string | null,
     isAuthEnabled: boolean,
-    ctx?: any
+    ctx?: any,
+    clientIp?: string | null
   ): Promise<{ success: boolean; finding: any; analysis: FindingAnalysisResult }>;
 }
 
@@ -366,7 +367,8 @@ export class ScansService implements IScansService {
     body: { code_context?: string },
     userId: string | null,
     isAuthEnabled: boolean,
-    ctx?: any
+    ctx?: any,
+    clientIp?: string | null
   ): Promise<{ success: boolean; finding: any; analysis: FindingAnalysisResult }> {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
@@ -378,9 +380,11 @@ export class ScansService implements IScansService {
       throw new Error('Finding not found|404');
     }
 
-    // Anti-abuse rate limiting per user via KV to safeguard daily Neurons budget
-    if (this.env.SESSION_CACHE && userId) {
-      const rateLimitKey = `ratelimit:ai_analyze:${userId}`;
+    // Anti-abuse rate limiting per user/IP via KV to safeguard daily Neurons budget
+    if (this.env.SESSION_CACHE) {
+      const identity = userId || clientIp || 'anonymous';
+      const bucket = Math.floor(Date.now() / 3600000);
+      const rateLimitKey = `ratelimit:ai_analyze:${identity}:${bucket}`;
       try {
         const countStr = await this.env.SESSION_CACHE.get(rateLimitKey);
         const count = countStr ? parseInt(countStr, 10) : 0;
@@ -389,7 +393,8 @@ export class ScansService implements IScansService {
         }
         await this.env.SESSION_CACHE.put(rateLimitKey, String(count + 1), { expirationTtl: 3600 });
       } catch (err: any) {
-        if (err.message.includes('|')) throw err;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes('|')) throw err;
       }
     }
 

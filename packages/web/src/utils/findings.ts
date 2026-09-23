@@ -121,3 +121,14 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
 
     return { title, color, key };
 }
+
+/**
+ * Determines whether finding `f` matches the target finding based on unique ID (when available)
+ * or ruleId (as fallback).
+ */
+export function matchesFinding(
+    f: { id?: string; ruleId: string },
+    target: { id?: string; ruleId: string }
+): boolean {
+    return target.id ? f.id === target.id : f.ruleId === target.ruleId;
+}

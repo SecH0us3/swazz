@@ -114,4 +114,58 @@ if __name__ == "__main__":
     expect(result.model).toContain('algorithmic-rules');
     expect(result.code).toContain('assert');
   });
+
+  it('correctly formats Python script with json.loads and properly escaped URL/payload', () => {
+    const result = generateAlgorithmicAdaptivePoc({
+      method: 'POST',
+      url: 'https://api.example.com/search?q="test"',
+      headers: { 'Content-Type': 'application/json' },
+      body: { active: true, fallback: null, query: 'admin" OR 1=1--' },
+      language: 'python',
+      ruleId: 'swazz/sqli'
+    });
+
+    expect(result.code).toContain('import json');
+    expect(result.code).toContain('TARGET_URL = "https://api.example.com/search?q=\\"test\\""');
+    expect(result.code).toContain('HEADERS = json.loads(');
+    expect(result.code).toContain('PAYLOAD = json.loads(');
+    expect(result.code).toMatch(/PAYLOAD = json\.loads\("{\\?"active\\?":\s*true/);
+  });
+
+  it('correctly formats TypeScript script with properly escaped URL', () => {
+    const result = generateAlgorithmicAdaptivePoc({
+      method: 'GET',
+      url: 'https://api.example.com/test?query="quoted"',
+      language: 'typescript',
+      ruleId: 'swazz/xss'
+    });
+
+    expect(result.code).toContain('const url = "https://api.example.com/test?query=\\"quoted\\"";');
+  });
+
+  it('correctly formats Go script with backticks in body and properly escaped URL', () => {
+    const result = generateAlgorithmicAdaptivePoc({
+      method: 'POST',
+      url: 'https://api.example.com/run?id="xyz"',
+      body: 'echo `id`',
+      language: 'go',
+      ruleId: 'swazz/cmdi'
+    });
+
+    expect(result.code).toContain('targetURL := "https://api.example.com/run?id=\\"xyz\\""');
+    expect(result.code).toContain('strings.NewReader("echo `id`")');
+    expect(result.code).not.toContain('strings.NewReader(`echo `id``)');
+  });
+
+  it('correctly escapes URL containing quotes and dollar signs in cURL echo statement', () => {
+    const result = generateAlgorithmicAdaptivePoc({
+      method: 'GET',
+      url: 'https://api.example.com/eval?expr="$(whoami)"&tag="test"',
+      language: 'curl',
+      ruleId: 'swazz/cmdi'
+    });
+
+    expect(result.code).toContain('echo "[*] Sending verification request to https://api.example.com/eval?expr=\\"\\$(whoami)\\"&tag=\\"test\\"..."');
+  });
 });
+

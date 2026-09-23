@@ -352,6 +352,7 @@ export function RequestDetail({
 
         return () => {
             active = false;
+            setGeneratingAdaptive(false);
         };
     }, [mainTab, pocMode, pocLang, result.id, initialUrl]);
 

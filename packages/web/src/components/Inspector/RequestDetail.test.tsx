@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { RequestDetail } from './RequestDetail.js';
 import type { FuzzResult, AnalysisFinding, SwazzConfig } from '../../types.js';
+import * as adaptivePocModule from '../../services/adaptivePocService.js';
 
 describe('RequestDetail Component', () => {
     const mockOnClose = vi.fn();
@@ -578,5 +579,45 @@ describe('RequestDetail Component', () => {
         // Close modal
         fireEvent.click(screen.getByRole('button', { name: /Got it/i }));
         expect(screen.queryByText(/Tier 1 \(Default\): Chrome Built-in AI/i)).toBeNull();
+    });
+
+    it('resets generatingAdaptive on effect cleanup when switching away or unmounting', async () => {
+        let resolvePromise: (val: any) => void = () => {};
+        const pendingPromise = new Promise<any>((resolve) => {
+            resolvePromise = resolve;
+        });
+        const spy = vi.spyOn(adaptivePocModule, 'generateAdaptivePoc').mockReturnValue(pendingPromise);
+
+        const { unmount } = render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+            />
+        );
+
+        // Switch to PoC tab
+        const pocTab = screen.getByRole('tab', { name: /Live Replay & PoC Export/i });
+        fireEvent.click(pocTab);
+
+        // Switch to Adaptive AI mode
+        const adaptiveBtn = screen.getByRole('button', { name: /⚡ Adaptive AI/i });
+        fireEvent.click(adaptiveBtn);
+
+        // Loading state should be displayed
+        expect(screen.getByText(/Generating adaptive regression test script with on-device AI/i)).toBeTruthy();
+
+        // Switch back to Template mode - triggers cleanup
+        const templateBtn = screen.getByRole('button', { name: /📄 Template/i });
+        fireEvent.click(templateBtn);
+
+        // Loading state should no longer be displayed
+        expect(screen.queryByText(/Generating adaptive regression test script with on-device AI/i)).toBeNull();
+
+        unmount();
+        resolvePromise({ code: '', model: '', simulated: true });
+        spy.mockRestore();
     });
 });

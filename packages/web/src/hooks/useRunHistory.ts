@@ -3,6 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
+import { useCallback } from 'react';
 import type { RunStats } from '../types.js';
 import type { ResultSummary } from './useRunner.js';
 import type { QueryOptions } from './useDb.js';
@@ -21,7 +22,7 @@ interface UseRunHistoryProps {
 export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, showToast, onRunLoaded }: UseRunHistoryProps) {
     // No need to subscribe to store state here since we use getState() in callbacks
 
-    const handleLoadRun = async (runId: string, importedRun?: any) => {
+    const handleLoadRun = useCallback(async (runId: string, importedRun?: any) => {
         const runData = importedRun || runs.find(r => r.id === runId);
         if (!runData) return;
         useAppStore.setState({
@@ -30,9 +31,9 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         });
         onRunLoaded();
         showToast(`Loaded run from history`, 'success');
-    };
+    }, [runs, onRunLoaded, showToast]);
 
-    const handleDeleteRun = async (runId: string) => {
+    const handleDeleteRun = useCallback(async (runId: string) => {
         await deleteRun(runId);
         const state = useAppStore.getState();
         if (state.loadedRunId === runId) {
@@ -46,9 +47,9 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
             });
         }
         showToast('Run deleted', 'success');
-    };
+    }, [deleteRun, showToast]);
 
-    const handleExport = async (runId: string | null, baseUrl?: string) => {
+    const handleExport = useCallback(async (runId: string | null, baseUrl?: string) => {
         if (!runId) {
             showToast('No run selected to export', 'error');
             return;
@@ -80,29 +81,9 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         a.click();
         URL.revokeObjectURL(url);
         showToast(`Exported ${rows.length.toLocaleString()} results`, 'success');
-    };
+    }, [getRunResults, showToast]);
 
-    const buildSummaryInput = (findings: ClientFinding[], rows: ResultSummary[], stats: RunStats | null, startedAt: number, completedAt: number) => {
-        const durationSec = completedAt && startedAt ? Math.max(0, Math.floor((completedAt - startedAt) / 1000)) : 0;
-        const topFindings = findings.slice(0, 10).map(f => ({
-            ruleId: f.ruleId,
-            level: f.level,
-            endpoint: f.endpoint,
-            owaspCategory: f.owaspCategory && f.owaspCategory.length > 0 ? f.owaspCategory : f.owaspApiCategory,
-        }));
-        return {
-            totalRequests: stats?.totalRequests || rows.length,
-            durationSec,
-            totalEndpoints: stats?.progress?.totalEndpoints || new Set(findings.map(f => f.endpoint)).size || 1,
-            findingsCount: findings.length,
-            errorsCount: findings.filter(f => f.level === 'error').length,
-            warningsCount: findings.filter(f => f.level === 'warning').length,
-            notesCount: findings.filter(f => f.level === 'note').length,
-            topFindings,
-        };
-    };
-
-    const handleExportHTML = async (runId: string | null) => {
+    const handleExportHTML = useCallback(async (runId: string | null) => {
         if (!runId) {
             showToast('No active run or selected history to export', 'error');
             return;
@@ -138,9 +119,9 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         } catch (err) {
             showToast(err instanceof Error ? err.message : 'Export failed', 'error');
         }
-    };
+    }, [runs, getRunResults, showToast]);
 
-    const handleExportMD = async (runId: string | null) => {
+    const handleExportMD = useCallback(async (runId: string | null) => {
         if (!runId) {
             showToast('No active run or selected history to export', 'error');
             return;
@@ -176,9 +157,9 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         } catch (err) {
             showToast(err instanceof Error ? err.message : 'Export failed', 'error');
         }
-    };
+    }, [runs, getRunResults, showToast]);
 
-    const getRunExecutiveSummary = async (runId: string) => {
+    const getRunExecutiveSummary = useCallback(async (runId: string) => {
         const runData = runs.find(r => r.id === runId);
         const startedAt = runData ? runData.startedAt : Date.now();
         const completedAt = runData ? runData.completedAt : Date.now();
@@ -188,7 +169,7 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         const findings = classifyResults(rows);
         const summaryInput = buildSummaryInput(findings, rows, stats, startedAt, completedAt);
         return generateExecutiveSummary(summaryInput);
-    };
+    }, [runs, getRunResults]);
 
     return {
         handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD,
@@ -198,6 +179,26 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
 }
 
 // ─── Helpers for Client-Side Report Generation ─────────────────
+
+function buildSummaryInput(findings: ClientFinding[], rows: ResultSummary[], stats: RunStats | null, startedAt: number, completedAt: number) {
+    const durationSec = completedAt && startedAt ? Math.max(0, Math.floor((completedAt - startedAt) / 1000)) : 0;
+    const topFindings = findings.slice(0, 10).map(f => ({
+        ruleId: f.ruleId,
+        level: f.level,
+        endpoint: f.endpoint,
+        owaspCategory: f.owaspCategory && f.owaspCategory.length > 0 ? f.owaspCategory : f.owaspApiCategory,
+    }));
+    return {
+        totalRequests: stats?.totalRequests || rows.length,
+        durationSec,
+        totalEndpoints: stats?.progress?.totalEndpoints || new Set(findings.map(f => f.endpoint)).size || 1,
+        findingsCount: findings.length,
+        errorsCount: findings.filter(f => f.level === 'error').length,
+        warningsCount: findings.filter(f => f.level === 'warning').length,
+        notesCount: findings.filter(f => f.level === 'note').length,
+        topFindings,
+    };
+}
 
 interface ClientFinding {
     id: string;

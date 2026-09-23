@@ -36,6 +36,7 @@ import { useTips } from './hooks/useTips.js';
 import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
 import { TipsOffNotice } from './components/DidYouKnow/TipsOffNotice.js';
 import { explainFindingWithChromeAI, getAlgorithmicFindingAnalysis } from './services/chromeAiService.js';
+import { matchesFinding } from './utils/findings.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -611,7 +612,8 @@ export default function App() {
             }
 
             const updatedFindings = (current.analyzerFindings || []).map(f => {
-                if ((finding.id && f.id === finding.id) || f.ruleId === finding.ruleId) {
+                const isMatch = matchesFinding(f, finding);
+                if (isMatch) {
                     return {
                         ...f,
                         ai_status: 'completed' as const,

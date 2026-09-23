@@ -336,7 +336,8 @@ describe('Scans Routes Unit Tests', () => {
         { code_context: 'SELECT * FROM users WHERE id = ' },
         'user_123',
         true,
-        undefined
+        undefined,
+        '127.0.0.1'
       );
     });
 

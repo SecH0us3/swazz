@@ -198,7 +198,8 @@ describe('Workers AI End-to-End Workflow', () => {
     expect(analyzeBody.analysis.confidence).toBeGreaterThanOrEqual(80);
 
     // 3. Verify KV rate limit key was recorded
-    expect(kvStore.get(`ratelimit:ai_analyze:${userId}`)).toBe('1');
+    const hourlyBucket = Math.floor(Date.now() / 3600000);
+    expect(kvStore.get(`ratelimit:ai_analyze:${userId}:${hourlyBucket}`)).toBe('1');
 
     // 4. Verify Finding in D1 was updated to completed state
     const updatedFinding = d1Findings.get(findingId);
@@ -222,7 +223,7 @@ describe('Workers AI End-to-End Workflow', () => {
       }),
     });
 
-    await scansRepo.updateScanStatus(scanId, 'completed', null);
+    await scansRepo.updateScanStatus(scanId, 'completed');
 
     // 6. Inspect sent transactional emails
     const sentEmails = getDevSentEmails();
@@ -254,7 +255,8 @@ describe('Workers AI End-to-End Workflow', () => {
     d1Findings.set(findingId, { id: findingId, scan_id: scanId, rule_id: 'xss', level: 'high' });
 
     // Pre-seed KV with 50 previous requests
-    kvStore.set(`ratelimit:ai_analyze:${userId}`, '50');
+    const hourlyBucket = Math.floor(Date.now() / 3600000);
+    kvStore.set(`ratelimit:ai_analyze:${userId}:${hourlyBucket}`, '50');
     kvStore.set(`rbac:${projectId}:${userId}`, JSON.stringify({
       permissions: ['get:/api/projects/:id/scans', 'post:/api/projects/:id/scans']
     }));

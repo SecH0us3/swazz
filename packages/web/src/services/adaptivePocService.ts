@@ -56,12 +56,13 @@ Purpose: Verify if vulnerability "${rule}" is remediated.
 Expected: Target API must reject malicious inputs or maintain access boundaries.
 """
 
+import json
 import requests
 import sys
 
-TARGET_URL = "${input.url}"
-HEADERS = ${JSON.stringify(input.headers || {}, null, 4)}
-${input.body !== undefined && input.body !== null ? `PAYLOAD = ${JSON.stringify(input.body, null, 4)}\n` : ''}
+TARGET_URL = ${JSON.stringify(input.url)}
+HEADERS = json.loads(${JSON.stringify(JSON.stringify(input.headers || {}))})
+${input.body !== undefined && input.body !== null ? `PAYLOAD = json.loads(${JSON.stringify(JSON.stringify(input.body))})\n` : ''}
 def verify_security_patch():
     print(f"[*] Testing {TARGET_URL} for ${rule} remediation...")
     try:
@@ -104,7 +105,7 @@ if __name__ == "__main__":
  */
 
 async function verifySecurityPatch(): Promise<boolean> {
-  const url = "${input.url}";
+  const url = ${JSON.stringify(input.url)};
   const headers = ${JSON.stringify(input.headers || {}, null, 2)};
   ${input.body !== undefined && input.body !== null ? `const payload = ${JSON.stringify(input.body, null, 2)};\n` : ''}
   console.log(\`[*] Verifying remediation for \${"${rule}"} at \${url}...\`);
@@ -143,6 +144,7 @@ verifySecurityPatch().catch((err) => {
       headers: input.headers,
       body: input.body,
     });
+    const escapedShellUrl = input.url.replace(/["$`\\]/g, '\\$&');
 
     code = `#!/usr/bin/env bash
 # Automated Verification Script for ${rule}
@@ -150,7 +152,7 @@ verifySecurityPatch().catch((err) => {
 
 set -eo pipefail
 
-echo "[*] Sending verification request to ${input.url}..."
+echo "[*] Sending verification request to ${escapedShellUrl}..."
 RESPONSE_FILE=$(mktemp)
 
 STATUS_CODE=$(${rawCurl} -s -w "%{http_code}" -o "$RESPONSE_FILE")
@@ -188,11 +190,11 @@ import (
 
 // Security Regression Test: ${rule}
 func main() {
-\ttargetURL := "${input.url}"
+\ttargetURL := ${JSON.stringify(input.url)}
 \tfmt.Printf("[*] Testing %s for ${rule} remediation...\\n", targetURL)
 
 \tclient := &http.Client{Timeout: 10 * time.Second}
-\treq, err := http.NewRequest("${input.method.toUpperCase()}", targetURL, ${input.body !== undefined && input.body !== null ? `strings.NewReader(\`${String(bodyFormatted)}\`)` : 'nil'})
+\treq, err := http.NewRequest("${input.method.toUpperCase()}", targetURL, ${input.body !== undefined && input.body !== null ? `strings.NewReader(${JSON.stringify(String(bodyFormatted))})` : 'nil'})
 \tif err != nil {
 \t\tpanic(err)
 \t}

@@ -10,8 +10,8 @@ export interface FormattedMarkdownProps {
   className?: string;
 }
 
-// Matches code blocks, double asterisk/underscore bold, inline backticks, and single asterisk italics
-const TOKEN_REGEX = /(```[\s\S]*?```|\*\*[^*]+?\*\*|__[^_]+?__|`[^`]+?`|\*[^*]+?\*)/g;
+// Matches code blocks, headings (## and ###), double asterisk/underscore bold, inline backticks, and single asterisk italics
+const TOKEN_REGEX = /(```[\s\S]*?```|(?:^|\r?\n)[ \t]{0,3}###[ \t]+[^\r\n]*(?:\r?\n)?|(?:^|\r?\n)[ \t]{0,3}##[ \t]+[^\r\n]*(?:\r?\n)?|\*\*[^*]+?\*\*|__[^_]+?__|`[^`]+?`|\*[^*]+?\*)/g;
 
 /**
  * Parses inline markdown tokens safely into React nodes without using innerHTML or unsafe HTML parsing.
@@ -35,6 +35,28 @@ export function renderFormattedMarkdown(text?: string | null, keyPrefix = 'md'):
         <pre key={key} className="ai-markdown-pre">
           <code className="ai-markdown-code-block">{code}</code>
         </pre>
+      );
+    }
+
+    const trimmed = part.trim();
+
+    // Heading 3: ### Heading
+    if (/^[ \t]{0,3}###[ \t]+/.test(trimmed)) {
+      const headingText = trimmed.replace(/^[ \t]{0,3}###[ \t]+/, '');
+      return (
+        <h3 key={key} className="markdown-heading-3">
+          {renderFormattedMarkdown(headingText, `${key}-inner`)}
+        </h3>
+      );
+    }
+
+    // Heading 2: ## Heading
+    if (/^[ \t]{0,3}##[ \t]+/.test(trimmed)) {
+      const headingText = trimmed.replace(/^[ \t]{0,3}##[ \t]+/, '');
+      return (
+        <h2 key={key} className="markdown-heading-2">
+          {renderFormattedMarkdown(headingText, `${key}-inner`)}
+        </h2>
       );
     }
 

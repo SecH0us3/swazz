@@ -79,4 +79,34 @@ describe('FormattedMarkdown', () => {
     const nodes = renderFormattedMarkdown('Simple **bold** word');
     expect(nodes).toBeDefined();
   });
+
+  it('formats ### markdown headings with markdown-heading-3 class and inner formatting', () => {
+    const markdown = '### Executive **Summary** for `/api/v1`\nDetails follow.';
+    render(<FormattedMarkdown content={markdown} />);
+
+    const h3El = screen.getByRole('heading', { level: 3 });
+    expect(h3El).toBeTruthy();
+    expect(h3El.className).toContain('markdown-heading-3');
+    expect(h3El.textContent).toBe('Executive Summary for /api/v1');
+
+    // Bold inside heading
+    const boldInside = h3El.querySelector('strong');
+    expect(boldInside).toBeTruthy();
+    expect(boldInside?.textContent).toBe('Summary');
+
+    // Code inside heading
+    const codeInside = h3El.querySelector('code');
+    expect(codeInside).toBeTruthy();
+    expect(codeInside?.textContent).toBe('/api/v1');
+  });
+
+  it('formats ## markdown headings with markdown-heading-2 class', () => {
+    const markdown = '## Vulnerability Assessment\nFound issues.';
+    render(<FormattedMarkdown content={markdown} />);
+
+    const h2El = screen.getByRole('heading', { level: 2 });
+    expect(h2El).toBeTruthy();
+    expect(h2El.className).toContain('markdown-heading-2');
+    expect(h2El.textContent).toBe('Vulnerability Assessment');
+  });
 });

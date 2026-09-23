@@ -217,6 +217,7 @@ export function registerScansRoutes(
     const findingId = c.req.param('findingId');
     const body = await c.req.json().catch(() => ({}));
     const userId = await getUserIdFromRequest(c);
+    const clientIp = getClientIp(c);
     const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
 
     let executionCtx: any = undefined;
@@ -231,7 +232,8 @@ export function registerScansRoutes(
         body,
         userId,
         isAuthEnabled,
-        executionCtx
+        executionCtx,
+        clientIp
       );
       return c.json(result);
     } catch (err: any) {

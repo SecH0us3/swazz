@@ -357,4 +357,44 @@ describe('useRunHistory', () => {
         expect(mdContent).toContain('**CWE:** CWE-89');
         expect(mdContent).toContain('**CWE:** CWE-755');
     });
+
+    it('maintains referential stability of getRunExecutiveSummary and export handlers across re-renders', () => {
+        const { result, rerender } = renderHook(
+            (props) => useRunHistory(props),
+            {
+                initialProps: {
+                    runs: mockRuns,
+                    queryResults: mockQueryResults,
+                    getRunResults: mockGetRunResults,
+                    deleteRun: mockDeleteRun,
+                    showToast: mockShowToast,
+                    onRunLoaded: mockOnRunLoaded
+                }
+            }
+        );
+
+        const initialGetSummary = result.current.getRunExecutiveSummary;
+        const initialExportHTML = result.current.handleExportHTML;
+        const initialExportMD = result.current.handleExportMD;
+        const initialExport = result.current.handleExport;
+        const initialLoadRun = result.current.handleLoadRun;
+        const initialDeleteRun = result.current.handleDeleteRun;
+
+        // Re-render with identical prop references
+        rerender({
+            runs: mockRuns,
+            queryResults: mockQueryResults,
+            getRunResults: mockGetRunResults,
+            deleteRun: mockDeleteRun,
+            showToast: mockShowToast,
+            onRunLoaded: mockOnRunLoaded
+        });
+
+        expect(result.current.getRunExecutiveSummary).toBe(initialGetSummary);
+        expect(result.current.handleExportHTML).toBe(initialExportHTML);
+        expect(result.current.handleExportMD).toBe(initialExportMD);
+        expect(result.current.handleExport).toBe(initialExport);
+        expect(result.current.handleLoadRun).toBe(initialLoadRun);
+        expect(result.current.handleDeleteRun).toBe(initialDeleteRun);
+    });
 });
