@@ -28,7 +28,7 @@
     "@playwright/test": "^1.62.1",
     "concurrently": "^10.0.3",
     "patch-package": "^8.0.0",
-    "wrangler": "4.125.0"
+    "wrangler": "4.136.3"
   },
   "overrides": {
     "esbuild": "0.28.2",
