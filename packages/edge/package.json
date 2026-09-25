@@ -16,7 +16,7 @@
     "@vitest/snapshot": "^4.1.9",
     "miniflare": "^5.20260811.1-alpha",
     "pretty-format": "^30.5.1",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.1",
     "workerd": "1.20260916.1"
   },
   "dependencies": {
