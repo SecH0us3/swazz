@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0"
+    "@huggingface/transformers": "^4.3.0"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
