@@ -12,7 +12,7 @@
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260902.1",
     "@vitest/coverage-istanbul": "^4.1.11",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^5.0.1",
     "@vitest/snapshot": "^4.1.9",
     "miniflare": "^5.20260811.1-alpha",
     "pretty-format": "^30.5.1",
