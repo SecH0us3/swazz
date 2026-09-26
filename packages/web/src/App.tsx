@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { useEffect, useCallback, useState, useRef } from 'react';
-import type { FuzzResult } from './types.js';
+import type { FuzzResult, AnalysisFinding } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig, validateConfig } from './hooks/useConfig.js';
 import { useRunner } from './hooks/useRunner.js';
@@ -35,6 +35,8 @@ import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
 import { useTips } from './hooks/useTips.js';
 import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
 import { TipsOffNotice } from './components/DidYouKnow/TipsOffNotice.js';
+import { explainFindingWithChromeAI, getAlgorithmicFindingAnalysis } from './services/chromeAiService.js';
+import { matchesFinding } from './utils/findings.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -250,7 +252,7 @@ export default function App() {
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
 
-    const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD } = useRunHistory({
+    const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD, getRunExecutiveSummary } = useRunHistory({
         runs,
         queryResults,
         getRunResults,
@@ -548,6 +550,102 @@ export default function App() {
             }
         }
     }, [updateTriage, showToast, config, updateConfig]);
+
+    const handleAnalyzeFinding = useCallback(async (finding: AnalysisFinding) => {
+        const current = useAppStore.getState().selectedResult;
+        if (!current) return;
+
+        try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            const token = localStorage.getItem('swazz_token') || localStorage.getItem('swazz_auth_token');
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const csrfToken = useAppStore.getState().csrfToken;
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+            let analysisData: any = null;
+            const scanId = (current as any).scan_id || (current as any).scanId || useAppStore.getState().liveRunId || useAppStore.getState().loadedRunId;
+
+            // Tier 1 (Default): Chrome Built-in AI (Prompt API / Gemini Nano on-device)
+            const chromeResult = await explainFindingWithChromeAI({
+                ruleId: finding.ruleId,
+                level: finding.level,
+                message: finding.message,
+                evidence: finding.evidence,
+                endpoint: current.endpoint,
+                target_url: current.resolvedPath || current.endpoint,
+                code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload),
+            });
+            if (chromeResult) {
+                analysisData = chromeResult;
+            }
+
+            // Tier 2 (Cloud Fallback): Cloudflare Workers AI via Edge API
+            if (!analysisData && finding.id && scanId) {
+                try {
+                    const res = await fetch(`${PROXY_URL}/api/scans/${scanId}/findings/${finding.id}/ai-analyze`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload) }),
+                    });
+                    if (res.ok) {
+                        const json = await res.json();
+                        analysisData = json.analysis;
+                    }
+                } catch {
+                    // Backend AI failed or network error, fallback to next tier
+                }
+            }
+
+            // Tier 3 (Offline Rules Fallback): Algorithmic Rule-based Synthesis (CyberNova pattern)
+            if (!analysisData) {
+                analysisData = getAlgorithmicFindingAnalysis({
+                    ruleId: finding.ruleId,
+                    level: finding.level,
+                    message: finding.message,
+                    evidence: finding.evidence,
+                    endpoint: current.endpoint,
+                    target_url: current.resolvedPath || current.endpoint,
+                    code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload),
+                });
+            }
+
+            const updatedFindings = (current.analyzerFindings || []).map(f => {
+                const isMatch = matchesFinding(f, finding);
+                if (isMatch) {
+                    return {
+                        ...f,
+                        ai_status: 'completed' as const,
+                        ai_explanation: analysisData.explanation,
+                        ai_remediation: analysisData.remediation,
+                        ai_relevance: analysisData.relevance,
+                        ai_confidence: analysisData.confidence,
+                        ai_proposed_patch: analysisData.proposed_patch,
+                        ai_model: analysisData.model,
+                    };
+                }
+                return f;
+            });
+
+            useAppStore.setState({
+                selectedResult: {
+                    ...current,
+                    analyzerFindings: updatedFindings,
+                },
+            });
+
+            if (analysisData.model?.includes('gemini') || analysisData.model?.includes('chrome')) {
+                showToast('⚡ Analyzed on-device with Chrome Gemini Nano', 'success');
+            } else if (analysisData.model?.includes('algorithmic')) {
+                showToast('AI analysis completed (offline rules)', 'success');
+            } else {
+                showToast('AI analysis completed', 'success');
+            }
+        } catch (err: any) {
+            showToast(`AI analysis failed: ${err.message}`, 'error');
+        }
+    }, [showToast]);
 
     const handleExportIgnoreRules = useCallback(async () => {
         const triaged = await getAllTriaged();
@@ -874,6 +972,7 @@ export default function App() {
                     handleExport={handleExport}
                     handleExportHTML={handleExportHTML}
                     handleExportMD={handleExportMD}
+                    getRunExecutiveSummary={getRunExecutiveSummary}
                     handleLoadRun={handleLoadRun}
                     handleDeleteRun={handleDeleteRun}
                     queryResults={queryResults}
@@ -926,6 +1025,7 @@ export default function App() {
                     globalCookies={config.cookies}
                     config={config}
                     onTriage={handleTriage}
+                    onAnalyzeFinding={handleAnalyzeFinding}
                 />
             )}
 

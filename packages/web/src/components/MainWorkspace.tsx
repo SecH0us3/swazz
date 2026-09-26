@@ -18,6 +18,7 @@ import { LandingShowcase } from './LandingShowcase.js';
 import { ComparePage } from './ComparePage.js';
 import { AboutPage } from './AboutPage.js';
 import { WafCheckPanel } from './WafCheck/WafCheckPanel.js';
+import { ExecutiveSummaryModal } from './Shared/ExecutiveSummaryModal.js';
 import { Logo } from './Common/Logo.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
@@ -125,6 +126,7 @@ interface MainWorkspaceProps {
     handleExport: (runId: string | null, baseUrl?: string) => void;
     handleExportHTML: (runId: string | null) => void;
     handleExportMD: (runId: string | null) => void;
+    getRunExecutiveSummary?: (runId: string) => Promise<{ summary: string; model: string }>;
     handleLoadRun: (runId: string, importedRun?: any) => void;
     handleDeleteRun: (runId: string) => void;
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
@@ -146,6 +148,7 @@ export function MainWorkspace({
     handleExport,
     handleExportHTML,
     handleExportMD,
+    getRunExecutiveSummary,
     handleLoadRun,
     handleDeleteRun,
     queryResults,
@@ -218,6 +221,7 @@ export function MainWorkspace({
 
     const [localUrl, setLocalUrl] = useState(baseUrl);
     const [isExportHovered, setIsExportHovered] = useState(false);
+    const [executiveSummaryRunId, setExecutiveSummaryRunId] = useState<string | null>(null);
 
     useEffect(() => {
         const inputEl = document.querySelector('.header-target-input');
@@ -511,6 +515,23 @@ export function MainWorkspace({
                                         </svg>
                                         MD Report {!gateReportExports.unlocked && (gateReportExports.gateType === 'coming_soon' ? '⏳' : '🔒')}
                                     </button>
+                                    <button
+                                        className="tab-bar-btn workspace-export-dropdown-item"
+                                        onClick={() => {
+                                            if (!inspectorRunId) {
+                                                showToast('No scan run selected for Executive Summary', 'error');
+                                                return;
+                                            }
+                                            setExecutiveSummaryRunId(inspectorRunId);
+                                            setIsExportHovered(false);
+                                        }}
+                                        title="Generate on-device AI Executive Summary"
+                                    >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                                        </svg>
+                                        AI Executive Summary
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -542,6 +563,7 @@ export function MainWorkspace({
                             onExport={handleExport}
                             onExportHTML={handleExportHTML}
                             onExportMD={handleExportMD}
+                            onExportExecutiveSummary={(runId) => setExecutiveSummaryRunId(runId)}
                         />
                     ) : activeTab === 'waf' ? (
                         <WafCheckPanel targetUrl={config?.base_url} />
@@ -707,6 +729,13 @@ export function MainWorkspace({
                 </div>
             )}
 
+            {executiveSummaryRunId && getRunExecutiveSummary && (
+                <ExecutiveSummaryModal
+                    runId={executiveSummaryRunId}
+                    onClose={() => setExecutiveSummaryRunId(null)}
+                    getExecutiveSummary={getRunExecutiveSummary}
+                />
+            )}
         </div>
     );
 }

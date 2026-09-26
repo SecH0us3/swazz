@@ -229,6 +229,7 @@ describe('useRunHistory', () => {
         const mdContent = mockBlobConstructor.mock.calls[0]?.[0]?.[0] || '';
         expect(mdContent).toContain('# 🛡️ Swazz API Fuzzer Report');
         expect(mdContent).toContain('CRLF injection vulnerability detected');
+        expect(mdContent).toContain('Security Posture');
         expect(mdContent).toContain('### /users');
 
         expect(window.URL.createObjectURL).toHaveBeenCalled();
@@ -355,5 +356,45 @@ describe('useRunHistory', () => {
         expect(mdContent).toContain('**CWE:** CWE-770');
         expect(mdContent).toContain('**CWE:** CWE-89');
         expect(mdContent).toContain('**CWE:** CWE-755');
+    });
+
+    it('maintains referential stability of getRunExecutiveSummary and export handlers across re-renders', () => {
+        const { result, rerender } = renderHook(
+            (props) => useRunHistory(props),
+            {
+                initialProps: {
+                    runs: mockRuns,
+                    queryResults: mockQueryResults,
+                    getRunResults: mockGetRunResults,
+                    deleteRun: mockDeleteRun,
+                    showToast: mockShowToast,
+                    onRunLoaded: mockOnRunLoaded
+                }
+            }
+        );
+
+        const initialGetSummary = result.current.getRunExecutiveSummary;
+        const initialExportHTML = result.current.handleExportHTML;
+        const initialExportMD = result.current.handleExportMD;
+        const initialExport = result.current.handleExport;
+        const initialLoadRun = result.current.handleLoadRun;
+        const initialDeleteRun = result.current.handleDeleteRun;
+
+        // Re-render with identical prop references
+        rerender({
+            runs: mockRuns,
+            queryResults: mockQueryResults,
+            getRunResults: mockGetRunResults,
+            deleteRun: mockDeleteRun,
+            showToast: mockShowToast,
+            onRunLoaded: mockOnRunLoaded
+        });
+
+        expect(result.current.getRunExecutiveSummary).toBe(initialGetSummary);
+        expect(result.current.handleExportHTML).toBe(initialExportHTML);
+        expect(result.current.handleExportMD).toBe(initialExportMD);
+        expect(result.current.handleExport).toBe(initialExport);
+        expect(result.current.handleLoadRun).toBe(initialLoadRun);
+        expect(result.current.handleDeleteRun).toBe(initialDeleteRun);
     });
 });

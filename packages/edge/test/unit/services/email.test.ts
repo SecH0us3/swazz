@@ -255,5 +255,30 @@ describe('Email Service', () => {
       expect(sanitizeUrl('')).toBe('#');
       expect(sanitizeUrl(undefined)).toBe('#');
     });
+
+    it('renders scan completed digest with AI executive risk briefing when provided', () => {
+      const email = renderScanCompletedDigestEmail({
+        projectName: 'Bank App',
+        targetUrl: 'https://bank.example.com',
+        scanId: 'scan-1',
+        reportUrl: 'https://swazz.secmy.app/projects/p1/scans/s1',
+        totalFindings: 3,
+        criticalCount: 1,
+        highCount: 1,
+        mediumCount: 1,
+        lowCount: 0,
+        completedAt: '2026-09-20T00:00:00Z',
+        aiBriefing: {
+          summary: 'Critical SQLi detected in authentication endpoint. Immediate patching required.',
+          key_recommendations: ['Patch auth controller', 'Enable Cloudflare WAF rule #42'],
+        },
+      });
+
+      expect(email.html).toContain('AI Executive Risk Briefing');
+      expect(email.html).toContain('Critical SQLi detected in authentication endpoint');
+      expect(email.html).toContain('Patch auth controller');
+      expect(email.html).toContain('Enable Cloudflare WAF rule #42');
+      expect(email.text).toContain('AI Executive Risk Briefing');
+    });
   });
 });

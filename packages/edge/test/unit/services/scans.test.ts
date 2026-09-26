@@ -379,4 +379,77 @@ describe('ScansService Unit Tests', () => {
       expect(mockScansRepo.saveWAFPatchReport).toHaveBeenCalledWith('s1', report);
     });
   });
+
+  describe('analyzeFindingWithAI rate limiting', () => {
+    beforeEach(() => {
+      mockScansRepo.getScan.mockResolvedValue({ id: 's1', project_id: 'p1', target_url: 'https://api.test' });
+      mockScansRepo.getFindingDetails.mockResolvedValue({ id: 'f1', scan_id: 's1', rule_id: 'sqli', level: 'high' });
+      mockScansRepo.updateFinding.mockResolvedValue({ id: 'f1', ai_status: 'completed' });
+    });
+
+    it('handles non-Error KV rejection safely without throwing TypeError', async () => {
+      mockEnv.SESSION_CACHE = {
+        get: vi.fn().mockRejectedValue('raw string failure'),
+        put: vi.fn(),
+      };
+
+      const res = await scansService.analyzeFindingWithAI('s1', 'f1', {}, 'u1', false);
+      expect(res.success).toBe(true);
+    });
+
+    it('uses a fixed hourly bucket key for rate limiting', async () => {
+      const getMock = vi.fn().mockResolvedValue('5');
+      const putMock = vi.fn().mockResolvedValue(undefined);
+      mockEnv.SESSION_CACHE = {
+        get: getMock,
+        put: putMock,
+      };
+
+      const nowBucket = Math.floor(Date.now() / 3600000);
+      const res = await scansService.analyzeFindingWithAI('s1', 'f1', {}, 'u1', false);
+      expect(res.success).toBe(true);
+      expect(getMock).toHaveBeenCalledWith(`ratelimit:ai_analyze:u1:${nowBucket}`);
+      expect(putMock).toHaveBeenCalledWith(
+        `ratelimit:ai_analyze:u1:${nowBucket}`,
+        '6',
+        { expirationTtl: 3600 }
+      );
+    });
+
+    it('applies rate limit to clientIp when userId is null', async () => {
+      const getMock = vi.fn().mockResolvedValue('10');
+      const putMock = vi.fn().mockResolvedValue(undefined);
+      mockEnv.SESSION_CACHE = {
+        get: getMock,
+        put: putMock,
+      };
+
+      const nowBucket = Math.floor(Date.now() / 3600000);
+      const res = await scansService.analyzeFindingWithAI('s1', 'f1', {}, null, false, undefined, '10.0.0.1');
+      expect(res.success).toBe(true);
+      expect(getMock).toHaveBeenCalledWith(`ratelimit:ai_analyze:10.0.0.1:${nowBucket}`);
+      expect(putMock).toHaveBeenCalledWith(
+        `ratelimit:ai_analyze:10.0.0.1:${nowBucket}`,
+        '11',
+        { expirationTtl: 3600 }
+      );
+    });
+
+    it('falls back to anonymous bucket when userId and clientIp are absent and enforces 50 limit', async () => {
+      const getMock = vi.fn().mockResolvedValue('50');
+      const putMock = vi.fn();
+      mockEnv.SESSION_CACHE = {
+        get: getMock,
+        put: putMock,
+      };
+
+      const nowBucket = Math.floor(Date.now() / 3600000);
+      await expect(
+        scansService.analyzeFindingWithAI('s1', 'f1', {}, null, false, undefined, null)
+      ).rejects.toThrow('AI analysis rate limit exceeded. Please try again later.|429');
+
+      expect(getMock).toHaveBeenCalledWith(`ratelimit:ai_analyze:anonymous:${nowBucket}`);
+      expect(putMock).not.toHaveBeenCalled();
+    });
+  });
 });

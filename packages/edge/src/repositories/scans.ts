@@ -7,6 +7,7 @@ import { Env } from '../env';
 import { BaseService } from './base';
 import { dispatchWebhook } from '../utils/webhooks';
 import { sendScanCompletedDigestEmail } from '../services/email';
+import { WorkersAIService } from '../services/ai';
 import { logError } from '../../../common/logging/logger';
 
 export interface IScansRepository {
@@ -407,6 +408,27 @@ export class ScansRepository extends BaseService implements IScansRepository {
               const projectName = targetUser.project_name || 'Project';
               const reportUrl = `https://swazz.secmy.app/projects/${scan.project_id}/scans/${scan.id}`;
 
+              let aiBriefing: { summary: string; key_recommendations?: string[] } | undefined = undefined;
+              if (totalFindings > 0 && this.env.AI) {
+                try {
+                  const briefingResult = await WorkersAIService.generateScanBriefing(this.env, {
+                    projectName,
+                    targetUrl: scan.target_url,
+                    totalFindings,
+                    criticalCount,
+                    highCount,
+                    mediumCount,
+                    lowCount,
+                  });
+                  aiBriefing = {
+                    summary: briefingResult.summary,
+                    key_recommendations: briefingResult.key_recommendations,
+                  };
+                } catch {
+                  // Non-fatal if AI briefing fails
+                }
+              }
+
               await sendScanCompletedDigestEmail(this.env, {
                 to: targetUser.email,
                 projectName,
@@ -419,6 +441,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
                 mediumCount,
                 lowCount,
                 completedAt: scan.completed_at || new Date().toISOString(),
+                aiBriefing,
               });
             }
           } catch (emailErr) {

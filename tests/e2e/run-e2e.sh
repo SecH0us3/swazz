@@ -37,6 +37,14 @@ echo "SWAZZ_LICENSE_PUBKEY=\"$SWAZZ_LICENSE_PUBKEY\"" >> packages/edge/.dev.vars
 echo "SWAZZ_LICENSE_PRIVKEY=\"$SWAZZ_DEV_LICENSE_PRIVKEY_HEX\"" >> packages/edge/.dev.vars
 echo 'NODE_ENV="development"' >> packages/edge/.dev.vars
 
+# Backup packages/edge/wrangler.toml if it exists, and strip remote [ai] binding for headless local dev
+# Cloudflare Workers AI has no local runtime; in non-interactive CI, an active [ai] binding causes
+# wrangler dev to fail immediately without CLOUDFLARE_API_TOKEN.
+if [ -f packages/edge/wrangler.toml ]; then
+  cp packages/edge/wrangler.toml packages/edge/wrangler.toml.bak
+  node -e "const fs = require('fs'); const content = fs.readFileSync('packages/edge/wrangler.toml', 'utf8'); fs.writeFileSync('packages/edge/wrangler.toml', content.replace(/\[ai\][\s\S]*?(?=\n\[|\n*$)/g, ''));"
+fi
+
 # Create dummy wordlist folder and file for E2E tests
 mkdir -p wordlists
 echo "dummy-xss-payload" > wordlists/xss-custom.txt
@@ -55,6 +63,10 @@ cleanup() {
   # Restore .dev.vars if backup exists
   if [ -f packages/edge/.dev.vars.bak ]; then
     mv packages/edge/.dev.vars.bak packages/edge/.dev.vars
+  fi
+  # Restore wrangler.toml if backup exists
+  if [ -f packages/edge/wrangler.toml.bak ]; then
+    mv packages/edge/wrangler.toml.bak packages/edge/wrangler.toml
   fi
   # Clean up dummy wordlist
   rm -rf wordlists
@@ -101,6 +113,13 @@ wait_for_port() {
     sleep 1
   done
   echo "✗ Error: $name on port $port failed to start or become healthy within 30 seconds."
+  if [ "$port" = "8787" ] && [ -f edge.log ]; then
+    echo "=== edge.log output ==="
+    cat edge.log
+  elif [ "$port" = "8788" ] && [ -f demo.log ]; then
+    echo "=== demo.log output ==="
+    cat demo.log
+  fi
   exit 1
 }
 
@@ -163,7 +182,7 @@ if check_port 8787; then
   echo "✓ Edge Coordinator is already running on port 8787."
 else
   echo "→ Applying local database migrations..."
-  "$WRANGLER" d1 migrations apply swazz_db --local --cwd packages/edge || true
+  echo "y" | "$WRANGLER" d1 migrations apply swazz_db --local --cwd packages/edge || true
   echo "→ Seeding CI runner user..."
   "$WRANGLER" d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', '0c4000e5af58b58dac6d8f190a5e4960441c0d8b6370b09096900931f87df527', 'Supporter Plan');" --cwd packages/edge || true
   echo "→ Starting Edge Coordinator (with watchdog)..."

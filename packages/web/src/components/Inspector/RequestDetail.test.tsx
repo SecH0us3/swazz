@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { RequestDetail } from './RequestDetail.js';
 import type { FuzzResult, AnalysisFinding, SwazzConfig } from '../../types.js';
+import * as adaptivePocModule from '../../services/adaptivePocService.js';
 
 describe('RequestDetail Component', () => {
     const mockOnClose = vi.fn();
@@ -146,6 +147,88 @@ describe('RequestDetail Component', () => {
         expect(mockOnTriage).toHaveBeenCalledWith('res-123', 'false_positive');
     });
 
+    it('renders on-device badge when ai_model is chrome gemini nano', () => {
+        const onDeviceResult = {
+            ...mockResult,
+            analyzerFindings: [
+                {
+                    ruleId: 'swazz/cors-misconfig',
+                    level: 'warning',
+                    message: 'CORS wildcard found',
+                    ai_status: 'completed',
+                    ai_relevance: true,
+                    ai_confidence: 88,
+                    ai_model: 'chrome-gemini-nano (on-device)',
+                    ai_explanation: 'Origin allows any domain',
+                    ai_remediation: 'Whitelist origins',
+                } as any
+            ]
+        };
+
+        render(
+            <RequestDetail
+                result={onDeviceResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+                onTriage={mockOnTriage}
+            />
+        );
+
+        const findingsTab = screen.getByRole('tab', { name: /Alerts & Findings/i });
+        fireEvent.click(findingsTab);
+
+        expect(screen.getByText('⚡ Gemini Nano (On-Device)')).toBeTruthy();
+    });
+
+    it('renders markdown bold and inline code in AI explanation and remediation', () => {
+        const markdownResult = {
+            ...mockResult,
+            analyzerFindings: [
+                {
+                    ruleId: 'swazz/oob-interaction',
+                    level: 'error',
+                    message: 'OOB interaction detected',
+                    ai_status: 'completed',
+                    ai_relevance: true,
+                    ai_confidence: 85,
+                    ai_model: 'algorithmic-rules (local)',
+                    ai_explanation: '**Root Cause Analysis:** Potential SSRF at `/users`.',
+                    ai_remediation: '1. **Egress Network Filtering**: Restrict outbound connections.',
+                } as any
+            ]
+        };
+
+        render(
+            <RequestDetail
+                result={markdownResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+                onTriage={mockOnTriage}
+            />
+        );
+
+        const findingsTab = screen.getByRole('tab', { name: /Alerts & Findings/i });
+        fireEvent.click(findingsTab);
+
+        const boldExplanation = screen.getByText('Root Cause Analysis:');
+        expect(boldExplanation.tagName.toLowerCase()).toBe('strong');
+        expect(boldExplanation.className).toContain('ai-markdown-bold');
+
+        const codeEndpoint = screen.getByText('/users');
+        expect(codeEndpoint.tagName.toLowerCase()).toBe('code');
+        expect(codeEndpoint.className).toContain('ai-markdown-code');
+
+        const boldRemediation = screen.getByText('Egress Network Filtering');
+        expect(boldRemediation.tagName.toLowerCase()).toBe('strong');
+        expect(boldRemediation.className).toContain('ai-markdown-bold');
+    });
+
     it('switches between Mutation Diff and Raw Request views', () => {
         render(
             <RequestDetail
@@ -231,6 +314,39 @@ describe('RequestDetail Component', () => {
         const copyScriptBtn = screen.getByRole('button', { name: /Copy Exploit Script/i });
         fireEvent.click(copyScriptBtn);
         expect(navigator.clipboard.writeText).toHaveBeenCalled();
+    });
+
+    it('generates adaptive AI PoC script when Adaptive AI mode is selected', async () => {
+        render(
+            <RequestDetail
+                result={{
+                    ...mockResult,
+                    analyzerFindings: [{
+                        ruleId: 'swazz/crlf-injection',
+                        message: 'CRLF injection header split',
+                        level: 'error'
+                    }]
+                }}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+            />
+        );
+
+        const pocTab = screen.getByRole('tab', { name: /Live Replay & PoC Export/i });
+        fireEvent.click(pocTab);
+
+        const adaptiveModeBtn = screen.getByRole('button', { name: /⚡ Adaptive AI/i });
+        fireEvent.click(adaptiveModeBtn);
+
+        expect(await screen.findByText(/Deterministic Regression Script/i)).toBeTruthy();
+
+        await vi.waitFor(() => {
+            const el = document.querySelector('.poc-code-pre');
+            expect(el).toBeTruthy();
+            expect(el?.textContent?.length).toBeGreaterThan(0);
+        });
     });
 
     it('handles replay request successfully and updates live response', async () => {
@@ -411,5 +527,97 @@ describe('RequestDetail Component', () => {
         );
 
         expect(screen.getByText(/errorCode/i)).toBeTruthy();
+    });
+
+    it('renders and triggers Explain & Remediate with AI button when finding has not completed AI analysis', async () => {
+        const onAnalyze = vi.fn().mockResolvedValue(undefined);
+        const resultWithIncompleteFinding: any = {
+            ...mockResult,
+            analyzerFindings: [
+                {
+                    ruleId: 'swazz/sqli',
+                    level: 'error',
+                    message: 'SQL injection detected',
+                    ai_status: 'pending',
+                }
+            ]
+        };
+
+        render(
+            <RequestDetail
+                result={resultWithIncompleteFinding}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                onAnalyzeFinding={onAnalyze}
+            />
+        );
+
+        // Switch to Findings tab
+        const findingsTab = screen.getByText(/Alerts & Findings/i);
+        fireEvent.click(findingsTab);
+
+        const aiBtn = screen.getByRole('button', { name: /Explain & Remediate with AI/i });
+        expect(aiBtn).toBeTruthy();
+
+        fireEvent.click(aiBtn);
+        expect(onAnalyze).toHaveBeenCalledWith(expect.objectContaining({
+            ruleId: 'swazz/sqli',
+            level: 'error',
+        }));
+
+        // Click question mark button next to AI button
+        const helpBtns = screen.getAllByTitle(/How AI Works in Swazz/i);
+        expect(helpBtns.length).toBeGreaterThan(0);
+        fireEvent.click(helpBtns[0]);
+
+        // Modal should appear
+        expect(screen.getByText(/Swazz AI Engine/i)).toBeTruthy();
+        expect(screen.getByText(/Tier 1 \(Default\): Chrome Built-in AI/i)).toBeTruthy();
+
+        // Close modal
+        fireEvent.click(screen.getByRole('button', { name: /Got it/i }));
+        expect(screen.queryByText(/Tier 1 \(Default\): Chrome Built-in AI/i)).toBeNull();
+    });
+
+    it('resets generatingAdaptive on effect cleanup when switching away or unmounting', async () => {
+        let resolvePromise: (val: any) => void = () => {};
+        const pendingPromise = new Promise<any>((resolve) => {
+            resolvePromise = resolve;
+        });
+        const spy = vi.spyOn(adaptivePocModule, 'generateAdaptivePoc').mockReturnValue(pendingPromise);
+
+        const { unmount } = render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+            />
+        );
+
+        // Switch to PoC tab
+        const pocTab = screen.getByRole('tab', { name: /Live Replay & PoC Export/i });
+        fireEvent.click(pocTab);
+
+        // Switch to Adaptive AI mode
+        const adaptiveBtn = screen.getByRole('button', { name: /⚡ Adaptive AI/i });
+        fireEvent.click(adaptiveBtn);
+
+        // Loading state should be displayed
+        expect(screen.getByText(/Generating adaptive regression test script with on-device AI/i)).toBeTruthy();
+
+        // Switch back to Template mode - triggers cleanup
+        const templateBtn = screen.getByRole('button', { name: /📄 Template/i });
+        fireEvent.click(templateBtn);
+
+        // Loading state should no longer be displayed
+        expect(screen.queryByText(/Generating adaptive regression test script with on-device AI/i)).toBeNull();
+
+        unmount();
+        resolvePromise({ code: '', model: '', simulated: true });
+        spy.mockRestore();
     });
 });

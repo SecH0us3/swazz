@@ -7,7 +7,10 @@ import React, { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
+import { generateAdaptivePoc, type AdaptivePocResult } from '../../services/adaptivePocService.js';
 import { tokenizeCode } from '../../utils/syntaxHighlight.js';
+import { FormattedMarkdown } from '../Shared/FormattedMarkdown.js';
+import { AiEngineInfoModal } from '../Shared/AiEngineInfoModal.js';
 
 function tryParseEmbeddedJson(val: any): any {
     if (val === null || val === undefined) return val;
@@ -90,6 +93,7 @@ interface Props {
     globalCookies: Record<string, string>;
     config?: SwazzConfig;
     onTriage?: (id: string, status: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => void;
+    onAnalyzeFinding?: (finding: AnalysisFinding) => Promise<void>;
 }
 
 function renderHighlightedJson(json: string): ReactNode {
@@ -210,7 +214,8 @@ export function RequestDetail({
     globalHeaders,
     globalCookies,
     config,
-    onTriage
+    onTriage,
+    onAnalyzeFinding
 }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
@@ -218,9 +223,27 @@ export function RequestDetail({
     const hasFindings = result.analyzerFindings && result.analyzerFindings.length > 0;
     const [mainTab, setMainTab] = useState<'findings' | 'request' | 'poc'>('request');
     const [pocLang, setPocLang] = useState<'curl' | 'python' | 'typescript' | 'go'>('curl');
+    const [pocMode, setPocMode] = useState<'template' | 'adaptive'>('template');
+    const [adaptiveCache, setAdaptiveCache] = useState<Record<string, AdaptivePocResult>>({});
+    const [generatingAdaptive, setGeneratingAdaptive] = useState(false);
+    const [analyzingFindingId, setAnalyzingFindingId] = useState<string | null>(null);
+    const [showAiInfoModal, setShowAiInfoModal] = useState(false);
+
+    const handleAnalyzeFinding = async (finding: AnalysisFinding) => {
+        if (!onAnalyzeFinding) return;
+        const fid = finding.id || finding.ruleId;
+        setAnalyzingFindingId(fid);
+        try {
+            await onAnalyzeFinding(finding);
+        } finally {
+            setAnalyzingFindingId(null);
+        }
+    };
 
     useEffect(() => {
         setMainTab('request');
+        setPocMode('template');
+        setAdaptiveCache({});
     }, [result.id]);
 
     const isMultiIdentity = config?.settings?.bola_testing || Object.keys(config?.auth_identities || {}).length > 0;
@@ -296,6 +319,58 @@ export function RequestDetail({
         setLiveResponse(result.responseBody);
         setLiveHeaders(result.responseHeaders || {});
     }, [result, baseUrl]);
+
+    useEffect(() => {
+        if (mainTab !== 'poc' || pocMode !== 'adaptive' || adaptiveCache[pocLang]) {
+            return;
+        }
+
+        let active = true;
+        setGeneratingAdaptive(true);
+        const firstFinding = result.analyzerFindings?.[0];
+
+        generateAdaptivePoc({
+            method: result.method,
+            url: initialUrl,
+            headers: result.requestHeaders,
+            body: result.payload,
+            language: pocLang,
+            ruleId: firstFinding?.ruleId,
+            message: firstFinding?.message,
+            level: firstFinding?.level,
+            evidence: firstFinding?.evidence,
+        }).then(res => {
+            if (active) {
+                setAdaptiveCache(prev => ({ ...prev, [pocLang]: res }));
+                setGeneratingAdaptive(false);
+            }
+        }).catch(() => {
+            if (active) {
+                setGeneratingAdaptive(false);
+            }
+        });
+
+        return () => {
+            active = false;
+            setGeneratingAdaptive(false);
+        };
+    }, [mainTab, pocMode, pocLang, result.id, initialUrl]);
+
+    const getActivePocCode = (): string => {
+        const reqOpts = {
+            method: result.method,
+            url: initialUrl,
+            headers: result.requestHeaders,
+            body: result.payload,
+        };
+        if (pocMode === 'adaptive') {
+            return adaptiveCache[pocLang]?.code || '';
+        }
+        if (pocLang === 'curl') return generateCurl(reqOpts);
+        if (pocLang === 'python') return generatePython(reqOpts);
+        if (pocLang === 'typescript') return generateTypeScript(reqOpts);
+        return generateGo(reqOpts);
+    };
 
     const matchingEndpoint = config?.endpoints.find(
         (ep) => ep.path === result.endpoint && ep.method.toUpperCase() === result.method.toUpperCase()
@@ -588,6 +663,22 @@ export function RequestDetail({
                                     <div className="ai-insights-section">
                                         <div className="ai-insights-header">
                                             <span className="ai-insights-title">✨ AI Insights</span>
+                                            {finding.ai_model && (
+                                                <span className="badge badge-ai-model" title={finding.ai_model}>
+                                                    {finding.ai_model.includes('gemini') || finding.ai_model.includes('chrome') ? '⚡ Gemini Nano (On-Device)' :
+                                                     finding.ai_model.includes('llama') ? '☁️ Llama 3.2 (Workers AI)' :
+                                                     '🛠️ Rule-based (Local)'}
+                                                </span>
+                                            )}
+                                            <button
+                                                type="button"
+                                                className="ai-info-help-btn"
+                                                onClick={() => setShowAiInfoModal(true)}
+                                                title="How AI Works in Swazz (Local On-Device & Fallback)"
+                                                aria-label="How AI Works in Swazz"
+                                            >
+                                                ?
+                                            </button>
                                             {finding.ai_relevance != null && (
                                                 <span className={`alert-badge ${finding.ai_relevance ? 'badge-error' : 'badge-success'}`}>
                                                     {finding.ai_relevance ? 'True Positive' : 'False Positive'}
@@ -605,13 +696,17 @@ export function RequestDetail({
                                         {finding.ai_explanation && (
                                             <div className="ai-insights-block">
                                                 <strong className="ai-insights-label">Explanation</strong>
-                                                <div className="ai-insights-text">{finding.ai_explanation}</div>
+                                                <div className="ai-insights-text">
+                                                    <FormattedMarkdown content={finding.ai_explanation} />
+                                                </div>
                                             </div>
                                         )}
                                         {finding.ai_remediation && (
                                             <div className="ai-insights-block">
                                                 <strong className="ai-insights-label">Remediation</strong>
-                                                <div className="ai-insights-text">{finding.ai_remediation}</div>
+                                                <div className="ai-insights-text">
+                                                    <FormattedMarkdown content={finding.ai_remediation} />
+                                                </div>
                                             </div>
                                         )}
                                         {finding.ai_proposed_patch && (
@@ -633,6 +728,27 @@ export function RequestDetail({
                                         )}
                                     </div>
                                 )}
+                                {finding.ai_status !== 'completed' && onAnalyzeFinding && (
+                                    <div className="ai-insights-actions">
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => handleAnalyzeFinding(finding)}
+                                            disabled={analyzingFindingId === (finding.id || finding.ruleId)}
+                                        >
+                                            {analyzingFindingId === (finding.id || finding.ruleId) ? 'Analyzing with AI...' : '✨ Explain & Remediate with AI'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="ai-info-help-btn"
+                                            onClick={() => setShowAiInfoModal(true)}
+                                            title="How AI Works in Swazz (Local On-Device & Fallback)"
+                                            aria-label="How AI Works in Swazz"
+                                        >
+                                            ?
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -641,75 +757,98 @@ export function RequestDetail({
                 {mainTab === 'poc' && (
                     <div className="poc-container">
                         <div className="poc-header">
-                            <div className="poc-lang-tabs">
-                                <button
-                                    className={`btn btn-sm ${pocLang === 'curl' ? 'btn-primary' : 'btn-ghost'}`}
-                                    onClick={() => setPocLang('curl')}
+                            <div className="poc-header-left">
+                                <div className="poc-lang-tabs">
+                                    <button
+                                        className={`btn btn-sm ${pocLang === 'curl' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setPocLang('curl')}
+                                    >
+                                        cURL
+                                    </button>
+                                    <button
+                                        className={`btn btn-sm ${pocLang === 'python' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setPocLang('python')}
+                                    >
+                                        Python
+                                    </button>
+                                    <button
+                                        className={`btn btn-sm ${pocLang === 'typescript' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setPocLang('typescript')}
+                                    >
+                                        TypeScript
+                                    </button>
+                                    <button
+                                        className={`btn btn-sm ${pocLang === 'go' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setPocLang('go')}
+                                    >
+                                        Go
+                                    </button>
+                                </div>
+                                <div className="poc-mode-tabs">
+                                    <button
+                                        type="button"
+                                        className={`poc-mode-tab ${pocMode === 'template' ? 'active' : ''}`}
+                                        onClick={() => setPocMode('template')}
+                                    >
+                                        📄 Template
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`poc-mode-tab ${pocMode === 'adaptive' ? 'active' : ''}`}
+                                        onClick={() => setPocMode('adaptive')}
+                                    >
+                                        ⚡ Adaptive AI
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="poc-header-actions">
+                                <button 
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => {
+                                        const code = getActivePocCode();
+                                        copy(code, 'poc');
+                                    }}
                                 >
-                                    cURL
-                                </button>
-                                <button
-                                    className={`btn btn-sm ${pocLang === 'python' ? 'btn-primary' : 'btn-ghost'}`}
-                                    onClick={() => setPocLang('python')}
-                                >
-                                    Python
-                                </button>
-                                <button
-                                    className={`btn btn-sm ${pocLang === 'typescript' ? 'btn-primary' : 'btn-ghost'}`}
-                                    onClick={() => setPocLang('typescript')}
-                                >
-                                    TypeScript
-                                </button>
-                                <button
-                                    className={`btn btn-sm ${pocLang === 'go' ? 'btn-primary' : 'btn-ghost'}`}
-                                    onClick={() => setPocLang('go')}
-                                >
-                                    Go
+                                    {copied === 'poc' ? '✓ Copied' : '📋 Copy Exploit Script'}
                                 </button>
                             </div>
-                            <button 
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => {
-                                    const reqOpts = {
-                                        method: result.method,
-                                        url: initialUrl,
-                                        headers: result.requestHeaders,
-                                        body: result.payload,
-                                    };
-                                    let code = '';
-                                    if (pocLang === 'curl') code = generateCurl(reqOpts);
-                                    else if (pocLang === 'python') code = generatePython(reqOpts);
-                                    else if (pocLang === 'typescript') code = generateTypeScript(reqOpts);
-                                    else if (pocLang === 'go') code = generateGo(reqOpts);
-                                    copy(code, 'poc');
-                                }}
-                            >
-                                {copied === 'poc' ? '✓ Copied' : '📋 Copy Exploit Script'}
-                            </button>
                         </div>
+
+                        {pocMode === 'adaptive' && (
+                            <div className="poc-adaptive-banner">
+                                <span className="poc-adaptive-badge">
+                                    {adaptiveCache[pocLang] && !adaptiveCache[pocLang].simulated
+                                        ? '⚡ Gemini Nano (Defensive QA Regression Test)'
+                                        : '🛠️ Deterministic Regression Script'}
+                                </span>
+                                {generatingAdaptive && (
+                                    <span className="poc-generating-indicator">
+                                        <span className="spinner-sm" /> Generating script with on-device AI...
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
                         <div className="poc-code-wrapper">
-                            <pre className="poc-code-pre">
-                                <code>
-                                    {(() => {
-                                        const reqOpts = {
-                                            method: result.method,
-                                            url: initialUrl,
-                                            headers: result.requestHeaders,
-                                            body: result.payload,
-                                        };
-                                        let code: string;
-                                        if (pocLang === 'curl') code = generateCurl(reqOpts);
-                                        else if (pocLang === 'python') code = generatePython(reqOpts);
-                                        else if (pocLang === 'typescript') code = generateTypeScript(reqOpts);
-                                        else code = generateGo(reqOpts);
-                                        return tokenizeCode(code, 'code').map((tok, i) =>
-                                            tok.className
-                                                ? <span key={i} className={tok.className}>{tok.text}</span>
-                                                : <React.Fragment key={i}>{tok.text}</React.Fragment>
-                                        );
-                                    })()}
-                                </code>
-                            </pre>
+                            {generatingAdaptive && !adaptiveCache[pocLang] ? (
+                                <div className="poc-loading-state">
+                                    <span className="spinner-sm" />
+                                    <span>Generating adaptive regression test script with on-device AI...</span>
+                                </div>
+                            ) : (
+                                <pre className="poc-code-pre">
+                                    <code>
+                                        {(() => {
+                                            const code = getActivePocCode();
+                                            return tokenizeCode(code, 'code').map((tok, i) =>
+                                                tok.className
+                                                    ? <span key={i} className={tok.className}>{tok.text}</span>
+                                                    : <React.Fragment key={i}>{tok.text}</React.Fragment>
+                                            );
+                                        })()}
+                                    </code>
+                                </pre>
+                            )}
                         </div>
                     </div>
                 )}
@@ -932,6 +1071,9 @@ export function RequestDetail({
                 </div>
                 )}
             </div>
+            {showAiInfoModal && (
+                <AiEngineInfoModal onClose={() => setShowAiInfoModal(false)} />
+            )}
         </div>
     );
 }
