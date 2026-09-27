@@ -304,7 +304,11 @@ export function RequestDetail({
     const sentUri = result.requestUri || result.resolvedPath || result.endpoint;
     const replayUri = (result.requestUri && result.requestUri.endsWith('…')) ? (result.resolvedPath || result.endpoint) : sentUri;
     const initialUrl = joinUrl(baseUrl, replayUri);
-    const initialBody = formatValue(result.payload);
+    const hasBody = !['GET', 'HEAD', 'OPTIONS'].includes(result.method.toUpperCase()) &&
+        result.payload !== undefined &&
+        result.payload !== null &&
+        result.payload !== 'null';
+    const initialBody = hasBody ? formatValue(result.payload) : '';
 
     const [liveStatus, setLiveStatus] = useState<number>(result.status);
     const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
@@ -316,11 +320,11 @@ export function RequestDetail({
 
     useEffect(() => {
         setEditedUrl(joinUrl(baseUrl, replayUri));
-        setEditedBody(formatValue(result.payload));
+        setEditedBody(hasBody ? formatValue(result.payload) : '');
         setLiveStatus(result.status);
         setLiveResponse(result.responseBody);
         setLiveHeaders(result.responseHeaders || {});
-    }, [result, baseUrl, replayUri]);
+    }, [result, baseUrl, replayUri, hasBody]);
 
     useEffect(() => {
         if (mainTab !== 'poc' || pocMode !== 'adaptive' || adaptiveCache[pocLang]) {
@@ -335,7 +339,7 @@ export function RequestDetail({
             method: result.method,
             url: initialUrl,
             headers: result.requestHeaders,
-            body: result.payload,
+            body: hasBody ? result.payload : undefined,
             language: pocLang,
             ruleId: firstFinding?.ruleId,
             message: firstFinding?.message,
@@ -356,14 +360,14 @@ export function RequestDetail({
             active = false;
             setGeneratingAdaptive(false);
         };
-    }, [mainTab, pocMode, pocLang, result.id, initialUrl]);
+    }, [mainTab, pocMode, pocLang, result.id, initialUrl, hasBody]);
 
     const getActivePocCode = (): string => {
         const reqOpts = {
             method: result.method,
             url: initialUrl,
             headers: result.requestHeaders,
-            body: result.payload,
+            body: hasBody ? result.payload : undefined,
         };
         if (pocMode === 'adaptive') {
             return adaptiveCache[pocLang]?.code || '';
@@ -431,11 +435,6 @@ export function RequestDetail({
         }
     }
     const hasQueryDiff = Object.keys(fuzzedQueryParams).length > 0 || Object.keys(templateQueryParams).length > 0;
-
-    const hasBody = !['GET', 'HEAD', 'OPTIONS'].includes(result.method.toUpperCase()) &&
-        result.payload !== undefined &&
-        result.payload !== null &&
-        result.payload !== 'null';
 
     useEffect(() => {
         const hasHeaders = !!result.requestHeaders && Object.keys(result.requestHeaders).length > 0;

@@ -230,9 +230,14 @@ describe('RequestDetail Component', () => {
     });
 
     it('switches between Mutation Diff and Raw Request views', () => {
+        const postResult: any = {
+            ...mockResult,
+            method: 'POST',
+        };
+
         render(
             <RequestDetail
-                result={mockResult}
+                result={postResult}
                 baseUrl="https://api.example.com"
                 onClose={mockOnClose}
                 globalHeaders={{}}
@@ -249,6 +254,42 @@ describe('RequestDetail Component', () => {
 
         expect(screen.getByText('Payload')).toBeTruthy();
         expect(screen.getByDisplayValue(/"role": "admin"/i)).toBeTruthy();
+    });
+
+    it('keeps payload textarea empty for GET results with query-param payload and omits --data-raw in curl PoC', () => {
+        const getResult: any = {
+            ...mockResult,
+            method: 'GET',
+            requestUri: '/filter?category=x',
+            payload: '{"category":"x"}',
+        };
+
+        render(
+            <RequestDetail
+                result={getResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        // after clicking "Raw Request", the payload textarea is empty
+        const rawReqBtn = screen.getByRole('button', { name: 'Raw Request' });
+        fireEvent.click(rawReqBtn);
+
+        const textarea = document.querySelector('textarea.textarea') as HTMLTextAreaElement;
+        expect(textarea).toBeTruthy();
+        expect(textarea.value).toBe('');
+
+        // and the generated curl PoC contains category=x in the URL and does NOT contain --data-raw
+        const pocTab = screen.getByRole('tab', { name: /Live Replay & PoC Export/i });
+        fireEvent.click(pocTab);
+
+        const pocCode = document.querySelector('.poc-code-pre')?.textContent || '';
+        expect(pocCode).toContain('category=x');
+        expect(pocCode).not.toContain('--data-raw');
     });
 
     it('calls onClose when close button is clicked or Escape is pressed', () => {
@@ -381,10 +422,14 @@ describe('RequestDetail Component', () => {
 
     it('handles replay request error and malformed raw body', async () => {
         const mockReplay = vi.fn().mockRejectedValue(new Error('Network connection refused'));
+        const postResult: any = {
+            ...mockResult,
+            method: 'POST',
+        };
 
         render(
             <RequestDetail
-                result={mockResult}
+                result={postResult}
                 baseUrl="https://api.example.com"
                 onClose={mockOnClose}
                 onReplay={mockReplay}
