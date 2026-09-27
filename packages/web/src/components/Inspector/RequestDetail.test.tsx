@@ -620,4 +620,88 @@ describe('RequestDetail Component', () => {
         resolvePromise({ code: '', model: '', simulated: true });
         spy.mockRestore();
     });
+
+    it('renders query parameters table and full URI for GET malicious result with requestUri and hides body diff', () => {
+        const getMaliciousResult: any = {
+            ...mockResult,
+            method: 'GET',
+            profile: 'MALICIOUS',
+            resolvedPath: '/filter',
+            requestUri: '/filter?category=%3Cscript%3Ealert(1)%3C%2Fscript%3E&sort=asc',
+            payload: 'null',
+        };
+
+        const { container } = render(
+            <RequestDetail
+                result={getMaliciousResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        // the Request URL shows the full URI
+        expect(screen.getByText('/filter?category=%3Cscript%3Ealert(1)%3C%2Fscript%3E&sort=asc')).toBeTruthy();
+
+        // the table has rows category → <script>alert(1)</script> and sort → asc
+        expect(screen.getByText('Query Parameters')).toBeTruthy();
+        expect(screen.getByText('category')).toBeTruthy();
+        expect(screen.getByText('<script>alert(1)</script>')).toBeTruthy();
+        expect(screen.getByText('sort')).toBeTruthy();
+        expect(screen.getByText('asc')).toBeTruthy();
+
+        // as text: assert no script element was created
+        expect(container.querySelectorAll('script').length).toBe(0);
+
+        // there is no "Request Body Diff" button
+        expect(screen.queryByRole('button', { name: 'Request Body Diff' })).toBeNull();
+    });
+
+    it('renders exactly as before when result has no requestUri (no table, URL = resolvedPath)', () => {
+        const resultWithoutRequestUri: any = {
+            ...mockResult,
+            resolvedPath: '/api/v1/users/42',
+            requestUri: undefined,
+        };
+
+        render(
+            <RequestDetail
+                result={resultWithoutRequestUri}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        expect(screen.getByText('/api/v1/users/42')).toBeTruthy();
+        expect(screen.queryByText('Query Parameters')).toBeNull();
+        expect(document.querySelector('.detail-query-table')).toBeNull();
+    });
+
+    it('shows truncated note when requestUri ends with ellipsis', () => {
+        const truncatedResult: any = {
+            ...mockResult,
+            method: 'GET',
+            resolvedPath: '/filter',
+            requestUri: '/filter?category=toolong…',
+            payload: 'null',
+        };
+
+        render(
+            <RequestDetail
+                result={truncatedResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        expect(screen.getByText('(truncated — full URL not stored)')).toBeTruthy();
+    });
 });

@@ -219,7 +219,8 @@ func (r *Runner) executeRequest(
 			reqCancel()
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-				Method: method, Profile: profile, Status: 0, Payload: payload, PayloadSize: payloadSize,
+				RequestURI: requestURIOf(rawURL),
+				Method: method, Profile: profile, Status: 0, Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize,
 				Error: err.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				RequestHeaders: mergedHeaders,
 			}
@@ -324,8 +325,9 @@ func (r *Runner) executeRequest(
 			}
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
+				RequestURI: requestURIOf(rawURL),
 				Method: method, Profile: profile, Status: 0, Duration: duration,
-				Payload: payload, PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+				Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				RequestHeaders: mergedHeaders,
 			}
 		}
@@ -365,8 +367,9 @@ func (r *Runner) executeRequest(
 				timer.Stop()
 				return &swagger.FuzzResult{
 					ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
+					RequestURI: requestURIOf(rawURL),
 					Method: method, Profile: profile, Status: 429, Duration: duration,
-					Payload: payload, PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+					Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 					RequestHeaders: mergedHeaders,
 				}
 			}
@@ -462,6 +465,7 @@ func (r *Runner) executeRequest(
 			ID:              uuid.New().String(),
 			Endpoint:        originalPath,
 			ResolvedPath:    resolvedPath,
+			RequestURI:      requestURIOf(rawURL),
 			Method:          method,
 			Profile:         profile,
 			Status:          resp.StatusCode,

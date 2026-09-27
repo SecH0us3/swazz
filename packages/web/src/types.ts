@@ -224,6 +224,7 @@ export interface FuzzResult {
     id: string;
     endpoint: string;         // original template path e.g. /users/{id}
     resolvedPath: string;     // actual path used e.g. /users/abc123
+    requestUri?: string;      // path + query actually sent
     method: string;
     profile: FuzzingProfile;
     status: number;

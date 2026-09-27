@@ -5,7 +5,7 @@
 
 import React, { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
-import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
+import { generateTemplateFromSchema, parseQueryParams, parseQueryParamList, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
 import { generateAdaptivePoc, type AdaptivePocResult } from '../../services/adaptivePocService.js';
 import { tokenizeCode } from '../../utils/syntaxHighlight.js';
@@ -301,7 +301,9 @@ export function RequestDetail({
         );
     };
 
-    const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
+    const sentUri = result.requestUri || result.resolvedPath || result.endpoint;
+    const replayUri = (result.requestUri && result.requestUri.endsWith('…')) ? (result.resolvedPath || result.endpoint) : sentUri;
+    const initialUrl = joinUrl(baseUrl, replayUri);
     const initialBody = formatValue(result.payload);
 
     const [liveStatus, setLiveStatus] = useState<number>(result.status);
@@ -313,12 +315,12 @@ export function RequestDetail({
     const [editedBody, setEditedBody] = useState(initialBody);
 
     useEffect(() => {
-        setEditedUrl(joinUrl(baseUrl, result.resolvedPath || result.endpoint));
+        setEditedUrl(joinUrl(baseUrl, replayUri));
         setEditedBody(formatValue(result.payload));
         setLiveStatus(result.status);
         setLiveResponse(result.responseBody);
         setLiveHeaders(result.responseHeaders || {});
-    }, [result, baseUrl]);
+    }, [result, baseUrl, replayUri]);
 
     useEffect(() => {
         if (mainTab !== 'poc' || pocMode !== 'adaptive' || adaptiveCache[pocLang]) {
@@ -419,7 +421,7 @@ export function RequestDetail({
     }
 
     // Process query params diff
-    const fuzzedQueryParams = parseQueryParams(result.resolvedPath);
+    const fuzzedQueryParams = parseQueryParams(result.requestUri || result.resolvedPath);
     let templateQueryParams: Record<string, any> = {};
     if (matchingEndpoint?.schema && (!matchingEndpoint.schema.type || matchingEndpoint.schema.type === 'object') && matchingEndpoint.schema.properties) {
         // If there's no body, schema properties represent the query params (e.g. GET requests)
@@ -430,8 +432,12 @@ export function RequestDetail({
     }
     const hasQueryDiff = Object.keys(fuzzedQueryParams).length > 0 || Object.keys(templateQueryParams).length > 0;
 
+    const hasBody = !['GET', 'HEAD', 'OPTIONS'].includes(result.method.toUpperCase()) &&
+        result.payload !== undefined &&
+        result.payload !== null &&
+        result.payload !== 'null';
+
     useEffect(() => {
-        const hasBody = result.payload !== undefined && result.payload !== null;
         const hasHeaders = !!result.requestHeaders && Object.keys(result.requestHeaders).length > 0;
         if (hasBody) {
             setSubTab('body');
@@ -440,7 +446,7 @@ export function RequestDetail({
         } else if (hasHeaders) {
             setSubTab('headers');
         }
-    }, [result, hasQueryDiff]);
+    }, [result, hasBody, hasQueryDiff]);
 
     const copy = (text: string, label: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -897,13 +903,52 @@ export function RequestDetail({
                                 <div>
                                     <div className="detail-section-title">Request URL</div>
                                     <div className="detail-url-display">
-                                        {highlightOobPayload(result.resolvedPath || result.endpoint, result.id)}
+                                        {highlightOobPayload(sentUri, result.id)}
                                     </div>
                                 </div>
 
                                 {(() => {
+                                    const queryParamsList = parseQueryParamList(result.requestUri);
+                                    if (queryParamsList.length === 0) return null;
+                                    return (
+                                        <div>
+                                            <div className="detail-section-title">Query Parameters</div>
+                                            <table className="detail-query-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Parameter</th>
+                                                        <th>Value</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {queryParamsList.map(([key, value], idx) => (
+                                                        <tr key={`${key}-${idx}`}>
+                                                            <td>{key}</td>
+                                                            <td>
+                                                                {result.profile === 'MALICIOUS' ? (
+                                                                    <span className="diff-mutated-malicious">
+                                                                        {highlightOobPayload(value, result.id)}
+                                                                    </span>
+                                                                ) : (
+                                                                    highlightOobPayload(value, result.id)
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                            {result.requestUri?.endsWith('…') && (
+                                                <div className="detail-query-truncated-note">
+                                                    (truncated — full URL not stored)
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+
+                                {(() => {
                                     const availableTabs = [
-                                        { id: 'body', label: 'Request Body Diff', visible: result.payload !== undefined && result.payload !== null },
+                                        { id: 'body', label: 'Request Body Diff', visible: hasBody },
                                         { id: 'query', label: 'Query Parameters Diff', visible: hasQueryDiff },
                                         { id: 'headers', label: 'Request Headers', visible: !!result.requestHeaders && Object.keys(result.requestHeaders).length > 0 },
                                     ].filter(t => t.visible);
@@ -925,7 +970,7 @@ export function RequestDetail({
                                             </div>
 
                                             <div style={{ flex: 1, overflowY: 'auto' }}>
-                                                {subTab === 'body' && result.payload !== undefined && result.payload !== null && (
+                                                {subTab === 'body' && hasBody && (
                                                     <div className="detail-body-diff-section">
                                                         <div className="detail-json-wrapper detail-diff-json-wrapper">
                                                             <pre className="detail-json detail-diff-json-pre">

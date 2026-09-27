@@ -1748,6 +1748,38 @@ body.resizing .sidebar-resizer {
   cursor: pointer;
 }
 
+.detail-query-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.detail-query-table th,
+.detail-query-table td {
+  padding: 6px 12px;
+  text-align: left;
+  word-break: break-all;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.detail-query-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+}
+
+.detail-query-table td {
+  color: var(--text-primary);
+}
+
+.detail-query-truncated-note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-disabled);
+  font-weight: 400;
+}
+
 /* ─── Profile Toggles ────────────────────────────────────── */
 
 .profile-toggles {

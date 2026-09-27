@@ -74,6 +74,13 @@ func TestFillPathParamsFromMap(t *testing.T) {
 func TestMergePayload(t *testing.T) {
 	assert.Equal(t, "body_payload", mergePayload("body_payload", map[string]any{"qp": 1}))
 	assert.Equal(t, map[string]any{"qp": 1}, mergePayload(nil, map[string]any{"qp": 1}))
+	assert.Equal(t, map[string]any{"category": "x"}, mergePayload(map[string]any(nil), map[string]any{"category": "x"}))
+	assert.Nil(t, mergePayload(nil, nil))
+}
+
+func TestRequestURIOf(t *testing.T) {
+	assert.Equal(t, "/filter?category=a%2Cb", requestURIOf("https://h/filter?category=a%2Cb"))
+	assert.Equal(t, "", requestURIOf("://invalid url with spaces and bad scheme"))
 }
 
 func TestPreviewAnyAndTruncateValue(t *testing.T) {
@@ -113,6 +120,16 @@ func TestToSSE(t *testing.T) {
 	sse := ToSSE(result)
 	assert.Equal(t, 203, len(sse.ResolvedPath)) // 200 + 3-byte '…' symbol
 	assert.True(t, strings.HasSuffix(sse.ResolvedPath, "…"))
+
+	// Long request URI truncation (capped at 2048 bytes + '…')
+	longURI := "/api/v1/search?q=" + strings.Repeat("a", 5000)
+	resultURI := &swagger.FuzzResult{
+		ID:         "test-uri",
+		RequestURI: longURI,
+	}
+	sseURI := ToSSE(resultURI)
+	assert.Equal(t, 2048+len("…"), len(sseURI.RequestURI))
+	assert.True(t, strings.HasSuffix(sseURI.RequestURI, "…"))
 
 	// Evidence and message truncation in findings
 	resultWithFinding := &swagger.FuzzResult{
