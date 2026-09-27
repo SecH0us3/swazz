@@ -25,6 +25,7 @@ Under our **Additional Use Grant**, you are granted full permission to run Swazz
 
 > [!NOTE]
 > If your company's annual revenue exceeds **$1,000,000 USD** and you use Swazz in production or commercial environments beyond the 14-day trial period, an official **Swazz Enterprise Commercial License** is required.
+> To request a license, email **license@secmy.app** — licenses may be granted free of charge.
 
 ---
 

@@ -102,6 +102,22 @@ describe('ContactSalesCard', () => {
   });
 
   describe('Component UI', () => {
+    it('uses license@secmy.app as SALES_EMAIL', () => {
+      expect(SALES_EMAIL).toBe('license@secmy.app');
+    });
+
+    it('shows email link with mailto:license@secmy.app on rendered card with modal closed', () => {
+      render(<ContactSalesCard />);
+      const emailLink = screen.getByRole('link', { name: 'license@secmy.app' });
+      expect(emailLink).toBeInTheDocument();
+      expect(emailLink).toHaveAttribute('href', 'mailto:license@secmy.app');
+    });
+
+    it('shows text hinting that licenses may be granted free of charge', () => {
+      render(<ContactSalesCard />);
+      expect(screen.getByText(/Licenses may be granted free of charge/i)).toBeInTheDocument();
+    });
+
     it('renders Contact Sales card and opens modal on click', () => {
       render(<ContactSalesCard />);
       const btn = screen.getByRole('button', { name: /contact sales/i });
