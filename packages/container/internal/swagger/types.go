@@ -456,6 +456,7 @@ type FuzzResult struct {
 	ID               string            `json:"id"`
 	Endpoint         string            `json:"endpoint"`
 	ResolvedPath     string            `json:"resolvedPath"`
+	RequestURI       string            `json:"requestUri,omitempty"` // path + "?" + encoded query actually sent
 	Method           string            `json:"method"`
 	Profile          FuzzingProfile    `json:"profile"`
 	Status           int               `json:"status"`
@@ -483,6 +484,7 @@ type FuzzResultSSE struct {
 	ID                 string            `json:"id"`
 	Endpoint           string            `json:"endpoint"`
 	ResolvedPath       string            `json:"resolvedPath"`
+	RequestURI         string            `json:"requestUri,omitempty"` // path + "?" + encoded query actually sent
 	Method             string            `json:"method"`
 	Profile            FuzzingProfile    `json:"profile"`
 	Status             int               `json:"status"`

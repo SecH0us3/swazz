@@ -62,6 +62,23 @@ export function parseQueryParams(resolvedPath: string): Record<string, string> {
     return params;
 }
 
+/** Ordered [key, value] pairs of the query string, keeping duplicates. Empty on error. */
+export function parseQueryParamList(uri: string | undefined): Array<[string, string]> {
+    if (!uri) return [];
+    const pairs: Array<[string, string]> = [];
+    try {
+        const queryIndex = uri.indexOf('?');
+        if (queryIndex !== -1) {
+            const queryString = uri.substring(queryIndex + 1);
+            const searchParams = new URLSearchParams(queryString);
+            searchParams.forEach((val, key) => {
+                pairs.push([key, val]);
+            });
+        }
+    } catch { /* ignore */ }
+    return pairs;
+}
+
 /**
  * Recursively diffs fuzzed vs template values and renders standard React Nodes with highlights.
  */

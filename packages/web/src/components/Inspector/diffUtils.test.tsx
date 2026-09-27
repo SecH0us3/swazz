@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect } from 'vitest';
-import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
+import { generateTemplateFromSchema, parseQueryParams, parseQueryParamList, renderJsonDiff } from './diffUtils.js';
 import type { SchemaProperty } from '../../types.js';
 
 describe('diffUtils', () => {
@@ -75,6 +75,22 @@ describe('diffUtils', () => {
         it('should return empty object if no query params', () => {
             expect(parseQueryParams('/api/v1/users')).toEqual({});
             expect(parseQueryParams('/api/v1/users?')).toEqual({});
+        });
+    });
+
+    describe('parseQueryParamList', () => {
+        it('keeps duplicate keys in order and parses values', () => {
+            const uri = '/filter?category=a&category=b&sort=asc';
+            expect(parseQueryParamList(uri)).toEqual([
+                ['category', 'a'],
+                ['category', 'b'],
+                ['sort', 'asc']
+            ]);
+        });
+
+        it('returns [] for a URI without ? or undefined', () => {
+            expect(parseQueryParamList('/api/v1/users')).toEqual([]);
+            expect(parseQueryParamList(undefined)).toEqual([]);
         });
     });
 

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"swazz-engine/internal/classifier"
@@ -166,10 +167,35 @@ func capPathParam(v any) string {
 }
 
 func mergePayload(payload any, queryParams map[string]any) any {
-	if payload != nil {
+	if !isNilValue(payload) {
 		return payload
 	}
+	if len(queryParams) == 0 {
+		return nil
+	}
 	return queryParams
+}
+
+// isNilValue reports whether v is nil or an interface wrapping a nil map/slice/pointer.
+func isNilValue(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Map, reflect.Slice, reflect.Pointer, reflect.Interface, reflect.Func, reflect.Chan:
+		return rv.IsNil()
+	}
+	return false
+}
+
+// requestURIOf returns the path+query of rawURL, or "" if it does not parse.
+func requestURIOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.RequestURI()
 }
 
 // ToSSE converts a full FuzzResult into the lightweight FuzzResultSSE for SSE broadcast.
@@ -180,6 +206,10 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 	resolvedPath := r.ResolvedPath
 	if len(resolvedPath) > 200 {
 		resolvedPath = resolvedPath[:200] + "…"
+	}
+	requestURI := r.RequestURI
+	if len(requestURI) > 2048 {
+		requestURI = requestURI[:2048] + "…"
 	}
 	hasHeaderInjection := false
 	for _, f := range r.AnalyzerFindings {
@@ -252,6 +282,7 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		ID:                 r.ID,
 		Endpoint:           r.Endpoint,
 		ResolvedPath:       resolvedPath,
+		RequestURI:         requestURI,
 		Method:             r.Method,
 		Profile:            r.Profile,
 		Status:             r.Status,

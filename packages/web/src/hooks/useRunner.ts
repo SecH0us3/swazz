@@ -75,6 +75,7 @@ export interface ResultSummary {
     method: string;
     endpoint: string;
     resolvedPath: string;
+    requestUri?: string;
     status: number;
     profile: string;
     duration: number;
@@ -102,6 +103,7 @@ export function toSummary(r: any): ResultSummary {
         method: r.method,
         endpoint: r.endpoint,
         resolvedPath: r.resolvedPath,
+        requestUri: r.requestUri,
         status: r.status,
         profile: r.profile,
         duration: r.duration,

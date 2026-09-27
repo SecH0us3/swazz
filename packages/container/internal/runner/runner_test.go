@@ -168,6 +168,40 @@ func TestExecuteRequest_QueryParams(t *testing.T) {
 	}
 }
 
+func TestExecuteRequest_QueryParamsTypedNil(t *testing.T) {
+	var capturedURI string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedURI = r.URL.RequestURI()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	r := newTestRunner(server.Client(), nil)
+	defer r.Close()
+
+	var typedNilPayload map[string]any = nil
+	queryParams := map[string]any{
+		"category": "<script>",
+	}
+
+	res := r.executeRequest(
+		context.Background(),
+		server.URL, "/filter", "/filter", "GET",
+		nil, nil, any(typedNilPayload), swagger.ProfileMalicious, queryParams, nil, "",
+	)
+
+	if res == nil {
+		t.Fatal("Expected FuzzResult, got nil")
+	}
+	if res.Error != "" {
+		t.Fatalf("Expected no error, got %s", res.Error)
+	}
+
+	assert.Equal(t, queryParams, res.Payload)
+	assert.Equal(t, capturedURI, res.RequestURI)
+	assert.Contains(t, res.RequestURI, "category=")
+}
+
 func TestConcurrentStatsAccuracy(t *testing.T) {
 	// Verify that concurrent workers sending results through statsChan
 	// produce accurate aggregated counts.

@@ -230,9 +230,14 @@ describe('RequestDetail Component', () => {
     });
 
     it('switches between Mutation Diff and Raw Request views', () => {
+        const postResult: any = {
+            ...mockResult,
+            method: 'POST',
+        };
+
         render(
             <RequestDetail
-                result={mockResult}
+                result={postResult}
                 baseUrl="https://api.example.com"
                 onClose={mockOnClose}
                 globalHeaders={{}}
@@ -249,6 +254,42 @@ describe('RequestDetail Component', () => {
 
         expect(screen.getByText('Payload')).toBeTruthy();
         expect(screen.getByDisplayValue(/"role": "admin"/i)).toBeTruthy();
+    });
+
+    it('keeps payload textarea empty for GET results with query-param payload and omits --data-raw in curl PoC', () => {
+        const getResult: any = {
+            ...mockResult,
+            method: 'GET',
+            requestUri: '/filter?category=x',
+            payload: '{"category":"x"}',
+        };
+
+        render(
+            <RequestDetail
+                result={getResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        // after clicking "Raw Request", the payload textarea is empty
+        const rawReqBtn = screen.getByRole('button', { name: 'Raw Request' });
+        fireEvent.click(rawReqBtn);
+
+        const textarea = document.querySelector('textarea.textarea') as HTMLTextAreaElement;
+        expect(textarea).toBeTruthy();
+        expect(textarea.value).toBe('');
+
+        // and the generated curl PoC contains category=x in the URL and does NOT contain --data-raw
+        const pocTab = screen.getByRole('tab', { name: /Live Replay & PoC Export/i });
+        fireEvent.click(pocTab);
+
+        const pocCode = document.querySelector('.poc-code-pre')?.textContent || '';
+        expect(pocCode).toContain('category=x');
+        expect(pocCode).not.toContain('--data-raw');
     });
 
     it('calls onClose when close button is clicked or Escape is pressed', () => {
@@ -381,10 +422,14 @@ describe('RequestDetail Component', () => {
 
     it('handles replay request error and malformed raw body', async () => {
         const mockReplay = vi.fn().mockRejectedValue(new Error('Network connection refused'));
+        const postResult: any = {
+            ...mockResult,
+            method: 'POST',
+        };
 
         render(
             <RequestDetail
-                result={mockResult}
+                result={postResult}
                 baseUrl="https://api.example.com"
                 onClose={mockOnClose}
                 onReplay={mockReplay}
@@ -619,5 +664,89 @@ describe('RequestDetail Component', () => {
         unmount();
         resolvePromise({ code: '', model: '', simulated: true });
         spy.mockRestore();
+    });
+
+    it('renders query parameters table and full URI for GET malicious result with requestUri and hides body diff', () => {
+        const getMaliciousResult: any = {
+            ...mockResult,
+            method: 'GET',
+            profile: 'MALICIOUS',
+            resolvedPath: '/filter',
+            requestUri: '/filter?category=%3Cscript%3Ealert(1)%3C%2Fscript%3E&sort=asc',
+            payload: 'null',
+        };
+
+        const { container } = render(
+            <RequestDetail
+                result={getMaliciousResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        // the Request URL shows the full URI
+        expect(screen.getByText('/filter?category=%3Cscript%3Ealert(1)%3C%2Fscript%3E&sort=asc')).toBeTruthy();
+
+        // the table has rows category → <script>alert(1)</script> and sort → asc
+        expect(screen.getByText('Query Parameters')).toBeTruthy();
+        expect(screen.getByText('category')).toBeTruthy();
+        expect(screen.getByText('<script>alert(1)</script>')).toBeTruthy();
+        expect(screen.getByText('sort')).toBeTruthy();
+        expect(screen.getByText('asc')).toBeTruthy();
+
+        // as text: assert no script element was created
+        expect(container.querySelectorAll('script').length).toBe(0);
+
+        // there is no "Request Body Diff" button
+        expect(screen.queryByRole('button', { name: 'Request Body Diff' })).toBeNull();
+    });
+
+    it('renders exactly as before when result has no requestUri (no table, URL = resolvedPath)', () => {
+        const resultWithoutRequestUri: any = {
+            ...mockResult,
+            resolvedPath: '/api/v1/users/42',
+            requestUri: undefined,
+        };
+
+        render(
+            <RequestDetail
+                result={resultWithoutRequestUri}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        expect(screen.getByText('/api/v1/users/42')).toBeTruthy();
+        expect(screen.queryByText('Query Parameters')).toBeNull();
+        expect(document.querySelector('.detail-query-table')).toBeNull();
+    });
+
+    it('shows truncated note when requestUri ends with ellipsis', () => {
+        const truncatedResult: any = {
+            ...mockResult,
+            method: 'GET',
+            resolvedPath: '/filter',
+            requestUri: '/filter?category=toolong…',
+            payload: 'null',
+        };
+
+        render(
+            <RequestDetail
+                result={truncatedResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        expect(screen.getByText('(truncated — full URL not stored)')).toBeTruthy();
     });
 });
