@@ -3,7 +3,7 @@
   "compatibility_date": "2026-04-30",
   "main": "worker.ts",
   "assets": {
-    "directory": "../container/web/dist",
+    "directory": "./dist",
     "binding": "ASSETS"
   },
   "vars": {

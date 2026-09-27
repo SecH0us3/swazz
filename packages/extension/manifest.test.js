@@ -105,3 +105,22 @@ describe('markup and stylesheet agree', () => {
         expect(ids('sidepanel.html')).toEqual(ids('popup.html'));
     });
 });
+
+describe('config wiring', () => {
+    it('includes config.js in background.js importScripts', () => {
+        const bg = read('background.js');
+        expect(bg).toMatch(/importScripts\([^)]*['"]config\.js['"][^)]*\)/);
+    });
+
+    it('loads config.js before popup.js in popup.html and sidepanel.html', () => {
+        for (const f of ['popup.html', 'sidepanel.html']) {
+            const html = read(f);
+            const configIdx = html.indexOf('src="config.js"');
+            const popupIdx = html.indexOf('src="popup.js"');
+            expect(configIdx, `${f} must include config.js`).toBeGreaterThan(-1);
+            expect(popupIdx, `${f} must include popup.js`).toBeGreaterThan(-1);
+            expect(configIdx, `${f} must load config.js before popup.js`).toBeLessThan(popupIdx);
+        }
+    });
+});
+

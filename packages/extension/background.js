@@ -1,5 +1,5 @@
 if (typeof importScripts === 'function') {
-    importScripts('har.js', 'scope.js');
+    importScripts('config.js', 'har.js', 'scope.js');
 }
 
 const { normalizePath } = (typeof self !== 'undefined' && self.SwazzHar) || 
@@ -17,7 +17,7 @@ const DEFAULT_STATE = {
     lastDroppedHost: "",
     droppedHosts: {}, // host -> how many requests were ignored for being out of scope
     token: null,
-    swazzUrl: "http://localhost:5173",
+    swazzUrl: (typeof self !== 'undefined' && self.SWAZZ_DEFAULT_URL) || "http://localhost:5173",
     projectId: null,
     projectName: "",
     userProfile: null

@@ -64,3 +64,12 @@ These environment variables are read by the fuzzer agent engine (`packages/conta
 | **`GOOGLE_API_KEY`** | Google AI Studio API key for Gemini models via Pre-Scan LLM Batching. *(Optional if Cloudflare AI Gateway Provider Keys / BYOK is used)*. | `AIzaSy...` |
 | **`OPENAI_API_KEY`** | OpenAI API key for pre-scan schema analysis. *(Optional if Cloudflare AI Gateway Provider Keys / BYOK is used)*. | `sk-...` |
 
+---
+
+## 🧩 Browser Extension (build time)
+
+| Variable Name | Description | Default / Example |
+| :--- | :--- | :--- |
+| **`SWAZZ_EXTENSION_URL`** | Default dashboard URL baked into the production extension zip by `build-zip.mjs --mode prod`; must be a bare origin allowed by `isAuthOriginAllowed`; ignored in dev mode | `https://swazz.secmy.app` |
+
+

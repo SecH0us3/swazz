@@ -8,7 +8,7 @@ The **Swazz Traffic Capturer** is a Chrome (MV3) extension that records real API
 use your application, turns it into endpoints, and either syncs them straight into a Swazz project
 or exports them as a standard `.har` file.
 
-It lives in `packages/extension/` and has no build step — load it unpacked.
+The extension lives in `packages/extension/`. For local development, load that folder unpacked — it then defaults to the local dashboard `http://localhost:5173`. The ready-made zip downloaded from the dashboard (Settings → Traffic Capture) is built for production and defaults to `https://swazz.secmy.app`. Either way the URL can be changed in the popup's Swazz URL field, and a value already saved in the extension is kept on update.
 
 ## Install
 
@@ -71,6 +71,16 @@ The file is a normal HAR, so DevTools, Postman and other tooling read it too.
 **📂 Import HAR** loads a HAR back into the popup — useful to restore a capture after a browser
 restart, or to review a recording a teammate sent you. Imports merge into the current capture rather
 than replacing it.
+
+### Building the zip
+
+`packages/web` builds `public/swazz-extension.zip` automatically via `packages/extension/build-zip.mjs` — `npm run dev` uses `--mode dev` (localhost), `npm run build` uses `--mode prod`.
+
+In prod mode the default URL is `https://swazz.secmy.app`, overridable at build time with `SWAZZ_EXTENSION_URL`; the value must be a bare origin accepted by the extension's own dashboard-origin check (`isAuthOriginAllowed` in `scope.js`, i.e. `https://swazz.secmy.app` or its subdomains, or `http://localhost:5173`), otherwise the production build fails. Only manifest, icons, HTML, CSS and non-test JS files are packaged.
+
+```bash
+node packages/extension/build-zip.mjs --mode prod --out /tmp/swazz-extension.zip
+```
 
 ## Privacy and safety notes
 
