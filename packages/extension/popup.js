@@ -1,3 +1,5 @@
+const DEFAULT_SWAZZ_URL = (typeof self !== 'undefined' && self.SWAZZ_DEFAULT_URL) || "http://localhost:5173";
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const toggleRecord = document.getElementById('btn-toggle-record');
@@ -60,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let targetDomains = [];
     let capturedRequests = {};
     let activeToken = null;
-    let activeSwazzUrl = "http://localhost:5173";
+    let activeSwazzUrl = DEFAULT_SWAZZ_URL;
     let activeProjectId = null;
     let projectsList = [];
     let droppedOutOfScope = 0;
@@ -148,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
             droppedHosts = state.droppedHosts || {};
             updateCrawlUI(state.crawlState);
             activeToken = state.token || null;
-            activeSwazzUrl = state.swazzUrl || "http://localhost:5173";
+            activeSwazzUrl = state.swazzUrl || DEFAULT_SWAZZ_URL;
             activeProjectId = state.projectId || null;
 
             // Sync toggle
@@ -353,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
             url = 'http://' + url;
         }
-        activeSwazzUrl = url || "http://localhost:5173";
+        activeSwazzUrl = url || DEFAULT_SWAZZ_URL;
         chrome.storage.local.set({ swazzUrl: activeSwazzUrl });
         if (activeToken) fetchProjects();
     });
