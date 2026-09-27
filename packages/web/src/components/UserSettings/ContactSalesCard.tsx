@@ -8,7 +8,7 @@ import { Modal } from '../Shared/Modal.js';
 import { FEATURES, FEATURE_TYPE_PAID } from '@swazz/shared';
 import { useAppStore } from '../../store/appStore.js';
 
-export const SALES_EMAIL = 'swazz@secmy.app';
+export const SALES_EMAIL = 'license@secmy.app';
 
 export interface LicenseRequest {
   projectName: string;
@@ -206,7 +206,13 @@ export function ContactSalesCard({ isCommercialActive = false, isPrimary = false
       <div className="contact-sales-card">
         <div className="contact-sales-info">
           <h3>{isCommercialActive ? 'Renew or expand your license?' : 'Need a commercial license?'}</h3>
-          <p>Contact us — we'll help tailor duration, seat count, and concurrency level.</p>
+          <p>
+            Email <a href={`mailto:${SALES_EMAIL}`} className="contact-sales-email-link">{SALES_EMAIL}</a>
+            {' '}— we'll help tailor duration, seat count, and concurrency level.
+          </p>
+          <p className="contact-sales-free-hint">
+            Licenses may be granted free of charge — just write to us about your project.
+          </p>
         </div>
         <button
           ref={openBtnRef}

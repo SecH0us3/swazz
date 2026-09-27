@@ -5185,6 +5185,12 @@ kbd {
   line-height: 1.4;
 }
 
+.contact-sales-free-hint {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
 .contact-sales-form {
   display: flex;
   flex-direction: column;
