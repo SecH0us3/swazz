@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AuthService } from '../../../src/services/auth';
+import { AuthService, parseTransports } from '../../../src/services/auth';
 import { IAuthRepository } from '../../../src/repositories/auth';
 import { Env, AppEnv } from '../../../src/env';
 import { Context } from 'hono';
@@ -575,6 +575,34 @@ describe('AuthService', () => {
       const res = await service.handleGitlabCallback('code', state, 'http://front', mockContext);
       expect(res.redirectUrl).toContain('status=gitlab_linked');
       expect(mockRepo.linkGitlabUser).toHaveBeenCalledWith('u1', '98765');
+    });
+  });
+
+  describe('parseTransports', () => {
+    it('parses comma-separated valid transports', () => {
+      expect(parseTransports('usb,nfc')).toEqual(['usb', 'nfc']);
+    });
+
+    it('maps legacy cable to hybrid', () => {
+      expect(parseTransports('cable')).toEqual(['hybrid']);
+    });
+
+    it('deduplicates cable and hybrid to single hybrid entry', () => {
+      expect(parseTransports('cable,hybrid')).toEqual(['hybrid']);
+    });
+
+    it('filters out unknown legacy transports such as smart-card', () => {
+      expect(parseTransports('smart-card,usb')).toEqual(['usb']);
+    });
+
+    it('returns undefined when all inputs are filtered out', () => {
+      expect(parseTransports('smart-card')).toBeUndefined();
+    });
+
+    it('returns undefined for empty string, null, and undefined', () => {
+      expect(parseTransports('')).toBeUndefined();
+      expect(parseTransports(null)).toBeUndefined();
+      expect(parseTransports(undefined)).toBeUndefined();
     });
   });
 });

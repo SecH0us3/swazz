@@ -20,18 +20,24 @@ import {
   verifyRegistrationResponse,
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
-  type AuthenticatorTransportFuture,
+  type AuthenticatorTransport,
 } from '@simplewebauthn/server';
 import { sendVerificationEmail } from './email';
 
-const VALID_TRANSPORTS = new Set<AuthenticatorTransportFuture>([
-  'ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb'
+const VALID_TRANSPORTS = new Set<AuthenticatorTransport>([
+  'ble', 'hybrid', 'internal', 'nfc', 'usb'
 ]);
 
-function parseTransports(raw?: string | null): AuthenticatorTransportFuture[] | undefined {
+// Legacy caBLE was standardized as hybrid; transports are only a browser hint.
+export function parseTransports(raw?: string | null): AuthenticatorTransport[] | undefined {
   if (!raw) return undefined;
-  const list = raw.split(',').map(s => s.trim()).filter((s): s is AuthenticatorTransportFuture => VALID_TRANSPORTS.has(s as AuthenticatorTransportFuture));
-  return list.length > 0 ? list : undefined;
+  const list = raw
+    .split(',')
+    .map(s => s.trim())
+    .map(s => (s === 'cable' ? 'hybrid' : s))
+    .filter((s): s is AuthenticatorTransport => VALID_TRANSPORTS.has(s as AuthenticatorTransport));
+  const deduped = Array.from(new Set(list));
+  return deduped.length > 0 ? deduped : undefined;
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array) {

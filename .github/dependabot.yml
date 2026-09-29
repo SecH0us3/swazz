@@ -9,6 +9,18 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
+    groups:
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+    ignore:
+      # packages/edge must stay on vitest 4 until @cloudflare/vitest-pool-workers supports
+      # vitest 5 (0.22.0 peers vitest ^4.1.0). Remove this once it does, and upgrade edge.
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
 
   # 2. Go Modules (Backend Fuzzing Engine)
   - package-ecosystem: "gomod"
