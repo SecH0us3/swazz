@@ -473,7 +473,8 @@ export default {
             method: 'POST',
             body: JSON.stringify({
               runId: msg.body.runId,
-              config: msg.body.config || {},
+              configKey: msg.body.configKey,
+              config: msg.body.config,
               userPublicKey: msg.body.userPublicKey || ""
             }),
           });

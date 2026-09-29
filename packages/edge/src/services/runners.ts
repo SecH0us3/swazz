@@ -8,6 +8,7 @@ import { IRunnersRepository } from '../repositories/runners';
 import { IRbacRepository } from '../repositories/rbac';
 import { hashApiKey } from '../utils/auth';
 import { ScansRepository } from '../repositories/scans';
+import { isValidRunId, putScanConfig } from './scanConfigStore';
 
 export interface IRunnersService {
   connect(
@@ -214,6 +215,12 @@ export class RunnersService implements IRunnersService {
     }
 
     const runId = body.runId || crypto.randomUUID();
+    if (!isValidRunId(runId)) {
+      throw new Error('Invalid runId|400');
+    }
+
+    const configKey = await putScanConfig(this.env, runId, body.config || {});
+
     const projectId = body.projectId || "";
     const targetUrl = body.config?.base_url || "";
     const profile = (body.config?.profiles && body.config.profiles[0]) || "default";
@@ -227,7 +234,7 @@ export class RunnersService implements IRunnersService {
 
     await this.env.SCAN_QUEUE.send({
       runId,
-      config: body.config || {},
+      configKey,
       userPublicKey,
       targetUrl,
       profile,

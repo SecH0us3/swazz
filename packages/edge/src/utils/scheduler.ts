@@ -5,6 +5,7 @@
 
 import { Env } from '../env';
 import { ScansRepository } from '../repositories/scans';
+import { isValidRunId, putScanConfig } from '../services/scanConfigStore';
 
 function matchCronField(pattern: string, value: number, min: number, max: number): boolean {
   if (pattern === '*') return true;
@@ -84,7 +85,11 @@ export async function handleScheduledScans(env: Env): Promise<void> {
       }
       
       const runId = crypto.randomUUID();
+      if (!isValidRunId(runId)) {
+        throw new Error('Invalid runId|400');
+      }
       const parsedConfig = JSON.parse(config.config_json || "{}") || {};
+      const configKey = await putScanConfig(env, runId, parsedConfig);
       const targetUrl = parsedConfig.base_url || "";
       const profile = (parsedConfig.settings?.profiles && parsedConfig.settings.profiles[0]) || "default";
       const status = 'queued';
@@ -94,7 +99,7 @@ export async function handleScheduledScans(env: Env): Promise<void> {
       // Send message to SCAN_QUEUE
       await env.SCAN_QUEUE.send({
         runId,
-        config: parsedConfig,
+        configKey,
         userPublicKey: activeOwner.public_key || "",
         targetUrl,
         profile,

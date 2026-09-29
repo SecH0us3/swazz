@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { RouteHandler, HandlerContext } from './types';
+import { isValidScanConfigKey, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
 
 export class DispatchHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -17,7 +18,25 @@ export class DispatchHandler implements RouteHandler {
       return new Response('Missing payload', { status: 400 });
     }
 
-    await context.state.storage.put(`config:${payload.runId}`, payload.config || {});
+    let config: any;
+    const configKey: string | undefined = payload.configKey;
+
+    if (configKey) {
+      if (!isValidScanConfigKey(configKey)) {
+        return new Response('Invalid scan config key', { status: 400 });
+      }
+      try {
+        config = await getScanConfig(context.env, configKey);
+      } catch (err) {
+        console.error(`[DispatchHandler] Failed to load scan config from R2: ${configKey}`, err);
+        return new Response('Failed to load scan config', { status: 500 });
+      }
+      await context.state.storage.put(`config_ref:${payload.runId}`, configKey);
+    } else {
+      config = payload.config || {};
+      await context.state.storage.put(`config:${payload.runId}`, config);
+    }
+
     await context.state.storage.put(`user_public_key:${payload.runId}`, payload.userPublicKey || "");
 
     const activeRunners = Array.from(context.stateManager.runners);
@@ -27,7 +46,11 @@ export class DispatchHandler implements RouteHandler {
     
     const dispatchMsg = JSON.stringify({
       type: 'job_dispatch',
-      payload,
+      payload: {
+        runId: payload.runId,
+        config,
+        userPublicKey: payload.userPublicKey || "",
+      },
     });
 
     let runner = null;
@@ -40,7 +63,7 @@ export class DispatchHandler implements RouteHandler {
           return tags.includes(payload.userPublicKey);
         });
       }
-      if (!runner && !payload?.config?.settings?.disable_shared_runners) {
+      if (!runner && !config?.settings?.disable_shared_runners) {
         runner = activeRunners.find(r => !context.stateManager.isPrivateRunner(r)) || null;
       }
     }
@@ -56,7 +79,11 @@ export class DispatchHandler implements RouteHandler {
       try {
         runner.send(dispatchMsg);
         await context.state.storage.delete(`config:${payload.runId}`);
+        await context.state.storage.delete(`config_ref:${payload.runId}`);
         await context.state.storage.delete(`user_public_key:${payload.runId}`);
+        if (configKey) {
+          await deleteScanConfig(context.env, configKey);
+        }
         return new Response('Dispatched', { status: 200 });
       } catch (err) {
         context.stateManager.runners.delete(runner);
@@ -83,6 +110,18 @@ export class CommandHandler implements RouteHandler {
     }
     if (!payload || !payload.runId) {
       return new Response('Missing runId', { status: 400 });
+    }
+
+    if (payload.command === 'stop') {
+      try {
+        const ref = await context.state.storage.get<string>(`config_ref:${payload.runId}`);
+        if (ref) {
+          await context.state.storage.delete(`config_ref:${payload.runId}`);
+          await deleteScanConfig(context.env, ref);
+        }
+      } catch (err) {
+        console.error(`[CommandHandler] Error cleaning up config_ref for run ${payload.runId}:`, err);
+      }
     }
 
     const runner = context.stateManager.jobs.get(payload.runId);

@@ -28,10 +28,31 @@ describe('RunnersService Unit Tests', () => {
   let mockRbacRepo: any;
   let mockCoordinatorFetch = vi.fn();
 
+  let store: Map<string, { value: string; httpMetadata?: any }>;
+  let mockStorage: any;
+
   beforeEach(() => {
+    store = new Map();
+    mockStorage = {
+      put: vi.fn(async (key: string, value: string, opts?: any) => {
+        store.set(key, { value, httpMetadata: opts?.httpMetadata });
+      }),
+      get: vi.fn(async (key: string) => {
+        const item = store.get(key);
+        if (!item) return null;
+        return {
+          text: async () => item.value,
+          httpMetadata: item.httpMetadata,
+        };
+      }),
+      delete: vi.fn(async (key: string) => {
+        store.delete(key);
+      }),
+    };
     mockCoordinatorFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ runners: [{ publicKey: 'test-key' }], status: 'ok' })));
     mockEnv = {
       AUTH_ENABLED: 'true',
+      STORAGE: mockStorage,
       SCAN_QUEUE: {
         send: vi.fn().mockResolvedValue(undefined),
       },
@@ -141,20 +162,75 @@ describe('RunnersService Unit Tests', () => {
     expect(res.id).toBeDefined();
   });
 
-  test('queueRun should throw if anon limit reached', async () => {
+  test('queueRun should throw if anon limit reached and not write to R2 (Threat model invariant 5)', async () => {
     mockEnv.LIMIT_ANONYMOUS = 'true';
     await expect(
       runnersService.queueRun({ config: { endpoints: Array(51).fill('test') } }, 'anon', true, true)
     ).rejects.toThrow('Anonymous limit reached: You can only scan up to 50 endpoints.|403');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
   });
 
-  test('queueRun should throw if projectId present and isAnon', async () => {
+  test('queueRun should throw if projectId present and isAnon and not write to R2 (Threat model invariant 5)', async () => {
     await expect(runnersService.queueRun({ projectId: 'p1' }, 'anon', true, true)).rejects.toThrow('Forbidden|403');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
   });
 
-  test('queueRun should throw if isWeb, has projectId and no rbac permission', async () => {
+  test('queueRun should throw if isWeb, has projectId and no rbac permission and not write to R2 (Threat model invariant 5)', async () => {
     mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
     await expect(runnersService.queueRun({ projectId: 'p1' }, 'user-1', true, false)).rejects.toThrow('Forbidden|403');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+  });
+
+  test('queued message has configKey and no config, and R2 object exists and equals body.config', async () => {
+    const config = { base_url: 'https://example.com', endpoints: ['/test'] };
+    const res = await runnersService.queueRun({ config }, 'user-1', false, false);
+    expect(res.status).toBe('queued');
+
+    expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalledTimes(1);
+    const sent = (mockEnv.SCAN_QUEUE.send as any).mock.calls[0][0];
+    expect(sent.configKey).toBeDefined();
+    expect(sent.config).toBeUndefined();
+    expect(sent.runId).toBe(res.id);
+
+    expect(mockEnv.STORAGE.put).toHaveBeenCalled();
+    const storedObj = await mockEnv.STORAGE.get(sent.configKey);
+    expect(storedObj).not.toBeNull();
+    expect(JSON.parse(await storedObj!.text())).toEqual(config);
+  });
+
+  test('a config of about 300 KB succeeds (regression for 128KB limit)', async () => {
+    const largeEndpoints = Array.from({ length: 500 }, (_, i) => ({
+      path: `/api/v1/endpoint_${i}`,
+      method: 'POST',
+      padding: 'x'.repeat(600)
+    }));
+    const config = { base_url: 'https://api.example.com', endpoints: largeEndpoints };
+    const size = new TextEncoder().encode(JSON.stringify(config)).byteLength;
+    expect(size).toBeGreaterThan(250 * 1024);
+
+    const res = await runnersService.queueRun({ config }, 'user-1', false, false);
+    expect(res.status).toBe('queued');
+    const sent = (mockEnv.SCAN_QUEUE.send as any).mock.calls[0][0];
+    expect(sent.configKey).toBeDefined();
+    expect(sent.config).toBeUndefined();
+  });
+
+  test('an invalid runId returns 400 and does not write to R2 or D1 (Threat model invariant 2)', async () => {
+    await expect(
+      runnersService.queueRun({ runId: '../traversal', config: {} }, 'user-1', false, false)
+    ).rejects.toThrow('Invalid runId|400');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+    expect(mockRunnersRepo.createScanRecord).not.toHaveBeenCalled();
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  test('an oversized config returns 413 and no D1 row is created (Threat model invariant 4)', async () => {
+    const oversized = { padding: 'y'.repeat(21 * 1024 * 1024) };
+    await expect(
+      runnersService.queueRun({ config: oversized }, 'user-1', false, false)
+    ).rejects.toThrow(/Scan config too large.*\|413/);
+    expect(mockRunnersRepo.createScanRecord).not.toHaveBeenCalled();
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
   });
 
   test('stopRun should succeed', async () => {

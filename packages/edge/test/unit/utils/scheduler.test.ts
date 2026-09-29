@@ -65,6 +65,11 @@ describe('scheduler util', () => {
 
     beforeEach(() => {
       mockEnv = {
+        STORAGE: {
+          put: vi.fn().mockResolvedValue(undefined),
+          get: vi.fn(),
+          delete: vi.fn(),
+        },
         SCAN_QUEUE: {
           send: vi.fn(),
         },
@@ -110,6 +115,14 @@ describe('scheduler util', () => {
         now.toISOString()
       );
       expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalled();
+      const sentPayload = mockEnv.SCAN_QUEUE.send.mock.calls[0][0];
+      expect(sentPayload.config).toBeUndefined();
+      expect(sentPayload.configKey).toMatch(/^scans\/configs\//);
+      expect(mockEnv.STORAGE.put).toHaveBeenCalledWith(
+        sentPayload.configKey,
+        JSON.stringify({ base_url: "http://test", settings: { profiles: ["full"] } }),
+        { httpMetadata: { contentType: 'application/json' } }
+      );
 
       vi.useRealTimers();
     });

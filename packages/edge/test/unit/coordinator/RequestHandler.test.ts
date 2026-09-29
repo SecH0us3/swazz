@@ -68,7 +68,8 @@ describe('RequestHandler', () => {
       JWT_SECRET: 'test-secret',
       STORAGE: {
         get: vi.fn().mockResolvedValue(null),
-        put: vi.fn().mockResolvedValue(true)
+        put: vi.fn().mockResolvedValue(true),
+        delete: vi.fn().mockResolvedValue(true)
       }
     };
 
@@ -287,6 +288,111 @@ describe('RequestHandler', () => {
       expect(stateManager.runners.has(mockWs)).toBe(false);
       expect(stateManager.jobs.has('run1')).toBe(false);
     });
+
+    it('loads config from R2 and honours settings.disable_shared_runners from R2 (Threat model invariant 6)', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner']); // shared runner
+      stateManager.runners.add(mockWs);
+
+      const configKey = `scans/configs/run1/${crypto.randomUUID()}.json`;
+      mockEnv.STORAGE.get = vi.fn().mockResolvedValue({
+        text: async () => JSON.stringify({ settings: { disable_shared_runners: true } })
+      });
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', configKey })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(mockState.storage.put).toHaveBeenCalledWith('config_ref:run1', configKey);
+    });
+
+    it('deletes R2 object and config_ref after successful send (Threat model invariant 7)', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner']);
+      stateManager.runners.add(mockWs);
+
+      const configKey = `scans/configs/run1/${crypto.randomUUID()}.json`;
+      mockEnv.STORAGE.get = vi.fn().mockResolvedValue({
+        text: async () => JSON.stringify({ base_url: 'http://test' })
+      });
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', configKey })
+      }));
+
+      expect(res.status).toBe(200);
+      expect(mockWs.send).toHaveBeenCalled();
+      const dispatchMsg = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(dispatchMsg.type).toBe('job_dispatch');
+      expect(dispatchMsg.payload.runId).toBe('run1');
+      expect(dispatchMsg.payload.config).toEqual({ base_url: 'http://test' });
+      expect(dispatchMsg.payload.configKey).toBeUndefined();
+
+      expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:run1');
+      expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
+    });
+
+    it('keeps R2 object and storage ref after send failure (Threat model invariant 7)', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner']);
+      mockWs.send.mockImplementation(() => {
+        throw new Error('send error');
+      });
+      stateManager.runners.add(mockWs);
+
+      const configKey = `scans/configs/run1/${crypto.randomUUID()}.json`;
+      mockEnv.STORAGE.get = vi.fn().mockResolvedValue({
+        text: async () => JSON.stringify({ base_url: 'http://test' })
+      });
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', configKey })
+      }));
+
+      expect(res.status).toBe(500);
+      expect(mockState.storage.delete).not.toHaveBeenCalledWith('config_ref:run1');
+      expect(mockEnv.STORAGE.delete).not.toHaveBeenCalledWith(configKey);
+    });
+
+    it('returns 400 for invalid configKey (Threat model invariant 3)', async () => {
+      const stateManager = new StateManager(mockState);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', configKey: '../bad-key' })
+      }));
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 500 when R2 object is missing and nothing is dispatched (Threat model invariant 6)', async () => {
+      const stateManager = new StateManager(mockState);
+      stateManager.runners.add(mockWs);
+
+      const configKey = `scans/configs/run1/${crypto.randomUUID()}.json`;
+      mockEnv.STORAGE.get = vi.fn().mockResolvedValue(null);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', configKey })
+      }));
+
+      expect(res.status).toBe(500);
+      expect(mockWs.send).not.toHaveBeenCalled();
+    });
   });
 
   describe('/command', () => {
@@ -338,6 +444,26 @@ describe('RequestHandler', () => {
         body: JSON.stringify({ runId: 'run-not-found', command: 'pause' })
       }));
       expect(res.status).toBe(404);
+    });
+
+    it('cleans up config_ref and R2 object on stop command if job was not dispatched (Threat model invariant 7)', async () => {
+      const stateManager = new StateManager(mockState);
+      const configKey = `scans/configs/run-stopped/${crypto.randomUUID()}.json`;
+      mockState.storage.get = vi.fn().mockImplementation(async (key: string) => {
+        if (key === 'config_ref:run-stopped') return configKey;
+        return null;
+      });
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-stopped', command: 'stop' })
+      }));
+
+      expect(res.status).toBe(404);
+      expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:run-stopped');
+      expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
     });
   });
 

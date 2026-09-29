@@ -7,6 +7,7 @@ import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
+import { isValidScanConfigKey, getScanConfig, deleteScanConfig } from '../services/scanConfigStore';
 
 export class QueueService {
   constructor(
@@ -35,6 +36,7 @@ export class QueueService {
 
       const keys = activeScans.flatMap(scan => [
         `config:${scan.id}`,
+        `config_ref:${scan.id}`,
         `user_public_key:${scan.id}`
       ]);
       const storedData = await this.state.storage.get<any>(keys);
@@ -46,9 +48,24 @@ export class QueueService {
         }
 
         const scanUserPubKey = storedData.get(`user_public_key:${scan.id}`) || scan.userPublicKey || "";
-        let config = storedData.get(`config:${scan.id}`);
-        
-        if (!config && scan.project_id) {
+        let config: any = null;
+        const configRef: string | undefined = storedData.get(`config_ref:${scan.id}`);
+        const legacyConfig = storedData.get(`config:${scan.id}`);
+
+        if (legacyConfig !== undefined && legacyConfig !== null) {
+          config = legacyConfig;
+        } else if (configRef) {
+          if (!isValidScanConfigKey(configRef)) {
+            logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Invalid scan config key in storage for scan ${scan.id}: ${configRef}`);
+            continue;
+          }
+          try {
+            config = await getScanConfig(this.env, configRef);
+          } catch (err) {
+            logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to load scan config from R2 for scan ${scan.id}`, { error: err });
+            continue;
+          }
+        } else if (scan.project_id) {
           try {
             const configJson = await scansRepo.getScanConfigByProject(scan.project_id, scan.profile);
             if (configJson) {
@@ -122,7 +139,11 @@ export class QueueService {
           }
 
           await this.state.storage.delete(`config:${runId}`);
+          await this.state.storage.delete(`config_ref:${runId}`);
           await this.state.storage.delete(`user_public_key:${runId}`);
+          if (configRef) {
+            await deleteScanConfig(this.env, configRef);
+          }
           break;
         }
       }
