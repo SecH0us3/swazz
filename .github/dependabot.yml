@@ -20,6 +20,12 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
+      cloudflare:
+        patterns:
+          - "wrangler"
+          - "workerd"
+          - "miniflare"
+          - "@cloudflare/*"
     ignore:
       # packages/edge must stay on vitest 4 until @cloudflare/vitest-pool-workers supports
       # vitest 5 (0.22.0 peers vitest ^4.1.0). Remove this once it does, and upgrade edge.
