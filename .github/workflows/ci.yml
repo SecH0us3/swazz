@@ -36,6 +36,7 @@ jobs:
       edge: ${{ steps.filter.outputs.edge }}
       e2e: ${{ steps.filter.outputs.e2e }}
       extension: ${{ steps.filter.outputs.extension }}
+      lockfile: ${{ steps.filter.outputs.lockfile }}
     steps:
       # v6.0.2
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -76,6 +77,32 @@ jobs:
               - 'package-lock.json'
               - 'playwright.config.ts'
               - '.github/workflows/ci.yml'
+            lockfile:
+              - '**/package.json'
+              - 'package-lock.json'
+              - '.github/dependabot.yml'
+              - '.github/workflows/ci.yml'
+
+  lockfile-sync:
+    name: Check npm lockfile
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.lockfile == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up Node.js
+        # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '25.9.0'
+      - name: Verify package-lock.json matches every package.json
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          if ! git diff --exit-code -- package-lock.json; then
+            echo "::error file=package-lock.json::package-lock.json is out of sync with a package.json. Run 'npm install' at the repo root and commit the lockfile."
+            exit 1
+          fi
 
   test-extension:
     name: Test Extension
