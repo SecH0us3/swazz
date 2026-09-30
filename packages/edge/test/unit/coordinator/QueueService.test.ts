@@ -9,6 +9,7 @@ import { StateManager } from '../../../src/coordinator/StateManager';
 
 const mockGetActiveScans = vi.fn();
 const mockUpdateScanStatus = vi.fn();
+const mockMarkFailedIfActive = vi.fn();
 const mockGetScanConfigByProject = vi.fn();
 
 vi.mock('../../../src/repositories/scans', () => {
@@ -17,6 +18,7 @@ vi.mock('../../../src/repositories/scans', () => {
       return {
         getActiveScans: mockGetActiveScans,
         updateScanStatus: mockUpdateScanStatus,
+        markFailedIfActive: mockMarkFailedIfActive,
         getScanConfigByProject: mockGetScanConfigByProject,
       };
     })
@@ -64,6 +66,7 @@ describe('QueueService', () => {
       { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
     ]);
     mockUpdateScanStatus.mockResolvedValue(true);
+    mockMarkFailedIfActive.mockResolvedValue(true);
     mockGetScanConfigByProject.mockResolvedValue(null);
   });
 
@@ -249,7 +252,7 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockGetScanConfigByProject).not.toHaveBeenCalled();
-    expect(mockUpdateScanStatus).toHaveBeenCalledWith('scan-1', 'failed');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
     expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
     expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
     expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:scan-1');
@@ -268,7 +271,7 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
-    expect(mockUpdateScanStatus).toHaveBeenCalledWith('scan-1', 'failed');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
     expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
     expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
     expect(mockLogError).toHaveBeenCalled();
@@ -287,7 +290,7 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
-    expect(mockUpdateScanStatus).toHaveBeenCalledWith('scan-1', 'failed');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
     expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
     expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
     expect(mockLogError).toHaveBeenCalled();
@@ -375,5 +378,96 @@ describe('QueueService', () => {
     // mockWs should NOT send because the job was assigned to otherWs during R2 await
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(stateManager.jobs.get('scan-1')).toBe(otherWs);
+  });
+
+  it('skips scan before R2 load if job already assigned in stateManager (Round 4 item 1a)', async () => {
+    const configKey = `scans/configs/scan-1/${crypto.randomUUID()}.json`;
+    const mockStorageMap = new Map();
+    mockStorageMap.set('config_ref:scan-1', configKey);
+    mockStorageMap.set('config_meta:scan-1', { disableShared: false });
+    mockState.storage.get = vi.fn().mockResolvedValue(mockStorageMap);
+
+    const otherWs = { send: vi.fn() };
+    const stateManager = new StateManager(mockState);
+    stateManager.jobs.set('scan-1', otherWs as any);
+
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).not.toHaveBeenCalled();
+    expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
+    expect(mockMarkFailedIfActive).not.toHaveBeenCalled();
+  });
+
+  it('does not mark scan failed or delete storage keys on transient R2 error (Round 4 item 1b)', async () => {
+    const configKey = `scans/configs/scan-1/${crypto.randomUUID()}.json`;
+    const mockStorageMap = new Map();
+    mockStorageMap.set('config_ref:scan-1', configKey);
+    mockStorageMap.set('config_meta:scan-1', { disableShared: false });
+    mockState.storage.get = vi.fn().mockResolvedValue(mockStorageMap);
+
+    // Transient R2 error (not ScanConfigNotFoundError)
+    mockEnv.STORAGE.get = vi.fn().mockRejectedValue(new Error('R2 network timeout'));
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).not.toHaveBeenCalled();
+    expect(mockMarkFailedIfActive).not.toHaveBeenCalled();
+    expect(mockState.storage.delete).not.toHaveBeenCalled();
+    expect(mockLogError).toHaveBeenCalledWith(
+      expect.anything(),
+      'Coordinator',
+      expect.stringContaining('Failed to load scan config from R2'),
+      expect.objectContaining({ error: expect.any(Error) })
+    );
+  });
+
+  it('does not delete storage keys if markFailedIfActive returns false on missing R2 object (Round 4 item 1b)', async () => {
+    const configKey = `scans/configs/scan-1/${crypto.randomUUID()}.json`;
+    const mockStorageMap = new Map();
+    mockStorageMap.set('config_ref:scan-1', configKey);
+    mockStorageMap.set('config_meta:scan-1', { disableShared: false });
+    mockState.storage.get = vi.fn().mockResolvedValue(mockStorageMap);
+
+    // R2 read returns null -> ScanConfigNotFoundError
+    mockEnv.STORAGE.get = vi.fn().mockResolvedValue(null);
+    mockMarkFailedIfActive.mockResolvedValueOnce(false);
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).not.toHaveBeenCalled();
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
+    expect(mockState.storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('skips without marking failed if job assigned during R2 await and R2 throws (Round 4 item 1b)', async () => {
+    const configKey = `scans/configs/scan-1/${crypto.randomUUID()}.json`;
+    const mockStorageMap = new Map();
+    mockStorageMap.set('config_ref:scan-1', configKey);
+    mockStorageMap.set('config_meta:scan-1', { disableShared: false });
+    mockState.storage.get = vi.fn().mockResolvedValue(mockStorageMap);
+
+    const otherWs = { send: vi.fn() };
+    const stateManager = new StateManager(mockState);
+
+    mockEnv.STORAGE.get = vi.fn().mockImplementation(async () => {
+      stateManager.jobs.set('scan-1', otherWs as any);
+      throw new Error('R2 network timeout');
+    });
+
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).not.toHaveBeenCalled();
+    expect(mockMarkFailedIfActive).not.toHaveBeenCalled();
+    expect(mockState.storage.delete).not.toHaveBeenCalled();
   });
 });

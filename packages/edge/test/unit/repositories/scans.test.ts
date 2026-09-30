@@ -381,4 +381,48 @@ describe('ScansRepository Unit Tests', () => {
       expect(mockBind).toHaveBeenCalledWith(reportStr, 's-1');
     });
   });
+
+  describe('markFailedIfActive', () => {
+    it('returns true when an active scan was transitioned to failed', async () => {
+      const repo = new ScansRepository(mockEnv);
+      mockAll.mockResolvedValueOnce({ meta: { changes: 1 } });
+      const result = await repo.markFailedIfActive('scan-123');
+
+      expect(mockPrepare).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ? AND status IN ('queued','dispatched','paused')")
+      );
+      expect(mockBind).toHaveBeenCalledWith('scan-123');
+      expect(result).toBe(true);
+    });
+
+    it('returns false when no rows were updated (already terminal or non-existent)', async () => {
+      const repo = new ScansRepository(mockEnv);
+      mockAll.mockResolvedValueOnce({ meta: { changes: 0 } });
+      const result = await repo.markFailedIfActive('scan-terminal');
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('getScanStatus', () => {
+    it('returns status when scan exists', async () => {
+      const repo = new ScansRepository(mockEnv);
+      mockAll.mockResolvedValueOnce({ status: 'queued' });
+      const status = await repo.getScanStatus('scan-123');
+
+      expect(mockPrepare).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT status FROM scans WHERE id = ?')
+      );
+      expect(mockBind).toHaveBeenCalledWith('scan-123');
+      expect(status).toBe('queued');
+    });
+
+    it('returns null when scan does not exist', async () => {
+      const repo = new ScansRepository(mockEnv);
+      mockAll.mockResolvedValueOnce(null);
+      const status = await repo.getScanStatus('scan-not-found');
+
+      expect(status).toBeNull();
+    });
+  });
 });

@@ -279,7 +279,8 @@ describe('WebSocketHandler', () => {
 
     expect(stateManager.jobs.has('run-456')).toBe(false);
     expect(mockWs.serializeAttachment).toHaveBeenCalledWith({
-      activeJobs: []
+      activeJobs: [],
+      recentJobs: ['run-456']
     });
   });
 
@@ -673,6 +674,104 @@ describe('WebSocketHandler', () => {
         payload: legitMsg.payload
       });
       expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(legitMsg.payload));
+    });
+  });
+
+  describe('Round 4 item 5: post-complete runner_log gate and recentJobs', () => {
+    it('allows runner_log event for runId in recentJobs post-complete and forwards it', async () => {
+      mockEnv.JWT_SECRET = 'prod-secret';
+      mockState.getTags.mockReturnValue(['runner']);
+      mockWs.deserializeAttachment.mockReturnValue({
+        activeJobs: [],
+        recentJobs: ['completed-job']
+      });
+
+      const stateManager = new StateManager(mockState);
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      stateManager.clients.set('completed-job', new Set([mockClientWs]));
+
+      const logMsg = {
+        type: 'event',
+        runId: 'completed-job',
+        payload: { type: 'runner_log', message: 'Generating WAF patch...' }
+      };
+
+      await handler.handleMessage(mockWs, JSON.stringify(logMsg));
+
+      expect(mockEnv.FINDINGS_QUEUE.send).toHaveBeenCalledWith({
+        scanId: 'completed-job',
+        type: 'event',
+        payload: logMsg.payload
+      });
+      expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(logMsg.payload));
+      expect(mockLogError).not.toHaveBeenCalled();
+    });
+
+    it('silently drops redundant error and non-runner_log events for runId in recentJobs without logError', async () => {
+      mockEnv.JWT_SECRET = 'prod-secret';
+      mockState.getTags.mockReturnValue(['runner']);
+      mockWs.deserializeAttachment.mockReturnValue({
+        activeJobs: [],
+        recentJobs: ['completed-job']
+      });
+
+      const stateManager = new StateManager(mockState);
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      stateManager.clients.set('completed-job', new Set([mockClientWs]));
+
+      // 1. Redundant error event
+      const errorMsg = {
+        type: 'error',
+        runId: 'completed-job',
+        payload: { error: 'redundant error' }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(errorMsg));
+
+      // 2. Non-runner_log event (e.g. finding)
+      const findingMsg = {
+        type: 'event',
+        runId: 'completed-job',
+        payload: { type: 'finding', data: 'stray finding' }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(findingMsg));
+
+      // Should be silently dropped: no queue send, no client send, no logError
+      expect(mockEnv.FINDINGS_QUEUE.send).not.toHaveBeenCalled();
+      expect(mockClientWs.send).not.toHaveBeenCalled();
+      expect(mockLogError).not.toHaveBeenCalled();
+    });
+
+    it('bounds recentJobs to 20 jobs FIFO on job completion', async () => {
+      mockState.getTags.mockReturnValue(['runner']);
+      const stateManager = new StateManager(mockState);
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      // Start with 20 existing recent jobs
+      const existingRecent = Array.from({ length: 20 }, (_, i) => `job-${i}`);
+      let currentAttachment: any = {
+        activeJobs: ['job-20'],
+        recentJobs: [...existingRecent]
+      };
+      mockWs.deserializeAttachment.mockImplementation(() => currentAttachment);
+      mockWs.serializeAttachment.mockImplementation((val: any) => { currentAttachment = val; });
+
+      // Complete job-20
+      const completeMsg = {
+        type: 'event',
+        runId: 'job-20',
+        payload: { type: 'complete', summary: {} }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(completeMsg));
+
+      expect(currentAttachment.activeJobs).toEqual([]);
+      expect(currentAttachment.recentJobs.length).toBe(20);
+      expect(currentAttachment.recentJobs[0]).toBe('job-1'); // job-0 was shifted out
+      expect(currentAttachment.recentJobs[19]).toBe('job-20'); // job-20 is newest
     });
   });
 });

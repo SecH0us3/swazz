@@ -44,6 +44,23 @@ export class DispatchHandler implements RouteHandler {
 
     await context.state.storage.put(`user_public_key:${payload.runId}`, payload.userPublicKey || "");
 
+    const scansRepo = new ScansRepository(context.env);
+    const status = await scansRepo.getScanStatus(payload.runId);
+    if (status !== 'queued') {
+      await context.state.storage.delete(`config:${payload.runId}`);
+      await context.state.storage.delete(`config_ref:${payload.runId}`);
+      await context.state.storage.delete(`config_meta:${payload.runId}`);
+      await context.state.storage.delete(`user_public_key:${payload.runId}`);
+      if (configKey) {
+        await deleteScanConfig(context.env, configKey);
+      }
+      return new Response('Scan not dispatchable', { status: 409 });
+    }
+
+    if (context.stateManager.jobs.has(payload.runId)) {
+      return new Response('Already dispatched', { status: 200 });
+    }
+
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) {
       return new Response('No runners available', { status: 503 });
@@ -124,15 +141,16 @@ export class CommandHandler implements RouteHandler {
       if (!runner) {
         try {
           const scansRepo = new ScansRepository(context.env);
-          await scansRepo.updateScanStatus(payload.runId, 'failed');
-
-          const ref = await context.state.storage.get<string>(`config_ref:${payload.runId}`);
-          await context.state.storage.delete(`config_ref:${payload.runId}`);
-          await context.state.storage.delete(`config_meta:${payload.runId}`);
-          await context.state.storage.delete(`config:${payload.runId}`);
-          await context.state.storage.delete(`user_public_key:${payload.runId}`);
-          if (ref) {
-            await deleteScanConfig(context.env, ref);
+          const marked = await scansRepo.markFailedIfActive(payload.runId);
+          if (marked) {
+            const ref = await context.state.storage.get<string>(`config_ref:${payload.runId}`);
+            await context.state.storage.delete(`config_ref:${payload.runId}`);
+            await context.state.storage.delete(`config_meta:${payload.runId}`);
+            await context.state.storage.delete(`config:${payload.runId}`);
+            await context.state.storage.delete(`user_public_key:${payload.runId}`);
+            if (ref) {
+              await deleteScanConfig(context.env, ref);
+            }
           }
         } catch (err) {
           console.error(`[CommandHandler] Error terminating undispatched scan ${payload.runId}:`, err);

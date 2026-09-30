@@ -51,6 +51,14 @@ export async function writeScanConfig(env: Env, runId: string, body: string): Pr
   return key;
 }
 
+export class ScanConfigNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ScanConfigNotFoundError';
+    Object.setPrototypeOf(this, ScanConfigNotFoundError.prototype);
+  }
+}
+
 /** Validates the key (throws 'Invalid scan config key|500'), reads it and JSON-parses it. Throws if the
  *  object is missing or the JSON is invalid. */
 export async function getScanConfig(env: Env, key: string): Promise<any> {
@@ -60,7 +68,7 @@ export async function getScanConfig(env: Env, key: string): Promise<any> {
 
   const obj = await env.STORAGE.get(key);
   if (!obj) {
-    throw new Error(`Scan config not found: ${key}|500`);
+    throw new ScanConfigNotFoundError(`Scan config not found: ${key}|500`);
   }
 
   const text = await obj.text();

@@ -12,6 +12,7 @@ import {
   writeScanConfig,
   getScanConfig,
   deleteScanConfig,
+  ScanConfigNotFoundError,
   MAX_SCAN_CONFIG_BYTES,
   SCAN_CONFIG_PREFIX,
 } from '../../../src/services/scanConfigStore';
@@ -235,8 +236,9 @@ describe('scanConfigStore', () => {
       expect(mockStorage.get).not.toHaveBeenCalled();
     });
 
-    it('getScanConfig throws 500 when object is missing in R2', async () => {
+    it('getScanConfig throws ScanConfigNotFoundError with 500 when object is missing in R2', async () => {
       const validKey = `${SCAN_CONFIG_PREFIX}run-1/${crypto.randomUUID()}.json`;
+      await expect(getScanConfig(mockEnv, validKey)).rejects.toThrow(ScanConfigNotFoundError);
       await expect(getScanConfig(mockEnv, validKey)).rejects.toThrow(/Scan config not found.*\|500/);
     });
 

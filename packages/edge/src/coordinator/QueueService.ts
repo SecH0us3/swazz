@@ -7,7 +7,7 @@ import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
-import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../services/scanConfigStore';
+import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
 
 export class QueueService {
   constructor(
@@ -90,33 +90,48 @@ export class QueueService {
           if (legacyConfig !== undefined && legacyConfig !== null) {
             config = legacyConfig;
           } else if (configRef) {
+            if (this.stateManager.jobs.has(scan.id)) {
+              continue;
+            }
+
             if (!isScanConfigKeyForRun(configRef, scan.id)) {
               logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Invalid scan config key in storage for scan ${scan.id}: ${configRef}`);
               try {
-                await scansRepo.updateScanStatus(scan.id, 'failed');
+                const marked = await scansRepo.markFailedIfActive(scan.id);
+                if (marked) {
+                  await this.state.storage.delete(`config:${scan.id}`);
+                  await this.state.storage.delete(`config_ref:${scan.id}`);
+                  await this.state.storage.delete(`config_meta:${scan.id}`);
+                  await this.state.storage.delete(`user_public_key:${scan.id}`);
+                }
               } catch (dbErr) {
                 logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
               }
-              await this.state.storage.delete(`config:${scan.id}`);
-              await this.state.storage.delete(`config_ref:${scan.id}`);
-              await this.state.storage.delete(`config_meta:${scan.id}`);
-              await this.state.storage.delete(`user_public_key:${scan.id}`);
               continue;
             }
 
             try {
               config = await getScanConfig(this.env, configRef);
             } catch (err) {
-              logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to load scan config from R2 for scan ${scan.id}`, { error: err });
-              try {
-                await scansRepo.updateScanStatus(scan.id, 'failed');
-              } catch (dbErr) {
-                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
+              if (this.stateManager.jobs.has(scan.id)) {
+                continue;
               }
-              await this.state.storage.delete(`config:${scan.id}`);
-              await this.state.storage.delete(`config_ref:${scan.id}`);
-              await this.state.storage.delete(`config_meta:${scan.id}`);
-              await this.state.storage.delete(`user_public_key:${scan.id}`);
+              if (err instanceof ScanConfigNotFoundError) {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Scan config not found in R2 for scan ${scan.id}`, { error: err });
+                try {
+                  const marked = await scansRepo.markFailedIfActive(scan.id);
+                  if (marked) {
+                    await this.state.storage.delete(`config:${scan.id}`);
+                    await this.state.storage.delete(`config_ref:${scan.id}`);
+                    await this.state.storage.delete(`config_meta:${scan.id}`);
+                    await this.state.storage.delete(`user_public_key:${scan.id}`);
+                  }
+                } catch (dbErr) {
+                  logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
+                }
+              } else {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to load scan config from R2 for scan ${scan.id}`, { error: err });
+              }
               continue;
             }
           } else if (scan.project_id) {

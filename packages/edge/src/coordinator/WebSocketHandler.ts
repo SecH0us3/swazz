@@ -172,9 +172,11 @@ export class WebSocketHandler {
         if (msg.type === 'event' || msg.type === 'error') {
           const runId = msg.runId;
 
-          const attachment = (ws.deserializeAttachment?.() || {}) as { activeJobs?: string[] };
+          const attachment = (ws.deserializeAttachment?.() || {}) as { activeJobs?: string[]; recentJobs?: string[] };
           const activeJobs = attachment.activeJobs ?? [];
-          if (typeof runId !== 'string' || runId === '' || !activeJobs.includes(runId)) {
+          const recentJobs = attachment.recentJobs ?? [];
+
+          if (typeof runId !== 'string' || runId === '') {
             logError(
               { env: this.env, executionCtx: this.state },
               "Coordinator",
@@ -182,6 +184,25 @@ export class WebSocketHandler {
               { tags, runId }
             );
             return;
+          }
+
+          if (!activeJobs.includes(runId)) {
+            if (recentJobs.includes(runId)) {
+              if (msg.type === 'event' && msg.payload?.type === 'runner_log') {
+                // accept only runner_log, proceed to forward and broadcast
+              } else {
+                // silently drop anything else (no logError)
+                return;
+              }
+            } else {
+              logError(
+                { env: this.env, executionCtx: this.state },
+                "Coordinator",
+                `Runner sent unauthorized or invalid runId: ${runId}`,
+                { tags, runId }
+              );
+              return;
+            }
           }
 
           if (this.env.JWT_SECRET === 'test-secret') {
@@ -234,13 +255,22 @@ export class WebSocketHandler {
 
           if (shouldCleanup && runId) {
             this.stateManager.jobs.delete(runId);
-            const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
+            const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; recentJobs?: string[] } | null || {};
             const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
+            const recentJobs = attachment.recentJobs ? [...attachment.recentJobs] : [];
             const index = activeJobs.indexOf(runId);
             if (index > -1) {
               activeJobs.splice(index, 1);
-              ws.serializeAttachment({ ...attachment, activeJobs });
             }
+            const rIndex = recentJobs.indexOf(runId);
+            if (rIndex > -1) {
+              recentJobs.splice(rIndex, 1);
+            }
+            recentJobs.push(runId);
+            while (recentJobs.length > 20) {
+              recentJobs.shift();
+            }
+            ws.serializeAttachment({ ...attachment, activeJobs, recentJobs });
           }
         }
       } catch (e) {

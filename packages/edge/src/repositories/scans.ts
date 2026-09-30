@@ -46,6 +46,8 @@ export interface IScansRepository {
   getCachedSwaggerDetails(url: string): Promise<{ endpoints_hash: string; endpoints_r2_key: string; raw_spec_r2_key: string } | null>;
   upsertSwaggerCache(url: string, basePath: string, endpointsHash: string, endpointsR2Key: string | undefined, rawSpecR2Key: string | undefined): Promise<void>;
   updateScanStatus(scanId: string, status: string, summaryStats?: string): Promise<void>;
+  markFailedIfActive(scanId: string): Promise<boolean>;
+  getScanStatus(scanId: string): Promise<string | null>;
   getQueuedScans(): Promise<any[]>;
   getActiveScans(): Promise<any[]>;
   getScanConfigByProject(projectId: string, profileName: string): Promise<string | null>;
@@ -452,6 +454,20 @@ export class ScansRepository extends BaseService implements IScansRepository {
     } catch (webhookErr) {
       logError({ env: this.env, executionCtx: ctx }, 'Webhook', "Failed to trigger webhook from updateScanStatus", { error: webhookErr });
     }
+  }
+
+  async markFailedIfActive(scanId: string): Promise<boolean> {
+    const res = await this.db.prepare(
+      "UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ? AND status IN ('queued','dispatched','paused')"
+    ).bind(scanId).run();
+    return ((res?.meta as any)?.changes ?? 0) > 0;
+  }
+
+  async getScanStatus(scanId: string): Promise<string | null> {
+    const row = await this.db.prepare(
+      'SELECT status FROM scans WHERE id = ?'
+    ).bind(scanId).first<{ status: string }>();
+    return row ? row.status : null;
   }
 
   async getQueuedScans(): Promise<any[]> {
