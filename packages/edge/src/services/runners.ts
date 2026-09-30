@@ -250,14 +250,14 @@ export class RunnersService implements IRunnersService {
         userId: userId
       });
     } catch (err: any) {
+      console.error("Failed to process scan config or queue run in /api/runs:", err);
       try {
         const scansRepo = new ScansRepository(this.env);
         await scansRepo.updateScanStatus(runId, 'failed');
       } catch (statusErr) {
         console.error("Failed to mark scan as failed after R2/queue error in /api/runs:", statusErr);
       }
-      const msg = (err instanceof Error ? err.message : String(err)).split('|')[0];
-      throw new Error(`${msg}|500`);
+      throw new Error('Failed to queue scan|500');
     }
 
     return { id: runId, status: 'queued' };

@@ -135,13 +135,13 @@ export class ScansService implements IScansService {
         userId
       });
     } catch (err: any) {
+      console.error("Failed to process scan config or queue scan in /api/scans:", err);
       try {
         await this.scansRepo.updateScanStatus(id, 'failed');
       } catch (statusErr) {
         console.error("Failed to mark scan as failed after R2/queue error in /api/scans:", statusErr);
       }
-      const msg = (err instanceof Error ? err.message : String(err)).split('|')[0];
-      throw new Error(`${msg}|500`);
+      throw new Error('Failed to queue scan|500');
     }
 
     // Fire-and-forget audit log

@@ -204,14 +204,20 @@ describe('ScansService Unit Tests', () => {
 
     it('an R2 write failure after createScan marks scan failed in D1 and rethrows 500', async () => {
       mockEnv.STORAGE.put.mockRejectedValueOnce(new Error('R2 write error'));
-      await expect(
-        scansService.createScan(
+      let thrownError: any = null;
+      try {
+        await scansService.createScan(
           { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config: {} },
           'u1',
           'auth',
           '1.1.1.1'
-        )
-      ).rejects.toThrow('R2 write error|500');
+        );
+      } catch (e) {
+        thrownError = e;
+      }
+      expect(thrownError).toBeInstanceOf(Error);
+      expect(thrownError.message).toBe('Failed to queue scan|500');
+      expect(thrownError.message).not.toContain('R2 write error');
       expect(mockScansRepo.createScan).toHaveBeenCalled();
       expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
       expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
@@ -219,14 +225,20 @@ describe('ScansService Unit Tests', () => {
 
     it('a queue send failure after createScan marks scan failed in D1 and rethrows 500', async () => {
       mockEnv.SCAN_QUEUE.send.mockRejectedValueOnce(new Error('Queue send failed'));
-      await expect(
-        scansService.createScan(
+      let thrownError: any = null;
+      try {
+        await scansService.createScan(
           { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config: {} },
           'u1',
           'auth',
           '1.1.1.1'
-        )
-      ).rejects.toThrow('Queue send failed|500');
+        );
+      } catch (e) {
+        thrownError = e;
+      }
+      expect(thrownError).toBeInstanceOf(Error);
+      expect(thrownError.message).toBe('Failed to queue scan|500');
+      expect(thrownError.message).not.toContain('Queue send failed');
       expect(mockScansRepo.createScan).toHaveBeenCalled();
       expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
     });

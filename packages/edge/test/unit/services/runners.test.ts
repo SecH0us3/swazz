@@ -169,9 +169,15 @@ describe('RunnersService Unit Tests', () => {
 
   test('an R2 write failure after INSERT marks scan failed in D1 and rethrows 500 (Threat model T1)', async () => {
     mockStorage.put.mockRejectedValueOnce(new Error('R2 write error'));
-    await expect(
-      runnersService.queueRun({ runId: 'run-r2-fail', config: {} }, 'user-1', false, false)
-    ).rejects.toThrow('R2 write error|500');
+    let thrownError: any = null;
+    try {
+      await runnersService.queueRun({ runId: 'run-r2-fail', config: {} }, 'user-1', false, false);
+    } catch (e) {
+      thrownError = e;
+    }
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe('Failed to queue scan|500');
+    expect(thrownError.message).not.toContain('R2 write error');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
     expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-r2-fail', 'failed');
     expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
@@ -179,9 +185,15 @@ describe('RunnersService Unit Tests', () => {
 
   test('a queue send failure after INSERT marks scan failed in D1 and rethrows 500 (Threat model T1)', async () => {
     (mockEnv.SCAN_QUEUE.send as any).mockRejectedValueOnce(new Error('Queue unavailable'));
-    await expect(
-      runnersService.queueRun({ runId: 'run-q-fail', config: {} }, 'user-1', false, false)
-    ).rejects.toThrow('Queue unavailable|500');
+    let thrownError: any = null;
+    try {
+      await runnersService.queueRun({ runId: 'run-q-fail', config: {} }, 'user-1', false, false);
+    } catch (e) {
+      thrownError = e;
+    }
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe('Failed to queue scan|500');
+    expect(thrownError.message).not.toContain('Queue unavailable');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
     expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-q-fail', 'failed');
   });
