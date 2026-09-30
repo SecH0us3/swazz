@@ -172,6 +172,18 @@ export class WebSocketHandler {
         if (msg.type === 'event' || msg.type === 'error') {
           const runId = msg.runId;
 
+          const attachment = (ws.deserializeAttachment?.() || {}) as { activeJobs?: string[] };
+          const activeJobs = attachment.activeJobs ?? [];
+          if (typeof runId !== 'string' || runId === '' || !activeJobs.includes(runId)) {
+            logError(
+              { env: this.env, executionCtx: this.state },
+              "Coordinator",
+              `Runner sent unauthorized or invalid runId: ${runId}`,
+              { tags, runId }
+            );
+            return;
+          }
+
           if (this.env.JWT_SECRET === 'test-secret') {
             // Local dev: write findings/events straight to D1, bypassing the
             // queue emulation. Miniflare's queue broker is unstable under the

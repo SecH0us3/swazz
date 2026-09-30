@@ -19,21 +19,32 @@ export function isValidScanConfigKey(key: unknown): key is string {
   return typeof key === 'string' && !key.includes('..') && SCAN_CONFIG_KEY_REGEX.test(key);
 }
 
-/** Serialises, enforces the size cap (throws 'Scan config too large (<n> bytes, limit <max>)|413'),
- *  writes to env.STORAGE with contentType application/json, returns the key. */
-export async function putScanConfig(env: Env, runId: string, config: unknown): Promise<string> {
-  if (!isValidRunId(runId)) {
-    throw new Error('Invalid runId|400');
+export function isScanConfigKeyForRun(key: unknown, runId: unknown): key is string {
+  if (!isValidScanConfigKey(key) || !isValidRunId(runId)) {
+    return false;
   }
+  return key.startsWith(`${SCAN_CONFIG_PREFIX}${runId}/`);
+}
 
+/** Serializes config, enforces the size cap (throws 'Scan config too large (<n> bytes, limit <max>)|413'),
+ *  performs no I/O. */
+export function serializeScanConfig(config: unknown): { body: string; byteLength: number } {
   const serialized = JSON.stringify(config === undefined ? {} : config);
   const byteLength = new TextEncoder().encode(serialized).byteLength;
   if (byteLength > MAX_SCAN_CONFIG_BYTES) {
     throw new Error(`Scan config too large (${byteLength} bytes, limit ${MAX_SCAN_CONFIG_BYTES})|413`);
   }
+  return { body: serialized, byteLength };
+}
+
+/** Validates runId, writes body to env.STORAGE with contentType application/json, returns the key. */
+export async function writeScanConfig(env: Env, runId: string, body: string): Promise<string> {
+  if (!isValidRunId(runId)) {
+    throw new Error('Invalid runId|400');
+  }
 
   const key = `${SCAN_CONFIG_PREFIX}${runId}/${crypto.randomUUID()}.json`;
-  await env.STORAGE.put(key, serialized, {
+  await env.STORAGE.put(key, body, {
     httpMetadata: { contentType: 'application/json' },
   });
 

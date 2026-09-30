@@ -11,6 +11,7 @@ import { ulid } from 'ulidx';
 
 const mockGetCachedSwagger = vi.fn();
 const mockGetScan = vi.fn().mockResolvedValue(null);
+const mockUpdateScanStatus = vi.fn().mockResolvedValue(true);
 
 vi.mock('../../../src/repositories/scans', () => {
   return {
@@ -18,6 +19,7 @@ vi.mock('../../../src/repositories/scans', () => {
       return {
         getCachedSwagger: mockGetCachedSwagger,
         getScan: mockGetScan,
+        updateScanStatus: mockUpdateScanStatus,
       };
     })
   };
@@ -308,6 +310,25 @@ describe('RequestHandler', () => {
 
       expect(res.status).toBe(503);
       expect(mockState.storage.put).toHaveBeenCalledWith('config_ref:run1', configKey);
+      expect(mockState.storage.put).toHaveBeenCalledWith('config_meta:run1', { disableShared: true });
+    });
+
+    it('returns 200 on second /dispatch for the same runId after already dispatched without re-sending or reading R2', async () => {
+      const stateManager = new StateManager(mockState);
+      stateManager.jobs.set('run1', mockWs); // already dispatched
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', configKey: `scans/configs/run1/${crypto.randomUUID()}.json` })
+      }));
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('Already dispatched');
+      expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
+      expect(mockWs.send).not.toHaveBeenCalled();
+      expect(mockState.storage.put).not.toHaveBeenCalled();
     });
 
     it('deletes R2 object and config_ref after successful send (Threat model invariant 7)', async () => {
@@ -336,6 +357,7 @@ describe('RequestHandler', () => {
       expect(dispatchMsg.payload.configKey).toBeUndefined();
 
       expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:run1');
+      expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:run1');
       expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
     });
 
@@ -374,6 +396,22 @@ describe('RequestHandler', () => {
       }));
 
       expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when configKey belongs to run A but payload.runId is run B without reading R2 (Threat model T3)', async () => {
+      const stateManager = new StateManager(mockState);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const configKeyRunA = `scans/configs/run-A/${crypto.randomUUID()}.json`;
+
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-B', configKey: configKeyRunA })
+      }));
+
+      expect(res.status).toBe(400);
+      expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
+      expect(mockState.storage.put).not.toHaveBeenCalled();
     });
 
     it('returns 500 when R2 object is missing and nothing is dispatched (Threat model invariant 6)', async () => {
@@ -446,7 +484,7 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(404);
     });
 
-    it('cleans up config_ref and R2 object on stop command if job was not dispatched (Threat model invariant 7)', async () => {
+    it('cleans up undispatched scan on stop command by marking failed in D1, then deleting storage keys and R2 object (Threat model invariant 7)', async () => {
       const stateManager = new StateManager(mockState);
       const configKey = `scans/configs/run-stopped/${crypto.randomUUID()}.json`;
       mockState.storage.get = vi.fn().mockImplementation(async (key: string) => {
@@ -462,8 +500,52 @@ describe('RequestHandler', () => {
       }));
 
       expect(res.status).toBe(404);
+      expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-stopped', 'failed');
       expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:run-stopped');
+      expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:run-stopped');
+      expect(mockState.storage.delete).toHaveBeenCalledWith('config:run-stopped');
+      expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:run-stopped');
       expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
+    });
+
+    it('deletes nothing if D1 update throws on stop of undispatched scan', async () => {
+      const stateManager = new StateManager(mockState);
+      const configKey = `scans/configs/run-stopped/${crypto.randomUUID()}.json`;
+      mockState.storage.get = vi.fn().mockImplementation(async (key: string) => {
+        if (key === 'config_ref:run-stopped') return configKey;
+        return null;
+      });
+      mockUpdateScanStatus.mockRejectedValueOnce(new Error('D1 update error'));
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-stopped', command: 'stop' })
+      }));
+
+      expect(res.status).toBe(404);
+      expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-stopped', 'failed');
+      expect(mockState.storage.delete).not.toHaveBeenCalled();
+      expect(mockEnv.STORAGE.delete).not.toHaveBeenCalled();
+    });
+
+    it('does not delete anything and preserves running job lifecycle when runner holds job on stop', async () => {
+      const stateManager = new StateManager(mockState);
+      stateManager.jobs.set('run-running', mockWs);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-running', command: 'stop' })
+      }));
+
+      expect(res.status).toBe(200);
+      expect(mockWs.send).toHaveBeenCalled();
+      expect(mockUpdateScanStatus).not.toHaveBeenCalled();
+      expect(mockState.storage.delete).not.toHaveBeenCalled();
+      expect(mockEnv.STORAGE.delete).not.toHaveBeenCalled();
     });
   });
 

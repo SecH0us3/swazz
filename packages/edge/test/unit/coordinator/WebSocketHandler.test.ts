@@ -188,6 +188,7 @@ describe('WebSocketHandler', () => {
     // Production mode (non test-secret JWT) routes events through the queue.
     mockEnv.JWT_SECRET = 'prod-secret';
     mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -228,6 +229,7 @@ describe('WebSocketHandler', () => {
 
     mockEnv.JWT_SECRET = 'test-secret';
     mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -433,6 +435,7 @@ describe('WebSocketHandler', () => {
     // Production mode (non test-secret JWT) routes events through the queue.
     mockEnv.JWT_SECRET = 'prod-secret';
     mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -469,6 +472,7 @@ describe('WebSocketHandler', () => {
 
   it('should handle client connection ws.send throwing error gracefully', async () => {
     mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -580,5 +584,95 @@ describe('WebSocketHandler', () => {
     }
     expect(mockEnv.STORAGE.put).toHaveBeenCalled();
     expect(mockUpsertSwaggerCache).toHaveBeenCalled();
+  });
+
+  describe('T2 acceptance tests: runner runId validation', () => {
+    it('drops event/error/complete/checkpoint for a runId not in activeJobs without queue send, D1 write or client broadcast', async () => {
+      const mockProcessFindings = vi.fn().mockResolvedValue(undefined);
+      (ScansRepository as any).mockImplementation(function () {
+        return {
+          processFindingsQueueMessages: mockProcessFindings,
+        };
+      });
+
+      mockState.getTags.mockReturnValue(['runner', 'runner-tag-abc']);
+      mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['legit-job'] });
+
+      const stateManager = new StateManager(mockState);
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      stateManager.clients.set('victim-run', new Set([mockClientWs]));
+
+      // 1. Foreign event
+      const foreignEventMsg = {
+        type: 'event',
+        runId: 'victim-run',
+        payload: { type: 'finding', data: 'malicious' }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(foreignEventMsg));
+
+      // 2. Foreign complete
+      const foreignCompleteMsg = {
+        type: 'event',
+        runId: 'victim-run',
+        payload: { type: 'complete', summary: {} }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(foreignCompleteMsg));
+
+      // 3. Foreign error
+      const foreignErrorMsg = {
+        type: 'error',
+        runId: 'victim-run',
+        payload: { error: 'evil abort' }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(foreignErrorMsg));
+
+      // 4. Empty or non-string runId
+      await handler.handleMessage(mockWs, JSON.stringify({ type: 'event', runId: '', payload: {} }));
+      await handler.handleMessage(mockWs, JSON.stringify({ type: 'event', runId: null, payload: {} }));
+
+      // Assertions: no queue send, no D1 write, no broadcast, no activeJobs mutation
+      expect(mockEnv.FINDINGS_QUEUE.send).not.toHaveBeenCalled();
+      expect(mockProcessFindings).not.toHaveBeenCalled();
+      expect(mockClientWs.send).not.toHaveBeenCalled();
+      expect(mockWs.serializeAttachment).not.toHaveBeenCalled();
+      expect(mockLogError).toHaveBeenCalledWith(
+        expect.anything(),
+        "Coordinator",
+        expect.stringContaining("unauthorized or invalid runId"),
+        expect.objectContaining({ tags: ['runner', 'runner-tag-abc'] })
+      );
+    });
+
+    it('processes messages for legitimate jobs including after simulated hibernation where only attachment remains', async () => {
+      mockEnv.JWT_SECRET = 'prod-secret';
+      mockState.getTags.mockReturnValue(['runner']);
+      // Simulated hibernation: stateManager.jobs is empty (in-memory state cleared), only attachment exists
+      mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['hibernated-job'] });
+
+      const stateManager = new StateManager(mockState);
+      expect(stateManager.jobs.size).toBe(0);
+
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      stateManager.clients.set('hibernated-job', new Set([mockClientWs]));
+
+      const legitMsg = {
+        type: 'event',
+        runId: 'hibernated-job',
+        payload: { type: 'log', message: 'Legitimate log' }
+      };
+
+      await handler.handleMessage(mockWs, JSON.stringify(legitMsg));
+
+      expect(mockEnv.FINDINGS_QUEUE.send).toHaveBeenCalledWith({
+        scanId: 'hibernated-job',
+        type: 'event',
+        payload: legitMsg.payload
+      });
+      expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(legitMsg.payload));
+    });
   });
 });

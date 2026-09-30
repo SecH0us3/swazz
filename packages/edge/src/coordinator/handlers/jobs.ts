@@ -4,7 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { RouteHandler, HandlerContext } from './types';
-import { isValidScanConfigKey, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
+import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
+import { ScansRepository } from '../../repositories/scans';
 
 export class DispatchHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -17,12 +18,15 @@ export class DispatchHandler implements RouteHandler {
     if (!payload) {
       return new Response('Missing payload', { status: 400 });
     }
+    if (payload.runId && context.stateManager.jobs.has(payload.runId)) {
+      return new Response('Already dispatched', { status: 200 });
+    }
 
     let config: any;
     const configKey: string | undefined = payload.configKey;
 
     if (configKey) {
-      if (!isValidScanConfigKey(configKey)) {
+      if (!isScanConfigKeyForRun(configKey, payload.runId)) {
         return new Response('Invalid scan config key', { status: 400 });
       }
       try {
@@ -32,6 +36,7 @@ export class DispatchHandler implements RouteHandler {
         return new Response('Failed to load scan config', { status: 500 });
       }
       await context.state.storage.put(`config_ref:${payload.runId}`, configKey);
+      await context.state.storage.put(`config_meta:${payload.runId}`, { disableShared: !!config?.settings?.disable_shared_runners });
     } else {
       config = payload.config || {};
       await context.state.storage.put(`config:${payload.runId}`, config);
@@ -80,6 +85,7 @@ export class DispatchHandler implements RouteHandler {
         runner.send(dispatchMsg);
         await context.state.storage.delete(`config:${payload.runId}`);
         await context.state.storage.delete(`config_ref:${payload.runId}`);
+        await context.state.storage.delete(`config_meta:${payload.runId}`);
         await context.state.storage.delete(`user_public_key:${payload.runId}`);
         if (configKey) {
           await deleteScanConfig(context.env, configKey);
@@ -112,19 +118,28 @@ export class CommandHandler implements RouteHandler {
       return new Response('Missing runId', { status: 400 });
     }
 
+    const runner = context.stateManager.jobs.get(payload.runId);
+
     if (payload.command === 'stop') {
-      try {
-        const ref = await context.state.storage.get<string>(`config_ref:${payload.runId}`);
-        if (ref) {
+      if (!runner) {
+        try {
+          const scansRepo = new ScansRepository(context.env);
+          await scansRepo.updateScanStatus(payload.runId, 'failed');
+
+          const ref = await context.state.storage.get<string>(`config_ref:${payload.runId}`);
           await context.state.storage.delete(`config_ref:${payload.runId}`);
-          await deleteScanConfig(context.env, ref);
+          await context.state.storage.delete(`config_meta:${payload.runId}`);
+          await context.state.storage.delete(`config:${payload.runId}`);
+          await context.state.storage.delete(`user_public_key:${payload.runId}`);
+          if (ref) {
+            await deleteScanConfig(context.env, ref);
+          }
+        } catch (err) {
+          console.error(`[CommandHandler] Error terminating undispatched scan ${payload.runId}:`, err);
         }
-      } catch (err) {
-        console.error(`[CommandHandler] Error cleaning up config_ref for run ${payload.runId}:`, err);
       }
     }
 
-    const runner = context.stateManager.jobs.get(payload.runId);
     if (runner) {
       runner.send(JSON.stringify({
         type: 'job_command',

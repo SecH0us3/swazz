@@ -7,7 +7,7 @@ import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
-import { isValidScanConfigKey, getScanConfig, deleteScanConfig } from '../services/scanConfigStore';
+import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../services/scanConfigStore';
 
 export class QueueService {
   constructor(
@@ -37,6 +37,7 @@ export class QueueService {
       const keys = activeScans.flatMap(scan => [
         `config:${scan.id}`,
         `config_ref:${scan.id}`,
+        `config_meta:${scan.id}`,
         `user_public_key:${scan.id}`
       ]);
       const storedData = await this.state.storage.get<any>(keys);
@@ -48,39 +49,9 @@ export class QueueService {
         }
 
         const scanUserPubKey = storedData.get(`user_public_key:${scan.id}`) || scan.userPublicKey || "";
-        let config: any = null;
-        const configRef: string | undefined = storedData.get(`config_ref:${scan.id}`);
         const legacyConfig = storedData.get(`config:${scan.id}`);
-
-        if (legacyConfig !== undefined && legacyConfig !== null) {
-          config = legacyConfig;
-        } else if (configRef) {
-          if (!isValidScanConfigKey(configRef)) {
-            logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Invalid scan config key in storage for scan ${scan.id}: ${configRef}`);
-            continue;
-          }
-          try {
-            config = await getScanConfig(this.env, configRef);
-          } catch (err) {
-            logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to load scan config from R2 for scan ${scan.id}`, { error: err });
-            continue;
-          }
-        } else if (scan.project_id) {
-          try {
-            const configJson = await scansRepo.getScanConfigByProject(scan.project_id, scan.profile);
-            if (configJson) {
-              config = JSON.parse(configJson);
-            }
-          } catch (err) {
-            logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to fetch config from scan_configs", { error: err });
-          }
-        }
-        if (!config) {
-          config = {};
-        }
-        if (!config.base_url) {
-          config.base_url = scan.target_url;
-        }
+        const configRef: string | undefined = storedData.get(`config_ref:${scan.id}`);
+        const configMeta: { disableShared?: boolean } | undefined = storedData.get(`config_meta:${scan.id}`);
 
         let isCompatible = false;
         if (String(this.env.AUTH_ENABLED) === 'false') {
@@ -90,7 +61,23 @@ export class QueueService {
             isCompatible = true;
           }
         } else {
-          const disableShared = config.settings?.disable_shared_runners || false;
+          let disableShared = false;
+          if (legacyConfig !== undefined && legacyConfig !== null) {
+            disableShared = legacyConfig.settings?.disable_shared_runners || false;
+          } else if (configRef) {
+            // Treat a missing meta as disableShared=true — fail closed
+            disableShared = configMeta ? !!configMeta.disableShared : true;
+          } else if (scan.project_id) {
+            try {
+              const configJson = await scansRepo.getScanConfigByProject(scan.project_id, scan.profile);
+              if (configJson) {
+                const parsed = JSON.parse(configJson);
+                disableShared = parsed.settings?.disable_shared_runners || false;
+              }
+            } catch (err) {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to fetch config from scan_configs", { error: err });
+            }
+          }
           if (!scanUserPubKey && !disableShared) {
             isCompatible = true;
           }
@@ -98,12 +85,56 @@ export class QueueService {
 
         if (isCompatible) {
           const runId = scan.id;
-          this.stateManager.jobs.set(runId, ws);
-          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
-          const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
-          if (!activeJobs.includes(runId)) {
-            activeJobs.push(runId);
-            ws.serializeAttachment({ ...attachment, activeJobs });
+          let config: any = null;
+
+          if (legacyConfig !== undefined && legacyConfig !== null) {
+            config = legacyConfig;
+          } else if (configRef) {
+            if (!isScanConfigKeyForRun(configRef, scan.id)) {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Invalid scan config key in storage for scan ${scan.id}: ${configRef}`);
+              try {
+                await scansRepo.updateScanStatus(scan.id, 'failed');
+              } catch (dbErr) {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
+              }
+              await this.state.storage.delete(`config:${scan.id}`);
+              await this.state.storage.delete(`config_ref:${scan.id}`);
+              await this.state.storage.delete(`config_meta:${scan.id}`);
+              await this.state.storage.delete(`user_public_key:${scan.id}`);
+              continue;
+            }
+
+            try {
+              config = await getScanConfig(this.env, configRef);
+            } catch (err) {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to load scan config from R2 for scan ${scan.id}`, { error: err });
+              try {
+                await scansRepo.updateScanStatus(scan.id, 'failed');
+              } catch (dbErr) {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
+              }
+              await this.state.storage.delete(`config:${scan.id}`);
+              await this.state.storage.delete(`config_ref:${scan.id}`);
+              await this.state.storage.delete(`config_meta:${scan.id}`);
+              await this.state.storage.delete(`user_public_key:${scan.id}`);
+              continue;
+            }
+          } else if (scan.project_id) {
+            try {
+              const configJson = await scansRepo.getScanConfigByProject(scan.project_id, scan.profile);
+              if (configJson) {
+                config = JSON.parse(configJson);
+              }
+            } catch (err) {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to fetch config from scan_configs", { error: err });
+            }
+          }
+
+          if (!config) {
+            config = {};
+          }
+          if (!config.base_url) {
+            config.base_url = scan.target_url;
           }
 
           let checkpoint = null;
@@ -130,6 +161,19 @@ export class QueueService {
             },
           });
 
+          // Race check across the R2 await: if already assigned, skip without sending
+          if (this.stateManager.jobs.has(runId)) {
+            continue;
+          }
+
+          this.stateManager.jobs.set(runId, ws);
+          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
+          const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
+          if (!activeJobs.includes(runId)) {
+            activeJobs.push(runId);
+            ws.serializeAttachment({ ...attachment, activeJobs });
+          }
+
           ws.send(dispatchMsg);
 
           try {
@@ -140,6 +184,7 @@ export class QueueService {
 
           await this.state.storage.delete(`config:${runId}`);
           await this.state.storage.delete(`config_ref:${runId}`);
+          await this.state.storage.delete(`config_meta:${runId}`);
           await this.state.storage.delete(`user_public_key:${runId}`);
           if (configRef) {
             await deleteScanConfig(this.env, configRef);

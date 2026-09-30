@@ -5,7 +5,7 @@
 
 import { Env } from '../env';
 import { ScansRepository } from '../repositories/scans';
-import { isValidRunId, putScanConfig } from '../services/scanConfigStore';
+import { isValidRunId, serializeScanConfig, writeScanConfig } from '../services/scanConfigStore';
 
 function matchCronField(pattern: string, value: number, min: number, max: number): boolean {
   if (pattern === '*') return true;
@@ -89,23 +89,33 @@ export async function handleScheduledScans(env: Env): Promise<void> {
         throw new Error('Invalid runId|400');
       }
       const parsedConfig = JSON.parse(config.config_json || "{}") || {};
-      const configKey = await putScanConfig(env, runId, parsedConfig);
+      const { body: configBody } = serializeScanConfig(parsedConfig);
       const targetUrl = parsedConfig.base_url || "";
       const profile = (parsedConfig.settings?.profiles && parsedConfig.settings.profiles[0]) || "default";
       const status = 'queued';
       
       await scansRepo.triggerScheduledScan(runId, config.project_id, targetUrl, profile, status, activeOwner.id, config.id, now.toISOString());
       
-      // Send message to SCAN_QUEUE
-      await env.SCAN_QUEUE.send({
-        runId,
-        configKey,
-        userPublicKey: activeOwner.public_key || "",
-        targetUrl,
-        profile,
-        projectId: config.project_id,
-        userId: activeOwner.id
-      });
+      try {
+        const configKey = await writeScanConfig(env, runId, configBody);
+        // Send message to SCAN_QUEUE
+        await env.SCAN_QUEUE.send({
+          runId,
+          configKey,
+          userPublicKey: activeOwner.public_key || "",
+          targetUrl,
+          profile,
+          projectId: config.project_id,
+          userId: activeOwner.id
+        });
+      } catch (err: any) {
+        try {
+          await scansRepo.updateScanStatus(runId, 'failed');
+        } catch (statusErr) {
+          console.error("Failed to mark scan as failed after R2/queue error in scheduler:", statusErr);
+        }
+        throw err;
+      }
       
       console.log(`[Scheduler] Triggered scheduled scan ${runId} for project ${config.project_id}`);
     } catch (err) {

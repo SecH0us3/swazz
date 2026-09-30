@@ -149,11 +149,41 @@ describe('RunnersService Unit Tests', () => {
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
   });
 
-  test('queueRun should cover createScanRecord error log', async () => {
-    mockRunnersRepo.createScanRecord.mockRejectedValueOnce(new Error('db error'));
-    const res = await runnersService.queueRun({ scanId: 'scan-1' }, 'user-1', true, false);
-    expect(res.id).toBeDefined();
+  test('a second queueRun with an existing runId returns 409 and writes no R2 and queues nothing (Threat model T1)', async () => {
+    mockRunnersRepo.createScanRecord.mockRejectedValueOnce(new Error('UNIQUE constraint failed: scans.id'));
+    await expect(
+      runnersService.queueRun({ runId: 'victim-run', config: { base_url: 'http://attacker.com' } }, 'attacker', false, false)
+    ).rejects.toThrow('Run already exists|409');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  test('a generic D1 error returns 500 and nothing is queued or written to R2 (Threat model T1)', async () => {
+    mockRunnersRepo.createScanRecord.mockRejectedValueOnce(new Error('database connection lost'));
+    await expect(
+      runnersService.queueRun({ runId: 'run-1', config: {} }, 'user-1', false, false)
+    ).rejects.toThrow('Failed to create scan|500');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  test('an R2 write failure after INSERT marks scan failed in D1 and rethrows 500 (Threat model T1)', async () => {
+    mockStorage.put.mockRejectedValueOnce(new Error('R2 write error'));
+    await expect(
+      runnersService.queueRun({ runId: 'run-r2-fail', config: {} }, 'user-1', false, false)
+    ).rejects.toThrow('R2 write error|500');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-r2-fail', 'failed');
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  test('a queue send failure after INSERT marks scan failed in D1 and rethrows 500 (Threat model T1)', async () => {
+    (mockEnv.SCAN_QUEUE.send as any).mockRejectedValueOnce(new Error('Queue unavailable'));
+    await expect(
+      runnersService.queueRun({ runId: 'run-q-fail', config: {} }, 'user-1', false, false)
+    ).rejects.toThrow('Queue unavailable|500');
+    expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-q-fail', 'failed');
   });
 
   test('queueRun should cover getUserPublicKey error log', async () => {

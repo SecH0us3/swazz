@@ -7,7 +7,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   isValidRunId,
   isValidScanConfigKey,
-  putScanConfig,
+  isScanConfigKeyForRun,
+  serializeScanConfig,
+  writeScanConfig,
   getScanConfig,
   deleteScanConfig,
   MAX_SCAN_CONFIG_BYTES,
@@ -118,7 +120,62 @@ describe('scanConfigStore', () => {
     });
   });
 
-  describe('putScanConfig and getScanConfig round-trip', () => {
+  describe('isScanConfigKeyForRun (Threat model T3)', () => {
+    it('accepts key matching the specified runId', () => {
+      const runId = 'valid-run-123';
+      const uuid = crypto.randomUUID();
+      const key = `${SCAN_CONFIG_PREFIX}${runId}/${uuid}.json`;
+      expect(isScanConfigKeyForRun(key, runId)).toBe(true);
+    });
+
+    it('rejects key belonging to another runId', () => {
+      const uuid = crypto.randomUUID();
+      const keyRunA = `${SCAN_CONFIG_PREFIX}run-A/${uuid}.json`;
+      expect(isScanConfigKeyForRun(keyRunA, 'run-B')).toBe(false);
+    });
+
+    it('rejects prefix collision without boundary (run-1 vs run-123)', () => {
+      const uuid = crypto.randomUUID();
+      const keyRun123 = `${SCAN_CONFIG_PREFIX}run-123/${uuid}.json`;
+      expect(isScanConfigKeyForRun(keyRun123, 'run-1')).toBe(false);
+    });
+
+    it('rejects invalid key or invalid runId', () => {
+      const uuid = crypto.randomUUID();
+      expect(isScanConfigKeyForRun(`../bad/${uuid}.json`, 'run-1')).toBe(false);
+      expect(isScanConfigKeyForRun(`${SCAN_CONFIG_PREFIX}run-1/${uuid}.json`, '../bad')).toBe(false);
+      expect(isScanConfigKeyForRun(null, 'run-1')).toBe(false);
+      expect(isScanConfigKeyForRun(`${SCAN_CONFIG_PREFIX}run-1/${uuid}.json`, null)).toBe(false);
+    });
+  });
+
+  describe('serializeScanConfig (no I/O, 413 check)', () => {
+    it('serializes a config and returns body and byteLength without I/O', () => {
+      const config = { base_url: 'https://api.example.com', endpoints: [{ path: '/test' }] };
+      const res = serializeScanConfig(config);
+      expect(res.body).toBe(JSON.stringify(config));
+      expect(res.byteLength).toBe(new TextEncoder().encode(res.body).byteLength);
+      expect(mockStorage.put).not.toHaveBeenCalled();
+    });
+
+    it('handles undefined config as empty object', () => {
+      const res = serializeScanConfig(undefined);
+      expect(res.body).toBe('{}');
+      expect(res.byteLength).toBe(2);
+    });
+
+    it('rejects a config over 20 MB with 413 without I/O (Threat model T1 / invariant 4)', () => {
+      const bigString = 'x'.repeat(MAX_SCAN_CONFIG_BYTES + 100);
+      const oversizedConfig = { data: bigString };
+
+      expect(() => serializeScanConfig(oversizedConfig)).toThrow(
+        new RegExp(`Scan config too large \\(\\d+ bytes, limit ${MAX_SCAN_CONFIG_BYTES}\\)\\|413`)
+      );
+      expect(mockStorage.put).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('writeScanConfig and getScanConfig round-trip', () => {
     it('round-trips a config of about 300 KB', async () => {
       const runId = crypto.randomUUID();
       const largeEndpoints = [];
@@ -142,48 +199,35 @@ describe('scanConfigStore', () => {
         },
       };
 
-      const serializedSize = new TextEncoder().encode(JSON.stringify(config)).byteLength;
-      expect(serializedSize).toBeGreaterThan(250 * 1024); // ~300 KB
+      const { body } = serializeScanConfig(config);
+      expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(250 * 1024); // ~300 KB
 
-      const key = await putScanConfig(mockEnv, runId, config);
+      const key = await writeScanConfig(mockEnv, runId, body);
       expect(isValidScanConfigKey(key)).toBe(true);
-      expect(key.startsWith(`${SCAN_CONFIG_PREFIX}${runId}/`)).toBe(true);
+      expect(isScanConfigKeyForRun(key, runId)).toBe(true);
 
       const retrieved = await getScanConfig(mockEnv, key);
       expect(retrieved).toEqual(config);
       expect(retrieved.settings.disable_shared_runners).toBe(true);
     });
 
-    it('two puts for the same runId produce different keys (Threat model invariant 1)', async () => {
+    it('two writes for the same runId produce different keys (Threat model invariant 1)', async () => {
       const runId = 'test-run-unique';
-      const config = { base_url: 'https://example.com' };
+      const { body } = serializeScanConfig({ base_url: 'https://example.com' });
 
-      const key1 = await putScanConfig(mockEnv, runId, config);
-      const key2 = await putScanConfig(mockEnv, runId, config);
+      const key1 = await writeScanConfig(mockEnv, runId, body);
+      const key2 = await writeScanConfig(mockEnv, runId, body);
 
       expect(key1).not.toBe(key2);
       expect(isValidScanConfigKey(key1)).toBe(true);
       expect(isValidScanConfigKey(key2)).toBe(true);
-      expect(key1.startsWith(`${SCAN_CONFIG_PREFIX}${runId}/`)).toBe(true);
-      expect(key2.startsWith(`${SCAN_CONFIG_PREFIX}${runId}/`)).toBe(true);
+      expect(isScanConfigKeyForRun(key1, runId)).toBe(true);
+      expect(isScanConfigKeyForRun(key2, runId)).toBe(true);
     });
 
-    it('rejects invalid runId on put (Threat model invariant 2)', async () => {
-      await expect(putScanConfig(mockEnv, '../invalid', { test: true })).rejects.toThrow('Invalid runId|400');
+    it('rejects invalid runId on write (Threat model invariant 2)', async () => {
+      await expect(writeScanConfig(mockEnv, '../invalid', '{}')).rejects.toThrow('Invalid runId|400');
       expect(mockStorage.put).not.toHaveBeenCalled();
-    });
-
-    it('rejects a config over 20 MB with 413 and writes nothing (Threat model invariant 4)', async () => {
-      const runId = crypto.randomUUID();
-      // Generate a string that exceeds 20 * 1024 * 1024 bytes
-      const bigString = 'x'.repeat(MAX_SCAN_CONFIG_BYTES + 100);
-      const oversizedConfig = { data: bigString };
-
-      await expect(putScanConfig(mockEnv, runId, oversizedConfig)).rejects.toThrow(
-        new RegExp(`Scan config too large \\(\\d+ bytes, limit ${MAX_SCAN_CONFIG_BYTES}\\)\\|413`)
-      );
-      expect(mockStorage.put).not.toHaveBeenCalled();
-      expect(store.size).toBe(0);
     });
 
     it('getScanConfig validates key and throws 500 on invalid key (Threat model invariant 3)', async () => {
@@ -207,7 +251,8 @@ describe('scanConfigStore', () => {
   describe('deleteScanConfig (Threat model invariant 7)', () => {
     it('deletes the object from R2 when key is valid', async () => {
       const runId = crypto.randomUUID();
-      const key = await putScanConfig(mockEnv, runId, { test: 123 });
+      const { body } = serializeScanConfig({ test: 123 });
+      const key = await writeScanConfig(mockEnv, runId, body);
       expect(store.has(key)).toBe(true);
 
       await deleteScanConfig(mockEnv, key);

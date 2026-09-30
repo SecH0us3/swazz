@@ -8,7 +8,7 @@ import { IRunnersRepository } from '../repositories/runners';
 import { IRbacRepository } from '../repositories/rbac';
 import { hashApiKey } from '../utils/auth';
 import { ScansRepository } from '../repositories/scans';
-import { isValidRunId, putScanConfig } from './scanConfigStore';
+import { isValidRunId, serializeScanConfig, writeScanConfig } from './scanConfigStore';
 
 export interface IRunnersService {
   connect(
@@ -219,7 +219,7 @@ export class RunnersService implements IRunnersService {
       throw new Error('Invalid runId|400');
     }
 
-    const configKey = await putScanConfig(this.env, runId, body.config || {});
+    const { body: configBody } = serializeScanConfig(body.config || {});
 
     const projectId = body.projectId || "";
     const targetUrl = body.config?.base_url || "";
@@ -228,19 +228,37 @@ export class RunnersService implements IRunnersService {
 
     try {
       await this.runnersRepo.createScanRecord(runId, projectId, targetUrl, profile, status, userId);
-    } catch (dbErr) {
+    } catch (dbErr: any) {
       console.error("Failed to insert scan into D1 in /api/runs:", dbErr);
+      const errMsg = String(dbErr?.message || dbErr);
+      if (errMsg.includes('UNIQUE') || errMsg.includes('PRIMARY KEY') || errMsg.includes('SQLITE_CONSTRAINT')) {
+        throw new Error('Run already exists|409');
+      }
+      throw new Error('Failed to create scan|500');
     }
 
-    await this.env.SCAN_QUEUE.send({
-      runId,
-      configKey,
-      userPublicKey,
-      targetUrl,
-      profile,
-      projectId,
-      userId: userId
-    });
+    let configKey: string;
+    try {
+      configKey = await writeScanConfig(this.env, runId, configBody);
+      await this.env.SCAN_QUEUE.send({
+        runId,
+        configKey,
+        userPublicKey,
+        targetUrl,
+        profile,
+        projectId,
+        userId: userId
+      });
+    } catch (err: any) {
+      try {
+        const scansRepo = new ScansRepository(this.env);
+        await scansRepo.updateScanStatus(runId, 'failed');
+      } catch (statusErr) {
+        console.error("Failed to mark scan as failed after R2/queue error in /api/runs:", statusErr);
+      }
+      const msg = (err instanceof Error ? err.message : String(err)).split('|')[0];
+      throw new Error(`${msg}|500`);
+    }
 
     return { id: runId, status: 'queued' };
   }
