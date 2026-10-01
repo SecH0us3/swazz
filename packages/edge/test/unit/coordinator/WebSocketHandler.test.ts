@@ -188,6 +188,7 @@ describe('WebSocketHandler', () => {
     // Production mode (non test-secret JWT) routes events through the queue.
     mockEnv.JWT_SECRET = 'prod-secret';
     mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -228,6 +229,7 @@ describe('WebSocketHandler', () => {
 
     mockEnv.JWT_SECRET = 'test-secret';
     mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -277,7 +279,8 @@ describe('WebSocketHandler', () => {
 
     expect(stateManager.jobs.has('run-456')).toBe(false);
     expect(mockWs.serializeAttachment).toHaveBeenCalledWith({
-      activeJobs: []
+      activeJobs: [],
+      recentJobs: ['run-456']
     });
   });
 
@@ -433,6 +436,7 @@ describe('WebSocketHandler', () => {
     // Production mode (non test-secret JWT) routes events through the queue.
     mockEnv.JWT_SECRET = 'prod-secret';
     mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -469,6 +473,7 @@ describe('WebSocketHandler', () => {
 
   it('should handle client connection ws.send throwing error gracefully', async () => {
     mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -580,5 +585,193 @@ describe('WebSocketHandler', () => {
     }
     expect(mockEnv.STORAGE.put).toHaveBeenCalled();
     expect(mockUpsertSwaggerCache).toHaveBeenCalled();
+  });
+
+  describe('T2 acceptance tests: runner runId validation', () => {
+    it('drops event/error/complete/checkpoint for a runId not in activeJobs without queue send, D1 write or client broadcast', async () => {
+      const mockProcessFindings = vi.fn().mockResolvedValue(undefined);
+      (ScansRepository as any).mockImplementation(function () {
+        return {
+          processFindingsQueueMessages: mockProcessFindings,
+        };
+      });
+
+      mockState.getTags.mockReturnValue(['runner', 'runner-tag-abc']);
+      mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['legit-job'] });
+
+      const stateManager = new StateManager(mockState);
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      stateManager.clients.set('victim-run', new Set([mockClientWs]));
+
+      // 1. Foreign event
+      const foreignEventMsg = {
+        type: 'event',
+        runId: 'victim-run',
+        payload: { type: 'finding', data: 'malicious' }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(foreignEventMsg));
+
+      // 2. Foreign complete
+      const foreignCompleteMsg = {
+        type: 'event',
+        runId: 'victim-run',
+        payload: { type: 'complete', summary: {} }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(foreignCompleteMsg));
+
+      // 3. Foreign error
+      const foreignErrorMsg = {
+        type: 'error',
+        runId: 'victim-run',
+        payload: { error: 'evil abort' }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(foreignErrorMsg));
+
+      // 4. Empty or non-string runId
+      await handler.handleMessage(mockWs, JSON.stringify({ type: 'event', runId: '', payload: {} }));
+      await handler.handleMessage(mockWs, JSON.stringify({ type: 'event', runId: null, payload: {} }));
+
+      // Assertions: no queue send, no D1 write, no broadcast, no activeJobs mutation
+      expect(mockEnv.FINDINGS_QUEUE.send).not.toHaveBeenCalled();
+      expect(mockProcessFindings).not.toHaveBeenCalled();
+      expect(mockClientWs.send).not.toHaveBeenCalled();
+      expect(mockWs.serializeAttachment).not.toHaveBeenCalled();
+      expect(mockLogError).toHaveBeenCalledWith(
+        expect.anything(),
+        "Coordinator",
+        expect.stringContaining("unauthorized or invalid runId"),
+        expect.objectContaining({ tags: ['runner', 'runner-tag-abc'] })
+      );
+    });
+
+    it('processes messages for legitimate jobs including after simulated hibernation where only attachment remains', async () => {
+      mockEnv.JWT_SECRET = 'prod-secret';
+      mockState.getTags.mockReturnValue(['runner']);
+      // Simulated hibernation: stateManager.jobs is empty (in-memory state cleared), only attachment exists
+      mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['hibernated-job'] });
+
+      const stateManager = new StateManager(mockState);
+      expect(stateManager.jobs.size).toBe(0);
+
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      stateManager.clients.set('hibernated-job', new Set([mockClientWs]));
+
+      const legitMsg = {
+        type: 'event',
+        runId: 'hibernated-job',
+        payload: { type: 'log', message: 'Legitimate log' }
+      };
+
+      await handler.handleMessage(mockWs, JSON.stringify(legitMsg));
+
+      expect(mockEnv.FINDINGS_QUEUE.send).toHaveBeenCalledWith({
+        scanId: 'hibernated-job',
+        type: 'event',
+        payload: legitMsg.payload
+      });
+      expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(legitMsg.payload));
+    });
+  });
+
+  describe('Round 4 item 5: post-complete runner_log gate and recentJobs', () => {
+    it('allows runner_log event for runId in recentJobs post-complete and forwards it', async () => {
+      mockEnv.JWT_SECRET = 'prod-secret';
+      mockState.getTags.mockReturnValue(['runner']);
+      mockWs.deserializeAttachment.mockReturnValue({
+        activeJobs: [],
+        recentJobs: ['completed-job']
+      });
+
+      const stateManager = new StateManager(mockState);
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      stateManager.clients.set('completed-job', new Set([mockClientWs]));
+
+      const logMsg = {
+        type: 'event',
+        runId: 'completed-job',
+        payload: { type: 'runner_log', message: 'Generating WAF patch...' }
+      };
+
+      await handler.handleMessage(mockWs, JSON.stringify(logMsg));
+
+      expect(mockEnv.FINDINGS_QUEUE.send).toHaveBeenCalledWith({
+        scanId: 'completed-job',
+        type: 'event',
+        payload: logMsg.payload
+      });
+      expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(logMsg.payload));
+      expect(mockLogError).not.toHaveBeenCalled();
+    });
+
+    it('silently drops redundant error and non-runner_log events for runId in recentJobs without logError', async () => {
+      mockEnv.JWT_SECRET = 'prod-secret';
+      mockState.getTags.mockReturnValue(['runner']);
+      mockWs.deserializeAttachment.mockReturnValue({
+        activeJobs: [],
+        recentJobs: ['completed-job']
+      });
+
+      const stateManager = new StateManager(mockState);
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      stateManager.clients.set('completed-job', new Set([mockClientWs]));
+
+      // 1. Redundant error event
+      const errorMsg = {
+        type: 'error',
+        runId: 'completed-job',
+        payload: { error: 'redundant error' }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(errorMsg));
+
+      // 2. Non-runner_log event (e.g. finding)
+      const findingMsg = {
+        type: 'event',
+        runId: 'completed-job',
+        payload: { type: 'finding', data: 'stray finding' }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(findingMsg));
+
+      // Should be silently dropped: no queue send, no client send, no logError
+      expect(mockEnv.FINDINGS_QUEUE.send).not.toHaveBeenCalled();
+      expect(mockClientWs.send).not.toHaveBeenCalled();
+      expect(mockLogError).not.toHaveBeenCalled();
+    });
+
+    it('bounds recentJobs to 20 jobs FIFO on job completion', async () => {
+      mockState.getTags.mockReturnValue(['runner']);
+      const stateManager = new StateManager(mockState);
+      const queueService = new QueueService(mockEnv, mockState, stateManager);
+      const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+      // Start with 20 existing recent jobs
+      const existingRecent = Array.from({ length: 20 }, (_, i) => `job-${i}`);
+      let currentAttachment: any = {
+        activeJobs: ['job-20'],
+        recentJobs: [...existingRecent]
+      };
+      mockWs.deserializeAttachment.mockImplementation(() => currentAttachment);
+      mockWs.serializeAttachment.mockImplementation((val: any) => { currentAttachment = val; });
+
+      // Complete job-20
+      const completeMsg = {
+        type: 'event',
+        runId: 'job-20',
+        payload: { type: 'complete', summary: {} }
+      };
+      await handler.handleMessage(mockWs, JSON.stringify(completeMsg));
+
+      expect(currentAttachment.activeJobs).toEqual([]);
+      expect(currentAttachment.recentJobs.length).toBe(20);
+      expect(currentAttachment.recentJobs[0]).toBe('job-1'); // job-0 was shifted out
+      expect(currentAttachment.recentJobs[19]).toBe('job-20'); // job-20 is newest
+    });
   });
 });

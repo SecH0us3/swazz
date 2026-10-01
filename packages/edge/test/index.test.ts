@@ -1928,6 +1928,53 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(["queued", "dispatched"]).toContain(scanRow?.status);
     });
 
+    it("handles SCAN_QUEUE flow and treats 409 from DO like 503 by acknowledging without dispatching (Round 4 item 4)", async () => {
+      const scanId = "scan-queue-409-id";
+
+      await env.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, ?, ?, ?)"
+      )
+        .bind(scanId, "test-project", "http://test-url.com", "default", "cancelled")
+        .run();
+
+      const mockMessages = [
+        {
+          body: {
+            runId: scanId,
+            config: { base_url: "http://test-url.com" },
+            userPublicKey: "",
+            targetUrl: "http://test-url.com",
+            profile: "default",
+            projectId: "test-project",
+            userId: null
+          },
+          ack: vi.fn(),
+          retry: vi.fn(),
+        }
+      ];
+
+      const batch = {
+        queue: "swazz-scan-queue",
+        messages: mockMessages,
+      } as any;
+
+      const stub = (testEnv as any).COORDINATOR_DO.get((testEnv as any).COORDINATOR_DO.idFromName('global-coordinator'));
+      const origFetch = stub.fetch;
+      stub.fetch = vi.fn().mockResolvedValue(new Response('Scan not dispatchable', { status: 409 }));
+
+      try {
+        await app.queue(batch, testEnv as any, {} as any);
+
+        expect(mockMessages[0].ack).toHaveBeenCalled();
+        expect(mockMessages[0].retry).not.toHaveBeenCalled();
+
+        const scanRow = await env.DB.prepare("SELECT status FROM scans WHERE id = ?").bind(scanId).first<any>();
+        expect(scanRow?.status).toBe("cancelled");
+      } finally {
+        stub.fetch = origFetch;
+      }
+    });
+
     describe("checkAndDispatchQueuedScans Coordinator Logic", () => {
       beforeEach(async () => {
         // Clear ALL active scans (queued/dispatched/paused), not just queued.

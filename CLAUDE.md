@@ -20,6 +20,7 @@ We use a **hybrid caching design** to allow instant loading of endpoint trees on
 2. **Cloudflare R2 Object Storage**: Stores large payload objects including:
    - `specs/parsed/<ulid>.json`: Pruned endpoint trees ready for instant UI rendering.
    - `specs/raw/<ulid>.json`: Original raw specification files (JSON/YAML).
+   - `scans/configs/<runId>/<uuid>.json`: the scan config claim-check (Queue and DO storage are limited to 128 KB); deleted after dispatch.
 3. **Go Runner Agent**: Connected via WebSocket to the Edge Durable Object coordinator. Downloads and parses specifications on cache misses, sending them back to the coordinator for storage.
 
 ```mermaid

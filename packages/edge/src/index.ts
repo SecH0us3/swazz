@@ -473,7 +473,8 @@ export default {
             method: 'POST',
             body: JSON.stringify({
               runId: msg.body.runId,
-              config: msg.body.config || {},
+              configKey: msg.body.configKey,
+              config: msg.body.config,
               userPublicKey: msg.body.userPublicKey || ""
             }),
           });
@@ -482,8 +483,8 @@ export default {
             const scansRepo = new ScansRepository(env);
             await scansRepo.updateScanStatus(msg.body.runId, 'dispatched', undefined, ctx);
             msg.ack();
-          } else if (doRes.status === 503) {
-            // Keep status as 'queued' in D1 and acknowledge the message so that when a runner connects, the coordinator DO will pull and assign it.
+          } else if (doRes.status === 503 || doRes.status === 409) {
+            // Keep status as is in D1 and acknowledge the message so that it is not retried.
             msg.ack();
           } else {
             logError({ env, executionCtx: ctx }, "Queue", `SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);

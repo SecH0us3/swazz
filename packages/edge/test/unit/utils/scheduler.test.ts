@@ -65,6 +65,11 @@ describe('scheduler util', () => {
 
     beforeEach(() => {
       mockEnv = {
+        STORAGE: {
+          put: vi.fn().mockResolvedValue(undefined),
+          get: vi.fn(),
+          delete: vi.fn(),
+        },
         SCAN_QUEUE: {
           send: vi.fn(),
         },
@@ -110,6 +115,14 @@ describe('scheduler util', () => {
         now.toISOString()
       );
       expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalled();
+      const sentPayload = mockEnv.SCAN_QUEUE.send.mock.calls[0][0];
+      expect(sentPayload.config).toBeUndefined();
+      expect(sentPayload.configKey).toMatch(/^scans\/configs\//);
+      expect(mockEnv.STORAGE.put).toHaveBeenCalledWith(
+        sentPayload.configKey,
+        JSON.stringify({ base_url: "http://test", settings: { profiles: ["full"] } }),
+        { httpMetadata: { contentType: 'application/json' } }
+      );
 
       vi.useRealTimers();
     });
@@ -194,6 +207,40 @@ describe('scheduler util', () => {
       await handleScheduledScans(mockEnv as Env);
 
       expect(consoleSpy).toHaveBeenCalledWith(`[Scheduler] Error processing schedule c1:`, expect.any(Error));
+
+      consoleSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('marks scan failed in D1 when R2 write or queue fails', async () => {
+      vi.useFakeTimers();
+      const now = new Date(Date.UTC(2025, 0, 1, 12, 30));
+      vi.setSystemTime(now);
+
+      const configs = [
+        {
+          id: 'c1',
+          project_id: 'p1',
+          cron_schedule: '* * * * *',
+          config_json: '{"base_url": "http://test"}'
+        }
+      ];
+
+      const repoInstance = {
+        getScheduledScanConfigs: vi.fn().mockResolvedValue(configs),
+        getProjectOwnerForScan: vi.fn().mockResolvedValue({ id: 'u1', public_key: 'pk' }),
+        triggerScheduledScan: vi.fn().mockResolvedValue(undefined),
+        updateScanStatus: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(ScansRepository).mockImplementation(function() { return repoInstance; } as any);
+      mockEnv.STORAGE.put.mockRejectedValueOnce(new Error('R2 write failure'));
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await handleScheduledScans(mockEnv as Env);
+
+      expect(repoInstance.triggerScheduledScan).toHaveBeenCalled();
+      expect(repoInstance.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
 
       consoleSpy.mockRestore();
       vi.useRealTimers();

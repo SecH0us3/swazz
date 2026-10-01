@@ -8,6 +8,7 @@ import { IScansRepository } from '../repositories/scans';
 import { IRbacRepository } from '../repositories/rbac';
 import { sign, verify } from 'hono/jwt';
 import { ulid } from 'ulidx';
+import { isValidRunId, serializeScanConfig, writeScanConfig } from './scanConfigStore';
 
 import { WorkersAIService, type FindingAnalysisResult } from './ai';
 
@@ -90,9 +91,24 @@ export class ScansService implements IScansService {
     }
 
     const id = ulid();
+    if (!isValidRunId(id)) {
+      throw new Error('Invalid runId|400');
+    }
+
+    const { body: configBody } = serializeScanConfig(body.config || {});
+
     const status = 'queued';
 
-    await this.scansRepo.createScan(id, body.project_id, body.target_url, body.profile, status, userId, body.trigger_type || 'manual');
+    try {
+      await this.scansRepo.createScan(id, body.project_id, body.target_url, body.profile, status, userId, body.trigger_type || 'manual');
+    } catch (dbErr: any) {
+      console.error("Failed to insert scan into D1 in /api/scans:", dbErr);
+      const errMsg = String(dbErr?.message || dbErr);
+      if (errMsg.includes('UNIQUE') || errMsg.includes('PRIMARY KEY') || errMsg.includes('SQLITE_CONSTRAINT')) {
+        throw new Error('Run already exists|409');
+      }
+      throw new Error('Failed to create scan|500');
+    }
 
     let userPublicKey = "";
     if (userId) {
@@ -106,15 +122,27 @@ export class ScansService implements IScansService {
       }
     }
 
-    await this.env.SCAN_QUEUE.send({
-      runId: id,
-      config: body.config || {},
-      userPublicKey,
-      targetUrl: body.target_url,
-      profile: body.profile,
-      projectId: body.project_id,
-      userId
-    });
+    let configKey: string;
+    try {
+      configKey = await writeScanConfig(this.env, id, configBody);
+      await this.env.SCAN_QUEUE.send({
+        runId: id,
+        configKey,
+        userPublicKey,
+        targetUrl: body.target_url,
+        profile: body.profile,
+        projectId: body.project_id,
+        userId
+      });
+    } catch (err: any) {
+      console.error("Failed to process scan config or queue scan in /api/scans:", err);
+      try {
+        await this.scansRepo.updateScanStatus(id, 'failed');
+      } catch (statusErr) {
+        console.error("Failed to mark scan as failed after R2/queue error in /api/scans:", statusErr);
+      }
+      throw new Error('Failed to queue scan|500');
+    }
 
     // Fire-and-forget audit log
     const auditPromise = (async () => {

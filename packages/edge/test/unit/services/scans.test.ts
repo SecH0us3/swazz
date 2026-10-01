@@ -39,6 +39,7 @@ describe('ScansService Unit Tests', () => {
       getScans: vi.fn(),
       getScan: vi.fn(),
       updateScan: vi.fn(),
+      updateScanStatus: vi.fn(),
       updateScanReportUrl: vi.fn(),
       getRunnerLogs: vi.fn(),
       getFindings: vi.fn(),
@@ -114,6 +115,132 @@ describe('ScansService Unit Tests', () => {
       expect(res.status).toBe('queued');
       // wait a bit for fire and forget
       await new Promise(r => setTimeout(r, 10));
+    });
+
+    it('a ~300 KB config via createScan queues configKey and no config', async () => {
+      const largeEndpoints = Array.from({ length: 500 }, (_, i) => ({
+        path: `/api/v1/endpoint_${i}`,
+        method: 'POST',
+        padding: 'x'.repeat(600)
+      }));
+      const config = { base_url: 'https://api.example.com', endpoints: largeEndpoints };
+      const size = new TextEncoder().encode(JSON.stringify(config)).byteLength;
+      expect(size).toBeGreaterThan(250 * 1024);
+
+      const res = await scansService.createScan(
+        { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config },
+        'u1',
+        'auth',
+        '1.1.1.1'
+      );
+      expect(res.status).toBe('queued');
+
+      expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalled();
+      const sentPayload = mockEnv.SCAN_QUEUE.send.mock.calls[mockEnv.SCAN_QUEUE.send.mock.calls.length - 1][0];
+      expect(sentPayload.config).toBeUndefined();
+      expect(sentPayload.configKey).toMatch(/^scans\/configs\//);
+      expect(mockEnv.STORAGE.put).toHaveBeenCalledWith(
+        sentPayload.configKey,
+        JSON.stringify(config),
+        { httpMetadata: { contentType: 'application/json' } }
+      );
+    });
+
+    it('an oversized config returns 413 and creates no D1 row in createScan', async () => {
+      const oversized = { padding: 'y'.repeat(21 * 1024 * 1024) };
+      await expect(
+        scansService.createScan(
+          { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config: oversized },
+          'u1',
+          'auth',
+          '1.1.1.1'
+        )
+      ).rejects.toThrow(/Scan config too large.*\|413/);
+      expect(mockScansRepo.createScan).not.toHaveBeenCalled();
+      expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+    });
+
+    it('a permission failure writes nothing to R2 and creates no D1 row in createScan', async () => {
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(
+        scansService.createScan(
+          { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config: { a: 1 } },
+          'u1',
+          'auth',
+          '1.1.1.1'
+        )
+      ).rejects.toThrow('Forbidden|403');
+      expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+      expect(mockScansRepo.createScan).not.toHaveBeenCalled();
+    });
+
+    it('a D1 constraint failure in createScan returns 409 and does not write to R2 or send to queue', async () => {
+      mockScansRepo.createScan.mockRejectedValueOnce(new Error('UNIQUE constraint failed: scans.id'));
+      await expect(
+        scansService.createScan(
+          { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config: {} },
+          'u1',
+          'auth',
+          '1.1.1.1'
+        )
+      ).rejects.toThrow('Run already exists|409');
+      expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+      expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+    });
+
+    it('a generic D1 error in createScan returns 500 and does not write to R2 or send to queue', async () => {
+      mockScansRepo.createScan.mockRejectedValueOnce(new Error('D1 error'));
+      await expect(
+        scansService.createScan(
+          { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config: {} },
+          'u1',
+          'auth',
+          '1.1.1.1'
+        )
+      ).rejects.toThrow('Failed to create scan|500');
+      expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+      expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+    });
+
+    it('an R2 write failure after createScan marks scan failed in D1 and rethrows 500', async () => {
+      mockEnv.STORAGE.put.mockRejectedValueOnce(new Error('R2 write error'));
+      let thrownError: any = null;
+      try {
+        await scansService.createScan(
+          { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config: {} },
+          'u1',
+          'auth',
+          '1.1.1.1'
+        );
+      } catch (e) {
+        thrownError = e;
+      }
+      expect(thrownError).toBeInstanceOf(Error);
+      expect(thrownError.message).toBe('Failed to queue scan|500');
+      expect(thrownError.message).not.toContain('R2 write error');
+      expect(mockScansRepo.createScan).toHaveBeenCalled();
+      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
+      expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+    });
+
+    it('a queue send failure after createScan marks scan failed in D1 and rethrows 500', async () => {
+      mockEnv.SCAN_QUEUE.send.mockRejectedValueOnce(new Error('Queue send failed'));
+      let thrownError: any = null;
+      try {
+        await scansService.createScan(
+          { project_id: 'p1', target_url: 'https://api.example.com', profile: 'default', config: {} },
+          'u1',
+          'auth',
+          '1.1.1.1'
+        );
+      } catch (e) {
+        thrownError = e;
+      }
+      expect(thrownError).toBeInstanceOf(Error);
+      expect(thrownError.message).toBe('Failed to queue scan|500');
+      expect(thrownError.message).not.toContain('Queue send failed');
+      expect(mockScansRepo.createScan).toHaveBeenCalled();
+      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
     });
   });
 

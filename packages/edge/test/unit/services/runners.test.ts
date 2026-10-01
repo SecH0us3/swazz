@@ -28,10 +28,31 @@ describe('RunnersService Unit Tests', () => {
   let mockRbacRepo: any;
   let mockCoordinatorFetch = vi.fn();
 
+  let store: Map<string, { value: string; httpMetadata?: any }>;
+  let mockStorage: any;
+
   beforeEach(() => {
+    store = new Map();
+    mockStorage = {
+      put: vi.fn(async (key: string, value: string, opts?: any) => {
+        store.set(key, { value, httpMetadata: opts?.httpMetadata });
+      }),
+      get: vi.fn(async (key: string) => {
+        const item = store.get(key);
+        if (!item) return null;
+        return {
+          text: async () => item.value,
+          httpMetadata: item.httpMetadata,
+        };
+      }),
+      delete: vi.fn(async (key: string) => {
+        store.delete(key);
+      }),
+    };
     mockCoordinatorFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ runners: [{ publicKey: 'test-key' }], status: 'ok' })));
     mockEnv = {
       AUTH_ENABLED: 'true',
+      STORAGE: mockStorage,
       SCAN_QUEUE: {
         send: vi.fn().mockResolvedValue(undefined),
       },
@@ -128,11 +149,53 @@ describe('RunnersService Unit Tests', () => {
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
   });
 
-  test('queueRun should cover createScanRecord error log', async () => {
-    mockRunnersRepo.createScanRecord.mockRejectedValueOnce(new Error('db error'));
-    const res = await runnersService.queueRun({ scanId: 'scan-1' }, 'user-1', true, false);
-    expect(res.id).toBeDefined();
+  test('a second queueRun with an existing runId returns 409 and writes no R2 and queues nothing (Threat model T1)', async () => {
+    mockRunnersRepo.createScanRecord.mockRejectedValueOnce(new Error('UNIQUE constraint failed: scans.id'));
+    await expect(
+      runnersService.queueRun({ runId: 'victim-run', config: { base_url: 'http://attacker.com' } }, 'attacker', false, false)
+    ).rejects.toThrow('Run already exists|409');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  test('a generic D1 error returns 500 and nothing is queued or written to R2 (Threat model T1)', async () => {
+    mockRunnersRepo.createScanRecord.mockRejectedValueOnce(new Error('database connection lost'));
+    await expect(
+      runnersService.queueRun({ runId: 'run-1', config: {} }, 'user-1', false, false)
+    ).rejects.toThrow('Failed to create scan|500');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  test('an R2 write failure after INSERT marks scan failed in D1 and rethrows 500 (Threat model T1)', async () => {
+    mockStorage.put.mockRejectedValueOnce(new Error('R2 write error'));
+    let thrownError: any = null;
+    try {
+      await runnersService.queueRun({ runId: 'run-r2-fail', config: {} }, 'user-1', false, false);
+    } catch (e) {
+      thrownError = e;
+    }
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe('Failed to queue scan|500');
+    expect(thrownError.message).not.toContain('R2 write error');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-r2-fail', 'failed');
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  test('a queue send failure after INSERT marks scan failed in D1 and rethrows 500 (Threat model T1)', async () => {
+    (mockEnv.SCAN_QUEUE.send as any).mockRejectedValueOnce(new Error('Queue unavailable'));
+    let thrownError: any = null;
+    try {
+      await runnersService.queueRun({ runId: 'run-q-fail', config: {} }, 'user-1', false, false);
+    } catch (e) {
+      thrownError = e;
+    }
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe('Failed to queue scan|500');
+    expect(thrownError.message).not.toContain('Queue unavailable');
+    expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-q-fail', 'failed');
   });
 
   test('queueRun should cover getUserPublicKey error log', async () => {
@@ -141,20 +204,75 @@ describe('RunnersService Unit Tests', () => {
     expect(res.id).toBeDefined();
   });
 
-  test('queueRun should throw if anon limit reached', async () => {
+  test('queueRun should throw if anon limit reached and not write to R2 (Threat model invariant 5)', async () => {
     mockEnv.LIMIT_ANONYMOUS = 'true';
     await expect(
       runnersService.queueRun({ config: { endpoints: Array(51).fill('test') } }, 'anon', true, true)
     ).rejects.toThrow('Anonymous limit reached: You can only scan up to 50 endpoints.|403');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
   });
 
-  test('queueRun should throw if projectId present and isAnon', async () => {
+  test('queueRun should throw if projectId present and isAnon and not write to R2 (Threat model invariant 5)', async () => {
     await expect(runnersService.queueRun({ projectId: 'p1' }, 'anon', true, true)).rejects.toThrow('Forbidden|403');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
   });
 
-  test('queueRun should throw if isWeb, has projectId and no rbac permission', async () => {
+  test('queueRun should throw if isWeb, has projectId and no rbac permission and not write to R2 (Threat model invariant 5)', async () => {
     mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
     await expect(runnersService.queueRun({ projectId: 'p1' }, 'user-1', true, false)).rejects.toThrow('Forbidden|403');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+  });
+
+  test('queued message has configKey and no config, and R2 object exists and equals body.config', async () => {
+    const config = { base_url: 'https://example.com', endpoints: ['/test'] };
+    const res = await runnersService.queueRun({ config }, 'user-1', false, false);
+    expect(res.status).toBe('queued');
+
+    expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalledTimes(1);
+    const sent = (mockEnv.SCAN_QUEUE.send as any).mock.calls[0][0];
+    expect(sent.configKey).toBeDefined();
+    expect(sent.config).toBeUndefined();
+    expect(sent.runId).toBe(res.id);
+
+    expect(mockEnv.STORAGE.put).toHaveBeenCalled();
+    const storedObj = await mockEnv.STORAGE.get(sent.configKey);
+    expect(storedObj).not.toBeNull();
+    expect(JSON.parse(await storedObj!.text())).toEqual(config);
+  });
+
+  test('a config of about 300 KB succeeds (regression for 128KB limit)', async () => {
+    const largeEndpoints = Array.from({ length: 500 }, (_, i) => ({
+      path: `/api/v1/endpoint_${i}`,
+      method: 'POST',
+      padding: 'x'.repeat(600)
+    }));
+    const config = { base_url: 'https://api.example.com', endpoints: largeEndpoints };
+    const size = new TextEncoder().encode(JSON.stringify(config)).byteLength;
+    expect(size).toBeGreaterThan(250 * 1024);
+
+    const res = await runnersService.queueRun({ config }, 'user-1', false, false);
+    expect(res.status).toBe('queued');
+    const sent = (mockEnv.SCAN_QUEUE.send as any).mock.calls[0][0];
+    expect(sent.configKey).toBeDefined();
+    expect(sent.config).toBeUndefined();
+  });
+
+  test('an invalid runId returns 400 and does not write to R2 or D1 (Threat model invariant 2)', async () => {
+    await expect(
+      runnersService.queueRun({ runId: '../traversal', config: {} }, 'user-1', false, false)
+    ).rejects.toThrow('Invalid runId|400');
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
+    expect(mockRunnersRepo.createScanRecord).not.toHaveBeenCalled();
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  test('an oversized config returns 413 and no D1 row is created (Threat model invariant 4)', async () => {
+    const oversized = { padding: 'y'.repeat(21 * 1024 * 1024) };
+    await expect(
+      runnersService.queueRun({ config: oversized }, 'user-1', false, false)
+    ).rejects.toThrow(/Scan config too large.*\|413/);
+    expect(mockRunnersRepo.createScanRecord).not.toHaveBeenCalled();
+    expect(mockEnv.STORAGE.put).not.toHaveBeenCalled();
   });
 
   test('stopRun should succeed', async () => {
