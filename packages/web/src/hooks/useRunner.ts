@@ -154,7 +154,13 @@ export function useRunner(proxyUrl: string) {
                 headers: requestHeaders,
                 body: JSON.stringify(req),
             });
-            return res.json() as Promise<{ status: number; body: any; headers?: Record<string, string>; duration: number }>;
+            const data = await res.json().catch(() => ({ error: res.statusText || `HTTP ${res.status}` }));
+            if (!res.ok) {
+                const err: any = new Error(data.error || `Proxy error: ${res.status}`);
+                err.status = res.status;
+                throw err;
+            }
+            return data as { status: number; body: any; headers?: Record<string, string>; duration: number };
         },
         [proxyUrl],
     );

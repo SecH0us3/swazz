@@ -51,7 +51,7 @@ describe('Misc Routes', () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockResult);
-      expect(mockServices.proxy).toHaveBeenCalledWith({ url: 'https://example.com' });
+      expect(mockServices.proxy).toHaveBeenCalledWith({ url: 'https://example.com' }, 'user_123');
     });
 
     it('should propagate service errors with proper status code', async () => {
