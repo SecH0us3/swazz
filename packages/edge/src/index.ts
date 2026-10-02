@@ -50,15 +50,19 @@ app.onError((err, c) => {
 
 app.use('*', async (c, next) => {
   const allowedOrigins = c.env.ALLOWED_ORIGINS ? c.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : ['*'];
+  const hasWildcard = allowedOrigins.includes('*');
   const origin = c.req.header('Origin');
+  const isAllowedOrigin = origin ? allowedOrigins.includes(origin) : false;
 
   const corsMiddleware = cors({
-    origin: allowedOrigins.includes('*') ? (origin || '*') : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
+    origin: hasWildcard
+      ? '*'
+      : ((reqOrigin) => (reqOrigin && allowedOrigins.includes(reqOrigin) ? reqOrigin : null)),
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowHeaders: ['Content-Type', 'Authorization', 'Upgrade', 'X-CSRF-Token'],
     exposeHeaders: ['Content-Length', 'Content-Signal', 'X-CSRF-Token'],
     maxAge: 86400,
-    credentials: true,
+    credentials: !hasWildcard && isAllowedOrigin,
   });
 
   return await corsMiddleware(c, next);
@@ -482,7 +486,8 @@ registerMiscRoutes(app);
 registerMcpRoutes(app);
 
 app.get('/api/dev/emails', (c) => {
-  if (c.env.NODE_ENV === 'production' && c.env.JWT_SECRET !== 'test-secret') {
+  const isDev = c.env.JWT_SECRET === 'test-secret' || c.env.NODE_ENV === 'development';
+  if (!isDev) {
     return c.json({ error: 'Not available in production' }, 403);
   }
   const recipient = c.req.query('recipient');
@@ -497,7 +502,8 @@ app.get('/api/dev/emails', (c) => {
 });
 
 app.post('/api/dev/emails/clear', (c) => {
-  if (c.env.NODE_ENV === 'production' && c.env.JWT_SECRET !== 'test-secret') {
+  const isDev = c.env.JWT_SECRET === 'test-secret' || c.env.NODE_ENV === 'development';
+  if (!isDev) {
     return c.json({ error: 'Not available in production' }, 403);
   }
   clearDevSentEmails();

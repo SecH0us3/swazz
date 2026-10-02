@@ -12,6 +12,7 @@ export interface IMiscRepository {
   getUserPublicKey(userId: string): Promise<string | null>;
   incrementGlobalScanCount(yyMm: string): Promise<void>;
   getGlobalScanCount(): Promise<{ total: number; monthly: Record<string, number> }>;
+  getUserScanTargetUrls(userId: string): Promise<string[]>;
 }
 
 export class MiscRepository extends BaseService implements IMiscRepository {
@@ -69,5 +70,17 @@ export class MiscRepository extends BaseService implements IMiscRepository {
     }
 
     return { total, monthly };
+  }
+
+  async getUserScanTargetUrls(userId: string): Promise<string[]> {
+    const { results } = await this.db.prepare(`
+      SELECT target_url FROM scans WHERE user_id = ?
+      UNION
+      SELECT s.target_url FROM scans s
+      JOIN project_members pm ON s.project_id = pm.project_id
+      WHERE pm.user_id = ?
+    `).bind(userId, userId).all<{ target_url: string }>();
+
+    return (results || []).map(r => r.target_url);
   }
 }

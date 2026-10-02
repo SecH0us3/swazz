@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, isWebRequest, isAnonymousUser, getClientIp, verifyTurnstile } from '../utils/auth';
 import { IMiscRepository, MiscRepository } from '../repositories/misc';
+import { AuthRepository } from '../repositories/auth';
 import { IMiscService, MiscService } from '../services/misc';
 import { runWafCheck } from '../services/wafCheck';
 import { errorStatus, toStatusCode } from '../utils/http';
@@ -21,7 +22,7 @@ import {
 
 export function registerMiscRoutes(
   app: Hono<AppEnv>,
-  miscServicesFactory: (env: Env) => IMiscService = (env) => new MiscService(env, new MiscRepository(env))
+  miscServicesFactory: (env: Env) => IMiscService = (env) => new MiscService(env, new MiscRepository(env), new AuthRepository(env))
 ) {
   app.post('/api/waf-check', async (c) => {
     try {
@@ -47,8 +48,9 @@ export function registerMiscRoutes(
   app.all('/api/proxy', async (c) => {
     const services = miscServicesFactory(c.env);
     try {
+      const userId = await getUserIdFromRequest(c);
       const payload = await readJsonBody(c);
-      const result = await services.proxy(payload);
+      const result = await services.proxy(payload, userId);
       return c.json(result);
     } catch (err: any) {
       if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);

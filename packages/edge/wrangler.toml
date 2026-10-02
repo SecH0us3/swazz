@@ -52,7 +52,7 @@ invocation_logs = true
 AUTH_ENABLED = "true"
 PASSWORD_AUTH_ENABLED = "false"
 LIMIT_ANONYMOUS = "true"
-ALLOWED_ORIGINS = "*"
+ALLOWED_ORIGINS = "https://swazz.secmy.app"
 TURNSTILE_SITE_KEY = "0x4AAAAAADry7cDPHW8cvNuC"
 NODE_ENV = "production"
 

@@ -100,5 +100,40 @@ describe('Dev Email Inspector Routes', () => {
 
     const res = await app.fetch(new Request('http://localhost/api/dev/emails'), prodEnv, {} as any);
     expect(res.status).toBe(403);
+
+    const clearRes = await app.fetch(
+      new Request('http://localhost/api/dev/emails/clear', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-Token': 'token-123',
+          Cookie: 'csrf_token=token-123',
+        },
+      }),
+      prodEnv,
+      {} as any
+    );
+    expect(clearRes.status).toBe(403);
+  });
+
+  it('allows access in NODE_ENV === "development" even with production-like JWT secret', async () => {
+    const devEnv: Env = {
+      ...mockEnv,
+      NODE_ENV: 'development',
+      JWT_SECRET: 'custom-dev-secret-not-test-secret',
+    };
+
+    const res = await app.fetch(new Request('http://localhost/api/dev/emails'), devEnv, {} as any);
+    expect(res.status).toBe(200);
+  });
+
+  it('denies access when NODE_ENV is staging or undefined without test-secret', async () => {
+    const stagingEnv: Env = {
+      ...mockEnv,
+      NODE_ENV: 'staging' as any,
+      JWT_SECRET: 'staging-secret-key-1234567890',
+    };
+
+    const res = await app.fetch(new Request('http://localhost/api/dev/emails'), stagingEnv, {} as any);
+    expect(res.status).toBe(403);
   });
 });

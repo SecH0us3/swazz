@@ -494,8 +494,8 @@ export function RequestDetail({
             } else {
                 setLiveHeaders({});
             }
-        } catch (err) {
-            setLiveStatus(0);
+        } catch (err: any) {
+            setLiveStatus(typeof err?.status === 'number' ? err.status : 0);
             setLiveResponse(err instanceof Error ? err.message : String(err));
             setLiveHeaders({});
         } finally {

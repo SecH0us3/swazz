@@ -213,6 +213,26 @@ describe('useRunner', () => {
         expect(res.status).toBe(200);
     });
 
+    it('should throw an error with status when sendRequest receives 4xx error', async () => {
+        (globalThis.fetch as any).mockResolvedValueOnce({
+            ok: false,
+            status: 403,
+            json: async () => ({ error: 'Target host not authorized for replay' }),
+        });
+
+        const { result } = renderHook(() => useRunner(proxyUrl));
+        await expect(result.current.sendRequest({
+            url: 'https://unauthorized.com/api',
+            method: 'GET',
+            headers: {},
+            cookies: {},
+            body: undefined,
+        })).rejects.toMatchObject({
+            message: 'Target host not authorized for replay',
+            status: 403,
+        });
+    });
+
     it('should connect to existing run via websocket using connectToExisting', async () => {
         let wsInstance: any = null;
         (globalThis as any).WebSocket = vi.fn().mockImplementation(function() {
