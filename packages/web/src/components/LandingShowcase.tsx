@@ -6,6 +6,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { HighlightedCode } from './Shared/HighlightedCode.js';
 import { Logo } from './Common/Logo.js';
+import { SALES_EMAIL } from './UserSettings/ContactSalesCard.js';
+import { SOCIAL_POST_REVIEW_DAYS } from './UserSettings/SocialPostLicenseCard.js';
 import './LandingShowcase.css';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
@@ -1223,6 +1225,17 @@ cd swazz
                                 Request Enterprise License
                             </button>
                         </div>
+                    </div>
+
+                    <div className="pricing-social-offer">
+                        <span className="pricing-social-offer-icon" aria-hidden="true">🎁</span>
+                        <p>
+                            <strong>Free 1-year license for a social post.</strong> Write a public post about Swazz and send the link,
+                            plus the name the license should be issued to, to{' '}
+                            <a href={`mailto:${SALES_EMAIL}`}>{SALES_EMAIL}</a>. We review requests within{' '}
+                            {SOCIAL_POST_REVIEW_DAYS} business days and reply with a full-featured single-user key.
+                            Signed-in users can send it from Settings → License &amp; Subscription.
+                        </p>
                     </div>
                 </section>
             )}

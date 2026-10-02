@@ -5157,6 +5157,94 @@ kbd {
   margin-top: var(--space-4);
 }
 
+/* Social Post License Card */
+.social-license-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+}
+
+.social-license-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.social-license-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.social-license-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.social-license-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.social-license-subtitle,
+.social-license-terms,
+.social-license-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.social-license-steps {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.social-license-steps li + li {
+  margin-top: var(--space-1);
+}
+
+.social-license-terms {
+  font-weight: 500;
+}
+
+.social-license-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-default);
+}
+
+.social-license-hint {
+  margin-top: var(--space-1);
+}
+
+.social-license-error {
+  margin: var(--space-1) 0 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+}
+
+.social-license-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 /* Contact Sales Card & Modal Styles */
 .contact-sales-card {
   display: flex;

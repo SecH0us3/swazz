@@ -22,6 +22,12 @@ Under our **Additional Use Grant**, you are granted full permission to run Swazz
 1. **Non-Commercial / Open Source Use**: You are using Swazz exclusively to scan non-commercial, academic, or open-source projects.
 2. **Small Business / Startup Exemption**: The annual gross revenue of your company (including parent, subsidiary, and affiliated entities) does not exceed **$1,000,000 USD**.
 3. **14-Day Free Trial**: Any registered user can self-generate a one-time 14-day commercial trial license in **Settings → License & Subscription** to explore all enterprise features without vendor intervention.
+4. **Free 1-Year License for a Social Post**: Publish a public post about Swazz (LinkedIn, X, Reddit, Habr, Telegram, Medium, a blog — your own experience or review with a link to the product; reposts don't count) and email **license@secmy.app** with:
+   - the link to the post;
+   - the license holder name (company, project or full name) — it is shown as the license owner in the dashboard and CLI;
+   - your Swazz account email.
+
+   Signed-in users can send this straight from **Settings → License & Subscription**. Requests are reviewed within **3 business days**; approved requests get a key with all features for **1 user, valid for 365 days**. One free license per account.
 
 > [!NOTE]
 > If your company's annual revenue exceeds **$1,000,000 USD** and you use Swazz in production or commercial environments beyond the 14-day trial period, an official **Swazz Enterprise Commercial License** is required.

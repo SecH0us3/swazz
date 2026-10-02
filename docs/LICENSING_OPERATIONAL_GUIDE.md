@@ -180,6 +180,40 @@ Send the generated `SWAZZ_LICENSE_KEY` string securely to the client contact via
 > [!IMPORTANT]
 > The license key is a self-contained signed JWT. The client does NOT need the public key — it's already embedded in the Swazz binary.
 
+### Step 3.4: Free 1-Year License for a Social Post
+
+The License tab, the landing page and `docs/PRICING.md` offer a free 1-year licence to anyone who publishes a post about Swazz. Requests arrive at `license@secmy.app` with the subject `Swazz free 1-year license — social post` and a body like:
+
+```text
+Post URL: https://www.linkedin.com/posts/...
+License holder (company / name): Acme Corp
+Swazz account email: jane@acme.com
+```
+
+The promised review time is **3 business days**.
+
+**Review checklist:**
+1. The post is public, written by the requester (not a repost), and links to Swazz.
+2. The account email has not received a social-post licence before — keep a register (account email, post URL, licence holder, issue date, key fingerprint).
+3. The licence holder name is reasonable to print in the dashboard (it is not validated anywhere else).
+
+**Issue** (all features, 1 user, 365 days):
+
+```bash
+go run scripts/issue-license.go \
+  -key private_key.pem \
+  -company "<License holder>" \
+  -days 365 \
+  -features "*" \
+  -max-users 1 \
+  -kind commercial
+```
+
+- `-features "*"` lifts the concurrency ceiling to 1000 on its own; `-max-concurrency` is not needed.
+- Keep `-kind commercial`: a `trial` kind would show *Trial License Active* and offer "Renew 14-Day Trial".
+
+Reply to the request email with the key and the activation steps from Step 3.3.
+
 ---
 
 ## 4. Key Rotation

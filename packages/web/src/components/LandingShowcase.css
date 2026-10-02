@@ -1581,6 +1581,37 @@
     margin: 0 auto;
 }
 
+.pricing-social-offer {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    max-width: 960px;
+    margin: 2rem auto 0;
+    padding: 1.25rem 1.5rem;
+    background: var(--bg-card);
+    border: 1px dashed var(--border-subtle);
+    border-radius: 16px;
+}
+
+.pricing-social-offer-icon {
+    font-size: 1.5rem;
+    line-height: 1.4;
+}
+
+.pricing-social-offer p {
+    margin: 0;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.pricing-social-offer strong {
+    color: var(--text-primary);
+}
+
+.pricing-social-offer a {
+    color: var(--accent-light);
+}
+
 .pricing-card {
     background: var(--bg-card);
     backdrop-filter: blur(16px);

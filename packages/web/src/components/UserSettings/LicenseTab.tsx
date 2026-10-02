@@ -27,6 +27,7 @@ import {
   TrialStatusData,
 } from '../../services/licenseService.js';
 import { ContactSalesCard } from './ContactSalesCard.js';
+import { SocialPostLicenseCard } from './SocialPostLicenseCard.js';
 import { Modal } from '../Shared/Modal.js';
 
 function isJwtLike(raw: string): boolean {
@@ -324,6 +325,10 @@ export function LicenseTab() {
           ✓ Trial claimed today. Next 14-day free trial will be available in {cooldownHours ? `${cooldownHours} hour${cooldownHours === 1 ? '' : 's'}` : '24 hours'}.
         </div>
       )}
+
+      {/* Free 1-year license for a social post: offered to anyone without a paid
+          licence, including trial users who want to keep going after 14 days. */}
+      {!isLoading && (!isActive || trial) && <SocialPostLicenseCard />}
 
       {/* 2. License Status Card (Loading skeleton, active, expired, or community) */}
       {isLoading ? (

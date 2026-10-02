@@ -380,6 +380,7 @@ Swazz is distributed under the **Business Source License 1.1 (BSL 1.1)**.
 
 - **Free Commercial Exemption**: Free for non-commercial use, open-source projects, and companies with under **$1,000,000 USD** in annual gross revenue.
 - **14-Day Free Trial Self-Generation**: Registered users can generate a one-time 14-day trial commercial license directly in **Settings → License & Subscription** to evaluate all enterprise capabilities (AI Remediation Pro, high concurrency, scheduled runs, report exports).
+- **Free 1-Year License for a Social Post**: Publish a public post about Swazz and email license@secmy.app the post link, the license holder name (company, project or full name) and your Swazz account email — or send it from **Settings → License & Subscription**. Requests are reviewed within 3 business days; approved posts get a full-featured, single-user key valid for 365 days. See [PRICING.md](docs/PRICING.md).
 - **Enterprise Commercial License**: Required for production commercial use by companies with annual revenue exceeding $1M USD. To request one, email license@secmy.app.
 - **WAF Analysis (Free for All Users)**: Pre-scan WAF fingerprinting and the interactive Web UI **WAF Check** tab are completely free and not license-gated across all community and enterprise installations.
 - To view the embedded license text at any time, run `./swazz-engine license`.

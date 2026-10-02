@@ -374,6 +374,8 @@ describe('LicenseTab Component', () => {
         expect(screen.getByText('Enterprise License Active')).toBeTruthy();
         expect(screen.queryByText('Trial License Active')).toBeNull();
         expect(screen.queryByRole('button', { name: /Renew 14-Day Trial/i })).toBeNull();
+        // A paid licence needs no free social-post offer
+        expect(screen.queryByText('Free 1-Year License for a Social Post')).toBeNull();
     });
 
     it('renders expired state with company and locked notice', async () => {
@@ -413,6 +415,8 @@ describe('LicenseTab Component', () => {
         expect(screen.getByText(/Paid features are locked/i)).toBeTruthy();
         // Contact sales is available
         expect(screen.getByRole('button', { name: /✉ Contact Sales/i })).toBeTruthy();
+        // ...and so is the free social-post licence
+        expect(screen.getByText('Free 1-Year License for a Social Post')).toBeTruthy();
     });
 
     it('does not trigger preview on typing, triggers on blur and paste for JWT keys', async () => {
