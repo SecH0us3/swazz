@@ -327,19 +327,22 @@ export function registerScansRoutes(
     if (!isValidId(scanId) || !isValidId(findingId)) {
       return c.json({ error: 'Finding not found' }, 404);
     }
-    const body = await readJsonBody(c, { optional: true });
-    optString(body.code_context, 'code_context', LIMITS.DESCRIPTION);
-
-    const userId = await getUserIdFromRequest(c);
-    const clientIp = getClientIp(c);
-    const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
-
-    let executionCtx: any = undefined;
     try {
-      executionCtx = c.executionCtx;
-    } catch {}
+      const body = await readJsonBody(c, { optional: true });
+      optString(body.code_context, 'code_context', LIMITS.LONG_TEXT);
+      if (typeof body.code_context === 'string' && body.code_context.length > 20_000) {
+        body.code_context = body.code_context.slice(0, 20_000);
+      }
 
-    try {
+      const userId = await getUserIdFromRequest(c);
+      const clientIp = getClientIp(c);
+      const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
+
+      let executionCtx: any = undefined;
+      try {
+        executionCtx = c.executionCtx;
+      } catch {}
+
       const result = await services.analyzeFindingWithAI(
         scanId,
         findingId,
@@ -352,13 +355,7 @@ export function registerScansRoutes(
       return c.json(result);
     } catch (err: any) {
       if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
-      const parts = (err instanceof Error ? err.message : String(err)).split('|');
-      const status = errorStatus(parts[1]);
-      if (status >= 500) {
-        console.error(err);
-        return c.json({ error: 'Internal Server Error' }, 500);
-      }
-      return c.json({ error: parts[0] }, status);
+      throw err;
     }
   });
 }

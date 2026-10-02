@@ -12,6 +12,7 @@ import type { SwazzConfig, SwazzSettings, Dictionary, FuzzingProfile } from '../
 import { DEFAULT_SETTINGS } from '../types.js';
 import { useAppStore } from '../store/appStore.js';
 import { stripJSONC } from '../utils/jsonc.js';
+import { showToast } from './useToast.js';
 
 const STORAGE_KEY = 'swazz:config';
 
@@ -265,7 +266,7 @@ export function useConfig() {
         if (token && activeProject) {
             const timer = setTimeout(async () => {
                 try {
-                    await fetch(`/api/projects/${activeProject.id}/config`, {
+                    const res = await fetch(`/api/projects/${activeProject.id}/config`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -273,8 +274,23 @@ export function useConfig() {
                         },
                         body: JSON.stringify({ config })
                     });
+                    if (!res.ok) {
+                        let errMsg = 'Failed to sync config to server';
+                        try {
+                            const data = await res.json();
+                            if (data.error) errMsg = data.error;
+                        } catch {
+                            try {
+                                const text = await res.text();
+                                if (text) errMsg = text;
+                            } catch {}
+                        }
+                        console.warn('[swazz] Failed to sync config to server:', errMsg);
+                        showToast(`Failed to sync config: ${errMsg}`, 'error');
+                    }
                 } catch (err) {
                     console.warn('[swazz] Failed to sync config to server:', err);
+                    showToast(`Failed to sync config: ${err instanceof Error ? err.message : String(err)}`, 'error');
                 }
             }, 1500); // 1.5s debounce
 

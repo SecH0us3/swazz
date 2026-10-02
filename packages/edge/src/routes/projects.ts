@@ -48,21 +48,22 @@ export function registerProjectsRoutes(
     const services = projectServicesFactory(c.env);
     const userId = await getUserIdFromRequest(c);
     const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
-    const body = await readJsonBody(c);
-    reqString(body.name, 'name', LIMITS.NAME);
-    if (body.description !== undefined) {
-      optString(body.description, 'description', LIMITS.DESCRIPTION);
-    }
-    optString(body.url_mappings, 'url_mappings', LIMITS.DESCRIPTION);
-    optString(body.ai_prompts, 'ai_prompts', LIMITS.DESCRIPTION);
-    optString(body.custom_cli_command, 'custom_cli_command', LIMITS.DESCRIPTION);
     
     try {
+      const body = await readJsonBody(c);
+      reqString(body.name, 'name', LIMITS.NAME);
+      if (body.description !== undefined) {
+        optString(body.description, 'description', LIMITS.DESCRIPTION);
+      }
+      optString(body.url_mappings, 'url_mappings', LIMITS.DESCRIPTION);
+      optString(body.ai_prompts, 'ai_prompts', LIMITS.LONG_TEXT);
+      optString(body.custom_cli_command, 'custom_cli_command', LIMITS.DESCRIPTION);
+
       const result = await services.createProject(userId, isAuthEnabled, body);
       return c.json(result);
     } catch (e: any) {
       if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
-      if (e.message.startsWith('Unauthorized')) return c.json({ error: 'Unauthorized' }, 401);
+      if (e.message?.startsWith('Unauthorized')) return c.json({ error: 'Unauthorized' }, 401);
       console.error('POST /api/projects error:', e);
       return c.json({ error: 'Internal Server Error' }, 500);
     }
@@ -79,10 +80,18 @@ export function registerProjectsRoutes(
   app.post('/api/projects/:id/config', requirePermission('post:/api/projects/:id/config'), auditLog('post:/api/projects/:id/config', 'Saved scan configuration'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
-    const body = await readJsonBody(c);
-  
-    const result = await services.saveProjectConfig(projectId, body.config);
-    return c.json(result);
+    try {
+      const body = await readJsonBody(c, {
+        maxBytes: LIMITS.CONFIG_BODY_BYTES,
+        tooLargeMessage: 'Configuration exceeds 1.9MB limit',
+      });
+
+      const result = await services.saveProjectConfig(projectId, body.config);
+      return c.json(result);
+    } catch (e: any) {
+      if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
+      throw e;
+    }
   });
 
   app.post('/api/projects/:id/schedule', requirePermission('post:/api/projects/:id/schedule'), requireFeature(FEATURE_SCHEDULED_RUNS), auditLog('post:/api/projects/:id/schedule', 'Updated scan schedule'), async (c) => {
@@ -112,21 +121,26 @@ export function registerProjectsRoutes(
   app.patch('/api/projects/:id', requirePermission('patch:/api/projects/:id'), auditLog('patch:/api/projects/:id', 'Updated project settings'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
-    const body = await readJsonBody(c);
-    optString(body.name, 'name', LIMITS.NAME);
-    optString(body.description, 'description', LIMITS.DESCRIPTION);
-    optString(body.default_branch, 'default_branch', LIMITS.SHORT_TEXT);
-    optString(body.url_mappings, 'url_mappings', LIMITS.DESCRIPTION);
-    optString(body.ai_prompts, 'ai_prompts', LIMITS.DESCRIPTION);
-    optString(body.custom_cli_command, 'custom_cli_command', LIMITS.DESCRIPTION);
-  
-    const result = await services.updateProjectSettings(projectId, body);
+    try {
+      const body = await readJsonBody(c);
+      optString(body.name, 'name', LIMITS.NAME);
+      optString(body.description, 'description', LIMITS.DESCRIPTION);
+      optString(body.default_branch, 'default_branch', LIMITS.SHORT_TEXT);
+      optString(body.url_mappings, 'url_mappings', LIMITS.DESCRIPTION);
+      optString(body.ai_prompts, 'ai_prompts', LIMITS.LONG_TEXT);
+      optString(body.custom_cli_command, 'custom_cli_command', LIMITS.DESCRIPTION);
+    
+      const result = await services.updateProjectSettings(projectId, body);
 
-    if (result.auditDetails) {
-      c.set('auditDetails', result.auditDetails);
+      if (result.auditDetails) {
+        c.set('auditDetails', result.auditDetails);
+      }
+    
+      return c.json({ status: result.status });
+    } catch (e: any) {
+      if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
+      throw e;
     }
-  
-    return c.json({ status: result.status });
   });
   
   app.delete('/api/projects/:id', requirePermission('delete:/api/projects/:id'), async (c) => {

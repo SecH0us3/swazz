@@ -14,20 +14,27 @@ export class ValidationError extends Error {
 }
 
 export const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/; // ulid, uuid, 'c_'+ulid
+export const CREDENTIAL_ID_PATTERN = /^[A-Za-z0-9_-]{1,1400}$/;
 
 export function isValidId(v: unknown): v is string {
   return typeof v === 'string' && ID_PATTERN.test(v);
+}
+
+export function isValidCredentialId(v: unknown): v is string {
+  return typeof v === 'string' && CREDENTIAL_ID_PATTERN.test(v);
 }
 
 export const LIMITS = {
   NAME: 128,
   SHORT_TEXT: 256,
   DESCRIPTION: 2000,
+  LONG_TEXT: 50_000,
   URL: 2048,
   EMAIL: 254,
   USERNAME: 64,
   PASSWORD: 256,
   JSON_BODY_BYTES: 1_048_576, // 1 MiB
+  CONFIG_BODY_BYTES: 1_900_000, // 1.9 MB (below D1's ~2 MB row limit)
   LARGE_BODY_BYTES: 22_020_096 /* 21 MiB */
 } as const;
 
@@ -37,14 +44,15 @@ export const LIMITS = {
  *  (unless opts.allowArray). */
 export async function readJsonBody<T = Record<string, unknown>>(
   c: Context,
-  opts?: { maxBytes?: number; allowArray?: boolean; optional?: boolean; allowPrimitives?: boolean }
+  opts?: { maxBytes?: number; allowArray?: boolean; optional?: boolean; allowPrimitives?: boolean; tooLargeMessage?: string }
 ): Promise<T> {
   const maxBytes = opts?.maxBytes ?? LIMITS.JSON_BODY_BYTES;
+  const tooLargeMsg = opts?.tooLargeMessage ?? 'Request body too large';
   const clHeader = c.req.header('content-length');
   if (clHeader !== undefined && clHeader !== null) {
     const cl = parseInt(clHeader, 10);
     if (!isNaN(cl) && cl > maxBytes) {
-      throw new ValidationError('Request body too large', 413);
+      throw new ValidationError(tooLargeMsg, 413);
     }
   }
 
@@ -70,7 +78,7 @@ export async function readJsonBody<T = Record<string, unknown>>(
           try {
             await reader.cancel();
           } catch {}
-          throw new ValidationError('Request body too large', 413);
+          throw new ValidationError(tooLargeMsg, 413);
         }
         chunks.push(value);
       }

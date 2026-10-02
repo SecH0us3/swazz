@@ -445,6 +445,19 @@ describe('Auth Routes Unit Tests', () => {
       const res = await app.request('/api/auth/passkeys/123', { method: 'DELETE', headers: { 'Authorization': 'Bearer valid' } });
       expect(res.status).toBe(200);
     });
+    it('returns 200 on success with a long credential ID (86+ chars)', async () => {
+      const longId = 'A'.repeat(120);
+      mockAuthService.deletePasskey.mockResolvedValue({ status: 'ok' });
+      const res = await app.request(`/api/auth/passkeys/${longId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer valid' } });
+      expect(res.status).toBe(200);
+      expect(mockAuthService.deletePasskey).toHaveBeenCalledWith('user_123', longId);
+    });
+    it('returns 404 for invalid credential ID format', async () => {
+      const invalidId = 'has+invalid_chars!';
+      const res = await app.request(`/api/auth/passkeys/${invalidId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer valid' } });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: 'Passkey not found' });
+    });
     it('handles error', async () => {
       mockAuthService.deletePasskey.mockRejectedValue(new Error('err|500'));
       const res = await app.request('/api/auth/passkeys/123', { method: 'DELETE', headers: { 'Authorization': 'Bearer valid' } });

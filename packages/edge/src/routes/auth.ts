@@ -10,7 +10,7 @@ import { errorStatus } from '../utils/http';
 import { IAuthService, AuthService } from '../services/auth';
 import { AuthRepository } from '../repositories/auth';
 import { LicenseService } from '../services/license';
-import { ValidationError, isValidId, LIMITS, readJsonBody, reqString, optString } from '../utils/validation';
+import { ValidationError, isValidId, isValidCredentialId, LIMITS, readJsonBody, reqString, optString } from '../utils/validation';
 
 export function registerAuthRoutes(
   app: Hono<AppEnv>,
@@ -527,7 +527,7 @@ export function registerAuthRoutes(
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
       const id = c.req.param('id');
-      if (!isValidId(id)) return c.json({ error: 'Passkey not found' }, 404);
+      if (!isValidCredentialId(id)) return c.json({ error: 'Passkey not found' }, 404);
 
       const services = authServicesFactory(c.env);
       const result = await services.deletePasskey(userId, id);

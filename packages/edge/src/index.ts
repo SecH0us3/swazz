@@ -68,7 +68,7 @@ app.use('/api/*', async (c, next) => {
   const path = c.req.path;
   const segments = path.split('/').filter(Boolean);
   for (const seg of segments) {
-    if (seg.length > 128 || !/^[A-Za-z0-9._~-]+$/.test(seg)) {
+    if (seg.length > 1400 || !/^[A-Za-z0-9._~-]+$/.test(seg)) {
       return c.json({ error: 'Invalid path parameter' }, 400);
     }
   }
@@ -80,9 +80,10 @@ app.use('/api/*', async (c, next) => {
       const isLargeRoute =
         (c.req.method === 'POST' && (path === '/api/runs' || path === '/api/scans' || path === '/api/parse')) ||
         (c.req.method === 'PUT' && /^\/api\/scans\/[^/]+\/upload$/.test(path));
-      const cap = isLargeRoute ? LIMITS.LARGE_BODY_BYTES : LIMITS.JSON_BODY_BYTES;
+      const isConfigRoute = c.req.method === 'POST' && /^\/api\/projects\/[^/]+\/config$/.test(path);
+      const cap = isLargeRoute ? LIMITS.LARGE_BODY_BYTES : isConfigRoute ? LIMITS.CONFIG_BODY_BYTES : LIMITS.JSON_BODY_BYTES;
       if (cl > cap) {
-        return c.json({ error: 'Request body too large' }, 413);
+        return c.json({ error: isConfigRoute ? 'Configuration exceeds 1.9MB limit' : 'Request body too large' }, 413);
       }
     }
   }

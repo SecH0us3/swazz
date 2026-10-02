@@ -11,6 +11,8 @@ import { renderHook, act } from '@testing-library/react';
 import { useConfig, validateConfig } from './useConfig.js';
 import { DEFAULT_SETTINGS } from '../types.js';
 import type { SwazzConfig } from '../types.js';
+import { useAppStore } from '../store/appStore.js';
+import * as ToastModule from './useToast.js';
 
 const STORAGE_KEY = 'swazz:config';
 
@@ -57,6 +59,7 @@ describe('useConfig', () => {
     });
 
     afterEach(() => {
+        useAppStore.setState({ activeProject: null });
         vi.unstubAllGlobals();
         vi.restoreAllMocks();
     });
@@ -403,5 +406,56 @@ describe('useConfig', () => {
                 result.current.importConfig('invalid json string');
             });
         }).toThrowError(/^Invalid JSON config:/);
+    });
+
+    describe('server sync error surfacing', () => {
+        it('surfaces an error via toast when server config save returns non-ok status', async () => {
+            vi.useFakeTimers();
+            const toastSpy = vi.spyOn(ToastModule, 'showToast');
+            const mockFetch = vi.fn().mockImplementation((url: string, opts?: any) => {
+                if (!opts || !opts.method || opts.method === 'GET') {
+                    return Promise.resolve({
+                        ok: true,
+                        json: async () => ({ config: DEFAULT_CONFIG }),
+                    });
+                }
+                return Promise.resolve({
+                    ok: false,
+                    status: 413,
+                    json: async () => ({ error: 'Configuration exceeds 1.9MB limit' }),
+                    text: async () => 'Configuration exceeds 1.9MB limit',
+                });
+            });
+            vi.stubGlobal('fetch', mockFetch);
+
+            localStorage.setItem('swazz_token', 'test-token');
+            useAppStore.setState({
+                activeProject: { id: 'p_1', name: 'Test Proj' } as any,
+                config: DEFAULT_CONFIG,
+            });
+
+            const { result } = renderHook(() => useConfig());
+
+            // Await initial load to finish setting currentKeyRef
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            act(() => {
+                result.current.updateConfig({ base_url: 'https://new-url.com' });
+            });
+
+            await act(async () => {
+                vi.advanceTimersByTime(1600);
+            });
+
+            expect(mockFetch).toHaveBeenCalledWith('/api/projects/p_1/config', expect.objectContaining({
+                method: 'POST',
+            }));
+            expect(toastSpy).toHaveBeenCalledWith('Failed to sync config: Configuration exceeds 1.9MB limit', 'error');
+
+            toastSpy.mockRestore();
+            vi.useRealTimers();
+        });
     });
 });

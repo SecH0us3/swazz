@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import {
   ValidationError,
   isValidId,
+  isValidCredentialId,
   readJsonBody,
   reqString,
   optString,
@@ -33,6 +34,35 @@ describe('Validation Primitives', () => {
       expect(isValidId(12345)).toBe(false);
       expect(isValidId('hello world')).toBe(false);
       expect(isValidId('hello/world')).toBe(false);
+    });
+  });
+
+  describe('isValidCredentialId', () => {
+    it('accepts short and long base64url credential ids up to 1400 chars', () => {
+      expect(isValidCredentialId('cred_123')).toBe(true);
+      expect(isValidCredentialId('A'.repeat(86))).toBe(true);
+      expect(isValidCredentialId('B'.repeat(1366))).toBe(true);
+      expect(isValidCredentialId('C'.repeat(1400))).toBe(true);
+      expect(isValidCredentialId('valid-base64url_credential-12345')).toBe(true);
+    });
+
+    it('rejects over 1400 chars, empty string, or invalid characters', () => {
+      expect(isValidCredentialId('A'.repeat(1401))).toBe(false);
+      expect(isValidCredentialId('')).toBe(false);
+      expect(isValidCredentialId(null)).toBe(false);
+      expect(isValidCredentialId(undefined)).toBe(false);
+      expect(isValidCredentialId(12345)).toBe(false);
+      expect(isValidCredentialId('has+plus')).toBe(false);
+      expect(isValidCredentialId('has/slash')).toBe(false);
+      expect(isValidCredentialId('has=padding')).toBe(false);
+      expect(isValidCredentialId('has.dot')).toBe(false);
+    });
+  });
+
+  describe('LIMITS', () => {
+    it('defines expected limits including LONG_TEXT and CONFIG_BODY_BYTES', () => {
+      expect(LIMITS.LONG_TEXT).toBe(50_000);
+      expect(LIMITS.CONFIG_BODY_BYTES).toBe(1_900_000);
     });
   });
 
@@ -296,6 +326,25 @@ describe('Validation Primitives', () => {
       const res = await app.fetch(req);
       expect(res.status).toBe(413);
       expect(await res.json()).toEqual({ error: 'Request body too large' });
+    });
+
+    it('supports custom tooLargeMessage on size overflow', async () => {
+      const app = helperApp();
+      app.post('/test', async (c) => {
+        const body = await readJsonBody(c, { maxBytes: 50, tooLargeMessage: 'Custom limit exceeded' });
+        return c.json(body);
+      });
+
+      const res = await app.request('/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': '100',
+        },
+        body: JSON.stringify({ a: 'b' }),
+      });
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({ error: 'Custom limit exceeded' });
     });
   });
 });
