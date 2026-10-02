@@ -9,6 +9,12 @@ import type { ToastData } from '../components/Toast/Toast.js';
 let globalToasts: ToastData[] = [];
 const listeners = new Set<(toasts: ToastData[]) => void>();
 
+export function showToast(message: string, type: 'info' | 'success' | 'error' = 'info') {
+    const id = Date.now();
+    globalToasts = [...globalToasts.slice(-4), { id, message, type }];
+    listeners.forEach((listener) => listener(globalToasts));
+}
+
 export function useToast() {
     const [toasts, setToasts] = useState<ToastData[]>(globalToasts);
 
@@ -19,10 +25,8 @@ export function useToast() {
         };
     }, []);
 
-    const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
-        const id = Date.now();
-        globalToasts = [...globalToasts.slice(-4), { id, message, type }];
-        listeners.forEach((listener) => listener(globalToasts));
+    const triggerToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
+        showToast(message, type);
     }, []);
 
     const dismissToast = useCallback((id: number) => {
@@ -30,7 +34,7 @@ export function useToast() {
         listeners.forEach((listener) => listener(globalToasts));
     }, []);
 
-    return { toasts, showToast, dismissToast };
+    return { toasts, showToast: triggerToast, dismissToast };
 }
 
 export function resetToasts() {

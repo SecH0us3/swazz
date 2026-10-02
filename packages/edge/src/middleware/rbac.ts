@@ -8,12 +8,16 @@ import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getSessionIat } from '../utils/auth';
 import { PermissionKey } from '../config/rbac';
 import { RbacRepository } from '../repositories/rbac';
+import { isValidId } from '../utils/validation';
 
 export const requirePermission = (permission: PermissionKey) => {
   return async (c: Context<AppEnv>, next: Next) => {
     const projectId = c.req.param('id');
     if (!projectId) {
       return c.json({ error: 'Project ID is required in the path' }, 400);
+    }
+    if (!isValidId(projectId)) {
+      return c.json({ error: 'Project not found' }, 404);
     }
 
     const userId = await getUserIdFromRequest(c);

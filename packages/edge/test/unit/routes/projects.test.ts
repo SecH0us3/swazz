@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { registerProjectsRoutes } from '../../../src/routes/projects';
 import { IProjectService } from '../../../src/services/projects';
+import { errorStatus } from '../../../src/utils/http';
+import { ValidationError } from '../../../src/utils/validation';
 
 // Mock middleware and auth utils so we can test routes in isolation
 vi.mock('../../../src/utils/auth', () => ({
@@ -55,6 +57,21 @@ describe('Projects Routes', () => {
     const mockFactory = () => mockServices as IProjectService;
 
     app = new Hono();
+    app.onError((err, c) => {
+      if (err instanceof ValidationError) {
+        return c.json({ error: err.message }, err.status);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('|')) {
+        const [msg, statusStr] = message.split('|');
+        const status = errorStatus(statusStr);
+        if (status >= 500) {
+          return c.json({ error: 'Internal Server Error' }, 500);
+        }
+        return c.json({ error: msg }, status);
+      }
+      return c.json({ error: 'Internal Server Error' }, 500);
+    });
     app.use('*', async (c, next) => {
       c.env = { AUTH_ENABLED: 'true' };
       await next();
@@ -107,15 +124,40 @@ describe('Projects Routes', () => {
       expect(mockServices.createProject).toHaveBeenCalledWith('user_123', true, { name: 'New Project' });
     });
 
+    it('should create a project with ai_prompts exceeding 2000 chars up to 50k chars', async () => {
+      (mockServices.createProject as any).mockResolvedValue({ id: 'new_p', status: 'created' });
+      const longPrompts = 'x'.repeat(5000);
+      
+      const res = await app.request('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Project With Long Prompts', ai_prompts: longPrompts })
+      });
+      
+      expect(res.status).toBe(200);
+      expect(mockServices.createProject).toHaveBeenCalledWith('user_123', true, { name: 'Project With Long Prompts', ai_prompts: longPrompts });
+    });
+
+    it('should reject ai_prompts exceeding 50,000 chars with 400', async () => {
+      const res = await app.request('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Project', ai_prompts: 'x'.repeat(50_001) })
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json() as any;
+      expect(data.error).toContain('ai_prompts must be a string of at most 50000 characters');
+    });
+
     it('should return 401 on Unauthorized', async () => {
       (mockServices.createProject as any).mockRejectedValue(new Error('Unauthorized'));
-      const res = await app.request('/api/projects', { method: 'POST', body: '{}' });
+      const res = await app.request('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Project' }) });
       expect(res.status).toBe(401);
     });
 
     it('should return 500 on other errors', async () => {
       (mockServices.createProject as any).mockRejectedValue(new Error('Internal'));
-      const res = await app.request('/api/projects', { method: 'POST', body: '{}' });
+      const res = await app.request('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Project' }) });
       expect(res.status).toBe(500);
     });
   });
@@ -144,6 +186,32 @@ describe('Projects Routes', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ status: 'saved' });
       expect(mockServices.saveProjectConfig).toHaveBeenCalledWith('proj_1', { a: 1 });
+    });
+
+    it('should return 413 when config body exceeds 1_900_000 bytes', async () => {
+      const res = await app.request('/api/projects/proj_1/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': '2000000',
+        },
+        body: JSON.stringify({ config: { data: 'x'.repeat(100) } })
+      });
+
+      expect(res.status).toBe(413);
+      const data = await res.json() as any;
+      expect(data.error).toBe('Configuration exceeds 1.9MB limit');
+    });
+
+    it('returns 403 when service throws Forbidden|403', async () => {
+      (mockServices.saveProjectConfig as any).mockRejectedValue(new Error('Forbidden|403'));
+      const res = await app.request('/api/projects/proj_1/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: { a: 1 } }),
+      });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'Forbidden' });
     });
   });
 
@@ -245,6 +313,31 @@ describe('Projects Routes', () => {
       
       expect(res.status).toBe(200);
       expect(mockServices.updateProjectSettings).toHaveBeenCalledWith('proj_1', { name: 'New' });
+    });
+
+    it('should update ai_prompts exceeding 2000 chars up to 50k chars', async () => {
+      (mockServices.updateProjectSettings as any).mockResolvedValue({ status: 'updated' });
+      const longPrompts = 'p'.repeat(8000);
+      
+      const res = await app.request('/api/projects/proj_1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ai_prompts: longPrompts })
+      });
+      
+      expect(res.status).toBe(200);
+      expect(mockServices.updateProjectSettings).toHaveBeenCalledWith('proj_1', { ai_prompts: longPrompts });
+    });
+
+    it('returns 403 when service throws Forbidden|403', async () => {
+      (mockServices.updateProjectSettings as any).mockRejectedValue(new Error('Forbidden|403'));
+      const res = await app.request('/api/projects/proj_1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'New' }),
+      });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'Forbidden' });
     });
   });
 

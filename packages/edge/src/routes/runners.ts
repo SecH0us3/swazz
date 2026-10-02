@@ -11,6 +11,13 @@ import { IRunnersService, RunnersService } from '../services/runners';
 
 import { RbacRepository } from '../repositories/rbac';
 import { errorStatus } from '../utils/http';
+import {
+  ValidationError,
+  isValidId,
+  LIMITS,
+  readJsonBody,
+  optString,
+} from '../utils/validation';
 
 export function registerRunnersRoutes(
   app: Hono<AppEnv>,
@@ -40,13 +47,21 @@ export function registerRunnersRoutes(
       return c.json(result);
     } catch (err: any) {
       const parts = (err instanceof Error ? err.message : String(err)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
   
   app.get('/api/runs/:id/events', async (c) => {
     const services = runnersServicesFactory(c.env);
     const runId = c.req.param('id');
+    if (!isValidId(runId)) {
+      return c.json({ error: 'Run not found' }, 404);
+    }
     const userId = await getUserIdFromRequest(c);
     const upgradeHeader = c.req.header('Upgrade');
 
@@ -62,7 +77,12 @@ export function registerRunnersRoutes(
   
   app.post('/api/runs', async (c) => {
     const services = runnersServicesFactory(c.env);
-    const body = await c.req.json();
+    const body = await readJsonBody(c, { maxBytes: LIMITS.LARGE_BODY_BYTES });
+    optString(body.projectId, 'projectId', LIMITS.NAME);
+    optString(body.targetUrl, 'targetUrl', LIMITS.URL);
+    optString(body.profile, 'profile', LIMITS.SHORT_TEXT);
+    optString(body.userPublicKey, 'userPublicKey', LIMITS.SHORT_TEXT);
+
     const userId = await getUserIdFromRequest(c);
     const isWeb = isWebRequest(c);
     const isAnon = await isAnonymousUser(c);
@@ -71,14 +91,23 @@ export function registerRunnersRoutes(
       const result = await services.queueRun(body, userId, isWeb, isAnon);
       return c.json(result, 201);
     } catch (err: any) {
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
       const parts = (err instanceof Error ? err.message : String(err)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
   
   app.post('/api/runs/:id/stop', async (c) => {
     const services = runnersServicesFactory(c.env);
     const runId = c.req.param('id');
+    if (!isValidId(runId)) {
+      return c.json({ error: 'Run not found' }, 404);
+    }
     const userId = await getUserIdFromRequest(c);
 
     try {
@@ -86,13 +115,21 @@ export function registerRunnersRoutes(
       return c.json(result);
     } catch (err: any) {
       const parts = (err instanceof Error ? err.message : String(err)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
   
   app.post('/api/runs/:id/pause', async (c) => {
     const services = runnersServicesFactory(c.env);
     const runId = c.req.param('id');
+    if (!isValidId(runId)) {
+      return c.json({ error: 'Run not found' }, 404);
+    }
     const userId = await getUserIdFromRequest(c);
 
     try {
@@ -100,13 +137,21 @@ export function registerRunnersRoutes(
       return c.json(result);
     } catch (err: any) {
       const parts = (err instanceof Error ? err.message : String(err)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
   
   app.post('/api/runs/:id/resume', async (c) => {
     const services = runnersServicesFactory(c.env);
     const runId = c.req.param('id');
+    if (!isValidId(runId)) {
+      return c.json({ error: 'Run not found' }, 404);
+    }
     const userId = await getUserIdFromRequest(c);
 
     try {
@@ -114,13 +159,21 @@ export function registerRunnersRoutes(
       return c.json(result);
     } catch (err: any) {
       const parts = (err instanceof Error ? err.message : String(err)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
 
   app.post('/api/runners/:connectionId/restart', async (c) => {
     const services = runnersServicesFactory(c.env);
     const connectionId = c.req.param('connectionId');
+    if (!isValidId(connectionId)) {
+      return c.json({ error: 'Runner not found' }, 404);
+    }
     const userId = await getUserIdFromRequest(c);
 
     try {
@@ -128,7 +181,12 @@ export function registerRunnersRoutes(
       return c.json(result);
     } catch (err: any) {
       const parts = (err instanceof Error ? err.message : String(err)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
 }

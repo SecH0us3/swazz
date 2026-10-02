@@ -41,6 +41,7 @@ export class RunnersService implements IRunnersService {
   ) {}
 
   private async checkScanAccess(scanId: string, userId: string, permission?: string): Promise<void> {
+    if (!isValidRunId(scanId) || (userId && !isValidRunId(userId))) throw new Error('Run/Scan not found|404');
     const scan = await this.runnersRepo.getScanDetails(scanId);
     if (!scan) throw new Error('Run/Scan not found|404');
 
@@ -326,6 +327,9 @@ export class RunnersService implements IRunnersService {
   }
 
   async restartRunner(connectionId: string, userId: string | null) {
+    if (!isValidRunId(connectionId)) {
+      throw new Error('Runner not found|404');
+    }
     if (!userId) {
       throw new Error('Unauthorized|401');
     }

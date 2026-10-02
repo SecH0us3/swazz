@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { registerScansRoutes } from '../../../src/routes/scans';
 import { IScansService } from '../../../src/services/scans';
+import { errorStatus } from '../../../src/utils/http';
+import { ValidationError } from '../../../src/utils/validation';
 
 vi.mock('../../../src/utils/auth', () => ({
   getUserIdFromRequest: vi.fn().mockResolvedValue('user_123'),
@@ -49,6 +51,21 @@ describe('Scans Routes Unit Tests', () => {
 
     const mockFactory = () => mockServices as IScansService;
     app = new Hono();
+    app.onError((err, c) => {
+      if (err instanceof ValidationError) {
+        return c.json({ error: err.message }, err.status);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('|')) {
+        const [msg, statusStr] = message.split('|');
+        const status = errorStatus(statusStr);
+        if (status >= 500) {
+          return c.json({ error: 'Internal Server Error' }, 500);
+        }
+        return c.json({ error: msg }, status);
+      }
+      return c.json({ error: 'Internal Server Error' }, 500);
+    });
     app.use('*', async (c, next) => {
       c.env = { AUTH_ENABLED: 'true' };
       await next();
@@ -294,7 +311,7 @@ describe('Scans Routes Unit Tests', () => {
         headers: { 'Content-Type': 'application/json' },
         body: '{not json',
       });
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(await res.json()).toHaveProperty('error');
       expect(mockServices.saveWAFPatchReport).not.toHaveBeenCalled();
     });
@@ -341,6 +358,46 @@ describe('Scans Routes Unit Tests', () => {
       );
     });
 
+    it('accepts code_context up to LIMITS.LONG_TEXT and truncates to 20_000 characters for AI request', async () => {
+      (mockServices.analyzeFindingWithAI as any).mockResolvedValue({
+        success: true,
+        finding: { id: 'f_123', ai_status: 'completed' },
+        analysis: { explanation: 'ok', remediation: 'ok', relevance: true, confidence: 95 },
+      });
+
+      const inputContext = 'a'.repeat(30_000);
+      const res = await app.request('/api/scans/s_123/findings/f_123/ai-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code_context: inputContext }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockServices.analyzeFindingWithAI).toHaveBeenCalledWith(
+        's_123',
+        'f_123',
+        { code_context: 'a'.repeat(20_000) },
+        'user_123',
+        true,
+        undefined,
+        '127.0.0.1'
+      );
+    });
+
+    it('rejects code_context exceeding LIMITS.LONG_TEXT (50_000) with 400', async () => {
+      vi.clearAllMocks();
+      const res = await app.request('/api/scans/s_123/findings/f_123/ai-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code_context: 'a'.repeat(50_001) }),
+      });
+
+      expect(res.status).toBe(400);
+      const data = await res.json() as any;
+      expect(data.error).toContain('code_context must be a string of at most 50000 characters');
+      expect(mockServices.analyzeFindingWithAI).not.toHaveBeenCalled();
+    });
+
     it('handles 404 when finding or scan is not found', async () => {
       (mockServices.analyzeFindingWithAI as any).mockRejectedValue(new Error('Finding not found|404'));
 
@@ -369,6 +426,19 @@ describe('Scans Routes Unit Tests', () => {
       expect(await res.json()).toEqual({
         error: 'AI analysis rate limit exceeded. Please try again later.',
       });
+    });
+
+    it('handles Forbidden|403 service error and returns 403', async () => {
+      (mockServices.analyzeFindingWithAI as any).mockRejectedValue(new Error('Forbidden|403'));
+
+      const res = await app.request('/api/scans/s_123/findings/f_123/ai-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'Forbidden' });
     });
   });
 });

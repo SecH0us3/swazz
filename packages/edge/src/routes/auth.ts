@@ -10,6 +10,7 @@ import { errorStatus } from '../utils/http';
 import { IAuthService, AuthService } from '../services/auth';
 import { AuthRepository } from '../repositories/auth';
 import { LicenseService } from '../services/license';
+import { ValidationError, isValidId, isValidCredentialId, LIMITS, readJsonBody, reqString, optString } from '../utils/validation';
 
 export function registerAuthRoutes(
   app: Hono<AppEnv>,
@@ -18,7 +19,7 @@ export function registerAuthRoutes(
 ) {
   app.post('/api/auth/register', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (typeof body.username !== 'string' || typeof body.password !== 'string') {
         return c.json({ error: 'Missing username or password' }, 400);
       }
@@ -30,22 +31,33 @@ export function registerAuthRoutes(
       if (body.password.length < 12) {
         return c.json({ error: 'Password must be at least 12 characters long' }, 400);
       }
+      reqString(body.password, 'password', LIMITS.PASSWORD, 12);
       if (body.email) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(body.email.trim())) {
-          return c.json({ error: 'Invalid email format' }, 400);
+        optString(body.email, 'email', LIMITS.EMAIL);
+        if (typeof body.email === 'string') {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(body.email.trim())) {
+            return c.json({ error: 'Invalid email format' }, 400);
+          }
         }
       }
+      optString(body['cf-turnstile-response'], 'cf-turnstile-response', LIMITS.SHORT_TEXT);
 
       const services = authServicesFactory(c.env);
-      const turnstileToken = body['cf-turnstile-response'];
+      const turnstileToken = body['cf-turnstile-response'] as string | undefined;
       const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
 
       const result = await services.register(body, turnstileToken, remoteip, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('register error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -56,11 +68,12 @@ export function registerAuthRoutes(
       if (!token) {
         return c.redirect(`${frontendBase}/verify-email?error=${encodeURIComponent('Missing verification token')}`);
       }
+      optString(token, 'token', LIMITS.SHORT_TEXT);
       const services = authServicesFactory(c.env);
       const result = await services.verifyEmail(token);
       return c.redirect(`${frontendBase}/verify-email?status=verified&email=${encodeURIComponent(result.email || '')}`);
     } catch (err: any) {
-      const [msg] = err.message.split('|');
+      const [msg] = (err instanceof Error ? err.message : String(err)).split('|');
       return c.redirect(`${frontendBase}/verify-email?error=${encodeURIComponent(msg || 'Verification failed')}`);
     }
   });
@@ -72,16 +85,23 @@ export function registerAuthRoutes(
         return c.json({ error: 'Unauthorized' }, 401);
       }
 
-      const body = await c.req.json().catch(() => ({}));
-      const turnstileToken = body['cf-turnstile-response'];
+      const body = await readJsonBody(c, { optional: true });
+      optString(body['cf-turnstile-response'], 'cf-turnstile-response', LIMITS.SHORT_TEXT);
+      const turnstileToken = body['cf-turnstile-response'] as string | undefined;
       const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
 
       const services = authServicesFactory(c.env);
       const result = await services.resendVerificationEmail(userId, turnstileToken, remoteip);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('resendVerificationEmail error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -90,36 +110,52 @@ export function registerAuthRoutes(
       const services = authServicesFactory(c.env);
       const clientIp = getClientIp(c);
       
-      let turnstileToken;
+      let turnstileToken: string | undefined;
       if (c.env.TURNSTILE_SECRET && c.env.JWT_SECRET !== 'test-secret') {
-        const body = await c.req.json();
-        turnstileToken = body['cf-turnstile-response'];
+        const body = await readJsonBody(c, { optional: true });
+        optString(body['cf-turnstile-response'], 'cf-turnstile-response', LIMITS.SHORT_TEXT);
+        turnstileToken = body['cf-turnstile-response'] as string | undefined;
       }
       const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
 
       const result = await services.registerGuestStep1(clientIp, turnstileToken, remoteip);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('registerGuestStep1 error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
   app.post('/api/auth/guest', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (!body.token || body.nonce === undefined) {
         return c.json({ error: 'Missing challenge token or nonce' }, 400);
       }
+      reqString(body.token, 'token', LIMITS.SHORT_TEXT);
+      optString(body['cf-turnstile-response'], 'cf-turnstile-response', LIMITS.SHORT_TEXT);
+
       const services = authServicesFactory(c.env);
-      const turnstileToken = body['cf-turnstile-response'];
+      const turnstileToken = body['cf-turnstile-response'] as string | undefined;
       const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
 
       const result = await services.registerGuest(body, turnstileToken, remoteip, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('registerGuest error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -132,8 +168,14 @@ export function registerAuthRoutes(
       const result = await services.getMe(userId);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('getMe error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -142,9 +184,10 @@ export function registerAuthRoutes(
       const userId = await getUserIdFromRequest(c);
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-      const body = await c.req.json();
-      const publicKey = body.public_key;
-      if (publicKey !== undefined && publicKey !== null && publicKey !== '') {
+      const body = await readJsonBody(c);
+      optString(body.public_key, 'public_key', LIMITS.SHORT_TEXT);
+      const publicKey = body.public_key as string | undefined;
+      if (typeof publicKey === 'string' && publicKey !== '') {
         if (!/^[0-9a-fA-F]{64}$/.test(publicKey)) {
           return c.json({ error: 'Invalid public key format. Must be a 64-character hex-encoded string.' }, 400);
         }
@@ -154,7 +197,9 @@ export function registerAuthRoutes(
       const result = await services.updatePublicKey(userId, publicKey);
       return c.json(result);
     } catch (err: any) {
-      return c.json({ error: err.message }, 500);
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      console.error('updatePublicKey error:', err);
+      return c.json({ error: 'Internal Server Error' }, 500);
     }
   });
 
@@ -167,51 +212,75 @@ export function registerAuthRoutes(
       const result = await services.regenerateApiKey(userId, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('regenerateApiKey error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
   app.post('/api/auth/login/step1', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (!body.username) return c.json({ error: 'Missing username' }, 400);
+      reqString(body.username, 'username', LIMITS.USERNAME);
+      optString(body['cf-turnstile-response'], 'cf-turnstile-response', LIMITS.SHORT_TEXT);
 
       const clientIp = getClientIp(c);
-      const turnstileToken = body['cf-turnstile-response'];
+      const turnstileToken = body['cf-turnstile-response'] as string | undefined;
       const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
 
       const services = authServicesFactory(c.env);
       const result = await services.loginStep1(body, clientIp, turnstileToken, remoteip);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('loginStep1 error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
   app.post('/api/auth/login', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       const isTestEnv = c.env.JWT_SECRET === 'test-secret';
       if (!isTestEnv) {
         if (!body.token || !body.password || body.nonce === undefined) {
           return c.json({ error: 'Missing token, password, or nonce' }, 400);
         }
       }
+      optString(body.token, 'token', LIMITS.SHORT_TEXT);
+      optString(body.username, 'username', LIMITS.USERNAME);
+      optString(body.password, 'password', LIMITS.PASSWORD);
+      optString(body['cf-turnstile-response'], 'cf-turnstile-response', LIMITS.SHORT_TEXT);
 
       const clientIp = getClientIp(c);
-      const turnstileToken = body['cf-turnstile-response'];
+      const turnstileToken = body['cf-turnstile-response'] as string | undefined;
       const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
 
       const services = authServicesFactory(c.env);
       const result = await services.login(body, clientIp, turnstileToken, remoteip, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status, retry_after] = err.message.split('|');
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status, retry_after] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('login error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
       const response: any = { error: msg };
       if (retry_after) response.retry_after = parseInt(retry_after);
-      return c.json(response, errorStatus(status));
+      return c.json(response, s);
     }
   });
 
@@ -224,8 +293,14 @@ export function registerAuthRoutes(
       const result = await services.deleteUser(userId, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('deleteUser error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -238,8 +313,14 @@ export function registerAuthRoutes(
       const result = await services.cancelDeleteUser(userId);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('cancelDeleteUser error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -248,15 +329,22 @@ export function registerAuthRoutes(
       const userId = await getUserIdFromRequest(c);
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (!body.password) return c.json({ error: 'Missing password verification' }, 400);
+      reqString(body.password, 'password', LIMITS.PASSWORD);
 
       const services = authServicesFactory(c.env);
       const result = await services.setup2FA(userId, body);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('setup2FA error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -265,16 +353,24 @@ export function registerAuthRoutes(
       const userId = await getUserIdFromRequest(c);
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (!body.code) return c.json({ error: 'Missing 2FA code' }, 400);
       if (!body.password) return c.json({ error: 'Missing password verification' }, 400);
+      reqString(body.code, 'code', 32);
+      reqString(body.password, 'password', LIMITS.PASSWORD);
 
       const services = authServicesFactory(c.env);
       const result = await services.verify2FA(userId, body);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('verify2FA error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -283,16 +379,24 @@ export function registerAuthRoutes(
       const userId = await getUserIdFromRequest(c);
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (!body.code) return c.json({ error: 'Missing 2FA code' }, 400);
       if (!body.password) return c.json({ error: 'Missing password verification' }, 400);
+      reqString(body.code, 'code', 32);
+      reqString(body.password, 'password', LIMITS.PASSWORD);
 
       const services = authServicesFactory(c.env);
       const result = await services.disable2FA(userId, body);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('disable2FA error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -308,8 +412,14 @@ export function registerAuthRoutes(
       const result = await services.generatePasskeyRegistrationOptions(userId, rpID, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('generatePasskeyRegistrationOptions error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -318,7 +428,7 @@ export function registerAuthRoutes(
       const userId = await getUserIdFromRequest(c);
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
       const expectedOrigin = requestOrigin;
       const rpID = new URL(requestOrigin).hostname;
@@ -327,17 +437,21 @@ export function registerAuthRoutes(
       const result = await services.verifyPasskeyRegistration(userId, body, expectedOrigin, rpID, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('verifyPasskeyRegistration error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
   const handleGeneratePasskeyOptions = async (c: any) => {
     try {
-      let body: any = {};
-      try {
-        body = await c.req.json();
-      } catch {}
+      const body = await readJsonBody(c, { optional: true });
+      optString(body.username, 'username', LIMITS.USERNAME);
 
       const clientIp = getClientIp(c);
       const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
@@ -347,8 +461,14 @@ export function registerAuthRoutes(
       const result = await services.generatePasskeyLoginOptions(body, clientIp, rpID, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('generatePasskeyLoginOptions error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   };
 
@@ -357,8 +477,9 @@ export function registerAuthRoutes(
 
   app.post('/api/auth/passkeys/login/verify', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (typeof body.id !== 'string') return c.json({ error: 'Invalid or missing credential ID' }, 400);
+      reqString(body.id, 'id', LIMITS.SHORT_TEXT);
 
       const clientIp = getClientIp(c);
       const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
@@ -369,8 +490,14 @@ export function registerAuthRoutes(
       const result = await services.verifyPasskeyLogin(body, clientIp, expectedOrigin, rpID, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('verifyPasskeyLogin error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -383,8 +510,14 @@ export function registerAuthRoutes(
       const result = await services.getPasskeys(userId);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('getPasskeys error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -394,12 +527,20 @@ export function registerAuthRoutes(
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
       const id = c.req.param('id');
+      if (!isValidCredentialId(id)) return c.json({ error: 'Passkey not found' }, 404);
+
       const services = authServicesFactory(c.env);
       const result = await services.deletePasskey(userId, id);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('deletePasskey error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -411,13 +552,22 @@ export function registerAuthRoutes(
       const authHeader = c.req.header('X-Admin-Secret') || c.req.header('Authorization');
       const providedSecret = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
 
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
+      optString(body.userId, 'userId', LIMITS.SHORT_TEXT);
+      optString(body.plan, 'plan', LIMITS.SHORT_TEXT);
+
       const services = authServicesFactory(c.env);
       const result = await services.updateAdminUserPlan(adminSecret, providedSecret, body);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('updateAdminUserPlan error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -435,8 +585,14 @@ export function registerAuthRoutes(
       const url = await services.handleGithubLogin(userId, redirectUri);
       return c.redirect(url);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('handleGithubLogin error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -482,8 +638,14 @@ export function registerAuthRoutes(
       const url = await services.handleGitlabLogin(userId, redirectUri);
       return c.redirect(url);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('handleGitlabLogin error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -517,15 +679,22 @@ export function registerAuthRoutes(
 
   app.post('/api/auth/oauth/exchange', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (typeof body.code !== 'string') return c.json({ error: 'Missing code' }, 400);
+      reqString(body.code, 'code', LIMITS.SHORT_TEXT);
 
       const services = authServicesFactory(c.env);
       const result = await services.exchangeOauthToken(body, c);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('exchangeOauthToken error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -538,8 +707,14 @@ export function registerAuthRoutes(
       const result = await licenseService.getStatus(userId);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('getStatus error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -548,17 +723,24 @@ export function registerAuthRoutes(
       const userId = await getUserIdFromRequest(c);
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (typeof body.license_key !== 'string' || body.license_key.trim() === '') {
         return c.json({ error: 'Missing license_key' }, 400);
       }
+      reqString(body.license_key, 'license_key', LIMITS.SHORT_TEXT);
 
       const licenseService = new LicenseService(c.env, new AuthRepository(c.env));
       const result = await licenseService.activate(userId, body.license_key);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('activate error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -571,8 +753,14 @@ export function registerAuthRoutes(
       const result = await licenseService.deactivate(userId);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('deactivate error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -585,8 +773,14 @@ export function registerAuthRoutes(
       const result = await licenseService.getTrialStatus(userId);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('getTrialStatus error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
@@ -604,24 +798,33 @@ export function registerAuthRoutes(
       const result = await licenseService.claimTrial(userId, user.username);
       return c.json(result);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
+      const s = errorStatus(status);
+      if (s >= 500) {
+        console.error('claimTrial error:', err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: msg }, s);
     }
   });
 
   app.post('/api/license/verify', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await readJsonBody(c);
       if (!body || typeof body.license_key !== 'string' || !body.license_key.trim()) {
         return c.json({ error: 'Missing license_key' }, 400);
       }
+      reqString(body.license_key, 'license_key', LIMITS.SHORT_TEXT);
 
       const licenseService = licenseServiceFactory(c.env);
       const license = await licenseService.verifyToken(body.license_key);
       return c.json({ valid: true, license });
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
+      if (err instanceof ValidationError) return c.json({ valid: false, error: err.message }, err.status);
+      const [msg, status] = (err instanceof Error ? err.message : String(err)).split('|');
       return c.json({ valid: false, error: msg }, errorStatus(status, 400));
     }
   });
 }
+
