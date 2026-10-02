@@ -8,6 +8,7 @@ import { Env, AppEnv } from '../env';
 import { mcpTools } from '../utils/mcp';
 import { getUserIdFromRequest } from '../utils/auth';
 import { errorStatus } from '../utils/http';
+import { ValidationError, isValidId, LIMITS, readJsonBody, reqString } from '../utils/validation';
 
 async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promise<any> {
   if (!reqBody || typeof reqBody !== 'object') {
@@ -172,8 +173,9 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
 
     let body;
     try {
-      body = await c.req.json();
-    } catch {
+      body = await readJsonBody(c, { allowPrimitives: true });
+    } catch (err: any) {
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
 
@@ -190,11 +192,13 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
 
     const connectionId = c.req.query('connectionId');
     if (!connectionId) return c.json({ error: 'Missing connectionId' }, 400);
+    if (!isValidId(connectionId)) return c.json({ error: 'Invalid connectionId' }, 400);
 
     let body;
     try {
-      body = await c.req.json();
-    } catch {
+      body = await readJsonBody(c, { allowPrimitives: true });
+    } catch (err: any) {
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
 
@@ -222,10 +226,12 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    let body;
+    let body: any;
     try {
-      body = await c.req.json();
-    } catch {
+      body = await readJsonBody(c);
+      reqString(body.name, 'name', LIMITS.NAME);
+    } catch (err: any) {
+      if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
     const { name, arguments: args } = body;

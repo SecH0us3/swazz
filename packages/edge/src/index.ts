@@ -22,10 +22,31 @@ import { csrfMiddleware } from './utils/csrf';
 import { handleScheduledScans } from './utils/scheduler';
 import { ScansRepository } from './repositories/scans';
 import { getDevSentEmails, clearDevSentEmails } from './services/email';
+import { ValidationError, isValidId, LIMITS } from './utils/validation';
+import { errorStatus } from './utils/http';
 
 export { RunnerCoordinator } from './Coordinator';
+export { app };
 
 const app = new Hono<AppEnv>();
+
+app.onError((err, c) => {
+  if (err instanceof ValidationError) {
+    return c.json({ error: err.message }, err.status);
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes('|')) {
+    const [msg, statusStr] = message.split('|');
+    const status = errorStatus(statusStr);
+    if (status >= 500) {
+      console.error(err);
+      return c.json({ error: 'Internal Server Error' }, 500);
+    }
+    return c.json({ error: msg }, status);
+  }
+  console.error(err);
+  return c.json({ error: 'Internal Server Error' }, 500);
+});
 
 app.use('*', async (c, next) => {
   const allowedOrigins = c.env.ALLOWED_ORIGINS ? c.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : ['*'];
@@ -41,6 +62,32 @@ app.use('*', async (c, next) => {
   });
 
   return await corsMiddleware(c, next);
+});
+
+app.use('/api/*', async (c, next) => {
+  const path = c.req.path;
+  const segments = path.split('/').filter(Boolean);
+  for (const seg of segments) {
+    if (seg.length > 128 || !/^[A-Za-z0-9._~-]+$/.test(seg)) {
+      return c.json({ error: 'Invalid path parameter' }, 400);
+    }
+  }
+
+  const clHeader = c.req.header('content-length');
+  if (clHeader !== undefined && clHeader !== null) {
+    const cl = parseInt(clHeader, 10);
+    if (!isNaN(cl)) {
+      const isLargeRoute =
+        (c.req.method === 'POST' && (path === '/api/runs' || path === '/api/scans' || path === '/api/parse')) ||
+        (c.req.method === 'PUT' && /^\/api\/scans\/[^/]+\/upload$/.test(path));
+      const cap = isLargeRoute ? LIMITS.LARGE_BODY_BYTES : LIMITS.JSON_BODY_BYTES;
+      if (cl > cap) {
+        return c.json({ error: 'Request body too large' }, 413);
+      }
+    }
+  }
+
+  await next();
 });
 
 app.use('/api/*', csrfMiddleware());
@@ -258,6 +305,9 @@ app.get('/health', (c) => c.json({ service: 'swazz-edge', status: 'ok' }));
 app.all('/api/oob/:runId/:uuid', async (c) => {
   const runId = c.req.param('runId');
   const uuid = c.req.param('uuid');
+  if (!isValidId(runId) || !isValidId(uuid)) {
+    return c.json({ error: 'Not Found' }, 404);
+  }
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
   const stub = c.env.COORDINATOR_DO.get(id);
   const url = new URL(c.req.url);

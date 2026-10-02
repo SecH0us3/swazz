@@ -109,13 +109,13 @@ describe('Projects Routes', () => {
 
     it('should return 401 on Unauthorized', async () => {
       (mockServices.createProject as any).mockRejectedValue(new Error('Unauthorized'));
-      const res = await app.request('/api/projects', { method: 'POST', body: '{}' });
+      const res = await app.request('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Project' }) });
       expect(res.status).toBe(401);
     });
 
     it('should return 500 on other errors', async () => {
       (mockServices.createProject as any).mockRejectedValue(new Error('Internal'));
-      const res = await app.request('/api/projects', { method: 'POST', body: '{}' });
+      const res = await app.request('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Project' }) });
       expect(res.status).toBe(500);
     });
   });

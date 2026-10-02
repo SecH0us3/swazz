@@ -5,6 +5,7 @@
 
 import { Env } from '../env';
 import { BaseService } from './base';
+import { isValidId } from '../utils/validation';
 
 export interface IRbacRepository {
   isGuestUser(userId: string): Promise<boolean>;
@@ -52,6 +53,9 @@ export class RbacRepository extends BaseService implements IRbacRepository {
   }
 
   async getProjectSessionTimeout(projectId: string): Promise<number | null> {
+    if (!isValidId(projectId)) {
+      return null;
+    }
     const project = await this.db.prepare(
       'SELECT member_session_timeout FROM projects WHERE id = ?'
     ).bind(projectId).first<{ member_session_timeout: number | null }>();
@@ -59,7 +63,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
   }
 
   async invalidateProjectRBAC(projectId: string): Promise<void> {
-    if (!this.env.SESSION_CACHE) return;
+    if (!isValidId(projectId) || !this.env.SESSION_CACHE) return;
     
     // Get all members of the project to invalidate their cache keys directly
     const { results } = await this.db.prepare(`
@@ -76,9 +80,8 @@ export class RbacRepository extends BaseService implements IRbacRepository {
   }
 
   async invalidateUserRBAC(projectId: string, userId: string): Promise<void> {
-    if (this.env.SESSION_CACHE) {
-      await this.env.SESSION_CACHE.delete(`rbac:${projectId}:${userId}`);
-    }
+    if (!isValidId(projectId) || !isValidId(userId) || !this.env.SESSION_CACHE) return;
+    await this.env.SESSION_CACHE.delete(`rbac:${projectId}:${userId}`);
   }
 
   async checkPermission(
@@ -86,6 +89,9 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     projectId: string,
     requiredPermission: string
   ): Promise<boolean> {
+    if (!isValidId(projectId) || !isValidId(userId)) {
+      return false;
+    }
     const cacheKey = `rbac:${projectId}:${userId}`;
     
     if (this.env.SESSION_CACHE) {

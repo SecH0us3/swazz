@@ -14,6 +14,15 @@ import { IProjectService, ProjectService } from '../services/projects';
 import { RbacRepository } from '../repositories/rbac';
 import { FEATURE_SCHEDULED_RUNS } from '@swazz/shared';
 import { errorStatus } from '../utils/http';
+import {
+  ValidationError,
+  isValidId,
+  LIMITS,
+  readJsonBody,
+  reqString,
+  optString,
+  optStringArray,
+} from '../utils/validation';
 
 export function registerProjectsRoutes(
   app: Hono<AppEnv>,
@@ -28,8 +37,10 @@ export function registerProjectsRoutes(
       const result = await services.getProjects(userId, isAuthEnabled);
       return c.json(result);
     } catch (e: any) {
+      if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
       if (e.message.startsWith('Unauthorized')) return c.json({ error: 'Unauthorized' }, 401);
-      return c.json({ error: e.message }, 500);
+      console.error('GET /api/projects error:', e);
+      return c.json({ error: 'Internal Server Error' }, 500);
     }
   });
   
@@ -37,14 +48,23 @@ export function registerProjectsRoutes(
     const services = projectServicesFactory(c.env);
     const userId = await getUserIdFromRequest(c);
     const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
-    const body = await c.req.json();
+    const body = await readJsonBody(c);
+    reqString(body.name, 'name', LIMITS.NAME);
+    if (body.description !== undefined) {
+      optString(body.description, 'description', LIMITS.DESCRIPTION);
+    }
+    optString(body.url_mappings, 'url_mappings', LIMITS.DESCRIPTION);
+    optString(body.ai_prompts, 'ai_prompts', LIMITS.DESCRIPTION);
+    optString(body.custom_cli_command, 'custom_cli_command', LIMITS.DESCRIPTION);
     
     try {
       const result = await services.createProject(userId, isAuthEnabled, body);
       return c.json(result);
     } catch (e: any) {
+      if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
       if (e.message.startsWith('Unauthorized')) return c.json({ error: 'Unauthorized' }, 401);
-      return c.json({ error: e.message }, 500);
+      console.error('POST /api/projects error:', e);
+      return c.json({ error: 'Internal Server Error' }, 500);
     }
   });
   
@@ -59,7 +79,7 @@ export function registerProjectsRoutes(
   app.post('/api/projects/:id/config', requirePermission('post:/api/projects/:id/config'), auditLog('post:/api/projects/:id/config', 'Saved scan configuration'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
-    const body = await c.req.json();
+    const body = await readJsonBody(c);
   
     const result = await services.saveProjectConfig(projectId, body.config);
     return c.json(result);
@@ -68,7 +88,8 @@ export function registerProjectsRoutes(
   app.post('/api/projects/:id/schedule', requirePermission('post:/api/projects/:id/schedule'), requireFeature(FEATURE_SCHEDULED_RUNS), auditLog('post:/api/projects/:id/schedule', 'Updated scan schedule'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
-    const body = await c.req.json();
+    const body = await readJsonBody(c);
+    optString(body.cron_schedule, 'cron_schedule', LIMITS.SHORT_TEXT);
     
     try {
       const result = await services.updateProjectSchedule(projectId, body);
@@ -79,17 +100,25 @@ export function registerProjectsRoutes(
    
       return c.json({ status: result.status, cron_schedule: result.cron_schedule });
     } catch (e: any) {
+      if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
       if (e.message.includes('|400')) {
         return c.json({ error: e.message.split('|')[0] }, 400);
       }
-      return c.json({ error: e.message }, 500);
+      console.error('POST /api/projects/:id/schedule error:', e);
+      return c.json({ error: 'Internal Server Error' }, 500);
     }
   });
   
   app.patch('/api/projects/:id', requirePermission('patch:/api/projects/:id'), auditLog('patch:/api/projects/:id', 'Updated project settings'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
-    const body = await c.req.json();
+    const body = await readJsonBody(c);
+    optString(body.name, 'name', LIMITS.NAME);
+    optString(body.description, 'description', LIMITS.DESCRIPTION);
+    optString(body.default_branch, 'default_branch', LIMITS.SHORT_TEXT);
+    optString(body.url_mappings, 'url_mappings', LIMITS.DESCRIPTION);
+    optString(body.ai_prompts, 'ai_prompts', LIMITS.DESCRIPTION);
+    optString(body.custom_cli_command, 'custom_cli_command', LIMITS.DESCRIPTION);
   
     const result = await services.updateProjectSettings(projectId, body);
 
@@ -111,6 +140,9 @@ export function registerProjectsRoutes(
   app.get('/api/projects/:id/analytics', async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
+    if (!isValidId(projectId)) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
     const userId = await getUserIdFromRequest(c);
     const period = c.req.query('period') || '30d';
     const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
@@ -122,7 +154,7 @@ export function registerProjectsRoutes(
       console.error("GET /api/projects/:id/analytics error:", e);
       if (e.message.startsWith('Unauthorized')) return c.json({ error: 'Unauthorized' }, 401);
       if (e.message.startsWith('Forbidden')) return c.json({ error: 'Forbidden' }, 403);
-      return c.json({ error: 'Internal Server Error', message: e.message, stack: e.stack }, 500);
+      return c.json({ error: 'Internal Server Error' }, 500);
     }
   });
 
@@ -130,6 +162,9 @@ export function registerProjectsRoutes(
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const userId = c.req.param('user_id') as string;
+    if (!isValidId(userId)) {
+      return c.json({ error: 'User not found' }, 404);
+    }
     const queryPage = c.req.query('page') || '1';
     const queryLimit = c.req.query('limit') || '20';
 
@@ -138,6 +173,7 @@ export function registerProjectsRoutes(
       return c.json(result);
     } catch (e: any) {
       if (e.message.includes('|404')) return c.json({ error: e.message.split('|')[0] }, 404);
+      console.error('GET /api/projects/:id/members/:user_id/login-history error:', e);
       return c.json({ error: 'Internal Server Error' }, 500);
     }
   });
@@ -165,20 +201,37 @@ export function registerProjectsRoutes(
       return c.json(result);
     } catch (e: any) {
       const parts = (e instanceof Error ? e.message : String(e)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(e);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
 
   app.post('/api/projects/:id/webhooks', requirePermission('post:/api/projects/:id/webhooks'), requireFeature(FEATURE_SCHEDULED_RUNS), auditLog('post:/api/projects/:id/webhooks', 'Created project webhook'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
-    const body = await c.req.json();
+    const body = await readJsonBody(c);
+    reqString(body.url, 'url', LIMITS.URL);
+    optStringArray(body.event_types, 'event_types', 20, LIMITS.SHORT_TEXT);
+    if (body.headers && typeof body.headers === 'string') {
+      optString(body.headers, 'headers', LIMITS.DESCRIPTION);
+    }
+    optString(body.secret, 'secret', LIMITS.SHORT_TEXT);
     try {
       const result = await services.createProjectWebhook(projectId, body);
       return c.json(result, 201);
     } catch (e: any) {
+      if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
       const parts = (e instanceof Error ? e.message : String(e)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(e);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
 
@@ -186,13 +239,27 @@ export function registerProjectsRoutes(
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const webhookId = c.req.param('webhook_id') as string;
-    const body = await c.req.json();
+    if (!isValidId(webhookId)) {
+      return c.json({ error: 'Webhook not found' }, 404);
+    }
+    const body = await readJsonBody(c);
+    reqString(body.url, 'url', LIMITS.URL);
+    optStringArray(body.event_types, 'event_types', 20, LIMITS.SHORT_TEXT);
+    if (body.headers && typeof body.headers === 'string') {
+      optString(body.headers, 'headers', LIMITS.DESCRIPTION);
+    }
     try {
       const result = await services.updateProjectWebhook(projectId, webhookId, body);
       return c.json(result);
     } catch (e: any) {
+      if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
       const parts = (e instanceof Error ? e.message : String(e)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(e);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
 
@@ -200,12 +267,20 @@ export function registerProjectsRoutes(
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const webhookId = c.req.param('webhook_id') as string;
+    if (!isValidId(webhookId)) {
+      return c.json({ error: 'Webhook not found' }, 404);
+    }
     try {
       const result = await services.deleteProjectWebhook(projectId, webhookId);
       return c.json(result);
     } catch (e: any) {
       const parts = (e instanceof Error ? e.message : String(e)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(e);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
 
@@ -213,12 +288,20 @@ export function registerProjectsRoutes(
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const webhookId = c.req.param('webhook_id') as string;
+    if (!isValidId(webhookId)) {
+      return c.json({ error: 'Webhook not found' }, 404);
+    }
     try {
       const result = await services.testProjectWebhook(projectId, webhookId);
       return c.json(result);
     } catch (e: any) {
       const parts = (e instanceof Error ? e.message : String(e)).split('|');
-      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(e);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
     }
   });
 
@@ -229,12 +312,10 @@ export function registerProjectsRoutes(
     async (c) => {
       const services = projectServicesFactory(c.env);
       const projectId = c.req.param('id') as string;
-      let body: any;
-      try {
-        body = await c.req.json();
-      } catch {
-        return c.json({ error: 'Invalid JSON body' }, 400);
-      }
+      const body = await readJsonBody(c);
+      reqString(body.username, 'username', LIMITS.USERNAME);
+      optString(body.email, 'email', LIMITS.EMAIL);
+      optStringArray(body.roles, 'roles', 20, LIMITS.SHORT_TEXT);
       
       try {
         const result = await services.createProjectMemberAccount(projectId, body);
@@ -246,10 +327,15 @@ export function registerProjectsRoutes(
         });
         return c.json(result, 201);
       } catch (e: any) {
+        if (e instanceof ValidationError) return c.json({ error: e.message }, e.status);
         const parts = (e instanceof Error ? e.message : String(e)).split('|');
-        return c.json({ error: parts[0] }, errorStatus(parts[1]));
+        const status = errorStatus(parts[1]);
+        if (status >= 500) {
+          console.error(e);
+          return c.json({ error: 'Internal Server Error' }, 500);
+        }
+        return c.json({ error: parts[0] }, status);
       }
     }
   );
 }
-

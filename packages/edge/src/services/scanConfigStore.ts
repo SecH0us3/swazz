@@ -4,15 +4,15 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Env } from '../env';
+import { isValidId } from '../utils/validation';
 
 export const MAX_SCAN_CONFIG_BYTES = 20 * 1024 * 1024;
 export const SCAN_CONFIG_PREFIX = 'scans/configs/';
 
-const RUN_ID_REGEX = /^[A-Za-z0-9_-]{1,64}$/;
 const SCAN_CONFIG_KEY_REGEX = /^scans\/configs\/[A-Za-z0-9_-]{1,64}\/[0-9a-f-]{36}\.json$/;
 
 export function isValidRunId(runId: unknown): runId is string {
-  return typeof runId === 'string' && RUN_ID_REGEX.test(runId);
+  return isValidId(runId);
 }
 
 export function isValidScanConfigKey(key: unknown): key is string {

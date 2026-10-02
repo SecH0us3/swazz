@@ -294,7 +294,7 @@ describe('Scans Routes Unit Tests', () => {
         headers: { 'Content-Type': 'application/json' },
         body: '{not json',
       });
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(await res.json()).toHaveProperty('error');
       expect(mockServices.saveWAFPatchReport).not.toHaveBeenCalled();
     });
