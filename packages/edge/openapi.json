@@ -1,0 +1,4347 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Swazz Edge API",
+    "version": "1.0.0",
+    "description": "OpenAPI 3.0.3 specification for the Swazz Edge API coordinator, runner coordination, scan management, RBAC, authentication, and MCP endpoints."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current edge coordinator environment"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT Bearer token obtained from login, or permanent API key prefixed with `swazz_live_`."
+      }
+    }
+  },
+  "paths": {
+    "/api/info": {
+      "get": {
+        "summary": "Get system information",
+        "description": "Returns system configuration flags, authentication settings, beta status, and version.",
+        "responses": {
+          "200": {
+            "description": "System information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "auth_enabled": {
+                      "type": "boolean"
+                    },
+                    "password_auth_enabled": {
+                      "type": "boolean"
+                    },
+                    "limit_anonymous": {
+                      "type": "boolean"
+                    },
+                    "github_auth_enabled": {
+                      "type": "boolean"
+                    },
+                    "gitlab_auth_enabled": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "turnstile_site_key": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "beta_mode_enabled": {
+                      "type": "boolean"
+                    },
+                    "beta_limit_reached": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/api/version": {
+      "get": {
+        "summary": "Get API version",
+        "description": "Get API version",
+        "responses": {
+          "200": {
+            "description": "API version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/api/admin/logs": {
+      "get": {
+        "summary": "Get admin logs",
+        "description": "Fetches recent system logs stored in session cache (requires ADMIN_SECRET).",
+        "responses": {
+          "200": {
+            "description": "Array of admin logs"
+          },
+          "401": {
+            "description": "Unauthorized: Admin secret missing or invalid"
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/slow-queries": {
+      "get": {
+        "summary": "Get slow queries",
+        "description": "Fetches recorded slow database queries from session cache (requires ADMIN_SECRET).",
+        "responses": {
+          "200": {
+            "description": "Array of slow queries"
+          },
+          "401": {
+            "description": "Unauthorized: Admin secret missing or invalid"
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/oob/{runId}/{uuid}": {
+      "get": {
+        "summary": "Out-of-band callback listener (GET)",
+        "description": "Receives out-of-band interactions triggered during fuzzing and forwards to the coordinator DO.",
+        "responses": {
+          "200": {
+            "description": "Interaction acknowledged"
+          }
+        },
+        "tags": [
+          "Fuzzing"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Scan or run ID"
+          },
+          {
+            "name": "uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique interaction token"
+          }
+        ]
+      },
+      "post": {
+        "summary": "Out-of-band callback listener (POST)",
+        "description": "Receives out-of-band interactions triggered during fuzzing and forwards to the coordinator DO.",
+        "responses": {
+          "200": {
+            "description": "Interaction acknowledged"
+          }
+        },
+        "tags": [
+          "Fuzzing"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Scan or run ID"
+          },
+          {
+            "name": "uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique interaction token"
+          }
+        ]
+      },
+      "put": {
+        "summary": "Out-of-band callback listener (PUT)",
+        "description": "Receives out-of-band interactions triggered during fuzzing and forwards to the coordinator DO.",
+        "responses": {
+          "200": {
+            "description": "Interaction acknowledged"
+          }
+        },
+        "tags": [
+          "Fuzzing"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Scan or run ID"
+          },
+          {
+            "name": "uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique interaction token"
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Out-of-band callback listener (DELETE)",
+        "description": "Receives out-of-band interactions triggered during fuzzing and forwards to the coordinator DO.",
+        "responses": {
+          "200": {
+            "description": "Interaction acknowledged"
+          }
+        },
+        "tags": [
+          "Fuzzing"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Scan or run ID"
+          },
+          {
+            "name": "uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique interaction token"
+          }
+        ]
+      }
+    },
+    "/api/payload-catalog": {
+      "get": {
+        "summary": "Get payload catalog",
+        "description": "Returns boundary, malicious, and random fuzzing payload definitions and metadata.",
+        "responses": {
+          "200": {
+            "description": "Payload catalog categorised by BOUNDARY, MALICIOUS, and RANDOM",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "BOUNDARY": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "MALICIOUS": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "RANDOM": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Fuzzing"
+        ]
+      }
+    },
+    "/api/dev/emails": {
+      "get": {
+        "summary": "Get development sent emails",
+        "description": "Retrieves sent email messages in development and test environments.",
+        "responses": {
+          "200": {
+            "description": "List of sent emails"
+          },
+          "403": {
+            "description": "Forbidden in production"
+          }
+        },
+        "tags": [
+          "Development"
+        ],
+        "parameters": [
+          {
+            "name": "recipient",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by recipient email"
+          }
+        ]
+      }
+    },
+    "/api/dev/emails/clear": {
+      "post": {
+        "summary": "Clear development sent emails",
+        "description": "Clears the in-memory log of sent emails in development.",
+        "responses": {
+          "200": {
+            "description": "Emails cleared successfully"
+          },
+          "403": {
+            "description": "Forbidden in production"
+          }
+        },
+        "tags": [
+          "Development"
+        ]
+      }
+    },
+    "/api/waf-check": {
+      "post": {
+        "summary": "Check WAF protection on URL",
+        "description": "Tests the target URL against known WAF signatures and heuristics.",
+        "responses": {
+          "200": {
+            "description": "WAF detection result"
+          },
+          "400": {
+            "description": "Missing or invalid target url"
+          },
+          "502": {
+            "description": "Failed to connect to target URL"
+          }
+        },
+        "tags": [
+          "Fuzzing"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Target URL to inspect"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/proxy": {
+      "get": {
+        "summary": "Proxy request to target URL (GET)",
+        "description": "Proxies an HTTP request through the edge worker.",
+        "responses": {
+          "200": {
+            "description": "Proxied response payload and headers"
+          },
+          "400": {
+            "description": "Invalid JSON or missing URL"
+          },
+          "502": {
+            "description": "Proxy error"
+          }
+        },
+        "tags": [
+          "Proxy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Destination URL"
+                  },
+                  "method": {
+                    "type": "string",
+                    "default": "GET"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Proxy request to target URL (POST)",
+        "description": "Proxies an HTTP request through the edge worker.",
+        "responses": {
+          "200": {
+            "description": "Proxied response payload and headers"
+          },
+          "400": {
+            "description": "Invalid JSON or missing URL"
+          },
+          "502": {
+            "description": "Proxy error"
+          }
+        },
+        "tags": [
+          "Proxy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Destination URL"
+                  },
+                  "method": {
+                    "type": "string",
+                    "default": "GET"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Proxy request to target URL (PUT)",
+        "description": "Proxies an HTTP request through the edge worker.",
+        "responses": {
+          "200": {
+            "description": "Proxied response payload and headers"
+          },
+          "400": {
+            "description": "Invalid JSON or missing URL"
+          },
+          "502": {
+            "description": "Proxy error"
+          }
+        },
+        "tags": [
+          "Proxy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Destination URL"
+                  },
+                  "method": {
+                    "type": "string",
+                    "default": "GET"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Proxy request to target URL (DELETE)",
+        "description": "Proxies an HTTP request through the edge worker.",
+        "responses": {
+          "200": {
+            "description": "Proxied response payload and headers"
+          },
+          "400": {
+            "description": "Invalid JSON or missing URL"
+          },
+          "502": {
+            "description": "Proxy error"
+          }
+        },
+        "tags": [
+          "Proxy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Destination URL"
+                  },
+                  "method": {
+                    "type": "string",
+                    "default": "GET"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Proxy request to target URL (PATCH)",
+        "description": "Proxies an HTTP request through the edge worker.",
+        "responses": {
+          "200": {
+            "description": "Proxied response payload and headers"
+          },
+          "400": {
+            "description": "Invalid JSON or missing URL"
+          },
+          "502": {
+            "description": "Proxy error"
+          }
+        },
+        "tags": [
+          "Proxy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Destination URL"
+                  },
+                  "method": {
+                    "type": "string",
+                    "default": "GET"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/parse": {
+      "post": {
+        "summary": "Parse Swagger / OpenAPI specification",
+        "description": "Validates and parses raw OpenAPI/Swagger text, YAML, or JSON into structured endpoint definitions.",
+        "responses": {
+          "200": {
+            "description": "Parsed endpoint models and schemas"
+          },
+          "400": {
+            "description": "Specification parsing error"
+          },
+          "500": {
+            "description": "Internal parsing error"
+          }
+        },
+        "tags": [
+          "Specification"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry/scans/increment": {
+      "post": {
+        "summary": "Increment global scan count",
+        "description": "Records telemetry for an executed scan.",
+        "responses": {
+          "200": {
+            "description": "Telemetry recorded"
+          },
+          "400": {
+            "description": "Invalid yyMm format"
+          }
+        },
+        "tags": [
+          "Telemetry"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "yyMm": {
+                    "type": "string",
+                    "pattern": "^\\d{4}$",
+                    "description": "Optional YYMM period string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry/scans/count": {
+      "get": {
+        "summary": "Get global scan count",
+        "description": "Returns aggregate count of scans run across Swazz installations.",
+        "responses": {
+          "200": {
+            "description": "Total scans count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Telemetry"
+        ]
+      }
+    },
+    "/api/waitlist": {
+      "post": {
+        "summary": "Join enterprise waitlist",
+        "description": "Submits an enterprise waitlist inquiry.",
+        "responses": {
+          "200": {
+            "description": "Waitlist entry registered successfully"
+          },
+          "400": {
+            "description": "Invalid email or payload"
+          },
+          "403": {
+            "description": "Turnstile verification failed"
+          }
+        },
+        "tags": [
+          "Waitlist"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "company": {
+                    "type": "string"
+                  },
+                  "cf-turnstile-response": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "summary": "Register new user",
+        "description": "Creates a new user account with username and password.",
+        "responses": {
+          "200": {
+            "description": "Registration successful"
+          },
+          "400": {
+            "description": "Validation failure"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 20
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 12
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "cf-turnstile-response": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/verify-email": {
+      "get": {
+        "summary": "Verify email address",
+        "description": "Validates email verification token and redirects to frontend.",
+        "responses": {
+          "302": {
+            "description": "Redirects to frontend verification status"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/auth/resend-verification": {
+      "post": {
+        "summary": "Resend verification email",
+        "description": "Resends email verification link to authenticated user.",
+        "responses": {
+          "200": {
+            "description": "Verification email sent"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cf-turnstile-response": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/guest/step1": {
+      "post": {
+        "summary": "Request guest registration challenge",
+        "description": "Generates proof-of-work challenge for guest user signup.",
+        "responses": {
+          "200": {
+            "description": "Challenge and difficulty"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cf-turnstile-response": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/guest": {
+      "post": {
+        "summary": "Complete guest registration",
+        "description": "Creates a temporary guest account using solved PoW challenge.",
+        "responses": {
+          "200": {
+            "description": "Guest session created"
+          },
+          "400": {
+            "description": "Missing challenge token or nonce"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "nonce"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "nonce": {
+                    "type": "number"
+                  },
+                  "cf-turnstile-response": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Get current user profile",
+        "description": "Returns profile, roles, plan, and settings for authenticated user.",
+        "responses": {
+          "200": {
+            "description": "Current user profile"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/public-key": {
+      "post": {
+        "summary": "Update runner public key",
+        "description": "Updates user's runner encryption public key.",
+        "responses": {
+          "200": {
+            "description": "Public key updated"
+          },
+          "400": {
+            "description": "Invalid public key format"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "public_key": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{64}$",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/regenerate-key": {
+      "post": {
+        "summary": "Regenerate API key",
+        "description": "Generates a new permanent live API key (`swazz_live_...`) for the user.",
+        "responses": {
+          "200": {
+            "description": "New API key"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/login/step1": {
+      "post": {
+        "summary": "Request login challenge (step 1)",
+        "description": "Returns password salt, PoW challenge, and 2FA requirements for the username.",
+        "responses": {
+          "200": {
+            "description": "Login challenge information"
+          },
+          "400": {
+            "description": "Missing username"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "cf-turnstile-response": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Log in (step 2)",
+        "description": "Authenticates user with password hash, challenge response, and optional TOTP code.",
+        "responses": {
+          "200": {
+            "description": "JWT session token and user details"
+          },
+          "400": {
+            "description": "Missing token, password, or nonce"
+          },
+          "401": {
+            "description": "Invalid credentials or TOTP code"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "token": {
+                    "type": "string"
+                  },
+                  "nonce": {
+                    "type": "number"
+                  },
+                  "totp_code": {
+                    "type": "string"
+                  },
+                  "cf-turnstile-response": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/me": {
+      "delete": {
+        "summary": "Schedule user deletion",
+        "description": "Marks authenticated user account for deletion after grace period.",
+        "responses": {
+          "200": {
+            "description": "Account deletion scheduled"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/users/me/cancel-deletion": {
+      "post": {
+        "summary": "Cancel user deletion",
+        "description": "Cancels scheduled deletion for the current user.",
+        "responses": {
+          "200": {
+            "description": "Account deletion cancelled"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/2fa/setup": {
+      "post": {
+        "summary": "Setup 2FA",
+        "description": "Generates TOTP secret and QR code URI for two-factor authentication setup.",
+        "responses": {
+          "200": {
+            "description": "TOTP secret and otpauth URI"
+          },
+          "400": {
+            "description": "Missing password verification"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/2fa/verify": {
+      "post": {
+        "summary": "Verify and enable 2FA",
+        "description": "Verifies TOTP code and activates two-factor authentication.",
+        "responses": {
+          "200": {
+            "description": "2FA successfully enabled"
+          },
+          "400": {
+            "description": "Invalid 2FA code or password"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code",
+                  "password"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/2fa/disable": {
+      "post": {
+        "summary": "Disable 2FA",
+        "description": "Disables two-factor authentication.",
+        "responses": {
+          "200": {
+            "description": "2FA disabled successfully"
+          },
+          "400": {
+            "description": "Invalid 2FA code or password"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code",
+                  "password"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/passkeys/register/generate-options": {
+      "post": {
+        "summary": "Generate passkey registration options",
+        "description": "Generates WebAuthn registration options for current user.",
+        "responses": {
+          "200": {
+            "description": "PublicKeyCredentialCreationOptions"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Passkeys"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/passkeys/register/verify": {
+      "post": {
+        "summary": "Verify passkey registration",
+        "description": "Verifies client attestation and registers new passkey credential.",
+        "responses": {
+          "200": {
+            "description": "Passkey registered"
+          },
+          "400": {
+            "description": "Verification failure"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Passkeys"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/passkeys/login/generate-options": {
+      "post": {
+        "summary": "Generate passkey login options",
+        "description": "Generates WebAuthn assertion options for passkey authentication.",
+        "responses": {
+          "200": {
+            "description": "PublicKeyCredentialRequestOptions"
+          }
+        },
+        "tags": [
+          "Passkeys"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/passkeys/login/options": {
+      "post": {
+        "summary": "Generate passkey login options",
+        "description": "Generates WebAuthn assertion options for passkey authentication.",
+        "responses": {
+          "200": {
+            "description": "PublicKeyCredentialRequestOptions"
+          }
+        },
+        "tags": [
+          "Passkeys"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/passkeys/login/verify": {
+      "post": {
+        "summary": "Verify passkey login",
+        "description": "Validates passkey assertion response and issues session token.",
+        "responses": {
+          "200": {
+            "description": "Login successful"
+          },
+          "400": {
+            "description": "Invalid credential ID or signature"
+          }
+        },
+        "tags": [
+          "Passkeys"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "response"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "rawId": {
+                    "type": "string"
+                  },
+                  "response": {
+                    "type": "object"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/passkeys": {
+      "get": {
+        "summary": "List user passkeys",
+        "description": "Lists all registered passkeys for current user.",
+        "responses": {
+          "200": {
+            "description": "List of passkey credentials"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Passkeys"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/passkeys/{id}": {
+      "delete": {
+        "summary": "Delete passkey",
+        "description": "Removes a passkey credential by ID.",
+        "responses": {
+          "200": {
+            "description": "Passkey deleted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Passkeys"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/users/plan": {
+      "post": {
+        "summary": "Update user plan (Admin)",
+        "description": "Sets subscription plan for a specific user.",
+        "responses": {
+          "200": {
+            "description": "Plan updated"
+          },
+          "401": {
+            "description": "Unauthorized: Invalid admin secret"
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "userId",
+                  "plan"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "plan": {
+                    "type": "string",
+                    "enum": [
+                      "Free",
+                      "Pro",
+                      "Enterprise"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login/github": {
+      "get": {
+        "summary": "GitHub OAuth login",
+        "description": "Initiates GitHub OAuth flow by redirecting to GitHub.",
+        "responses": {
+          "302": {
+            "description": "Redirect to GitHub"
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/callback/github": {
+      "get": {
+        "summary": "GitHub OAuth callback",
+        "description": "Handles OAuth code from GitHub and redirects to frontend.",
+        "responses": {
+          "302": {
+            "description": "Redirects to frontend with auth credentials"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/auth/login/gitlab": {
+      "get": {
+        "summary": "GitLab OAuth login",
+        "description": "Initiates GitLab OAuth flow by redirecting to GitLab.",
+        "responses": {
+          "302": {
+            "description": "Redirect to GitLab"
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/callback/gitlab": {
+      "get": {
+        "summary": "GitLab OAuth callback",
+        "description": "Handles OAuth code from GitLab and redirects to frontend.",
+        "responses": {
+          "302": {
+            "description": "Redirects to frontend with auth credentials"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/auth/oauth/exchange": {
+      "post": {
+        "summary": "Exchange OAuth code",
+        "description": "Exchanges temporary OAuth code for user session JWT.",
+        "responses": {
+          "200": {
+            "description": "Session token and user details"
+          },
+          "400": {
+            "description": "Missing or expired code"
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/license": {
+      "get": {
+        "summary": "Get user license status",
+        "description": "Retrieves current active license details and tier.",
+        "responses": {
+          "200": {
+            "description": "License status"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "License"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Activate license key",
+        "description": "Applies and activates a license key for current user.",
+        "responses": {
+          "200": {
+            "description": "License activated"
+          },
+          "400": {
+            "description": "Missing or invalid license key"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "License"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "license_key"
+                ],
+                "properties": {
+                  "license_key": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Deactivate license key",
+        "description": "Removes active license key from user account.",
+        "responses": {
+          "200": {
+            "description": "License deactivated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "License"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/user/trial-status": {
+      "get": {
+        "summary": "Get trial license status",
+        "description": "Checks whether authenticated user is eligible for trial license.",
+        "responses": {
+          "200": {
+            "description": "Trial eligibility status"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "License"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/user/trial-license": {
+      "post": {
+        "summary": "Claim trial license",
+        "description": "Issues a 14-day Pro trial license for registered user.",
+        "responses": {
+          "200": {
+            "description": "Trial license granted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Guest accounts not eligible"
+          }
+        },
+        "tags": [
+          "License"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/license/verify": {
+      "post": {
+        "summary": "Verify license key",
+        "description": "Verifies signature, expiration, and tier of a license token.",
+        "responses": {
+          "200": {
+            "description": "License is valid"
+          },
+          "400": {
+            "description": "License is invalid or expired"
+          }
+        },
+        "tags": [
+          "License"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "license_key"
+                ],
+                "properties": {
+                  "license_key": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp/sse": {
+      "get": {
+        "summary": "MCP Server-Sent Events stream",
+        "description": "Opens an SSE stream for MCP protocol communication.",
+        "responses": {
+          "200": {
+            "description": "SSE event stream (text/event-stream)"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "MCP"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Send MCP JSON-RPC over SSE",
+        "description": "Posts a JSON-RPC request to active MCP SSE session.",
+        "responses": {
+          "200": {
+            "description": "JSON-RPC response"
+          },
+          "202": {
+            "description": "Accepted (notification)"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "MCP"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "jsonrpc",
+                  "method"
+                ],
+                "properties": {
+                  "jsonrpc": {
+                    "type": "string",
+                    "enum": [
+                      "2.0"
+                    ]
+                  },
+                  "id": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "method": {
+                    "type": "string"
+                  },
+                  "params": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp/message": {
+      "post": {
+        "summary": "Send MCP connection message",
+        "description": "Sends a JSON-RPC message to a specific MCP connection.",
+        "responses": {
+          "202": {
+            "description": "Message accepted"
+          },
+          "400": {
+            "description": "Missing connectionId or invalid body"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "MCP"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "connectionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp/tools": {
+      "get": {
+        "summary": "List MCP tools",
+        "description": "Returns metadata and schemas for all exposed MCP tools.",
+        "responses": {
+          "200": {
+            "description": "Available MCP tools list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "MCP"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/mcp/call": {
+      "post": {
+        "summary": "Call MCP tool",
+        "description": "Directly invokes an MCP tool by name with arguments.",
+        "responses": {
+          "200": {
+            "description": "Tool execution result"
+          },
+          "400": {
+            "description": "Invalid arguments"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Tool not found"
+          }
+        },
+        "tags": [
+          "MCP"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "MCP tool name"
+                  },
+                  "arguments": {
+                    "type": "object",
+                    "description": "Arguments matching tool inputSchema"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects": {
+      "get": {
+        "summary": "List projects",
+        "description": "Returns all projects the user is a member of.",
+        "responses": {
+          "200": {
+            "description": "Array of projects"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create project",
+        "description": "Creates a new project and sets creator as owner.",
+        "responses": {
+          "200": {
+            "description": "Project created"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "url_mappings": {
+                    "type": "string"
+                  },
+                  "ai_prompts": {
+                    "type": "string"
+                  },
+                  "propose_fixes": {
+                    "type": "boolean"
+                  },
+                  "custom_cli_command": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/config": {
+      "get": {
+        "summary": "Get project scan configuration",
+        "description": "Returns saved scan configuration for project.",
+        "responses": {
+          "200": {
+            "description": "Scan configuration"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Save project scan configuration",
+        "description": "Saves scan configuration for project.",
+        "responses": {
+          "200": {
+            "description": "Configuration saved"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "config"
+                ],
+                "properties": {
+                  "config": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/schedule": {
+      "post": {
+        "summary": "Update project scan schedule",
+        "description": "Configures cron schedule for automatic recurring scans.",
+        "responses": {
+          "200": {
+            "description": "Schedule updated"
+          },
+          "400": {
+            "description": "Invalid cron format"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cron_schedule": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "5-field cron expression"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}": {
+      "patch": {
+        "summary": "Update project settings",
+        "description": "Updates project metadata and configuration.",
+        "responses": {
+          "200": {
+            "description": "Project updated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "url_mappings": {
+                    "type": "string"
+                  },
+                  "ai_prompts": {
+                    "type": "string"
+                  },
+                  "propose_fixes": {
+                    "type": "boolean"
+                  },
+                  "custom_cli_command": {
+                    "type": "string"
+                  },
+                  "member_session_timeout": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete project",
+        "description": "Deletes project and associated scan history.",
+        "responses": {
+          "200": {
+            "description": "Project deleted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/analytics": {
+      "get": {
+        "summary": "Get project analytics",
+        "description": "Returns aggregate scan and vulnerability statistics over specified time period.",
+        "responses": {
+          "200": {
+            "description": "Project analytics"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "30d"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/members/{user_id}/login-history": {
+      "get": {
+        "summary": "Get member login history",
+        "description": "Returns login history for a specific project member.",
+        "responses": {
+          "200": {
+            "description": "Login history"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "1"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "20"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/audit-logs": {
+      "get": {
+        "summary": "Get project audit logs",
+        "description": "Retrieves security audit logs for actions performed within project.",
+        "responses": {
+          "200": {
+            "description": "Audit logs"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "1"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "20"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/webhooks": {
+      "get": {
+        "summary": "List project webhooks",
+        "description": "Lists all outbound webhooks configured for project.",
+        "responses": {
+          "200": {
+            "description": "List of webhooks"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create project webhook",
+        "description": "Creates a new webhook subscriber for scan lifecycle events.",
+        "responses": {
+          "201": {
+            "description": "Webhook created"
+          },
+          "400": {
+            "description": "Invalid URL or event type"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "secret": {
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/webhooks/{webhook_id}": {
+      "put": {
+        "summary": "Update project webhook",
+        "description": "Updates existing webhook configuration.",
+        "responses": {
+          "200": {
+            "description": "Webhook updated"
+          },
+          "400": {
+            "description": "Invalid webhook payload"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "secret": {
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete project webhook",
+        "description": "Deletes webhook configuration.",
+        "responses": {
+          "200": {
+            "description": "Webhook deleted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/webhooks/{webhook_id}/test": {
+      "post": {
+        "summary": "Test project webhook",
+        "description": "Sends test payload to configured webhook destination.",
+        "responses": {
+          "200": {
+            "description": "Test ping sent"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/members/create": {
+      "post": {
+        "summary": "Create project member / service account",
+        "description": "Creates a new interactive user or non-interactive service account member in project.",
+        "responses": {
+          "201": {
+            "description": "Member account created"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Projects",
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "is_interactive": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/permissions": {
+      "get": {
+        "summary": "Get available RBAC permissions",
+        "description": "Returns all standard permissions available in the system.",
+        "responses": {
+          "200": {
+            "description": "Permissions array"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/roles": {
+      "get": {
+        "summary": "List project roles",
+        "description": "Lists built-in and custom roles defined for project.",
+        "responses": {
+          "200": {
+            "description": "Array of roles"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create custom role",
+        "description": "Creates a custom RBAC role with specific permissions.",
+        "responses": {
+          "200": {
+            "description": "Role created"
+          },
+          "400": {
+            "description": "Validation failure"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "permissions"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "permissions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/members": {
+      "get": {
+        "summary": "List project members",
+        "description": "Lists all users and service accounts associated with project.",
+        "responses": {
+          "200": {
+            "description": "List of members with roles"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/members/{user_id}": {
+      "put": {
+        "summary": "Update member roles",
+        "description": "Updates role assignments for a project member.",
+        "responses": {
+          "200": {
+            "description": "Member roles updated"
+          },
+          "400": {
+            "description": "Invalid roles"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "roles"
+                ],
+                "properties": {
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove member from project",
+        "description": "Revokes membership and role access for user in project.",
+        "responses": {
+          "200": {
+            "description": "Member removed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/roles/{role_id}": {
+      "put": {
+        "summary": "Update custom role",
+        "description": "Updates definition and permissions of custom role.",
+        "responses": {
+          "200": {
+            "description": "Role updated"
+          },
+          "400": {
+            "description": "Invalid role payload"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "permissions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete custom role",
+        "description": "Deletes a custom role from project.",
+        "responses": {
+          "200": {
+            "description": "Role deleted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/auth/invitations": {
+      "get": {
+        "summary": "List pending invitations",
+        "description": "Lists project invitations pending for current user.",
+        "responses": {
+          "200": {
+            "description": "Array of invitations"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/invitations": {
+      "post": {
+        "summary": "Invite user to project",
+        "description": "Sends email invitation to join project.",
+        "responses": {
+          "200": {
+            "description": "Invitation created"
+          },
+          "400": {
+            "description": "Invalid email or role"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "cf-turnstile-response": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/invitations/accept": {
+      "post": {
+        "summary": "Accept project invitation",
+        "description": "Accepts an invitation and adds user to project.",
+        "responses": {
+          "200": {
+            "description": "Invitation accepted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "invitation_id"
+                ],
+                "properties": {
+                  "invitation_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/invitations/decline": {
+      "post": {
+        "summary": "Decline project invitation",
+        "description": "Declines pending invitation.",
+        "responses": {
+          "200": {
+            "description": "Invitation declined"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "RBAC"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "invitation_id"
+                ],
+                "properties": {
+                  "invitation_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runners": {
+      "get": {
+        "summary": "List active runners",
+        "description": "Lists online fuzzing runner agents.",
+        "responses": {
+          "200": {
+            "description": "List of runner connections"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Runners"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "summary": "Queue fuzzing run",
+        "description": "Queues a direct or project-based fuzzing execution run.",
+        "responses": {
+          "201": {
+            "description": "Run queued"
+          },
+          "400": {
+            "description": "Invalid config"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Runners"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "config"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "config": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{id}/stop": {
+      "post": {
+        "summary": "Stop active run",
+        "description": "Cancels an active fuzzing run.",
+        "responses": {
+          "200": {
+            "description": "Run stopped"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Run not found"
+          }
+        },
+        "tags": [
+          "Runners"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/runs/{id}/pause": {
+      "post": {
+        "summary": "Pause active run",
+        "description": "Pauses execution of an ongoing fuzzing run.",
+        "responses": {
+          "200": {
+            "description": "Run paused"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Run not found"
+          }
+        },
+        "tags": [
+          "Runners"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/runs/{id}/resume": {
+      "post": {
+        "summary": "Resume paused run",
+        "description": "Resumes a paused fuzzing run.",
+        "responses": {
+          "200": {
+            "description": "Run resumed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Run not found"
+          }
+        },
+        "tags": [
+          "Runners"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/runners/{connectionId}/restart": {
+      "post": {
+        "summary": "Restart runner",
+        "description": "Sends restart command to runner agent.",
+        "responses": {
+          "200": {
+            "description": "Restart instruction sent"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Runner not found"
+          }
+        },
+        "tags": [
+          "Runners"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/scans": {
+      "post": {
+        "summary": "Create scan",
+        "description": "Creates a scan record and dispatches execution.",
+        "responses": {
+          "201": {
+            "description": "Scan queued"
+          },
+          "400": {
+            "description": "Missing required fields"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Scans"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "project_id",
+                  "target_url",
+                  "profile"
+                ],
+                "properties": {
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "target_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "description": "Fuzzing profile (boundary, malicious, random)"
+                  },
+                  "config": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List scans",
+        "description": "Lists scans, optionally filtered by project ID.",
+        "responses": {
+          "200": {
+            "description": "Array of scans"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "tags": [
+          "Scans"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/scans/{id}": {
+      "get": {
+        "summary": "Get scan details",
+        "description": "Returns scan execution status, configuration, and summary metrics.",
+        "responses": {
+          "200": {
+            "description": "Scan details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Scan not found"
+          }
+        },
+        "tags": [
+          "Scans"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Update scan",
+        "description": "Updates scan progress, error state, or completion status.",
+        "responses": {
+          "200": {
+            "description": "Scan updated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Scan not found"
+          }
+        },
+        "tags": [
+          "Scans"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "total_requests": {
+                    "type": "number"
+                  },
+                  "findings_count": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}/upload-url": {
+      "post": {
+        "summary": "Generate upload URL",
+        "description": "Generates signed JWT token and R2 key for runner scan report upload.",
+        "responses": {
+          "200": {
+            "description": "Upload credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "uploadUrl": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Scan not found"
+          }
+        },
+        "tags": [
+          "Scans"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/scans/{id}/upload": {
+      "put": {
+        "summary": "Upload scan report",
+        "description": "Receives full scan JSON report or raw artifacts stream from runner.",
+        "responses": {
+          "200": {
+            "description": "Report stored in R2"
+          },
+          "401": {
+            "description": "Token expired"
+          },
+          "403": {
+            "description": "Invalid upload token"
+          }
+        },
+        "tags": [
+          "Scans"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Upload-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}/runner-logs": {
+      "get": {
+        "summary": "Get scan runner logs",
+        "description": "Fetches raw execution log messages sent by runner during scan.",
+        "responses": {
+          "200": {
+            "description": "Array of runner logs"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Scan not found"
+          }
+        },
+        "tags": [
+          "Scans"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/scans/{id}/findings": {
+      "get": {
+        "summary": "List scan findings",
+        "description": "Returns all vulnerabilities and anomalies discovered during scan.",
+        "responses": {
+          "200": {
+            "description": "List of findings"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Scan not found"
+          }
+        },
+        "tags": [
+          "Findings"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/findings/{id}": {
+      "get": {
+        "summary": "Get finding details",
+        "description": "Returns full finding details, reproduction evidence, and AI remediation.",
+        "responses": {
+          "200": {
+            "description": "Finding details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Finding not found"
+          }
+        },
+        "tags": [
+          "Findings"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Update finding",
+        "description": "Updates finding triage status, false positive flag, or notes.",
+        "responses": {
+          "200": {
+            "description": "Finding updated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Finding not found"
+          }
+        },
+        "tags": [
+          "Findings"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "false_positive": {
+                    "type": "boolean"
+                  },
+                  "ai_status": {
+                    "type": "string"
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}/findings/ai-triage": {
+      "patch": {
+        "summary": "Batch AI triage findings",
+        "description": "Updates AI relevance, triage status, and confidence scores across scan findings.",
+        "responses": {
+          "200": {
+            "description": "Findings triaged"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "tags": [
+          "Findings",
+          "AI"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "updates"
+                ],
+                "properties": {
+                  "updates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "finding_id",
+                        "ai_status"
+                      ],
+                      "properties": {
+                        "finding_id": {
+                          "type": "string"
+                        },
+                        "ai_status": {
+                          "type": "string"
+                        },
+                        "ai_relevance": {
+                          "type": "boolean"
+                        },
+                        "ai_explanation": {
+                          "type": "string"
+                        },
+                        "ai_confidence": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}/waf-patch": {
+      "patch": {
+        "summary": "Save WAF patch report",
+        "description": "Saves generated WAF virtual patching rules report for scan findings.",
+        "responses": {
+          "200": {
+            "description": "WAF patch report saved"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Scan not found"
+          }
+        },
+        "tags": [
+          "Scans",
+          "WAF"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}/findings/{findingId}/ai-analyze": {
+      "post": {
+        "summary": "Analyze finding with AI",
+        "description": "Generates AI root-cause analysis, exploit explanation, and remediation advice for finding.",
+        "responses": {
+          "200": {
+            "description": "AI analysis result"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Finding not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "tags": [
+          "Findings",
+          "AI"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "findingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code_context": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
