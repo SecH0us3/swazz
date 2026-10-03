@@ -94,7 +94,7 @@ export function AccountTab() {
                     <div className="settings-oauth-link-status">
                         {userProfile?.githubId ? (
                             <div className="oauth-connected-badge">
-                                <svg className="github-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22d3a0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <svg className="github-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                                     <polyline points="22 4 12 14.01 9 11.01"></polyline>
                                 </svg>
@@ -117,7 +117,7 @@ export function AccountTab() {
 
                         {userProfile?.gitlabId ? (
                             <div className="oauth-connected-badge">
-                                <svg className="gitlab-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22d3a0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <svg className="gitlab-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                                     <polyline points="22 4 12 14.01 9 11.01"></polyline>
                                 </svg>
