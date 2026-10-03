@@ -152,3 +152,64 @@ func TestClient_GeneratePatches_ContextTimeout(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, report)
 }
+
+func TestClient_GeneratePatches_APIError_Variants(t *testing.T) {
+	t.Parallel()
+
+	t.Run("error only payload", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error": "forbidden_operation"}`))
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		report, err := client.GeneratePatches(context.Background(), nil, PatchOptions{})
+		require.Error(t, err)
+		assert.Nil(t, report)
+		assert.Contains(t, err.Error(), "virtual-patch API error (403): forbidden_operation")
+	})
+
+	t.Run("message only payload", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"message": "generator capacity reached"}`))
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		report, err := client.GeneratePatches(context.Background(), nil, PatchOptions{})
+		require.Error(t, err)
+		assert.Nil(t, report)
+		assert.Contains(t, err.Error(), "virtual-patch API error (503): generator capacity reached")
+	})
+
+	t.Run("plain text non-json error", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte("502 Bad Gateway: edge timeout"))
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		report, err := client.GeneratePatches(context.Background(), nil, PatchOptions{})
+		require.Error(t, err)
+		assert.Nil(t, report)
+		assert.Contains(t, err.Error(), "virtual-patch API error with status 502: 502 Bad Gateway: edge timeout")
+	})
+}
+
+func TestClient_GeneratePatches_InvalidEndpointURL(t *testing.T) {
+	t.Parallel()
+	client := NewClient("http://[::1]:namedport")
+	report, err := client.GeneratePatches(context.Background(), nil, PatchOptions{})
+	require.Error(t, err)
+	assert.Nil(t, report)
+	assert.Contains(t, err.Error(), "invalid WAF check endpoint")
+}
+
