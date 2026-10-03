@@ -139,7 +139,12 @@
   /* Overlay */
   --overlay-bg: rgba(255, 255, 255, 0.85);
 
-  /* Status overrides for light mode visibility */
+  /* Status overrides for light mode visibility: the dark-theme
+     neon shades fall below 2:1 contrast against white */
+  --color-success:    #047857;
+  --color-warning:    #b45309;
+  --color-error:      #be123c;
+  --color-info:       #0369a1;
   --color-success-bg: rgba(34,211,160,0.12);
   --color-warning-bg: rgba(245,158,11,0.12);
   --color-error-bg:   rgba(244,63,94,0.12);
@@ -3503,6 +3508,11 @@ button:focus-visible {
 
 .alert-badge.badge-warning {
   background: var(--color-warning);
+}
+
+/* White text on the translucent success tint is unreadable on a light page */
+[data-theme="light"] .alert-badge.badge-success {
+  background: var(--color-success);
 }
 
 .alert-banner-message {
@@ -8936,7 +8946,7 @@ kbd {
   background-color: rgba(34, 211, 160, 0.08);
   border: 1px solid rgba(34, 211, 160, 0.2);
   border-radius: var(--radius-md);
-  color: #22d3a0;
+  color: var(--color-success);
   font-size: var(--font-size-sm);
   font-weight: 500;
 }
@@ -11309,6 +11319,22 @@ kbd {
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+/* The pastel text colors above are tuned for dark backgrounds */
+[data-theme="light"] .ai-confidence-badge.high {
+  color: var(--color-success);
+  border-color: rgba(4, 120, 87, 0.35);
+}
+
+[data-theme="light"] .ai-confidence-badge.medium {
+  color: var(--color-warning);
+  border-color: rgba(180, 83, 9, 0.35);
+}
+
+[data-theme="light"] .ai-confidence-badge.low {
+  color: var(--color-error);
+  border-color: rgba(185, 28, 28, 0.35);
+}
+
 /* PerformanceTab Utility Classes */
 .performance-input-row-space-between {
   justify-content: space-between;
@@ -11758,9 +11784,45 @@ kbd {
   line-height: 1.7; color: var(--text-secondary); overflow-x: auto;
   white-space: pre;
 }
-.waf-code-block .tok-key { color: #38BDF8; }
-.waf-code-block .tok-str { color: #22d3a0; }
-.waf-code-block .tok-fn { color: #c084fc; }
+.waf-code-block .tok-key { color: var(--syntax-keyword); }
+.waf-code-block .tok-str { color: var(--syntax-string); }
+.waf-code-block .tok-fn { color: var(--syntax-number); }
 
+/* ─── Light theme: badges with pastel text tuned for dark backgrounds ─── */
 
+[data-theme="light"] .rbac-pending-badge,
+[data-theme="light"] .audit-trail-source-badge--api_key {
+  color: var(--color-warning);
+}
 
+[data-theme="light"] .rbac-permission-pill-edit,
+[data-theme="light"] .rbac-code-edit {
+  color: var(--color-warning) !important;
+}
+
+[data-theme="light"] .rbac-permission-pill-view,
+[data-theme="light"] .rbac-code-view {
+  color: #1d4ed8 !important;
+}
+
+[data-theme="light"] .rbac-permission-pill-delete,
+[data-theme="light"] .rbac-code-delete {
+  color: var(--color-error) !important;
+}
+
+[data-theme="light"] .audit-trail-source-badge--web {
+  color: #1d4ed8;
+}
+
+[data-theme="light"] .audit-trail-source-badge--mcp {
+  color: #6d28d9;
+}
+
+[data-theme="light"] .audit-diff-val--old {
+  color: var(--color-error);
+}
+
+[data-theme="light"] .audit-diff-val--new,
+[data-theme="light"] .webhook-headers-badge {
+  color: var(--color-success);
+}
