@@ -10,14 +10,14 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20260926.1",
+    "@cloudflare/workers-types": "^5.20260930.1",
     "@vitest/coverage-istanbul": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.10",
     "@vitest/snapshot": "^4.1.9",
     "miniflare": "^5.20260811.1-alpha",
     "pretty-format": "^30.5.1",
     "vitest": "^4.1.11",
-    "workerd": "^1.20260925.1"
+    "workerd": "^1.20260930.1"
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.0.3",
