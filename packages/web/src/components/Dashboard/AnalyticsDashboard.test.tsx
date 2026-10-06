@@ -63,4 +63,99 @@ describe('AnalyticsDashboard Component', () => {
       expect(screen.getByText(/Network error loading analytics/i)).toBeTruthy();
     });
   });
+
+  it('renders empty state when no projectId is provided and no activeProject in store', () => {
+    render(<AnalyticsDashboard projectId="" />);
+    expect(screen.getByText('No Active Project')).toBeInTheDocument();
+  });
+
+  it('renders runner status list with shared/private and busy/idle states', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        scanStats: { total: 5, completed: 5, failed: 0, avgDuration: 125 },
+        scanHistory: [{ date: '2026-07-01', count: 5, completed_count: 5, failed_count: 0 }],
+        findingsStats: [
+          { severity: 'high', category: 'swazz/sql-injection', count: 3 },
+          { severity: 'medium', category: 'swazz/cors', count: 2 },
+          { severity: 'low', category: 'swazz/hsts-missing', count: 1 }
+        ],
+        findingsHistory: [{ date: '2026-07-01', severity: 'error', count: 6 }],
+        runnerMetrics: {
+          totalConnected: 2,
+          totalBusy: 1,
+          utilization: 50,
+          runners: [
+            { name: 'runner-node-1', isShared: false, isBusy: true },
+            { name: 'runner-node-2', isShared: true, isBusy: false }
+          ]
+        }
+      })
+    });
+
+    render(<AnalyticsDashboard projectId="test-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('runner-node-1')).toBeInTheDocument();
+      expect(screen.getByText('runner-node-2')).toBeInTheDocument();
+      expect(screen.getByText('Private')).toBeInTheDocument();
+      expect(screen.getByText('Shared')).toBeInTheDocument();
+      expect(screen.getByText('Fuzzing')).toBeInTheDocument();
+      expect(screen.getByText('Idle')).toBeInTheDocument();
+    });
+
+    // Verify top categories pretty names
+    expect(screen.getByText('SQL Injection')).toBeInTheDocument();
+    expect(screen.getByText('CORS Policy')).toBeInTheDocument();
+  });
+
+  it('renders empty chart states when there is zero data', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        scanStats: { total: 0, completed: 0, failed: 0, avgDuration: 0 },
+        scanHistory: [],
+        findingsStats: [],
+        findingsHistory: [],
+        runnerMetrics: { totalConnected: 0, totalBusy: 0, utilization: 0, runners: [] }
+      })
+    });
+
+    render(<AnalyticsDashboard projectId="test-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('No scan history recorded in the selected period.')).toBeInTheDocument();
+      expect(screen.getByText('No findings detected for this project.')).toBeInTheDocument();
+      expect(screen.getByText('No runners currently connected.')).toBeInTheDocument();
+    });
+  });
+
+  it('shows tooltip when hovering over chart data points', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        scanStats: { total: 10, completed: 8, failed: 2, avgDuration: 15 },
+        scanHistory: [
+          { date: '2026-07-01', count: 5, completed_count: 4, failed_count: 1 },
+          { date: '2026-07-02', count: 5, completed_count: 4, failed_count: 1 }
+        ],
+        findingsStats: [{ severity: 'error', category: 'swazz/xss', count: 2 }],
+        findingsHistory: [{ date: '2026-07-01', severity: 'error', count: 2 }],
+        runnerMetrics: { totalConnected: 1, totalBusy: 0, utilization: 0, runners: [] }
+      })
+    });
+
+    render(<AnalyticsDashboard projectId="test-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Total Scans')).toBeInTheDocument();
+    });
+
+    const dots = document.querySelectorAll('.chart-interactive-dot');
+    if (dots.length > 0) {
+      fireEvent.mouseEnter(dots[0]);
+      expect(document.querySelector('.chart-tooltip-group')).toBeInTheDocument();
+      fireEvent.mouseLeave(dots[0]);
+    }
+  });
 });

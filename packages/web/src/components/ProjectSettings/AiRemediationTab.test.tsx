@@ -147,4 +147,63 @@ describe('AiRemediationTab Component', () => {
             expect(screen.getByText(/✓ Saved successfully/i)).toBeTruthy();
         });
     });
+
+    it('expands prompt in modal and allows editing', () => {
+        render(<AiRemediationTab />);
+
+        // Switch to Triage tab
+        fireEvent.click(screen.getByRole('tab', { name: /Triage Model \(Pass 1\)/i }));
+
+        const expandBtn = screen.getByTitle('Expand to full screen');
+        fireEvent.click(expandBtn);
+
+        expect(screen.getByRole('heading', { level: 3, name: 'Triage Prompt Template' })).toBeInTheDocument();
+
+        // Close the modal
+        const closeBtn = screen.getByRole('button', { name: '✕' });
+        fireEvent.click(closeBtn);
+        expect(screen.queryByRole('heading', { level: 3, name: 'Triage Prompt Template' })).toBeNull();
+    });
+
+    it('toggles propose fixes checkbox and switches to vibe and custom tools', () => {
+        render(<AiRemediationTab />);
+
+        const proposeCheckbox = screen.getByRole('checkbox', { name: /Propose Fixes Automatically/i }) as HTMLInputElement;
+        expect(proposeCheckbox.checked).toBe(false);
+        fireEvent.click(proposeCheckbox);
+        expect(proposeCheckbox.checked).toBe(true);
+
+        const toolSelect = screen.getByLabelText('Preferred AI Tool:') as HTMLSelectElement;
+        
+        // Select vibe
+        fireEvent.change(toolSelect, { target: { value: 'vibe' } });
+        fireEvent.click(screen.getByRole('tab', { name: /Triage Model \(Pass 1\)/i }));
+        const pass1Input = screen.getByLabelText('CLI Execution Command & Model') as HTMLInputElement;
+        expect(pass1Input.value).toContain('vibe -p');
+
+        // Select custom
+        fireEvent.click(screen.getByRole('tab', { name: /CLI & General Settings/i }));
+        const updatedToolSelect = screen.getByLabelText('Preferred AI Tool:') as HTMLSelectElement;
+        fireEvent.change(updatedToolSelect, { target: { value: 'custom' } });
+        fireEvent.click(screen.getByRole('tab', { name: /Triage Model \(Pass 1\)/i }));
+        const updatedPass1Input = screen.getByLabelText('CLI Execution Command & Model') as HTMLInputElement;
+        expect(updatedPass1Input.value).toBe('');
+    });
+
+    it('displays error message when saving settings fails', async () => {
+        const mockFetch = vi.fn().mockResolvedValue({
+            ok: false,
+            json: async () => ({ error: 'Database locked' })
+        });
+        global.fetch = mockFetch;
+
+        render(<AiRemediationTab />);
+
+        const saveBtn = screen.getByRole('button', { name: /Save AI Settings/i });
+        fireEvent.click(saveBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Error: Database locked/i)).toBeInTheDocument();
+        });
+    });
 });

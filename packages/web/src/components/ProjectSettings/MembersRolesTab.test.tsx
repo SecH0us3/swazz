@@ -8,6 +8,28 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import React from 'react';
 import { MembersRolesTab } from './MembersRolesTab.js';
 import { useAppStore } from '../../store/appStore.js';
+import { fetchMemberLoginHistory } from '../../services/projectService.js';
+
+vi.mock('../../services/projectService.js', () => ({
+    fetchMemberLoginHistory: vi.fn().mockResolvedValue({
+        history: [
+            {
+                id: 'lh-1',
+                created_at: '2026-09-01 10:00:00',
+                status: 'success',
+                auth_method: 'password',
+                two_factor_active: 1,
+                ip_address: '192.168.1.1',
+                city: 'Berlin',
+                region: 'BE',
+                country: 'DE',
+                user_agent: 'Mozilla/5.0',
+                cf_ray: 'ray-123',
+            },
+        ],
+        pagination: { page: 1, total: 15, pages: 2 },
+    }),
+}));
 
 describe('MembersRolesTab Component', () => {
     let mockFetch: any;
@@ -331,5 +353,102 @@ describe('MembersRolesTab Component', () => {
                 expect.objectContaining({ method: 'PUT' })
             );
         });
+    });
+
+    it('opens and interacts with login history modal and exports CSV', async () => {
+        window.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url');
+        window.URL.revokeObjectURL = vi.fn();
+
+        render(<MembersRolesTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('alice_admin')).toBeTruthy();
+        });
+
+        const historyBtns = screen.getAllByRole('button', { name: 'History' });
+        fireEvent.click(historyBtns[0]);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Login History: alice_admin/i)).toBeTruthy();
+            expect(screen.getByText('192.168.1.1')).toBeTruthy();
+            expect(screen.getByText('Berlin, BE, DE')).toBeTruthy();
+        });
+
+        // Test pagination next
+        const nextBtn = screen.getByRole('button', { name: 'Next' });
+        fireEvent.click(nextBtn);
+        expect(fetchMemberLoginHistory).toHaveBeenCalledWith('proj-123', 'u-1', 2, 10);
+
+        // Test export CSV
+        const exportCsvBtn = screen.getByRole('button', { name: 'Export CSV' });
+        fireEvent.click(exportCsvBtn);
+        await waitFor(() => {
+            expect(fetchMemberLoginHistory).toHaveBeenCalledWith('proj-123', 'u-1', 1, 1000);
+        });
+
+        // Close history modal
+        const closeBtn = screen.getByRole('button', { name: 'Close' });
+        fireEvent.click(closeBtn);
+        expect(screen.queryByText(/Login History: alice_admin/i)).toBeNull();
+    });
+
+    it('deletes custom role when confirmed', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<MembersRolesTab />);
+
+        // Switch to Roles tab
+        const rolesTabBtn = screen.getByRole('button', { name: 'Roles' });
+        fireEvent.click(rolesTabBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('Developer')).toBeTruthy();
+        });
+
+        // Developer is default, so let's mock non-default custom role
+        // In our mockRoles, 'Admin' is is_default: false, so it has Delete button!
+        const deleteButtons = screen.getAllByRole('button', { name: 'Delete' });
+        fireEvent.click(deleteButtons[0]);
+
+        await waitFor(() => {
+            expect(mockFetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/projects/proj-123/roles/r-admin'),
+                expect.objectContaining({ method: 'DELETE' })
+            );
+        });
+    });
+
+    it('removes member when confirmed', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<MembersRolesTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('bob_dev')).toBeTruthy();
+        });
+
+        const removeBtn = screen.getByRole('button', { name: 'Remove' });
+        fireEvent.click(removeBtn);
+
+        await waitFor(() => {
+            expect(mockFetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/projects/proj-123/members/u-2'),
+                expect.objectContaining({ method: 'DELETE' })
+            );
+        });
+    });
+
+    it('displays notice banner when user is a guest', () => {
+        useAppStore.setState({
+            userProfile: {
+                username: 'guest_user',
+                isGuest: true,
+            } as any,
+        });
+
+        render(<MembersRolesTab />);
+
+        expect(screen.getByText(/Guest accounts are permitted to view existing access rights/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Invite User' })).toBeDisabled();
     });
 });

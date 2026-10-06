@@ -223,4 +223,74 @@ describe('ApiSpecsTab', () => {
             });
         });
     });
+
+    it('shows error toast when attempting to add duplicate spec URL', async () => {
+        mockConfig = {
+            _swagger_urls: ['http://example.com/swagger.json'],
+        };
+        render(<ApiSpecsTab />);
+        const input = screen.getByPlaceholderText('https://bbad.secmy.app/swagger.json');
+        const addBtn = screen.getByText('Add URL');
+
+        vi.mocked(swaggerService.detectMcpServer).mockResolvedValueOnce(null as any);
+
+        fireEvent.change(input, { target: { value: 'http://example.com/swagger.json' } });
+        fireEvent.click(addBtn);
+
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith('This URL is already in the list', 'error');
+        });
+    });
+
+    it('refreshes all spec URLs when "Refresh All" is clicked', async () => {
+        mockConfig = {
+            _swagger_urls: ['http://example.com/1.json', 'http://example.com/2.json', 'http://example.com/3.json'],
+            endpoints: [],
+        };
+        vi.mocked(swaggerService.loadSwaggerUrl).mockResolvedValue({
+            basePath: 'http://example.com',
+            endpointCount: 2,
+            endpoints: [{ method: 'GET', path: '/api/v1/test' } as any],
+        });
+
+        render(<ApiSpecsTab />);
+        const refreshAllBtn = screen.getByRole('button', { name: /Refresh All/i });
+        fireEvent.click(refreshAllBtn);
+
+        await waitFor(() => {
+            expect(mockUpdateConfig).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    endpoints: [{ method: 'GET', path: '/api/v1/test' }],
+                })
+            );
+            expect(mockShowToast).toHaveBeenCalledWith(
+                expect.stringContaining('Total loaded: 6 endpoints'),
+                'success'
+            );
+        });
+    });
+
+    it('handles uploaded local spec file via parseRawSpec', async () => {
+        vi.mocked(swaggerService.parseRawSpec).mockResolvedValueOnce({
+            basePath: 'http://local.test',
+            endpointCount: 1,
+            endpoints: [{ method: 'POST', path: '/api/upload' } as any],
+        });
+
+        render(<ApiSpecsTab />);
+        const file = new File(['{"openapi": "3.0.0"}'], 'spec.json', { type: 'application/json' });
+        const fileInput = document.getElementById('specs-upload-input') as HTMLInputElement;
+
+        fireEvent.change(fileInput, { target: { files: [file] } });
+
+        await waitFor(() => {
+            expect(swaggerService.parseRawSpec).toHaveBeenCalled();
+            expect(mockUpdateConfig).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    base_url: 'http://local.test',
+                    endpoints: expect.arrayContaining([{ method: 'POST', path: '/api/upload' }]),
+                })
+            );
+        });
+    });
 });

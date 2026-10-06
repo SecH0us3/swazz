@@ -254,4 +254,141 @@ describe('LandingShowcase Component', () => {
         expect(screen.getByText('SARIF & Jira Exports')).toBeDefined();
         expect(screen.getByText('Transparent Security Pricing')).toBeDefined();
     });
+
+    it('handles onActionClick and custom actionText in hero and simulator CTA', async () => {
+        const onActionClick = vi.fn();
+        render(<LandingShowcase onActionClick={onActionClick} actionText="Launch Playground" />);
+
+        const heroBtn = screen.getByText('Launch Playground');
+        fireEvent.click(heroBtn);
+        expect(onActionClick).toHaveBeenCalledTimes(1);
+
+        const simCta = screen.getByText('Run this scan against your API →');
+        fireEvent.click(simCta);
+        expect(onActionClick).toHaveBeenCalledTimes(2);
+    });
+
+    it('navigates simulator scenarios using keyboard arrows (ArrowRight, ArrowLeft, ArrowDown, ArrowUp)', async () => {
+        render(<LandingShowcase />);
+        const bolaTab = screen.getByRole('tab', { name: /BOLA \/ IDOR Exploit/i });
+        bolaTab.focus();
+
+        // ArrowRight -> next scenario (JSON SQL Injection)
+        fireEvent.keyDown(bolaTab, { key: 'ArrowRight' });
+        expect(screen.getByText('/api/v2/orders/search')).toBeDefined();
+
+        // ArrowDown -> next scenario (SSRF)
+        const sqliTab = screen.getByRole('tab', { name: /JSON SQL Injection/i });
+        fireEvent.keyDown(sqliTab, { key: 'ArrowDown' });
+        expect(screen.getByText('/api/v1/integrations/webhook')).toBeDefined();
+
+        // ArrowLeft -> previous scenario (back to SQLi)
+        const ssrfTab = screen.getByRole('tab', { name: /SSRF via Webhook URL/i });
+        fireEvent.keyDown(ssrfTab, { key: 'ArrowLeft' });
+        expect(screen.getByText('/api/v2/orders/search')).toBeDefined();
+
+        // ArrowUp -> previous scenario (back to BOLA)
+        fireEvent.keyDown(sqliTab, { key: 'ArrowUp' });
+        expect(screen.getByText('/api/v1/users/{id}/billing')).toBeDefined();
+    });
+
+    it('switches to Local (No Docker) and Cloudflare Worker deployment tabs and copies commands', async () => {
+        render(<LandingShowcase />);
+
+        // Local tab
+        const localTab = screen.getByText('Local (No Docker)');
+        fireEvent.click(localTab);
+        expect(screen.getByText('Run the Full Stack Locally (Without Docker)')).toBeDefined();
+
+        const copyLocal = screen.getByText('Copy');
+        fireEvent.click(copyLocal);
+        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+
+        // Worker tab
+        const workerTab = screen.getByText('Cloudflare Worker');
+        fireEvent.click(workerTab);
+        expect(screen.getByText(/Bind to your own Cloudflare account/i)).toBeDefined();
+
+        const copyWorker = screen.getByText('Copy');
+        fireEvent.click(copyWorker);
+        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+    });
+
+    it('opens feature detail modal, zooms into fullscreen screenshot, and dismisses modals', async () => {
+        render(<LandingShowcase />);
+
+        // Click Intelligent AST Fuzzing card
+        const card = screen.getByText('Intelligent AST Fuzzing');
+        fireEvent.click(card);
+
+        // Feature modal should appear
+        expect(screen.getByText('What it is')).toBeDefined();
+        const screenshot = screen.getByAltText(/Discover Zero-Days/i);
+        expect(screenshot).toBeDefined();
+
+        // Click image to trigger fullscreen
+        fireEvent.click(screenshot);
+        expect(screen.getByAltText('Fullscreen View')).toBeDefined();
+
+        // Dismiss fullscreen via Escape
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByAltText('Fullscreen View')).toBeNull();
+
+        // Dismiss feature modal via close button
+        const closeBtn = screen.getByRole('button', { name: /Close modal/i });
+        fireEvent.click(closeBtn);
+        expect(screen.queryByText('What it is')).toBeNull();
+    });
+
+    it('handles waitlist form failure and dismissals via backdrop and close button', async () => {
+        (global.fetch as any).mockImplementation((url: string) => {
+            if (url.includes('/api/waitlist')) {
+                return Promise.resolve({ ok: false, status: 500 });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ total: 100 }) });
+        });
+
+        render(<LandingShowcase />);
+        const requestBtn = screen.getByText('Request Enterprise License');
+        fireEvent.click(requestBtn);
+
+        expect(screen.getByText('Swazz Enterprise Access')).toBeDefined();
+
+        // Fill form and submit
+        const nameInput = screen.getByPlaceholderText('Alex Smith');
+        const emailInput = screen.getByPlaceholderText('alex@company.com');
+        const companyInput = screen.getByPlaceholderText('Acme Security Inc.');
+        const submitBtn = screen.getByText('Submit Enterprise Access Request');
+
+        await act(async () => {
+            fireEvent.change(nameInput, { target: { value: 'Jane Error' } });
+            fireEvent.change(emailInput, { target: { value: 'err@corp.com' } });
+            fireEvent.change(companyInput, { target: { value: 'Fail Corp' } });
+            fireEvent.click(submitBtn);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Request Received!')).toBeDefined();
+        });
+
+        // Close after success
+        fireEvent.click(screen.getByText('Close'));
+        expect(screen.queryByText('Swazz Enterprise Access')).toBeNull();
+
+        // Re-open and dismiss via Escape
+        fireEvent.click(requestBtn);
+        expect(screen.getByText('Swazz Enterprise Access')).toBeDefined();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByText('Swazz Enterprise Access')).toBeNull();
+    });
+
+    it('hides ScanCounter when total is 0 or non-number', async () => {
+        (global.fetch as any).mockImplementationOnce(() =>
+            Promise.resolve({ ok: true, json: () => Promise.resolve({ total: 0 }) })
+        );
+        render(<LandingShowcase />);
+        await waitFor(() => {
+            expect(screen.queryByText(/Scans Run/)).toBeNull();
+        });
+    });
 });
