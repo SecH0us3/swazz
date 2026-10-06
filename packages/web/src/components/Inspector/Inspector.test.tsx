@@ -536,6 +536,132 @@ describe('Inspector Component', () => {
         );
         expect(screen.queryByTestId('waf-patch-viewer')).not.toBeInTheDocument();
     });
+
+    it('supports Expand All and Collapse All in findingsOnly mode', async () => {
+        const rows: ResultSummary[] = [
+            {
+                id: '1',
+                timestamp: Date.now(),
+                method: 'GET',
+                endpoint: '/api/v1/user/1',
+                resolvedPath: '/api/v1/user/1',
+                status: 500,
+                profile: 'AUTH',
+                duration: 20,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 50,
+            },
+            {
+                id: '2',
+                timestamp: Date.now(),
+                method: 'GET',
+                endpoint: '/api/v1/admin',
+                resolvedPath: '/api/v1/admin',
+                status: 403,
+                profile: 'AUTH',
+                duration: 25,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Forbidden',
+                responseSize: 30,
+            }
+        ];
+        mockQueryResults.mockResolvedValue({ rows, total: 2 });
+
+        render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Expand All')).toBeInTheDocument();
+        });
+
+        // Click Expand All
+        fireEvent.click(screen.getByText('Expand All'));
+        expect(screen.getByText('/api/v1/user/1')).toBeInTheDocument();
+        expect(screen.getByText('/api/v1/admin')).toBeInTheDocument();
+
+        // Click Collapse All
+        fireEvent.click(screen.getByText('Collapse All'));
+        expect(screen.queryByText('/api/v1/user/1')).toBeNull();
+        expect(screen.queryByText('/api/v1/admin')).toBeNull();
+    });
+
+    it('handles search input clear button and show all button for pagination', async () => {
+        const rows = Array.from({ length: 5 }, (_, i) => ({
+            id: String(i + 1),
+            timestamp: Date.now() - i * 1000,
+            method: 'GET',
+            endpoint: `/items/${i}`,
+            resolvedPath: `/items/${i}`,
+            status: 200,
+            profile: 'DEFAULT',
+            duration: 15,
+            payloadSize: 0,
+            retries: 0,
+            payloadPreview: '',
+            responsePreview: 'OK',
+            responseSize: 20,
+        }));
+        mockQueryResults.mockResolvedValue({ rows, total: 1500 });
+
+        render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={false}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('show all')).toBeInTheDocument();
+        });
+
+        // Click show all
+        fireEvent.click(screen.getByText('show all'));
+        expect(mockQueryResults).toHaveBeenCalledWith(expect.objectContaining({ limit: 1500 }));
+
+        // Type in search, then click clear search ✕
+        const searchInput = screen.getByPlaceholderText(/Filter by path…/i);
+        fireEvent.change(searchInput, { target: { value: 'items' } });
+        const clearBtn = screen.getByRole('button', { name: /Clear search/i });
+        fireEvent.click(clearBtn);
+        expect((searchInput as HTMLInputElement).value).toBe('');
+    });
+
+    it('renders empty state when runId is not provided', async () => {
+        mockQueryResults.mockResolvedValue({ rows: [], total: 0 });
+        render(
+            <Inspector
+                runId=""
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={false}
+            />
+        );
+
+        expect(screen.getByText('Waiting for requests')).toBeInTheDocument();
+        expect(screen.getByText(/Start a fuzz test to see results appear here in real time/i)).toBeInTheDocument();
+    });
 });
 
 

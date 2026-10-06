@@ -168,4 +168,91 @@ describe('AuthModal Component', () => {
 
         expect(onCloseMock).toHaveBeenCalledTimes(1);
     });
+
+    it('closes modal when Escape key is pressed', () => {
+        const onCloseMock = vi.fn();
+        render(<AuthModal {...defaultProps} onClose={onCloseMock} />);
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onCloseMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows validation error when username is too short on registration', async () => {
+        render(<AuthModal {...defaultProps} initialIsRegistering={true} />);
+
+        const usernameInput = screen.getByPlaceholderText('Enter username');
+        const passwordInput = screen.getByPlaceholderText('Min 12 characters');
+        const submitBtn = screen.getByRole('button', { name: /create account/i });
+
+        fireEvent.change(usernameInput, { target: { value: 'ab' } });
+        fireEvent.change(passwordInput, { target: { value: 'ValidPassword123!' } });
+        fireEvent.submit(submitBtn.closest('form')!);
+
+        await waitFor(() => {
+            expect(screen.getByText('Username must be between 3 and 20 characters')).toBeInTheDocument();
+        });
+    });
+
+    it('shows validation error when password is too short on registration', async () => {
+        render(<AuthModal {...defaultProps} initialIsRegistering={true} />);
+
+        const usernameInput = screen.getByPlaceholderText('Enter username');
+        const passwordInput = screen.getByPlaceholderText('Min 12 characters');
+        const submitBtn = screen.getByRole('button', { name: /create account/i });
+
+        fireEvent.change(usernameInput, { target: { value: 'validuser' } });
+        fireEvent.change(passwordInput, { target: { value: 'short' } });
+        fireEvent.submit(submitBtn.closest('form')!);
+
+        await waitFor(() => {
+            expect(screen.getByText('Password must be at least 12 characters')).toBeInTheDocument();
+        });
+    });
+
+    it('toggles password visibility between text and password types', () => {
+        render(<AuthModal {...defaultProps} initialIsRegistering={false} />);
+
+        const passwordInput = screen.getByPlaceholderText('••••••••••••');
+        expect(passwordInput).toHaveAttribute('type', 'password');
+
+        const toggleBtn = screen.getByRole('button', { name: /^Show$/i });
+        fireEvent.click(toggleBtn);
+        expect(passwordInput).toHaveAttribute('type', 'text');
+
+        const hideBtn = screen.getByRole('button', { name: /^Hide$/i });
+        fireEvent.click(hideBtn);
+        expect(passwordInput).toHaveAttribute('type', 'password');
+    });
+
+    it('cancels 2FA prompt and returns to login form', async () => {
+        const onLoginMock = vi.fn().mockResolvedValue({ twoFactorRequired: true });
+        render(<AuthModal {...defaultProps} initialIsRegistering={false} onLogin={onLoginMock} />);
+
+        const usernameInput = screen.getByPlaceholderText('Enter username');
+        const passwordInput = screen.getByPlaceholderText('••••••••••••');
+        const submitBtn = screen.getByRole('button', { name: /^sign in$/i });
+
+        fireEvent.change(usernameInput, { target: { value: 'twofauser' } });
+        fireEvent.change(passwordInput, { target: { value: 'SecretPassword!' } });
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('Two-Factor Verification')).toBeInTheDocument();
+        });
+
+        const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+        fireEvent.click(cancelBtn);
+
+        expect(screen.queryByText('Two-Factor Verification')).not.toBeInTheDocument();
+        expect(screen.getByText('Welcome back')).toBeInTheDocument();
+    });
+
+    it('injects Turnstile script when turnstileSiteKey is present in store', () => {
+        useAppStore.setState({ turnstileSiteKey: 'cf-site-key-123' });
+        render(<AuthModal {...defaultProps} />);
+
+        const script = document.getElementById('cf-turnstile-script') as HTMLScriptElement;
+        expect(script).not.toBeNull();
+        expect(script.src).toContain('challenges.cloudflare.com/turnstile');
+    });
 });

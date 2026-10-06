@@ -232,4 +232,114 @@ describe('useDb hook', () => {
         });
         expect(result.current.runs[0].triggerType).toBe('scheduled');
     });
+
+    it('imports CLI report successfully and rejects invalid report format', async () => {
+        const { result } = renderHook(() => useDb());
+
+        await waitFor(() => {
+            expect(result.current.db).not.toBeNull();
+        });
+
+        // Invalid report format
+        await expect(result.current.importCliReport({ tool: 'other' })).rejects.toThrow('Invalid Swazz CLI report format');
+
+        // Valid report format
+        const validReport = {
+            tool: 'swazz',
+            timestamp: '2026-08-01T12:00:00Z',
+            summary: {
+                totalRequests: 2,
+                statusCounts: { '200': 1, '500': 1 },
+                durationSeconds: 5,
+                totalResponseBytes: 1024,
+                maxResponseSize: 512,
+                totalDurationMs: 5000,
+            },
+            findings: [
+                {
+                    id: 'f1',
+                    method: 'GET',
+                    endpoint: '/api/v1/users',
+                    status: 200,
+                    profile: 'RANDOM',
+                    resolvedPath: 'https://api.example.com/api/v1/users',
+                },
+                {
+                    id: 'f2',
+                    method: 'POST',
+                    endpoint: '/api/v1/login',
+                    status: 500,
+                    profile: 'MALICIOUS',
+                    resolvedPath: 'https://api.example.com/api/v1/login',
+                },
+            ],
+        };
+
+        let imported: any = null;
+        await act(async () => {
+            imported = await result.current.importCliReport(validReport);
+        });
+
+        expect(imported.runId).toContain('cli-');
+        expect(imported.run.baseUrl).toBe('https://api.example.com');
+        expect(imported.run.stats.totalRequests).toBe(2);
+
+        // Verify countResults
+        const count = await result.current.countResults(imported.runId);
+        expect(count).toBe(2);
+    });
+
+    it('queries results with identity filter, heatmap filter, search, and sorting', async () => {
+        const { result } = renderHook(() => useDb());
+
+        await waitFor(() => {
+            expect(result.current.db).not.toBeNull();
+        });
+
+        const mockRun = {
+            id: 'run_advanced_query',
+            startedAt: 1000,
+            completedAt: 2000,
+            baseUrl: 'http://test.com',
+            stats: {} as any,
+        };
+
+        const mockResults = [
+            { id: 'r1', status: 200, duration: 100, timestamp: 10, endpoint: '/api/users', profile: 'quick', identity: 'User A', method: 'GET' },
+            { id: 'r2', status: 200, duration: 50, timestamp: 20, endpoint: '/api/products', profile: 'deep', identity: 'User B', method: 'GET' },
+            { id: 'r3', status: 500, duration: 200, timestamp: 30, endpoint: '/api/orders', profile: 'quick', identity: 'User A', method: 'POST' },
+        ] as any;
+
+        await act(async () => {
+            await result.current.saveRun(mockRun, mockResults);
+        });
+
+        // Identity filter User A
+        const userARes = await result.current.queryResults({ runId: 'run_advanced_query', identityFilter: 'User A' });
+        expect(userARes.rows).toHaveLength(2);
+
+        // Identity filter User B
+        const userBRes = await result.current.queryResults({ runId: 'run_advanced_query', identityFilter: 'User B' });
+        expect(userBRes.rows).toHaveLength(1);
+        expect(userBRes.rows[0].id).toBe('r2');
+
+        // Heatmap filter
+        const heatmapRes = await result.current.queryResults({
+            runId: 'run_advanced_query',
+            heatmapFilter: { method: 'POST', path: '/api/orders', status: 500 } as any,
+        });
+        expect(heatmapRes.rows).toHaveLength(1);
+        expect(heatmapRes.rows[0].id).toBe('r3');
+
+        // Search filter
+        const searchRes = await result.current.queryResults({ runId: 'run_advanced_query', search: 'products' });
+        expect(searchRes.rows).toHaveLength(1);
+        expect(searchRes.rows[0].id).toBe('r2');
+
+        // Sort by duration ascending
+        const sortedRes = await result.current.queryResults({ runId: 'run_advanced_query', sortKey: 'duration', sortDir: 'asc' });
+        expect(sortedRes.rows[0].id).toBe('r2'); // 50ms
+        expect(sortedRes.rows[1].id).toBe('r1'); // 100ms
+        expect(sortedRes.rows[2].id).toBe('r3'); // 200ms
+    });
 });
