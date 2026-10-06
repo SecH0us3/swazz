@@ -7,7 +7,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 
 vi.mock('../hooks/useToast.js', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../hooks/useFeatureGate.js', () => ({ useFeatureGate: () => ({ unlocked: true }) }));
@@ -105,5 +105,55 @@ describe('HistoryPage', () => {
         // it is absent from the Completed tab
         fireEvent.click(screen.getByRole('button', { name: /^Completed/ }));
         expect(screen.getByText('No scans found in this category')).toBeInTheDocument();
+    });
+
+    it('routes each export format to the matching callback', () => {
+        const p = { ...mountProps(), runs: [run('r1')] };
+        render(<HistoryPage {...p} />);
+        const select = screen.getByRole('combobox');
+
+        fireEvent.change(select, { target: { value: 'html' } });
+        expect(p.onExportHTML).toHaveBeenCalledWith('r1');
+
+        fireEvent.change(select, { target: { value: 'md' } });
+        expect(p.onExportMD).toHaveBeenCalledWith('r1');
+
+        fireEvent.change(select, { target: { value: 'json' } });
+        expect(p.onExport).toHaveBeenCalledWith('r1', 'https://api.test');
+    });
+
+    it('selecting two runs and pressing Compare sets the store and switches to the compare tab', () => {
+        const older = run('old', { startedAt: 1000 });
+        const newer = run('new', { startedAt: 2000 });
+        const p = { ...mountProps(), runs: [newer, older] };
+        render(<HistoryPage {...p} />);
+
+        const checkboxes = screen.getAllByRole('checkbox');
+        fireEvent.click(checkboxes[0]);
+        fireEvent.click(checkboxes[1]);
+        expect(screen.getByText(/scans selected for comparison/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Compare Scans/ }));
+        const s = useAppStore.getState() as any;
+        // older run is assigned as A regardless of selection order
+        expect(s.compareRunIdA).toBe('old');
+        expect(s.compareRunIdB).toBe('new');
+        expect(s.activeTab).toBe('compare');
+    });
+
+    it('imports a CLI report and loads the imported run', async () => {
+        const p = {
+            ...mountProps(),
+            runs: [run('r1')],
+            onImportRun: vi.fn(async () => ({ runId: 'imported-1', run: { id: 'imported-1' } })),
+        };
+        const { container } = render(<HistoryPage {...p} />);
+        const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+        const file = new File([JSON.stringify({ scan: 'data' })], 'report.json', { type: 'application/json' });
+
+        fireEvent.change(fileInput, { target: { files: [file] } });
+
+        await waitFor(() => expect(p.onImportRun).toHaveBeenCalledWith({ scan: 'data' }));
+        await waitFor(() => expect(p.onLoadRun).toHaveBeenCalledWith('imported-1', { id: 'imported-1' }));
     });
 });
