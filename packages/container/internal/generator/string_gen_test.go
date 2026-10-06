@@ -230,7 +230,7 @@ func TestStringGen_GenerateString_Malicious(t *testing.T) {
 		val := g.generateString("", "")
 		str, ok := val.(string)
 		require.True(t, ok)
-		assert.NotContains(t, str, "7*7")
+		assert.NotContains(t, str, "{{7*7}}") // the SSTI probe token was replaced; random primes may incidentally contain "7*7"
 		ctx, found := sstistore.GlobalStore.Get(str)
 		require.True(t, found)
 		assert.NotEmpty(t, ctx.RawExpr)
@@ -365,7 +365,7 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 	t.Run("ssti multiplication expression 7*7", func(t *testing.T) {
 		input := "payload_{{7*7}}_test"
 		out := g.randomizeAndRegisterSSTI(input)
-		assert.NotContains(t, out, "7*7")
+		assert.NotContains(t, out, "{{7*7}}")
 		assert.True(t, strings.HasPrefix(out, "payload_{{"))
 		assert.True(t, strings.HasSuffix(out, "}}_test"))
 
@@ -378,7 +378,7 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 	t.Run("ssti string concatenation 7+'7'", func(t *testing.T) {
 		input := "expr_${7+'7'}_tail"
 		out := g.randomizeAndRegisterSSTI(input)
-		assert.NotContains(t, out, "7+'7'")
+		assert.NotContains(t, out, "${7+'7'}")
 		assert.True(t, strings.HasPrefix(out, "expr_${"))
 		assert.True(t, strings.HasSuffix(out, "}_tail"))
 
