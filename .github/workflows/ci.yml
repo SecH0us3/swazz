@@ -77,6 +77,14 @@ jobs:
               - 'package-lock.json'
               - 'playwright.config.ts'
               - '.github/workflows/ci.yml'
+              # Unit-test-only changes do not affect runtime behaviour, so they
+              # should not trigger the (slow) E2E shards. gitignore-style last-match
+              # wins: a change touching a real source file still matches a positive
+              # pattern above and runs E2E; a change touching only unit tests is
+              # excluded here. E2E specs are *.spec.ts and are unaffected.
+              - '!**/*.test.ts'
+              - '!**/*.test.tsx'
+              - '!**/*_test.go'
             lockfile:
               - '**/package.json'
               - 'package-lock.json'
