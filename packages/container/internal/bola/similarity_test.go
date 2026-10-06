@@ -6,6 +6,7 @@
 package bola
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -113,5 +114,43 @@ func TestNormalizedLevenshtein(t *testing.T) {
 	expected := 1.0 - (3.0 / 7.0) // sitting has len 7, distance is 3
 	if sim < expected-0.0001 || sim > expected+0.0001 {
 		t.Errorf("normalizedLevenshtein(\"kitten\", \"sitting\") = %f; expected %f", sim, expected)
+	}
+}
+
+func TestCheckSimilarity_Branches(t *testing.T) {
+	// Nested JSON exercises flattenJSON recursion over maps and arrays.
+	nested := `{"user":{"id":1,"roles":["a","b"]},"items":[{"sku":"x"}]}`
+	if sim := CheckSimilarity([]byte(nested), []byte(nested)); sim < 0.99 {
+		t.Errorf("identical nested JSON should be ~1.0, got %.4f", sim)
+	}
+
+	// Two JSON scalars of the same type have no paths but matching types -> high similarity.
+	if sim := CheckSimilarity([]byte(`1`), []byte(`2`)); sim < 0.8 {
+		t.Errorf("same-typed JSON scalars should score high, got %.4f", sim)
+	}
+	// Different scalar types -> low structural similarity.
+	if sim := CheckSimilarity([]byte(`1`), []byte(`"x"`)); sim > 0.5 {
+		t.Errorf("differently-typed JSON scalars should score low, got %.4f", sim)
+	}
+
+	// Over-size guard: a >50000-byte body returns 0.0 without doing real work.
+	big := make([]byte, 50001)
+	for i := range big {
+		big[i] = 'a'
+	}
+	if sim := CheckSimilarity(big, []byte("a")); sim != 0.0 {
+		t.Errorf("oversize payload must short-circuit to 0.0, got %.4f", sim)
+	}
+}
+
+func TestNormalizedLevenshtein_Truncation(t *testing.T) {
+	// Strings longer than the 2000-rune cap are truncated before distance is computed;
+	// two identical long strings must still score 1.0.
+	long := strings.Repeat("ab", 1500) // 3000 runes
+	if sim := normalizedLevenshtein(long, long); sim != 1.0 {
+		t.Errorf("identical long strings should be 1.0 after truncation, got %f", sim)
+	}
+	if sim := normalizedLevenshtein("", ""); sim != 1.0 {
+		t.Errorf("two empty strings should be 1.0, got %f", sim)
 	}
 }

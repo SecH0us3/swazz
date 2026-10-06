@@ -116,3 +116,36 @@ func TestStripJSONC(t *testing.T) {
 		})
 	}
 }
+
+func TestStripJSONC_States(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		in   string
+		// after stripping, parse as JSON and compare the "k" value
+		wantK string
+	}{
+		{"line comment", "{ // a comment\n \"k\": \"v\" }", "v"},
+		{"block comment", "{ /* block */ \"k\": \"v\" }", "v"},
+		{"block comment with star", "{ /* a * b */ \"k\": \"v\" }", "v"},
+		{"multiline block", "{\n/*\nline1\nline2\n*/\n\"k\": \"v\" }", "v"},
+		{"slash in string kept", "{ \"k\": \"a//b\" }", "a//b"},
+		{"block marker in string kept", "{ \"k\": \"a/*b*/c\" }", "a/*b*/c"},
+		{"escaped quote in string", "{ \"k\": \"a\\\"b\" }", "a\"b"},
+		{"lone slash not a comment", "{ \"k\": \"v\", \"n\": 1 }", "v"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			stripped := StripJSONC([]byte(c.in))
+			var m map[string]any
+			if err := json.Unmarshal(stripped, &m); err != nil {
+				t.Fatalf("stripped output is not valid JSON: %v\nstripped: %q", err, string(stripped))
+			}
+			if got, _ := m["k"].(string); got != c.wantK {
+				t.Errorf("k: got %q, want %q (stripped: %q)", got, c.wantK, string(stripped))
+			}
+		})
+	}
+}
