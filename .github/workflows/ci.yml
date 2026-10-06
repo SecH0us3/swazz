@@ -37,9 +37,35 @@ jobs:
       e2e: ${{ steps.filter.outputs.e2e }}
       extension: ${{ steps.filter.outputs.extension }}
       lockfile: ${{ steps.filter.outputs.lockfile }}
+      # True when the change touches at least one non-test (runtime) file.
+      # Used to keep the slow E2E shards from running on unit-test-only changes.
+      # dorny/paths-filter ORs its patterns and cannot subtract test files inside
+      # a single filter, so this is computed explicitly from the diff instead.
+      code: ${{ steps.runtime.outputs.code }}
     steps:
       # v6.0.2
+      # fetch-depth: 2 so HEAD^1 exists — for a pull_request the checkout is the
+      # merge commit (HEAD^1 = base), for a push it is the pushed commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+      - name: Detect runtime (non-test) changes
+        id: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse HEAD^1 >/dev/null 2>&1; then
+            FILES="$(git diff --name-only HEAD^1 HEAD)"
+          else
+            # No parent available (shallow/first commit) — fail open and run E2E.
+            FILES="UNKNOWN"
+          fi
+          echo "Changed files:"; echo "$FILES"
+          if [ "$FILES" = "UNKNOWN" ] || printf '%s\n' "$FILES" | grep -qvE '(\.test\.(ts|tsx)|_test\.go)$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
       # v4.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
         id: filter
@@ -322,7 +348,7 @@ jobs:
   test-e2e:
     name: Test E2E (Playwright) - Shard ${{ matrix.shardIndex }} of ${{ matrix.shardTotal }}
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.e2e == 'true'
+    if: github.event_name == 'workflow_dispatch' || (needs.changes.outputs.e2e == 'true' && needs.changes.outputs.code == 'true')
     continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
@@ -389,8 +415,10 @@ jobs:
 
   merge-reports:
     name: Merge E2E Reports
-    if: always()
-    needs: [test-e2e]
+    # Run even if shards failed, but skip entirely when the E2E shards themselves
+    # were skipped (unit-test-only change), so there are no missing artifacts.
+    if: always() && (github.event_name == 'workflow_dispatch' || (needs.changes.outputs.e2e == 'true' && needs.changes.outputs.code == 'true'))
+    needs: [changes, test-e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: write
