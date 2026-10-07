@@ -87,7 +87,13 @@ describe('MembersRolesTab Component', () => {
             if (url.includes('/roles') && (!opts || opts.method === 'GET' || !opts.method)) {
                 return {
                     ok: true,
-                    json: async () => ({ roles: mockRoles, permissions: mockPermissions })
+                    json: async () => ({ roles: mockRoles })
+                };
+            }
+            if (url.includes('/permissions') && (!opts || opts.method === 'GET' || !opts.method)) {
+                return {
+                    ok: true,
+                    json: async () => ({ permissions: mockPermissions })
                 };
             }
             if (url.includes('/invitations') && opts?.method === 'POST') {
@@ -450,5 +456,276 @@ describe('MembersRolesTab Component', () => {
 
         expect(screen.getByText(/Guest accounts are permitted to view existing access rights/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Invite User' })).toBeDisabled();
+    });
+
+    it('opens Edit Role modal for custom role, updates and saves changes', async () => {
+        mockFetch.mockImplementation(async (url: string, opts?: any) => {
+            if (url.includes('/roles/r-admin') && opts?.method === 'PUT') {
+                return {
+                    ok: true,
+                    json: async () => ({ role: { id: 'r-admin', name: 'SuperAdmin' } })
+                };
+            }
+            if (url.includes('/roles')) {
+                return { ok: true, json: async () => ({ roles: mockRoles, permissions: mockPermissions }) };
+            }
+            if (url.includes('/members')) {
+                return { ok: true, json: async () => ({ members: mockMembers }) };
+            }
+            return { ok: true, json: async () => ({}) };
+        });
+
+        render(<MembersRolesTab />);
+
+        const rolesTabBtn = screen.getByRole('button', { name: 'Roles' });
+        fireEvent.click(rolesTabBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('Admin')).toBeTruthy();
+        });
+
+        const editBtns = screen.getAllByRole('button', { name: 'Edit' });
+        fireEvent.click(editBtns[0]);
+
+        expect(screen.getByDisplayValue('Admin')).toBeTruthy();
+
+        const nameInput = screen.getByDisplayValue('Admin');
+        fireEvent.change(nameInput, { target: { value: 'SuperAdmin' } });
+
+        const saveBtn = screen.getByRole('button', { name: 'Save Changes' });
+        fireEvent.click(saveBtn);
+
+        await waitFor(() => {
+            expect(mockFetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/projects/proj-123/roles/r-admin'),
+                expect.objectContaining({ method: 'PUT' })
+            );
+        });
+    });
+
+    it('cancels modals when cancel buttons are clicked', async () => {
+        render(<MembersRolesTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('alice_admin')).toBeTruthy();
+        });
+
+        // Test cancel invite modal
+        const inviteBtn = screen.getByRole('button', { name: /Invite User/i });
+        fireEvent.click(inviteBtn);
+        expect(screen.getByText('Email or Username')).toBeTruthy();
+
+        const cancelInviteBtn = screen.getByRole('button', { name: 'Cancel' });
+        fireEvent.click(cancelInviteBtn);
+        expect(screen.queryByText('Email or Username')).toBeNull();
+
+        // Test cancel create account modal
+        const createAccountBtn = screen.getByRole('button', { name: /Create User \/ Service Account/i });
+        fireEvent.click(createAccountBtn);
+        expect(screen.getByRole('heading', { name: 'Create User / Service Account' })).toBeTruthy();
+
+        const cancelCreateBtn = screen.getByRole('button', { name: 'Cancel' });
+        fireEvent.click(cancelCreateBtn);
+        expect(screen.queryByRole('heading', { name: 'Create User / Service Account' })).toBeNull();
+
+        // Switch to roles and test cancel role modal
+        const rolesTabBtn = screen.getByRole('button', { name: 'Roles' });
+        fireEvent.click(rolesTabBtn);
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Create Custom Role/i })).toBeTruthy();
+        });
+
+        const createRoleBtn = screen.getByRole('button', { name: /Create Custom Role/i });
+        fireEvent.click(createRoleBtn);
+        expect(screen.getByText('Role Name')).toBeTruthy();
+
+        const cancelRoleBtn = screen.getByRole('button', { name: 'Cancel' });
+        fireEvent.click(cancelRoleBtn);
+        expect(screen.queryByText('Role Name')).toBeNull();
+    });
+
+    it('toggles checkboxes on and off in Invite and Edit Member modals', async () => {
+        render(<MembersRolesTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('bob_dev')).toBeTruthy();
+        });
+
+        // Open edit roles modal
+        const editRolesBtn = screen.getByRole('button', { name: 'Edit Roles' });
+        fireEvent.click(editRolesBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Edit Roles for bob_dev/i)).toBeTruthy();
+        });
+
+        // Uncheck and recheck a role
+        const checkboxes = screen.getAllByRole('checkbox');
+        if (checkboxes.length > 0) {
+            fireEvent.click(checkboxes[0]); // toggle
+            fireEvent.click(checkboxes[0]); // toggle back
+        }
+
+        const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+        fireEvent.click(cancelBtn);
+    });
+
+    it('copies credentials to clipboard in create account modal', async () => {
+        const writeTextMock = vi.fn().mockResolvedValue(undefined);
+        Object.assign(navigator, {
+            clipboard: {
+                writeText: writeTextMock
+            }
+        });
+
+        mockFetch.mockImplementation(async (url: string, opts?: any) => {
+            if (url.includes('/members/create') && opts?.method === 'POST') {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        username: 'auto_bot',
+                        password: 'super-secret-password-123'
+                    })
+                };
+            }
+            if (url.includes('/roles')) {
+                return { ok: true, json: async () => ({ roles: mockRoles, permissions: mockPermissions }) };
+            }
+            if (url.includes('/members')) {
+                return { ok: true, json: async () => ({ members: mockMembers }) };
+            }
+            return { ok: true, json: async () => ({}) };
+        });
+
+        render(<MembersRolesTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('alice_admin')).toBeTruthy();
+        });
+
+        const createAccountBtn = screen.getByRole('button', { name: /Create User \/ Service Account/i });
+        fireEvent.click(createAccountBtn);
+
+        const usernameInput = screen.getByPlaceholderText(/e\.g\. scanner-node-1/i);
+        fireEvent.change(usernameInput, { target: { value: 'auto_bot' } });
+
+        const roleCheckbox = screen.getByLabelText('Admin');
+        fireEvent.click(roleCheckbox);
+
+        const submitBtn = screen.getByRole('button', { name: 'Create Account' });
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('Account Created Successfully')).toBeTruthy();
+        });
+
+        const copyBtn = screen.getByRole('button', { name: /Copy/i });
+        fireEvent.click(copyBtn);
+
+        expect(writeTextMock).toHaveBeenCalledWith('super-secret-password-123');
+    });
+
+    it('does not delete member or role when confirm dialog is cancelled', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+        render(<MembersRolesTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('bob_dev')).toBeTruthy();
+        });
+
+        const removeBtn = screen.getByRole('button', { name: 'Remove' });
+        fireEvent.click(removeBtn);
+
+        // Fetch should not have been called with DELETE
+        expect(mockFetch).not.toHaveBeenCalledWith(
+            expect.stringContaining('/members/u-2'),
+            expect.objectContaining({ method: 'DELETE' })
+        );
+    });
+
+    it('renders pending invited member with Invited badge and no History button', async () => {
+        const pendingMember = {
+            id: 'u-3',
+            username: 'pending_user',
+            email: 'pending@example.com',
+            roles: ['Developer'],
+            two_factor_enabled: false,
+            auth_method: 'password',
+            is_pending: true
+        };
+
+        mockFetch.mockImplementation(async (url: string) => {
+            if (url.includes('/members')) {
+                return { ok: true, json: async () => ({ members: [pendingMember] }) };
+            }
+            if (url.includes('/roles')) {
+                return { ok: true, json: async () => ({ roles: mockRoles, permissions: mockPermissions }) };
+            }
+            return { ok: true, json: async () => ({}) };
+        });
+
+        render(<MembersRolesTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('pending_user')).toBeTruthy();
+            expect(screen.getByText('Invited')).toBeTruthy();
+            expect(screen.queryByRole('button', { name: 'History' })).toBeNull();
+        });
+    });
+
+    it('displays empty state when members and roles lists are empty', async () => {
+        mockFetch.mockImplementation(async (url: string) => {
+            if (url.includes('/members')) {
+                return { ok: true, json: async () => ({ members: [] }) };
+            }
+            if (url.includes('/roles')) {
+                return { ok: true, json: async () => ({ roles: [], permissions: {} }) };
+            }
+            return { ok: true, json: async () => ({}) };
+        });
+
+        render(<MembersRolesTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('No members found.')).toBeTruthy();
+        });
+    });
+
+    it('filters permissions with search input and toggles inherited roles in Create Role modal', async () => {
+        render(<MembersRolesTab />);
+
+        const rolesTabBtn = screen.getByRole('button', { name: 'Roles' });
+        fireEvent.click(rolesTabBtn);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Create Custom Role/i })).toBeTruthy();
+        });
+
+        const createRoleBtn = screen.getByRole('button', { name: /Create Custom Role/i });
+        fireEvent.click(createRoleBtn);
+
+        // Search permissions
+        const searchInput = screen.getByPlaceholderText('Search permissions...');
+        fireEvent.change(searchInput, { target: { value: 'nonexistent-perm-query' } });
+        expect(screen.getByText('No matching permissions found.')).toBeTruthy();
+
+        // Clear search
+        fireEvent.change(searchInput, { target: { value: 'scans' } });
+        expect(screen.queryByText('No matching permissions found.')).toBeNull();
+
+        // Toggle permission checkbox on and off
+        const permCheckboxes = screen.getAllByRole('checkbox');
+        if (permCheckboxes.length > 0) {
+            fireEvent.click(permCheckboxes[0]); // check
+            fireEvent.click(permCheckboxes[0]); // uncheck
+        }
+
+        // Toggle inherited role checkbox on and off
+        const developerLabels = screen.getAllByText('Developer');
+        fireEvent.click(developerLabels[developerLabels.length - 1]);
+
+        const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+        fireEvent.click(cancelBtn);
     });
 });

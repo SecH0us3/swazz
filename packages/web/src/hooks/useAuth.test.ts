@@ -70,16 +70,20 @@ describe('useAuth hook', () => {
         }
         vi.stubGlobal('Worker', MockWorker);
         vi.stubGlobal('Blob', class {});
-        vi.stubGlobal('URL', {
-            createObjectURL: vi.fn(() => 'blob-url'),
-            revokeObjectURL: vi.fn()
-        });
+        
+        const RealURL = globalThis.URL;
+        class MockURL extends RealURL {
+            static createObjectURL = vi.fn(() => 'blob-url');
+            static revokeObjectURL = vi.fn();
+        }
+        vi.stubGlobal('URL', MockURL);
 
         // Set default store state
         useAppStore.setState({ csrfToken: null, turnstileSiteKey: null });
     });
 
     afterEach(() => {
+        window.history.replaceState({}, '', '/');
         globalThis.fetch = originalFetch;
         vi.unstubAllGlobals();
         vi.restoreAllMocks();
@@ -203,5 +207,184 @@ describe('useAuth hook', () => {
         expect(result.current.isGuest).toBe(false);
         expect(localStorage.getItem('swazz_token')).toBeNull();
         expect(sessionStorage.getItem('swazz_guest')).toBeNull();
+    });
+
+    it('should handle exchange_code from URL parameters', async () => {
+        window.history.pushState({}, '', '/?exchange_code=oauth-code-777');
+
+        vi.mocked(globalThis.fetch).mockImplementation(async (url: any) => {
+            if (String(url).includes('/api/auth/oauth/exchange')) {
+                return new Response(JSON.stringify({ token: 'oauth-token-result' }), { status: 200 });
+            }
+            if (String(url).includes('/api/info')) {
+                return new Response(JSON.stringify({ auth_enabled: true }), { status: 200 });
+            }
+            return new Response(JSON.stringify({}), { status: 200 });
+        });
+
+        let hookResult: any;
+        await act(async () => {
+            const { result } = renderHook(() => useAuth());
+            hookResult = result;
+        });
+
+        await act(async () => {
+            // allow promises in effect to flush
+            await new Promise(r => setTimeout(r, 10));
+        });
+
+        expect(localStorage.getItem('swazz_token')).toBe('oauth-token-result');
+        expect(window.location.search).not.toContain('exchange_code');
+    });
+
+    it('should handle auth_token from URL parameters', async () => {
+        window.history.pushState({}, '', '/?auth_token=direct-auth-token-888');
+
+        vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+
+        await act(async () => {
+            renderHook(() => useAuth());
+        });
+
+        expect(localStorage.getItem('swazz_token')).toBe('direct-auth-token-888');
+        expect(window.location.search).not.toContain('auth_token');
+    });
+
+    it('should handle 2fa_required response from login', async () => {
+        vi.mocked(globalThis.fetch).mockImplementation(async (url: any) => {
+            if (String(url).includes('/api/info')) {
+                return new Response(JSON.stringify({}), { status: 200 });
+            }
+            if (String(url).includes('/step1')) {
+                return new Response(JSON.stringify({ token: 'c-token', challenge: 'c-str', difficulty: 1 }), { status: 200 });
+            }
+            if (String(url).includes('/login')) {
+                return new Response(JSON.stringify({ status: '2fa_required' }), { status: 200 });
+            }
+            return new Response(JSON.stringify({}), { status: 200 });
+        });
+
+        const { result } = renderHook(() => useAuth());
+
+        let res: any;
+        await act(async () => {
+            res = await result.current.login('alice', 'password123');
+        });
+
+        expect(res).toEqual({ twoFactorRequired: true });
+    });
+
+    it('should throw error when login step 1 fails', async () => {
+        vi.mocked(globalThis.fetch).mockImplementation(async (url: any) => {
+            if (String(url).includes('/api/info')) {
+                return new Response(JSON.stringify({}), { status: 200 });
+            }
+            if (String(url).includes('/step1')) {
+                return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), { status: 429 });
+            }
+            return new Response(JSON.stringify({}), { status: 200 });
+        });
+
+        const { result } = renderHook(() => useAuth());
+
+        await expect(act(async () => {
+            await result.current.login('alice', 'password123');
+        })).rejects.toThrow('Rate limit exceeded');
+    });
+
+    it('should throw error when login step 2 fails', async () => {
+        vi.mocked(globalThis.fetch).mockImplementation(async (url: any) => {
+            if (String(url).includes('/api/info')) {
+                return new Response(JSON.stringify({}), { status: 200 });
+            }
+            if (String(url).includes('/step1')) {
+                return new Response(JSON.stringify({ token: 'c-token', challenge: 'c-str', difficulty: 1 }), { status: 200 });
+            }
+            if (String(url).includes('/login')) {
+                return new Response(JSON.stringify({ error: 'Invalid credentials' }), { status: 401 });
+            }
+            return new Response(JSON.stringify({}), { status: 200 });
+        });
+
+        const { result } = renderHook(() => useAuth());
+
+        await expect(act(async () => {
+            await result.current.login('alice', 'wrong-pass');
+        })).rejects.toThrow('Invalid credentials');
+    });
+
+    it('should handle registration failure when API returns error', async () => {
+        vi.mocked(globalThis.fetch).mockImplementation(async (url: any) => {
+            if (String(url).includes('/api/info')) {
+                return new Response(JSON.stringify({}), { status: 200 });
+            }
+            if (String(url).includes('/register')) {
+                return new Response(JSON.stringify({ error: 'Username already taken' }), { status: 400 });
+            }
+            return new Response(JSON.stringify({}), { status: 200 });
+        });
+
+        const { result } = renderHook(() => useAuth());
+
+        await expect(act(async () => {
+            await result.current.register('existing_user', 'pass123');
+        })).rejects.toThrow('Username already taken');
+    });
+
+    it('should handle registration without token by calling login', async () => {
+        vi.mocked(globalThis.fetch).mockImplementation(async (url: any) => {
+            if (String(url).includes('/api/info')) {
+                return new Response(JSON.stringify({}), { status: 200 });
+            }
+            if (String(url).includes('/register')) {
+                return new Response(JSON.stringify({ success: true }), { status: 200 }); // no token returned
+            }
+            if (String(url).includes('/step1')) {
+                return new Response(JSON.stringify({ token: 'c-token', challenge: 'c-str', difficulty: 1 }), { status: 200 });
+            }
+            if (String(url).includes('/login')) {
+                return new Response(JSON.stringify({ token: 'login-fallback-token' }), { status: 200 });
+            }
+            return new Response(JSON.stringify({}), { status: 200 });
+        });
+
+        const { result } = renderHook(() => useAuth());
+
+        await act(async () => {
+            await result.current.register('new_user', 'pass123');
+        });
+
+        expect(localStorage.getItem('swazz_token')).toBe('login-fallback-token');
+    });
+
+    it('should handle guest login errors in step 1 and step 2', async () => {
+        vi.mocked(globalThis.fetch).mockImplementation(async (url: any) => {
+            if (String(url).includes('/api/info')) {
+                return new Response(JSON.stringify({}), { status: 200 });
+            }
+            if (String(url).includes('/guest/step1')) {
+                return new Response(JSON.stringify({ error: 'Turnstile verification failed' }), { status: 403 });
+            }
+            return new Response(JSON.stringify({}), { status: 200 });
+        });
+
+        const { result } = renderHook(() => useAuth());
+
+        await expect(act(async () => {
+            await result.current.continueAsGuest();
+        })).rejects.toThrow('Turnstile verification failed');
+    });
+
+    it('should handle /api/info rejection and set authEnabled false', async () => {
+        vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error('Network offline'));
+
+        let hookResult: any;
+        await act(async () => {
+            const { result } = renderHook(() => useAuth());
+            hookResult = result;
+        });
+
+        expect(hookResult.current.authEnabled).toBe(false);
+        expect(hookResult.current.isLoading).toBe(false);
     });
 });
