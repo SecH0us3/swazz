@@ -257,4 +257,76 @@ describe('useFuzzSession hook', () => {
 
         expect(res).toBeUndefined();
     });
+
+    it('should invoke onResult and onComplete during handleStart execution', async () => {
+        const fakeDb = { name: 'swazz_test_db' };
+        mockGetDb.mockReturnValue(fakeDb);
+
+        mockStart.mockImplementation(async (config, onResult, onComplete, runId) => {
+            onResult({ endpoint: '/api/admin', method: 'GET', status: 200, duration: 12 });
+            onComplete({ total: 1, errors: 0, anomalies: 0 });
+        });
+
+        const { result } = renderHook(() => useFuzzSession({
+            config: initialConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        await act(async () => {
+            await result.current.handleStart();
+        });
+
+        expect(mockStart).toHaveBeenCalled();
+        expect(mockSaveRun).toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith(
+            expect.stringContaining('Scan complete'),
+            'success'
+        );
+    });
+
+    it('should handle generic start error and reset liveRunId', async () => {
+        mockStart.mockRejectedValueOnce(new Error('Runner crashed'));
+
+        const { result } = renderHook(() => useFuzzSession({
+            config: initialConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        await act(async () => {
+            await result.current.handleStart();
+        });
+
+        expect(mockShowToast).toHaveBeenCalledWith('Error: Runner crashed', 'error');
+        expect(useAppStore.getState().liveRunId).toBeNull();
+    });
+
+    it('should sanitize and update config when overrideBaseUrl differs', async () => {
+        const { result } = renderHook(() => useFuzzSession({
+            config: initialConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        await act(async () => {
+            await result.current.handleStart(undefined, 'https://override-target.example.com/');
+        });
+
+        expect(mockUpdateConfig).toHaveBeenCalledWith(
+            expect.objectContaining({ base_url: 'https://override-target.example.com' })
+        );
+    });
 });

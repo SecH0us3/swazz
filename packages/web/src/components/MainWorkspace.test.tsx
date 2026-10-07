@@ -16,8 +16,19 @@ vi.mock('../hooks/useToast.js', () => ({
     useToast: () => ({ showToast: mockShowToast }),
 }));
 
+let mockGateState = { unlocked: true, gateType: 'open', lockMessage: '' };
+
 vi.mock('../hooks/useFeatureGate.js', () => ({
-    useFeatureGate: () => ({ unlocked: true, gateType: 'open', lockMessage: '' }),
+    useFeatureGate: () => mockGateState,
+}));
+
+vi.mock('./Shared/ExecutiveSummaryModal.js', () => ({
+    ExecutiveSummaryModal: ({ runId, onClose }: any) => (
+        <div data-testid="mock-exec-summary-modal">
+            <span>Executive Summary Modal: {runId}</span>
+            <button onClick={onClose}>Close Summary Modal</button>
+        </div>
+    ),
 }));
 
 vi.mock('./WafCheck/WafCheckPanel.js', () => ({
@@ -137,6 +148,7 @@ describe('MainWorkspace Component', () => {
         }),
         runs: [{ id: 'run-1', created_at: '2026-08-01' }],
         onImportRun: vi.fn(),
+        getRunExecutiveSummary: vi.fn().mockResolvedValue({ summary: 'Executive summary content', model: 'gpt' }),
         baseUrl: 'https://api.example.com',
         onChangeBaseUrl: vi.fn(),
         onStart: vi.fn(),
@@ -148,6 +160,8 @@ describe('MainWorkspace Component', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockGateState = { unlocked: true, gateType: 'open', lockMessage: '' };
+        localStorage.clear();
         useAppStore.setState({
             activeTab: 'heatmap',
             liveRunId: 'run-live',
@@ -299,6 +313,180 @@ describe('MainWorkspace Component', () => {
             expect(defaultProps.queryResults).toHaveBeenCalledWith(
                 expect.objectContaining({ runId: 'run-live', findingsOnly: true })
             );
+        }, { timeout: 2000 });
+    });
+
+    it('handles AI Executive Summary modal from export dropdown', () => {
+        render(<MainWorkspace {...defaultProps} />);
+
+        const exportContainer = document.querySelector('.workspace-export-dropdown-container');
+        expect(exportContainer).toBeTruthy();
+        fireEvent.mouseEnter(exportContainer!);
+
+        const aiBtn = screen.getByRole('button', { name: /AI Executive Summary/i });
+        fireEvent.click(aiBtn);
+
+        expect(screen.getByTestId('mock-exec-summary-modal')).toBeInTheDocument();
+        expect(screen.getByText('Executive Summary Modal: run-live')).toBeInTheDocument();
+
+        // Close modal
+        const closeBtn = screen.getByRole('button', { name: /Close Summary Modal/i });
+        fireEvent.click(closeBtn);
+        expect(screen.queryByTestId('mock-exec-summary-modal')).not.toBeInTheDocument();
+    });
+
+    it('shows toast when attempting AI Executive Summary without an active run', () => {
+        useAppStore.setState({ liveRunId: null, loadedRunId: null });
+        render(<MainWorkspace {...defaultProps} />);
+
+        const exportContainer = document.querySelector('.workspace-export-dropdown-container');
+        fireEvent.mouseEnter(exportContainer!);
+
+        const aiBtn = screen.getByRole('button', { name: /AI Executive Summary/i });
+        fireEvent.click(aiBtn);
+
+        expect(mockShowToast).toHaveBeenCalledWith('No scan run selected for Executive Summary', 'error');
+        expect(screen.queryByTestId('mock-exec-summary-modal')).not.toBeInTheDocument();
+    });
+
+    it('opens AI Executive Summary modal from HistoryPage action', () => {
+        useAppStore.setState({ activeTab: 'history' });
+        render(<MainWorkspace {...defaultProps} />);
+
+        const execSummaryBtn = screen.getByRole('button', { name: /Export Exec Summary/i });
+        fireEvent.click(execSummaryBtn);
+
+        expect(screen.getByTestId('mock-exec-summary-modal')).toBeInTheDocument();
+        expect(screen.getByText('Executive Summary Modal: run-1')).toBeInTheDocument();
+    });
+
+    it('renders WafCheckPanel when WAF tab is selected', () => {
+        render(<MainWorkspace {...defaultProps} />);
+
+        const wafTabBtn = screen.getByTestId('tab-waf');
+        fireEvent.click(wafTabBtn);
+
+        expect(useAppStore.getState().activeTab).toBe('waf');
+        expect(screen.getByTestId('mock-waf-check-panel')).toBeInTheDocument();
+        expect(screen.getByText('Mock WafCheckPanel: https://api.example.com')).toBeInTheDocument();
+    });
+
+    it('handles locked feature gates for export reports and compare scans', () => {
+        mockGateState = {
+            unlocked: false,
+            gateType: 'coming_soon',
+            lockMessage: 'This feature is currently locked',
+        };
+        useAppStore.setState({ compareRunIdA: 'run-a', compareRunIdB: 'run-b' });
+
+        render(<MainWorkspace {...defaultProps} />);
+
+        // Compare scans lock toast
+        const compareBtn = screen.getByRole('button', { name: /Compare Scans/i });
+        fireEvent.click(compareBtn);
+        expect(mockShowToast).toHaveBeenCalledWith('This feature is currently locked', 'error');
+
+        // Export dropdown locked toast
+        const exportContainer = document.querySelector('.workspace-export-dropdown-container');
+        fireEvent.mouseEnter(exportContainer!);
+
+        const htmlBtn = screen.getByRole('button', { name: /HTML Report/i });
+        fireEvent.click(htmlBtn);
+        expect(mockShowToast).toHaveBeenCalledWith('This feature is currently locked', 'error');
+
+        const mdBtn = screen.getByRole('button', { name: /MD Report/i });
+        fireEvent.click(mdBtn);
+        expect(mockShowToast).toHaveBeenCalledWith('This feature is currently locked', 'error');
+    });
+
+    it('handles Dashboard heatmap filter and demo trigger', () => {
+        useAppStore.setState({ activeTab: 'heatmap' });
+        render(<MainWorkspace {...defaultProps} />);
+
+        const demoBtn = screen.getByRole('button', { name: /Dashboard Demo/i });
+        fireEvent.click(demoBtn);
+        expect(defaultProps.handleStart).toHaveBeenCalledWith(['https://bbad.secmy.app/swagger.json']);
+
+        const filterBtn = screen.getByRole('button', { name: /Filter 2xx/i });
+        fireEvent.click(filterBtn);
+        expect(useAppStore.getState().heatmapFilter).toEqual({ statusGroup: '2xx' });
+        expect(useAppStore.getState().activeTab).toBe('logs');
+    });
+
+    it('handles Inspector clear filter and export callbacks', () => {
+        useAppStore.setState({ activeTab: 'logs', heatmapFilter: { statusGroup: '2xx' } as any });
+        render(<MainWorkspace {...defaultProps} />);
+
+        const clearBtn = screen.getByRole('button', { name: /Clear Filter/i });
+        fireEvent.click(clearBtn);
+        expect(useAppStore.getState().heatmapFilter).toBeNull();
+
+        const exportBtn = screen.getByRole('button', { name: /Export Inspector/i });
+        fireEvent.click(exportBtn);
+        expect(defaultProps.handleExport).toHaveBeenCalledWith('run-live', 'https://api.example.com');
+    });
+
+    it('handles HistoryPage load run and export run callbacks', () => {
+        useAppStore.setState({ activeTab: 'history' });
+        render(<MainWorkspace {...defaultProps} />);
+
+        const exportBtn = screen.getByRole('button', { name: /Export Run/i });
+        fireEvent.click(exportBtn);
+        expect(defaultProps.handleExport).toHaveBeenCalledWith('run-1');
+
+        const loadBtn = screen.getByRole('button', { name: /Load Run/i });
+        fireEvent.click(loadBtn);
+        expect(defaultProps.handleLoadRun).toHaveBeenCalledWith('run-1', undefined);
+        expect(useAppStore.getState().activeTab).toBe('heatmap');
+    });
+
+    it('switches away from findings to logs when analyze_response_body is false', () => {
+        useAppStore.setState({ activeTab: 'findings' });
+        const propsNoAnalysis = {
+            ...defaultProps,
+            config: {
+                ...defaultProps.config,
+                settings: { analyze_response_body: false },
+            },
+        };
+
+        render(<MainWorkspace {...propsNoAnalysis} />);
+
+        expect(useAppStore.getState().activeTab).toBe('logs');
+        expect(screen.queryByRole('button', { name: /Findings/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /OWASP/i })).not.toBeInTheDocument();
+    });
+
+    it('focuses target input when Configure Target API is clicked in welcome view', () => {
+        useAppStore.setState({ liveRunId: null, loadedRunId: null });
+        const input = document.createElement('input');
+        input.className = 'workspace-target-input';
+        document.body.appendChild(input);
+        const focusSpy = vi.spyOn(input, 'focus');
+        const selectSpy = vi.spyOn(input, 'select');
+
+        const propsWithoutEndpoints = {
+            ...defaultProps,
+            config: { ...defaultProps.config, endpoints: [] },
+        };
+        render(<MainWorkspace {...propsWithoutEndpoints} />);
+
+        const configBtn = screen.getByRole('button', { name: /Configure Target API/i });
+        fireEvent.click(configBtn);
+
+        expect(focusSpy).toHaveBeenCalled();
+        expect(selectSpy).toHaveBeenCalled();
+
+        document.body.removeChild(input);
+    });
+
+    it('filters excluded statuses from localStorage in background count calculation', async () => {
+        localStorage.setItem('swazz_excluded_statuses', JSON.stringify([500]));
+
+        render(<MainWorkspace {...defaultProps} />);
+
+        await waitFor(() => {
+            expect(defaultProps.queryResults).toHaveBeenCalled();
         }, { timeout: 2000 });
     });
 });

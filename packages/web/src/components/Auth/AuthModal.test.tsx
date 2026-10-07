@@ -255,4 +255,98 @@ describe('AuthModal Component', () => {
         expect(script).not.toBeNull();
         expect(script.src).toContain('challenges.cloudflare.com/turnstile');
     });
+
+    it('renders required invite code when betaLimitReached is true in beta mode', async () => {
+        useAppStore.setState({ betaModeEnabled: true, betaLimitReached: true });
+        const onRegisterMock = vi.fn().mockResolvedValue(undefined);
+        render(<AuthModal {...defaultProps} initialIsRegistering={true} onRegister={onRegisterMock} />);
+
+        expect(screen.getByLabelText(/Invite Code/i)).toBeInTheDocument();
+        const inviteInput = screen.getByPlaceholderText('XXXX-XXXX-XXXX');
+        fireEvent.change(inviteInput, { target: { value: 'BETA-CODE-1234' } });
+
+        const usernameInput = screen.getByPlaceholderText('Enter username');
+        const passwordInput = screen.getByPlaceholderText('Min 12 characters');
+        const emailInput = screen.getByPlaceholderText('name@example.com');
+
+        fireEvent.change(usernameInput, { target: { value: 'betauser' } });
+        fireEvent.change(passwordInput, { target: { value: 'Password12345!' } });
+        fireEvent.change(emailInput, { target: { value: 'beta@example.com' } });
+
+        const submitBtn = screen.getByRole('button', { name: /create account/i });
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(onRegisterMock).toHaveBeenCalledWith(
+                'betauser',
+                'Password12345!',
+                'beta@example.com',
+                '',
+                'BETA-CODE-1234'
+            );
+        });
+    });
+
+    it('renders optional invite code toggle when betaLimitReached is false in beta mode', () => {
+        useAppStore.setState({ betaModeEnabled: true, betaLimitReached: false });
+        render(<AuthModal {...defaultProps} initialIsRegistering={true} />);
+
+        const toggleBtn = screen.getByRole('button', { name: /\+ Have an invite code\?/i });
+        expect(toggleBtn).toBeInTheDocument();
+
+        fireEvent.click(toggleBtn);
+        expect(screen.getByPlaceholderText('XXXX-XXXX-XXXX')).toBeInTheDocument();
+    });
+
+    it('handles continue as guest button click', async () => {
+        const onGuestMock = vi.fn().mockResolvedValue(undefined);
+        render(<AuthModal {...defaultProps} onGuest={onGuestMock} />);
+
+        const guestBtn = screen.getByRole('button', { name: /Try as guest/i });
+        fireEvent.click(guestBtn);
+
+        await waitFor(() => {
+            expect(onGuestMock).toHaveBeenCalled();
+        });
+    });
+
+    it('submits 2FA code during two-factor verification step', async () => {
+        const onLoginMock = vi.fn()
+            .mockResolvedValueOnce({ twoFactorRequired: true })
+            .mockResolvedValueOnce(undefined);
+
+        render(<AuthModal {...defaultProps} initialIsRegistering={false} onLogin={onLoginMock} />);
+
+        const usernameInput = screen.getByPlaceholderText('Enter username');
+        const passwordInput = screen.getByPlaceholderText('••••••••••••');
+        const submitBtn = screen.getByRole('button', { name: /^sign in$/i });
+
+        fireEvent.change(usernameInput, { target: { value: 'alice_2fa' } });
+        fireEvent.change(passwordInput, { target: { value: 'MySecretPassword123' } });
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('Two-Factor Verification')).toBeInTheDocument();
+        });
+
+        const codeInput = screen.getByPlaceholderText('000000');
+        fireEvent.change(codeInput, { target: { value: '123456' } });
+
+        const verifyBtn = screen.getByRole('button', { name: 'Verify' });
+        fireEvent.click(verifyBtn);
+
+        await waitFor(() => {
+            expect(onLoginMock).toHaveBeenCalledWith('alice_2fa', 'MySecretPassword123', '123456', '');
+        });
+    });
+
+    it('calls onClose when close button is clicked', () => {
+        const onCloseMock = vi.fn();
+        render(<AuthModal {...defaultProps} onClose={onCloseMock} />);
+
+        const closeBtn = screen.getByLabelText(/close/i);
+        fireEvent.click(closeBtn);
+
+        expect(onCloseMock).toHaveBeenCalled();
+    });
 });
