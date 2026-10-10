@@ -494,9 +494,11 @@ describe('WafCheckPanel Component', () => {
             expect(formatBackgroundWafUrl('http://localhost:3000')).toBe('http://localhost:3000');
         });
 
-        it('fixes protocol with missing slash (e.g. https:/ or http:/) in background', () => {
+        it('fixes protocol with missing slashes (e.g. https:/ or http:/ or https:example.com) in background', () => {
             expect(formatBackgroundWafUrl('https:/example.com')).toBe('https://example.com');
             expect(formatBackgroundWafUrl('http:/example.com')).toBe('http://example.com');
+            expect(formatBackgroundWafUrl('https:example.com')).toBe('https://example.com');
+            expect(formatBackgroundWafUrl('http:example.com')).toBe('http://example.com');
         });
 
         it('handles protocol-relative URLs by prepending https:', () => {

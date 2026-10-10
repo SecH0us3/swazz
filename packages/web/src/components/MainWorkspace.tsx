@@ -566,7 +566,7 @@ export function MainWorkspace({
                             onExportExecutiveSummary={(runId) => setExecutiveSummaryRunId(runId)}
                         />
                     ) : activeTab === 'waf' ? (
-                        <WafCheckPanel targetUrl={config?.base_url} />
+                        <WafCheckPanel key={activeProject?.id || 'default'} targetUrl={config?.base_url} />
                     ) : !hasActivity ? (
                         <div className="welcome-workspace-wrapper">
                             <div className="welcome-workspace-container">

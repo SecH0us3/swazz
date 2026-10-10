@@ -54,9 +54,9 @@ export function formatBackgroundWafUrl(rawUrl: string): string {
         return trimmed;
     }
 
-    // If missing a slash from the protocol (e.g. https:/example.com or http:/example.com)
-    if (/^https?:\/+[^\/]/i.test(trimmed)) {
-        return trimmed.replace(/^(https?):\/+/i, '$1://');
+    // If missing slashes from the protocol (e.g. https:/example.com, https:example.com, http:/example.com)
+    if (/^https?:\/*[^\/]/i.test(trimmed)) {
+        return trimmed.replace(/^(https?):?\/*/, '$1://');
     }
 
     // Protocol-relative //example.com
