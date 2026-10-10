@@ -40,6 +40,34 @@ export interface WafCheckPanelProps {
     targetUrl?: string;
 }
 
+/**
+ * Ensures the target URL sent in the background to /api/waf-check has a protocol.
+ * If the user did not enter a protocol, defaults to https://.
+ * Never mutates the raw input field in the UI.
+ */
+export function formatBackgroundWafUrl(rawUrl: string): string {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return '';
+
+    // Check if a standard protocol (http://, https://, ws://, etc.) is already present
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
+        return trimmed;
+    }
+
+    // If missing slashes from the protocol (e.g. https:/example.com, https:example.com, http:/example.com)
+    if (/^https?:\/*[^\/]/i.test(trimmed)) {
+        return trimmed.replace(/^(https?):?\/*/, '$1://');
+    }
+
+    // Protocol-relative //example.com
+    if (trimmed.startsWith('//')) {
+        return `https:${trimmed}`;
+    }
+
+    // If no protocol was entered, automatically write https:// in the background
+    return `https://${trimmed}`;
+}
+
 function classify(r: { status: number | null; verdict?: WafVerdict }): WafVerdict {
     if (r.verdict) return r.verdict;
     if (r.status === 403 || r.status === 406 || r.status === 429) return 'blocked';
@@ -56,15 +84,14 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
     const defaultUrl = (targetUrl !== undefined ? targetUrl : config?.base_url) || '';
     const [inputUrl, setInputUrl] = useState(defaultUrl);
     const lastDefaultRef = useRef(defaultUrl);
+    const isUserEditedRef = useRef(false);
 
     useEffect(() => {
-        if (lastDefaultRef.current !== defaultUrl) {
-            if (inputUrl === lastDefaultRef.current || !inputUrl.trim()) {
-                setInputUrl(defaultUrl);
-            }
+        if (!isUserEditedRef.current && lastDefaultRef.current !== defaultUrl) {
+            setInputUrl(defaultUrl);
             lastDefaultRef.current = defaultUrl;
         }
-    }, [defaultUrl, inputUrl]);
+    }, [defaultUrl]);
 
     const trimmedUrl = inputUrl.trim();
     const hasUrl = Boolean(trimmedUrl);
@@ -103,6 +130,9 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
             setLoadingStep('scanning');
         }, 3500);
 
+        const targetUrlToSend = formatBackgroundWafUrl(trimmedUrl);
+        if (!targetUrlToSend) return;
+
         try {
             const headers: Record<string, string> = {
                 'Content-Type': 'application/json',
@@ -115,7 +145,7 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
             const res = await fetch(`${PROXY_URL}/api/waf-check`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ url: trimmedUrl }),
+                body: JSON.stringify({ url: targetUrlToSend }),
             });
 
             let data: any;
@@ -164,7 +194,10 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
                         data-testid="waf-target-input"
                         placeholder="https://example.com"
                         value={inputUrl}
-                        onChange={(e) => setInputUrl(e.target.value)}
+                        onChange={(e) => {
+                            isUserEditedRef.current = true;
+                            setInputUrl(e.target.value);
+                        }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && hasUrl && !isLoading) {
                                 handleRunWafCheck();
