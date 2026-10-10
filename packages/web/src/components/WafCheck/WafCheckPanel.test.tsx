@@ -9,7 +9,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { WafCheckPanel } from './WafCheckPanel';
+import { WafCheckPanel, formatBackgroundWafUrl } from './WafCheckPanel';
 import { useConfig } from '../../hooks/useConfig.js';
 import { useAppStore } from '../../store/appStore.js';
 
@@ -480,5 +480,135 @@ describe('WafCheckPanel Component', () => {
 
         fireEvent.click(screen.getByTestId('waf-files-section-toggle'));
         expect(screen.getByText('timeout')).toBeInTheDocument();
+    });
+
+    describe('formatBackgroundWafUrl helper', () => {
+        it('prepends https:// when no protocol is provided', () => {
+            expect(formatBackgroundWafUrl('example.com')).toBe('https://example.com');
+            expect(formatBackgroundWafUrl('sub.domain.co:8080/path')).toBe('https://sub.domain.co:8080/path');
+        });
+
+        it('preserves existing http:// and https:// protocols', () => {
+            expect(formatBackgroundWafUrl('http://insecure.test')).toBe('http://insecure.test');
+            expect(formatBackgroundWafUrl('https://secure.test')).toBe('https://secure.test');
+            expect(formatBackgroundWafUrl('http://localhost:3000')).toBe('http://localhost:3000');
+        });
+
+        it('fixes protocol with missing slash (e.g. https:/ or http:/) in background', () => {
+            expect(formatBackgroundWafUrl('https:/example.com')).toBe('https://example.com');
+            expect(formatBackgroundWafUrl('http:/example.com')).toBe('http://example.com');
+        });
+
+        it('handles protocol-relative URLs by prepending https:', () => {
+            expect(formatBackgroundWafUrl('//example.com')).toBe('https://example.com');
+        });
+
+        it('returns empty string for empty or whitespace-only input', () => {
+            expect(formatBackgroundWafUrl('')).toBe('');
+            expect(formatBackgroundWafUrl('   ')).toBe('');
+        });
+    });
+
+    it('keeps raw user input in the field and auto-prepends https:// in background when no protocol entered', async () => {
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                detection: { detected: false, wafType: 'None', confidence: 0, evidence: [] },
+                recommendation: 'No WAF detected',
+            }),
+        });
+
+        render(<WafCheckPanel />);
+        const input = screen.getByTestId('waf-target-input') as HTMLInputElement;
+
+        fireEvent.change(input, { target: { value: 'target-without-scheme.org' } });
+
+        // User input in UI field is strictly preserved
+        expect(input.value).toBe('target-without-scheme.org');
+
+        fireEvent.click(screen.getByTestId('run-waf-check-btn'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('waf-check-recommendation')).toBeInTheDocument();
+        });
+
+        // Input field in UI continues to display exactly what the user typed
+        expect(input.value).toBe('target-without-scheme.org');
+
+        // Background request sends https://target-without-scheme.org
+        expect(mockFetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/waf-check'),
+            expect.objectContaining({
+                body: JSON.stringify({ url: 'https://target-without-scheme.org' }),
+            })
+        );
+    });
+
+    it('preserves raw input and repairs missing slash in background when user enters https:/target.org', async () => {
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                detection: { detected: false, wafType: 'None', confidence: 0, evidence: [] },
+                recommendation: 'No WAF detected',
+            }),
+        });
+
+        render(<WafCheckPanel />);
+        const input = screen.getByTestId('waf-target-input') as HTMLInputElement;
+
+        fireEvent.change(input, { target: { value: 'https:/flaky-slash.io' } });
+
+        // User input in UI field retains whatever the user typed
+        expect(input.value).toBe('https:/flaky-slash.io');
+
+        fireEvent.click(screen.getByTestId('run-waf-check-btn'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('waf-check-recommendation')).toBeInTheDocument();
+        });
+
+        // UI still displays the user's raw input
+        expect(input.value).toBe('https:/flaky-slash.io');
+
+        // Background request repairs the slash to https://
+        expect(mockFetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/waf-check'),
+            expect.objectContaining({
+                body: JSON.stringify({ url: 'https://flaky-slash.io' }),
+            })
+        );
+    });
+
+    it('does not overwrite user input when targetUrl/config.base_url changes after user has edited field', () => {
+        const { rerender } = render(<WafCheckPanel targetUrl="https://initial.com" />);
+        const input = screen.getByTestId('waf-target-input') as HTMLInputElement;
+        expect(input.value).toBe('https://initial.com');
+
+        // User edits the field
+        fireEvent.change(input, { target: { value: 'my-custom-domain.net' } });
+        expect(input.value).toBe('my-custom-domain.net');
+
+        // Parent component / config updates targetUrl
+        rerender(<WafCheckPanel targetUrl="https://updated-from-server.com" />);
+
+        // The user's input MUST NOT be overwritten
+        expect(input.value).toBe('my-custom-domain.net');
+    });
+
+    it('does not overwrite cleared input when targetUrl/config.base_url changes after user edit', () => {
+        const { rerender } = render(<WafCheckPanel targetUrl="https://initial.com" />);
+        const input = screen.getByTestId('waf-target-input') as HTMLInputElement;
+
+        // User clears the field
+        fireEvent.change(input, { target: { value: '' } });
+        expect(input.value).toBe('');
+
+        // Parent component / config updates targetUrl
+        rerender(<WafCheckPanel targetUrl="https://updated-from-server.com" />);
+
+        // Cleared field must NOT snap back to targetUrl
+        expect(input.value).toBe('');
     });
 });
