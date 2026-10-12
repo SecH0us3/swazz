@@ -117,7 +117,7 @@ go run scripts/issue-license.go \
 describe a licence. It does not grant or withhold anything — entitlements come from
 `-features` and the ceilings — it only decides what the user is told:
 
-| Kind | Dashboard badge | CLI / agent | Offers "Renew 14-Day Trial" |
+| Kind | Dashboard badge | CLI / agent | Offers "Renew 90-Day Trial" |
 |---|---|---|---|
 | `commercial` (default) | *Commercial License Active*, or *Enterprise License Active* when the licence carries `*` or `enterprise` | `Commercial` / `Enterprise` | No |
 | `trial` | *Trial License Active* | `Trial` | Yes |
