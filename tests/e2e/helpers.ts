@@ -57,7 +57,7 @@ export async function disableBoundaryProfile(page: Page): Promise<void> {
 
 /**
  * Safely registers and logs in a new unique user, disables intrusive onboarding tips,
- * and optionally claims a 14-day enterprise trial to enable backend & frontend enterprise features.
+ * and optionally claims a 90-day enterprise trial to enable backend & frontend enterprise features.
  */
 export async function registerAndLogin(
   page: Page,
