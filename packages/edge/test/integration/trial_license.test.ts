@@ -73,7 +73,7 @@ describe('Trial License Integration', () => {
     return { token: data.token, userId: data.id, csrfToken: csrf };
   }
 
-  it('allows a registered user to check trial status and claim a 14-day trial', async () => {
+  it('allows a registered user to check trial status and claim a 90-day trial', async () => {
     const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     const { token, csrfToken } = await registerUser(username);
 
@@ -109,7 +109,7 @@ describe('Trial License Integration', () => {
     expect(claimRes.status).toBe(200);
     const claimData = await claimRes.json();
     expect(claimData.status).toBe('ok');
-    expect(claimData.license.company).toBe(`${username} (14-Day Trial)`);
+    expect(claimData.license.company).toBe(`${username} (90-Day Trial)`);
     expect(claimData.license.kind).toBe('trial');
     expect(claimData.license.features).toEqual(['*']);
     expect(claimData.license.max_users).toBe(1);
@@ -147,7 +147,7 @@ describe('Trial License Integration', () => {
     expect(licRes.status).toBe(200);
     const licData = await licRes.json();
     expect(licData.status).toBe('active');
-    expect(licData.license.company).toBe(`${username} (14-Day Trial)`);
+    expect(licData.license.company).toBe(`${username} (90-Day Trial)`);
 
     // 5. Attempt duplicate claim within cooldown -> 429
     const dupRes = await app.fetch(

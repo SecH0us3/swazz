@@ -229,20 +229,20 @@ describe('LicenseService', () => {
       expect(res.next_available_at).toBeNull();
     });
 
-    it('claimTrial successfully generates, activates, and returns a 14-day trial token', async () => {
+    it('claimTrial successfully generates, activates, and returns a 90-day trial token', async () => {
       const res = await makeService().claimTrial('user-1', 'alex');
       expect(res.status).toBe('ok');
-      expect(res.license.company).toBe('alex (14-Day Trial)');
+      expect(res.license.company).toBe('alex (90-Day Trial)');
       expect(res.license.features).toEqual(['*']);
       expect(res.license.max_users).toBe(1);
       expect(res.license.max_concurrency).toBe(1000);
       expect(typeof res.token).toBe('string');
       expect(res.token.split('.').length).toBe(3);
 
-      // Verify expiration is ~14 days from now
+      // Verify expiration is ~90 days from now
       const expiresAt = new Date(res.license.expires_at).getTime();
-      const expectedMin = Date.now() + 13 * 24 * 60 * 60 * 1000;
-      const expectedMax = Date.now() + 15 * 24 * 60 * 60 * 1000;
+      const expectedMin = Date.now() + 89 * 24 * 60 * 60 * 1000;
+      const expectedMax = Date.now() + 91 * 24 * 60 * 60 * 1000;
       expect(expiresAt).toBeGreaterThan(expectedMin);
       expect(expiresAt).toBeLessThan(expectedMax);
 
@@ -275,7 +275,7 @@ describe('LicenseService', () => {
       const defaultService = new LicenseService({} as any, authRepo);
       const res = await defaultService.claimTrial('user-1', 'alex');
       expect(res.status).toBe('ok');
-      expect(res.license.company).toBe('alex (14-Day Trial)');
+      expect(res.license.company).toBe('alex (90-Day Trial)');
       expect(typeof res.token).toBe('string');
     });
   });

@@ -1836,7 +1836,7 @@
     "/api/user/trial-license": {
       "post": {
         "summary": "Claim trial license",
-        "description": "Issues a 14-day Pro trial license for registered user.",
+        "description": "Issues a 90-day Pro trial license for registered user.",
         "responses": {
           "200": {
             "description": "Trial license granted"
