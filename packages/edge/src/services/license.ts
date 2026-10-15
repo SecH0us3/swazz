@@ -21,7 +21,8 @@ export interface LicenseInfo {
 }
 
 export const TRIAL_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
-export const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+export const TRIAL_DURATION_DAYS = 90;
+export const TRIAL_DURATION_MS = TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000;
 
 export interface TrialStatus {
   claimed: boolean;
@@ -408,7 +409,7 @@ export class LicenseService implements ILicenseService {
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + TRIAL_DURATION_MS).toISOString();
-    const company = username ? `${username} (14-Day Trial)` : 'Swazz Trial User';
+    const company = username ? `${username} (${TRIAL_DURATION_DAYS}-Day Trial)` : 'Swazz Trial User';
 
     const payload = {
       company,
