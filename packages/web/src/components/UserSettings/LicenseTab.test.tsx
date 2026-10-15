@@ -49,7 +49,7 @@ describe('LicenseTab Component', () => {
         vi.unstubAllGlobals();
     });
 
-    it('renders unclaimed trial state and allows claiming 14-day trial', async () => {
+    it('renders unclaimed trial state and allows claiming 90-day trial', async () => {
         // Mock GET /api/user/license and GET /api/user/trial-status
         vi.spyOn(global, 'fetch').mockImplementation((url: any) => {
             const urlStr = String(url);
@@ -71,10 +71,10 @@ describe('LicenseTab Component', () => {
         render(<LicenseTab />);
 
         await waitFor(() => {
-            expect(screen.getByText('Claim 14-Day Free Trial')).toBeTruthy();
+            expect(screen.getByText('Claim 90-Day Free Trial')).toBeTruthy();
         });
 
-        expect(screen.getByText('14-Day Free Trial')).toBeTruthy();
+        expect(screen.getByText('90-Day Free Trial')).toBeTruthy();
         expect(screen.getByText(/Evaluate full enterprise capabilities/i)).toBeTruthy();
 
         // Now mock POST /api/user/trial-license
@@ -86,7 +86,7 @@ describe('LicenseTab Component', () => {
                     json: () => Promise.resolve({
                         status: 'ok',
                         license: {
-                            company: 'tester (14-Day Trial)',
+                            company: 'tester (90-Day Trial)',
                             expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
                             features: ['*'],
                             kind: 'trial',
@@ -103,15 +103,15 @@ describe('LicenseTab Component', () => {
             } as Response);
         });
 
-        const claimBtn = screen.getByRole('button', { name: /Claim 14-Day Free Trial/i });
+        const claimBtn = screen.getByRole('button', { name: /Claim 90-Day Free Trial/i });
         fireEvent.click(claimBtn);
 
         await waitFor(() => {
-            expect(screen.getByText(/14-day free trial license activated successfully/i)).toBeTruthy();
+            expect(screen.getByText(/90-day free trial license activated successfully/i)).toBeTruthy();
         });
 
         expect(screen.getByText(/Trial License Active/i)).toBeTruthy();
-        expect(screen.getByText('tester (14-Day Trial)')).toBeTruthy();
+        expect(screen.getByText('tester (90-Day Trial)')).toBeTruthy();
         expect(screen.getByText('Copy')).toBeTruthy();
     });
 
@@ -142,10 +142,10 @@ describe('LicenseTab Component', () => {
         render(<LicenseTab />);
 
         await waitFor(() => {
-            expect(screen.getByText(/Next 14-day free trial will be available in 14 hours/i)).toBeTruthy();
+            expect(screen.getByText(/Next 90-day free trial will be available in 14 hours/i)).toBeTruthy();
         });
 
-        expect(screen.queryByText('Claim 14-Day Free Trial')).toBeNull();
+        expect(screen.queryByText('Claim 90-Day Free Trial')).toBeNull();
     });
 
     it('allows claiming trial again after 24-hour cooldown expires when license is inactive', async () => {
@@ -175,11 +175,11 @@ describe('LicenseTab Component', () => {
         render(<LicenseTab />);
 
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Claim 14-Day Free Trial/i })).toBeTruthy();
+            expect(screen.getByRole('button', { name: /Claim 90-Day Free Trial/i })).toBeTruthy();
         });
     });
 
-    it('shows Renew 14-Day Trial button when active trial license is eligible for renewal', async () => {
+    it('shows Renew 90-Day Trial button when active trial license is eligible for renewal', async () => {
         vi.spyOn(global, 'fetch').mockImplementation((url: any, options?: any) => {
             const urlStr = String(url);
             if (urlStr.includes('/api/user/trial-status')) {
@@ -200,7 +200,7 @@ describe('LicenseTab Component', () => {
                     json: () => Promise.resolve({
                         status: 'active',
                         license: {
-                            company: 'tester (14-Day Trial)',
+                            company: 'tester (90-Day Trial)',
                             expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                             features: ['*'],
                             kind: 'trial',
@@ -216,7 +216,7 @@ describe('LicenseTab Component', () => {
                     json: () => Promise.resolve({
                         status: 'ok',
                         license: {
-                            company: 'tester (14-Day Trial)',
+                            company: 'tester (90-Day Trial)',
                             expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
                             features: ['*'],
                             kind: 'trial',
@@ -233,14 +233,14 @@ describe('LicenseTab Component', () => {
         render(<LicenseTab />);
 
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Renew 14-Day Trial/i })).toBeTruthy();
+            expect(screen.getByRole('button', { name: /Renew 90-Day Trial/i })).toBeTruthy();
         });
 
-        const renewBtn = screen.getByRole('button', { name: /Renew 14-Day Trial/i });
+        const renewBtn = screen.getByRole('button', { name: /Renew 90-Day Trial/i });
         fireEvent.click(renewBtn);
 
         await waitFor(() => {
-            expect(screen.getByText(/14-day free trial license renewed successfully/i)).toBeTruthy();
+            expect(screen.getByText(/90-day free trial license renewed successfully/i)).toBeTruthy();
         });
     });
 
@@ -373,7 +373,7 @@ describe('LicenseTab Component', () => {
         // Should display Commercial or Enterprise, NOT Trial License Active
         expect(screen.getByText('Enterprise License Active')).toBeTruthy();
         expect(screen.queryByText('Trial License Active')).toBeNull();
-        expect(screen.queryByRole('button', { name: /Renew 14-Day Trial/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Renew 90-Day Trial/i })).toBeNull();
     });
 
     it('renders expired state with company and locked notice', async () => {
@@ -632,7 +632,7 @@ describe('LicenseTab Component', () => {
         expect(textarea.getAttribute('id')).toBe('license-key-input');
     });
 
-    it('does not show expiring soon hint for fresh 14-day trial, but shows for commercial <= 30 days', async () => {
+    it('does not show expiring soon hint for fresh 90-day trial, but shows for commercial <= 30 days', async () => {
         vi.spyOn(global, 'fetch').mockImplementation((url: any) => {
             const urlStr = String(url);
             if (urlStr.includes('/api/user/trial-status')) {
@@ -647,8 +647,8 @@ describe('LicenseTab Component', () => {
                     json: () => Promise.resolve({
                         status: 'active',
                         license: {
-                            company: 'Tester (14-Day Trial)',
-                            expires_at: new Date(Date.now() + 13 * 24 * 60 * 60 * 1000).toISOString(),
+                            company: 'Tester (90-Day Trial)',
+                            expires_at: new Date(Date.now() + 89 * 24 * 60 * 60 * 1000).toISOString(),
                             features: ['*'],
                             kind: 'trial',
                             max_users: 1,
