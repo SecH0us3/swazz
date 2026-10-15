@@ -188,7 +188,7 @@ describe('licenseService', () => {
     it('sends POST request to /api/user/trial-license', async () => {
       storeMock['swazz_token'] = 'test-token';
       const mockResult = {
-        license: { company: 'Swazz (14-Day Trial)', expires_at: '2026-09-24T00:00:00Z', features: ['*'], kind: 'trial' },
+        license: { company: 'Swazz (90-Day Trial)', expires_at: '2026-09-24T00:00:00Z', features: ['*'], kind: 'trial' },
         token: 'trial-jwt',
       };
       vi.mocked(globalThis.fetch).mockResolvedValueOnce(

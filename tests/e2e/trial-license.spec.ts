@@ -32,20 +32,20 @@ test.describe('Trial License Self-Generation E2E Test', () => {
     page.on('requestfailed', req => console.log(`BROWSER REQUEST FAILED: ${req.url()} - ${req.failure()?.errorText}`));
   });
 
-  test('allows registered user to claim one-time 14-day trial and shows badge and token', async ({ page }) => {
+  test('allows registered user to claim one-time 90-day trial and shows badge and token', async ({ page }) => {
     await registerAndLogin(page, 'u', false);
     await navigateToLicenseSettings(page);
 
     // Initial state: Community mode and claim card visible
     await expect(page.locator('.license-status-badge')).toContainText('Community (Free) Mode');
-    const claimBtn = page.getByRole('button', { name: 'Claim 14-Day Free Trial' });
+    const claimBtn = page.getByRole('button', { name: 'Claim 90-Day Free Trial' });
     await expect(claimBtn).toBeVisible();
 
     // Click Claim Trial
     await claimBtn.click();
 
     // Verify success and active state
-    await expect(page.locator('.two-factor-success-alert')).toContainText('14-day free trial license activated successfully', { timeout: TIMEOUTS.DEFAULT });
+    await expect(page.locator('.two-factor-success-alert')).toContainText('90-day free trial license activated successfully', { timeout: TIMEOUTS.DEFAULT });
     await expect(page.locator('.license-status-badge.active')).toContainText('Trial License Active');
     await expect(page.locator('.license-days-badge')).toContainText('remaining');
     await expect(page.locator('.license-info-value', { hasText: 'Trial' })).toBeVisible();
@@ -56,7 +56,7 @@ test.describe('Trial License Self-Generation E2E Test', () => {
     await expect(page.locator('.trial-token-content')).toBeVisible();
 
     // Claim button is now gone
-    await expect(page.getByRole('button', { name: 'Claim 14-Day Free Trial' })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Claim 90-Day Free Trial' })).not.toBeVisible();
   });
 
   test('commercial license user who previously claimed trial does not show Trial License Active', async ({ page }) => {
@@ -100,8 +100,8 @@ test.describe('Trial License Self-Generation E2E Test', () => {
 
     await expect(page.locator('.license-status-badge.active')).toContainText('Enterprise License Active');
     await expect(page.locator('.license-status-badge')).not.toContainText('Trial License Active');
-    await expect(page.getByRole('button', { name: 'Claim 14-Day Free Trial' })).not.toBeVisible();
-    await expect(page.getByRole('button', { name: 'Renew 14-Day Trial' })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Claim 90-Day Free Trial' })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Renew 90-Day Trial' })).not.toBeVisible();
   });
 
   test('expired license displays License Expired badge and Contact Sales primary button', async ({ page }) => {

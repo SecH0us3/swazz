@@ -226,8 +226,8 @@ export function LicenseTab() {
       useAppStore.setState({ licenseStatus: newStatus });
       setSuccess(
         isRenewal
-          ? '14-day free trial license renewed successfully!'
-          : '14-day free trial license activated successfully!'
+          ? '90-day free trial license renewed successfully!'
+          : '90-day free trial license activated successfully!'
       );
     } catch (err: any) {
       setError(err.message || 'Failed to claim trial license');
@@ -301,7 +301,7 @@ export function LicenseTab() {
             <div className="trial-claim-title-group">
               <span className="trial-claim-icon">🚀</span>
               <div>
-                <h3 className="trial-claim-title">14-Day Free Trial</h3>
+                <h3 className="trial-claim-title">90-Day Free Trial</h3>
                 <p className="trial-claim-subtitle">
                   Evaluate full enterprise capabilities: high concurrency, scheduled runs, report exports, and AI remediation.
                 </p>
@@ -313,7 +313,7 @@ export function LicenseTab() {
               onClick={handleClaimTrial}
               disabled={isClaimingTrial}
             >
-              {isClaimingTrial ? 'Activating Trial...' : 'Claim 14-Day Free Trial'}
+              {isClaimingTrial ? 'Activating Trial...' : 'Claim 90-Day Free Trial'}
             </button>
           </div>
         </div>
@@ -321,7 +321,7 @@ export function LicenseTab() {
 
       {!isLoading && !isActive && !canClaimTrial && (
         <div className="trial-used-notice">
-          ✓ Trial claimed today. Next 14-day free trial will be available in {cooldownHours ? `${cooldownHours} hour${cooldownHours === 1 ? '' : 's'}` : '24 hours'}.
+          ✓ Trial claimed today. Next 90-day free trial will be available in {cooldownHours ? `${cooldownHours} hour${cooldownHours === 1 ? '' : 's'}` : '24 hours'}.
         </div>
       )}
 
@@ -345,7 +345,7 @@ export function LicenseTab() {
                       onClick={handleClaimTrial}
                       disabled={isClaimingTrial}
                     >
-                      {isClaimingTrial ? 'Renewing...' : 'Renew 14-Day Trial'}
+                      {isClaimingTrial ? 'Renewing...' : 'Renew 90-Day Trial'}
                     </button>
                   )}
                   {remainingDays !== null && (
