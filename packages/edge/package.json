@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
     "@cloudflare/workers-types": "^5.20260930.1",
     "@vitest/coverage-istanbul": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.10",
@@ -17,7 +17,7 @@
     "miniflare": "^5.20260811.1-alpha",
     "pretty-format": "^30.5.1",
     "vitest": "^4.1.11",
-    "workerd": "^1.20260930.1"
+    "workerd": "^1.20261013.1"
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.0.3",
