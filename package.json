@@ -24,7 +24,7 @@
     "test:e2e": "playwright test"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.64.0",
     "concurrently": "^10.0.3",
     "wrangler": "4.144.0"
   },
