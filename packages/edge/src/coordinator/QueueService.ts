@@ -5,7 +5,7 @@
 
 import { Env } from '../env';
 import { StateManager, MAX_ACTIVE_JOBS_PER_RUNNER } from './StateManager';
-import { scanStateKeys, clearScanState, batchStorageGet } from './utils';
+import { scanStateKeys, clearScanState, batchStorageGet, FINISHED_SCANS_KEY, getFinishedScans } from './utils';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
@@ -91,16 +91,18 @@ export class QueueService {
         return;
       }
 
-      // Request per-scan state keys + durable 'finished:<id>' markers in <=128-key batches
-      const keys = activeScans.flatMap(scan => [...scanStateKeys(scan.id), `finished:${scan.id}`]);
+      // Request per-scan state keys + the bounded finished_runs ring buffer in <=128-key batches
+      const keys = [...activeScans.flatMap(scan => scanStateKeys(scan.id)), FINISHED_SCANS_KEY];
       const storedData = await batchStorageGet<any>(this.state.storage, keys);
+      const finishedList = storedData.get(FINISHED_SCANS_KEY);
+      const finishedScans = new Set<string>(Array.isArray(finishedList) ? finishedList : []);
       const recentJobs = this.collectRecentJobIds(ws);
 
       for (const scan of activeScans) {
         // Skip scans that recently finished on any runner (either recorded durably in DO storage
-        // under 'finished:<id>' or in a live runner's recentJobs attachment) while FINDINGS_QUEUE
+        // under 'finished_runs' or in a live runner's recentJobs attachment) while FINDINGS_QUEUE
         // is still persisting the terminal status to D1.
-        if (storedData.get(`finished:${scan.id}`) || recentJobs.has(scan.id)) {
+        if (finishedScans.has(scan.id) || recentJobs.has(scan.id)) {
           continue;
         }
         // If the job is already active in memory, skip it
@@ -240,8 +242,8 @@ export class QueueService {
             continue;
           }
           if (configRef || scan.project_id) {
-            const postAwaitMap = await this.state.storage.get<any>([`finished:${runId}`]);
-            if (postAwaitMap instanceof Map && postAwaitMap.get(`finished:${runId}`)) {
+            const latestFinished = await getFinishedScans(this.state.storage);
+            if (latestFinished.has(runId)) {
               continue;
             }
           }

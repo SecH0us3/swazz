@@ -339,7 +339,7 @@ describe('WebSocketHandler', () => {
       await call[0];
     }
 
-    expect(mockState.storage.put).toHaveBeenCalledWith('finished:run-1', expect.any(Number));
+    expect(mockState.storage.put).toHaveBeenCalledWith('finished_runs', ['run-1']);
     expect(stateManager.jobs.has('run-1')).toBe(false);
     expect(stateManager.jobs.get('run-2')).toBe(mockWs);
     expect(currentAttachment.activeJobs).toEqual(['run-2']);

@@ -8,7 +8,7 @@ import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
 import { ScansRepository } from '../repositories/scans';
 import { ulid } from 'ulidx';
-import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags } from './utils';
+import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, markScanFinished } from './utils';
 import { logError, logWarn } from '../../../common/logging/logger';
 
 export class WebSocketHandler {
@@ -282,9 +282,7 @@ export class WebSocketHandler {
               recentJobs.shift();
             }
             ws.serializeAttachment({ ...attachment, activeJobs, recentJobs });
-            if (this.state.storage?.put) {
-              await this.state.storage.put(`finished:${runId}`, Date.now());
-            }
+            await markScanFinished(this.state.storage, runId);
             const dispatchPromise = this.queueService.checkAndDispatchQueuedScans(ws);
             if (typeof this.state.waitUntil === 'function') {
               this.state.waitUntil(dispatchPromise);

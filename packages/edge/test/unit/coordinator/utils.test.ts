@@ -4,7 +4,19 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi } from 'vitest';
-import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, scanStateKeys, clearScanState, batchStorageGet, DO_STORAGE_BATCH_LIMIT } from '../../../src/coordinator/utils';
+import {
+  isVersionOutdated,
+  getPublicKeyFromTags,
+  getRunIdFromTags,
+  scanStateKeys,
+  clearScanState,
+  batchStorageGet,
+  DO_STORAGE_BATCH_LIMIT,
+  markScanFinished,
+  getFinishedScans,
+  MAX_FINISHED_SCANS,
+  FINISHED_SCANS_KEY
+} from '../../../src/coordinator/utils';
 
 describe('isVersionOutdated', () => {
   it('returns false if either version is dev', () => {
@@ -109,4 +121,26 @@ describe('batchStorageGet', () => {
     expect(res.get('key-299')).toBe('val-key-299');
   });
 });
+
+describe('markScanFinished / getFinishedScans', () => {
+  it('stores finished scan IDs in a single bounded FIFO list capped at MAX_FINISHED_SCANS', async () => {
+    let storedList: string[] = Array.from({ length: MAX_FINISHED_SCANS }, (_, i) => `run-${i}`);
+    const storage: any = {
+      get: vi.fn().mockImplementation(async () => new Map([[FINISHED_SCANS_KEY, storedList]])),
+      put: vi.fn().mockImplementation(async (_k: string, val: string[]) => {
+        storedList = val;
+      })
+    };
+
+    await markScanFinished(storage, 'run-newest');
+    expect(storedList).toHaveLength(MAX_FINISHED_SCANS);
+    expect(storedList[0]).toBe('run-1');
+    expect(storedList[MAX_FINISHED_SCANS - 1]).toBe('run-newest');
+
+    const set = await getFinishedScans(storage);
+    expect(set.has('run-0')).toBe(false);
+    expect(set.has('run-newest')).toBe(true);
+  });
+});
+
 

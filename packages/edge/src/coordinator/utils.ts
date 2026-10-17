@@ -76,6 +76,27 @@ export async function clearScanState(storage: DurableObjectStorage, runId: strin
 }
 
 export const DO_STORAGE_BATCH_LIMIT = 128;
+export const FINISHED_SCANS_KEY = 'finished_runs';
+export const MAX_FINISHED_SCANS = 200;
+
+export async function markScanFinished(storage: DurableObjectStorage, runId: string): Promise<void> {
+  if (!storage?.get || !storage?.put) return;
+  const map = await storage.get<string[]>([FINISHED_SCANS_KEY]);
+  const existing = (map instanceof Map ? map.get(FINISHED_SCANS_KEY) : undefined) ?? [];
+  const list = Array.isArray(existing) ? existing.filter(id => id !== runId) : [];
+  list.push(runId);
+  while (list.length > MAX_FINISHED_SCANS) {
+    list.shift();
+  }
+  await storage.put(FINISHED_SCANS_KEY, list);
+}
+
+export async function getFinishedScans(storage: DurableObjectStorage): Promise<Set<string>> {
+  if (!storage?.get) return new Set();
+  const map = await storage.get<string[]>([FINISHED_SCANS_KEY]);
+  const list = map instanceof Map ? map.get(FINISHED_SCANS_KEY) : undefined;
+  return new Set(Array.isArray(list) ? list : []);
+}
 
 export async function batchStorageGet<T = any>(
   storage: DurableObjectStorage,
@@ -97,4 +118,5 @@ export async function batchStorageGet<T = any>(
   }
   return merged;
 }
+
 

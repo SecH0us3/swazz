@@ -256,8 +256,7 @@ describe('QueueService', () => {
     ]);
 
     const storageMap = new Map<string, any>([
-      ['finished:run-disconnected', Date.now()],
-      ['finished:run-evicted', Date.now()]
+      ['finished_runs', ['run-disconnected', 'run-evicted']]
     ]);
     mockState.storage.get = vi.fn().mockImplementation(async (arg: any) => {
       if (Array.isArray(arg)) return storageMap;
