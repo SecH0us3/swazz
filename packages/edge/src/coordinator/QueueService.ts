@@ -204,7 +204,8 @@ export class QueueService {
           if (configRef) {
             await deleteScanConfig(this.env, configRef);
           }
-          break;
+          // No break: a runner reconnects only after a restart or a spot-VM preemption,
+          // so every compatible scan that queued meanwhile must go out now, not one per reconnect.
         }
       }
     } catch (err) {
