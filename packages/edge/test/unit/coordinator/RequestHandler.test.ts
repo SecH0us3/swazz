@@ -9,6 +9,8 @@ import { StateManager } from '../../../src/coordinator/StateManager';
 import { QueueService } from '../../../src/coordinator/QueueService';
 import { ulid } from 'ulidx';
 
+const deletedKeys = (state: any): string[] => state.storage.delete.mock.calls.flatMap((c: any[]) => c[0]);
+
 const mockGetCachedSwagger = vi.fn();
 const mockGetScan = vi.fn().mockResolvedValue(null);
 const mockUpdateScanStatus = vi.fn().mockResolvedValue(true);
@@ -259,7 +261,7 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(200);
       expect(mockWs.send).toHaveBeenCalled();
       expect(stateManager.jobs.get('run1')).toBe(mockWs);
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config:run1');
+      expect(deletedKeys(mockState)).toContain('config:run1');
     });
 
     it('dispatches job to private runner if matching public key', async () => {
@@ -380,10 +382,10 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(409);
       expect(await res.text()).toBe('Scan not dispatchable');
       expect(mockGetScanStatus).toHaveBeenCalledWith('run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config:run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:run1');
+      expect(deletedKeys(mockState)).toContain('config:run1');
+      expect(deletedKeys(mockState)).toContain('config_ref:run1');
+      expect(deletedKeys(mockState)).toContain('config_meta:run1');
+      expect(deletedKeys(mockState)).toContain('user_public_key:run1');
       expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
       expect(mockWs.send).not.toHaveBeenCalled();
     });
@@ -402,10 +404,10 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(409);
       expect(await res.text()).toBe('Scan not dispatchable');
       expect(mockGetScanStatus).toHaveBeenCalledWith('run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config:run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:run1');
+      expect(deletedKeys(mockState)).toContain('config:run1');
+      expect(deletedKeys(mockState)).toContain('config_ref:run1');
+      expect(deletedKeys(mockState)).toContain('config_meta:run1');
+      expect(deletedKeys(mockState)).toContain('user_public_key:run1');
       expect(mockEnv.STORAGE.delete).not.toHaveBeenCalled();
       expect(mockWs.send).not.toHaveBeenCalled();
     });
@@ -435,8 +437,8 @@ describe('RequestHandler', () => {
       expect(dispatchMsg.payload.config).toEqual({ base_url: 'http://test' });
       expect(dispatchMsg.payload.configKey).toBeUndefined();
 
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:run1');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:run1');
+      expect(deletedKeys(mockState)).toContain('config_ref:run1');
+      expect(deletedKeys(mockState)).toContain('config_meta:run1');
       expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
     });
 
@@ -461,7 +463,7 @@ describe('RequestHandler', () => {
       }));
 
       expect(res.status).toBe(500);
-      expect(mockState.storage.delete).not.toHaveBeenCalledWith('config_ref:run1');
+      expect(deletedKeys(mockState)).not.toContain('config_ref:run1');
       expect(mockEnv.STORAGE.delete).not.toHaveBeenCalledWith(configKey);
     });
 
@@ -580,10 +582,10 @@ describe('RequestHandler', () => {
 
       expect(res.status).toBe(404);
       expect(mockMarkFailedIfActive).toHaveBeenCalledWith('run-stopped');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:run-stopped');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:run-stopped');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('config:run-stopped');
-      expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:run-stopped');
+      expect(deletedKeys(mockState)).toContain('config_ref:run-stopped');
+      expect(deletedKeys(mockState)).toContain('config_meta:run-stopped');
+      expect(deletedKeys(mockState)).toContain('config:run-stopped');
+      expect(deletedKeys(mockState)).toContain('user_public_key:run-stopped');
       expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
     });
 

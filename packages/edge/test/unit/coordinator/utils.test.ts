@@ -3,8 +3,8 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { describe, it, expect } from 'vitest';
-import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags } from '../../../src/coordinator/utils';
+import { describe, it, expect, vi } from 'vitest';
+import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, scanStateKeys, clearScanState } from '../../../src/coordinator/utils';
 
 describe('isVersionOutdated', () => {
   it('returns false if either version is dev', () => {
@@ -63,5 +63,20 @@ describe('getRunIdFromTags', () => {
   it('returns undefined if no run ID tag is found', () => {
     const tags = ['runner', 'name:test', 'version:1.0', 'user_id:123'];
     expect(getRunIdFromTags(tags)).toBeUndefined();
+  });
+});
+
+describe('scanStateKeys / clearScanState', () => {
+  it('lists every per-scan key the coordinator stores', () => {
+    expect(scanStateKeys('run-1')).toEqual([
+      'config:run-1', 'config_ref:run-1', 'config_meta:run-1', 'user_public_key:run-1'
+    ]);
+  });
+
+  it('deletes all of them in a single storage call', async () => {
+    const storage: any = { delete: vi.fn().mockResolvedValue(4) };
+    await clearScanState(storage, 'run-1');
+    expect(storage.delete).toHaveBeenCalledTimes(1);
+    expect(storage.delete).toHaveBeenCalledWith(scanStateKeys('run-1'));
   });
 });
