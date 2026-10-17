@@ -9,6 +9,11 @@ import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
 
+// Upper bound on scans one runner holds after a connect. Keeps the socket attachment
+// (activeJobs + recentJobs) well under the 2 KB Durable Object limit and bounds the
+// work done before the WebSocket upgrade response is returned.
+export const MAX_ACTIVE_JOBS_PER_RUNNER = 10;
+
 export class QueueService {
   constructor(
     private env: Env,
@@ -181,15 +186,30 @@ export class QueueService {
             continue;
           }
 
-          this.stateManager.jobs.set(runId, ws);
           const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
           const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
-          if (!activeJobs.includes(runId)) {
-            activeJobs.push(runId);
-            ws.serializeAttachment({ ...attachment, activeJobs });
+          if (activeJobs.length >= MAX_ACTIVE_JOBS_PER_RUNNER) {
+            // Leave the rest queued for another runner's connect rather than overload this one.
+            return;
           }
 
-          ws.send(dispatchMsg);
+          this.stateManager.jobs.set(runId, ws);
+          try {
+            if (!activeJobs.includes(runId)) {
+              activeJobs.push(runId);
+              ws.serializeAttachment({ ...attachment, activeJobs });
+            }
+            ws.send(dispatchMsg);
+          } catch (sendErr) {
+            // Same rollback as the /dispatch handler: the socket is unusable, so stop here
+            // and leave this and every later scan queued for the next connect.
+            this.stateManager.jobs.delete(runId);
+            try {
+              ws.serializeAttachment({ ...attachment, activeJobs: activeJobs.filter(id => id !== runId) });
+            } catch {}
+            logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to dispatch queued scan ${runId}`, { error: sendErr });
+            return;
+          }
 
           try {
             await scansRepo.updateScanStatus(runId, 'dispatched');
@@ -204,8 +224,9 @@ export class QueueService {
           if (configRef) {
             await deleteScanConfig(this.env, configRef);
           }
-          // No break: a runner reconnects only after a restart or a spot-VM preemption,
-          // so every compatible scan that queued meanwhile must go out now, not one per reconnect.
+          // No break: queued scans are dispatched only when a runner connects (nothing retries
+          // them on job completion), so everything that queued meanwhile goes out now, up to
+          // MAX_ACTIVE_JOBS_PER_RUNNER.
         }
       }
     } catch (err) {

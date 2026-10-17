@@ -54,7 +54,7 @@ External client runner agents never interact directly with the queues. Instead, 
   1. The client submits a scan. The coordinator writes the scan record to D1 with status `queued` and enqueues the configuration.
   2. The consumer processes the message, calling `/dispatch` on the coordinator DO.
   3. If a compatible runner is active, it receives the job, and the scan status becomes `dispatched`.
-  4. If no runner is online, the scan status remains `queued` in D1, and the message is acknowledged. When a compatible runner connects, the coordinator DO dispatches every scan that queued for it while no runner was online, not just the first one.
+  4. If no runner is online, the scan status remains `queued` in D1, and the message is acknowledged. When a compatible runner connects, the coordinator DO dispatches to it every scan that queued while no runner was online, plus `dispatched`/`paused` scans that lost their runner (resumed from their checkpoint), up to 10 active scans per runner (`MAX_ACTIVE_JOBS_PER_RUNNER`). Anything beyond that stays `queued` until another runner connects; queued scans are not retried when a job finishes.
 
 ### 2.2 Findings & Events Buffer Queue (`swazz-findings-queue`)
 * **Purpose**: Buffers real-time logs, progress metrics, and findings from runners before writing them to the database, protecting D1 from write exhaustion.
