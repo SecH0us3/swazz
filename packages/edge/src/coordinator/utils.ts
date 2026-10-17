@@ -65,3 +65,12 @@ export function getRunIdFromTags(tags: string[]): string | undefined {
     !t.startsWith('user_id:')
   );
 }
+
+// Per-scan keys the coordinator keeps in DO storage until the scan is dispatched or dropped.
+export function scanStateKeys(runId: string): string[] {
+  return [`config:${runId}`, `config_ref:${runId}`, `config_meta:${runId}`, `user_public_key:${runId}`];
+}
+
+export async function clearScanState(storage: DurableObjectStorage, runId: string): Promise<void> {
+  await storage.delete(scanStateKeys(runId));
+}

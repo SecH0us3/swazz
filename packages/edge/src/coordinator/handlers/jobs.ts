@@ -6,6 +6,7 @@
 import { RouteHandler, HandlerContext } from './types';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
 import { ScansRepository } from '../../repositories/scans';
+import { clearScanState } from '../utils';
 
 export class DispatchHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -47,10 +48,7 @@ export class DispatchHandler implements RouteHandler {
     const scansRepo = new ScansRepository(context.env);
     const status = await scansRepo.getScanStatus(payload.runId);
     if (status !== 'queued') {
-      await context.state.storage.delete(`config:${payload.runId}`);
-      await context.state.storage.delete(`config_ref:${payload.runId}`);
-      await context.state.storage.delete(`config_meta:${payload.runId}`);
-      await context.state.storage.delete(`user_public_key:${payload.runId}`);
+      await clearScanState(context.state.storage, payload.runId);
       if (configKey) {
         await deleteScanConfig(context.env, configKey);
       }
@@ -100,10 +98,7 @@ export class DispatchHandler implements RouteHandler {
       }
       try {
         runner.send(dispatchMsg);
-        await context.state.storage.delete(`config:${payload.runId}`);
-        await context.state.storage.delete(`config_ref:${payload.runId}`);
-        await context.state.storage.delete(`config_meta:${payload.runId}`);
-        await context.state.storage.delete(`user_public_key:${payload.runId}`);
+        await clearScanState(context.state.storage, payload.runId);
         if (configKey) {
           await deleteScanConfig(context.env, configKey);
         }
@@ -144,10 +139,7 @@ export class CommandHandler implements RouteHandler {
           const marked = await scansRepo.markFailedIfActive(payload.runId);
           if (marked) {
             const ref = await context.state.storage.get<string>(`config_ref:${payload.runId}`);
-            await context.state.storage.delete(`config_ref:${payload.runId}`);
-            await context.state.storage.delete(`config_meta:${payload.runId}`);
-            await context.state.storage.delete(`config:${payload.runId}`);
-            await context.state.storage.delete(`user_public_key:${payload.runId}`);
+            await clearScanState(context.state.storage, payload.runId);
             if (ref) {
               await deleteScanConfig(context.env, ref);
             }

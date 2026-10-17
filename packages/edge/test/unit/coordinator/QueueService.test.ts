@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueueService, MAX_ACTIVE_JOBS_PER_RUNNER } from '../../../src/coordinator/QueueService';
 import { StateManager } from '../../../src/coordinator/StateManager';
 
+const deletedKeys = (state: any): string[] => state.storage.delete.mock.calls.flatMap((c: any[]) => c[0]);
+
 const mockGetActiveScans = vi.fn();
 const mockUpdateScanStatus = vi.fn();
 const mockMarkFailedIfActive = vi.fn();
@@ -82,8 +84,8 @@ describe('QueueService', () => {
     expect(sentMsg.payload.runId).toBe('scan-1');
     expect(sentMsg.payload.userPublicKey).toBe('key-123');
     expect(stateManager.jobs.get('scan-1')).toBe(mockWs);
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:scan-1');
+    expect(deletedKeys(mockState)).toContain('config:scan-1');
+    expect(deletedKeys(mockState)).toContain('user_public_key:scan-1');
   });
 
   it('dispatches every compatible queued scan on one reconnect, not only the first', async () => {
@@ -157,7 +159,7 @@ describe('QueueService', () => {
     expect(stateManager.jobs.has('scan-3')).toBe(false);
     expect(attachment.activeJobs).toEqual(['scan-1']);
     expect(mockUpdateScanStatus).not.toHaveBeenCalledWith('scan-2', 'dispatched');
-    expect(mockState.storage.delete).not.toHaveBeenCalledWith('config:scan-2');
+    expect(deletedKeys(mockState)).not.toContain('config:scan-2');
   });
 
   it('does not re-dispatch a scan already running on a connected runner', async () => {
@@ -319,8 +321,8 @@ describe('QueueService', () => {
     expect(mockWs.send).toHaveBeenCalled();
     const sentMsg = JSON.parse(mockWs.send.mock.calls[0][0]);
     expect(sentMsg.payload.config.base_url).toBe('http://r2-config.com');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
   });
 
@@ -345,9 +347,9 @@ describe('QueueService', () => {
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockGetScanConfigByProject).not.toHaveBeenCalled();
     expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
+    expect(deletedKeys(mockState)).toContain('user_public_key:scan-1');
     expect(mockLogError).toHaveBeenCalled();
   });
 
@@ -364,8 +366,8 @@ describe('QueueService', () => {
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
     expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(mockLogError).toHaveBeenCalled();
   });
 
@@ -383,8 +385,8 @@ describe('QueueService', () => {
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
     expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(mockLogError).toHaveBeenCalled();
   });
 

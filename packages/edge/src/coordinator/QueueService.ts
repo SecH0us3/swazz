@@ -5,6 +5,7 @@
 
 import { Env } from '../env';
 import { StateManager } from './StateManager';
+import { scanStateKeys, clearScanState } from './utils';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
@@ -39,12 +40,7 @@ export class QueueService {
         return;
       }
 
-      const keys = activeScans.flatMap(scan => [
-        `config:${scan.id}`,
-        `config_ref:${scan.id}`,
-        `config_meta:${scan.id}`,
-        `user_public_key:${scan.id}`
-      ]);
+      const keys = activeScans.flatMap(scan => scanStateKeys(scan.id));
       const storedData = await this.state.storage.get<any>(keys);
 
       for (const scan of activeScans) {
@@ -89,6 +85,11 @@ export class QueueService {
         }
 
         if (isCompatible) {
+          const current = ws.deserializeAttachment() as { activeJobs?: string[] } | null;
+          if ((current?.activeJobs?.length ?? 0) >= MAX_ACTIVE_JOBS_PER_RUNNER) {
+            // Checked before the R2 read too, so a full runner costs no config fetches.
+            return;
+          }
           const runId = scan.id;
           let config: any = null;
 
@@ -104,10 +105,7 @@ export class QueueService {
               try {
                 const marked = await scansRepo.markFailedIfActive(scan.id);
                 if (marked) {
-                  await this.state.storage.delete(`config:${scan.id}`);
-                  await this.state.storage.delete(`config_ref:${scan.id}`);
-                  await this.state.storage.delete(`config_meta:${scan.id}`);
-                  await this.state.storage.delete(`user_public_key:${scan.id}`);
+                  await clearScanState(this.state.storage, scan.id);
                 }
               } catch (dbErr) {
                 logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
@@ -126,10 +124,7 @@ export class QueueService {
                 try {
                   const marked = await scansRepo.markFailedIfActive(scan.id);
                   if (marked) {
-                    await this.state.storage.delete(`config:${scan.id}`);
-                    await this.state.storage.delete(`config_ref:${scan.id}`);
-                    await this.state.storage.delete(`config_meta:${scan.id}`);
-                    await this.state.storage.delete(`user_public_key:${scan.id}`);
+                    await clearScanState(this.state.storage, scan.id);
                   }
                 } catch (dbErr) {
                   logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
@@ -217,10 +212,7 @@ export class QueueService {
             logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to dispatched", { error: dbErr });
           }
 
-          await this.state.storage.delete(`config:${runId}`);
-          await this.state.storage.delete(`config_ref:${runId}`);
-          await this.state.storage.delete(`config_meta:${runId}`);
-          await this.state.storage.delete(`user_public_key:${runId}`);
+          await clearScanState(this.state.storage, runId);
           if (configRef) {
             await deleteScanConfig(this.env, configRef);
           }
