@@ -49,10 +49,11 @@ export class QueueService {
           continue;
         }
 
-        const scanUserPubKey = storedData.get(`user_public_key:${scan.id}`) || scan.userPublicKey || "";
-        const legacyConfig = storedData.get(`config:${scan.id}`);
-        const configRef: string | undefined = storedData.get(`config_ref:${scan.id}`);
-        const configMeta: { disableShared?: boolean } | undefined = storedData.get(`config_meta:${scan.id}`);
+        const [configKey, configRefKey, configMetaKey, userPubKeyKey] = scanStateKeys(scan.id);
+        const scanUserPubKey = storedData.get(userPubKeyKey) || scan.userPublicKey || "";
+        const legacyConfig = storedData.get(configKey);
+        const configRef: string | undefined = storedData.get(configRefKey);
+        const configMeta: { disableShared?: boolean } | undefined = storedData.get(configMetaKey);
 
         let isCompatible = false;
         if (String(this.env.AUTH_ENABLED) === 'false') {
@@ -199,6 +200,7 @@ export class QueueService {
             // Same rollback as the /dispatch handler: the socket is unusable, so stop here
             // and leave this and every later scan queued for the next connect.
             this.stateManager.jobs.delete(runId);
+            this.stateManager.runners.delete(ws);
             try {
               ws.serializeAttachment({ ...attachment, activeJobs: activeJobs.filter(id => id !== runId) });
             } catch {}

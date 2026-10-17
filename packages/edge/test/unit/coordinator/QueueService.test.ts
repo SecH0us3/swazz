@@ -149,6 +149,7 @@ describe('QueueService', () => {
       .mockImplementationOnce(() => { throw new Error('socket closed'); });
 
     const stateManager = new StateManager(mockState);
+    stateManager.runners.add(mockWs);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
 
     await queueService.checkAndDispatchQueuedScans(mockWs);
@@ -157,6 +158,7 @@ describe('QueueService', () => {
     expect(stateManager.jobs.get('scan-1')).toBe(mockWs);
     expect(stateManager.jobs.has('scan-2')).toBe(false);
     expect(stateManager.jobs.has('scan-3')).toBe(false);
+    expect(stateManager.runners.has(mockWs)).toBe(false);
     expect(attachment.activeJobs).toEqual(['scan-1']);
     expect(mockUpdateScanStatus).not.toHaveBeenCalledWith('scan-2', 'dispatched');
     expect(deletedKeys(mockState)).not.toContain('config:scan-2');
