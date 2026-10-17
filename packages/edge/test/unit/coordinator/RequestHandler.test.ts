@@ -45,7 +45,7 @@ describe('RequestHandler', () => {
   let mockQueueService: any;
   let mockWs: any;
 
-  const createMockWs = () => {
+  const createMockWs = (): any => {
     let attachment: any = {};
     return {
       deserializeAttachment: vi.fn().mockImplementation(() => attachment),
@@ -244,6 +244,98 @@ describe('RequestHandler', () => {
         })
       }));
       expect(res.status).toBe(503);
+    });
+
+    it('returns 503 and leaves scan state in DO storage when compatible runner has reached MAX_ACTIVE_JOBS_PER_RUNNER', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner']);
+      mockWs.serializeAttachment({ activeJobs: Array.from({ length: 10 }, (_, i) => `job-${i}`) });
+      stateManager.runners.add(mockWs);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-queued', config: { base_url: 'http://example.com' } })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(mockWs.send).not.toHaveBeenCalled();
+      expect(stateManager.jobs.has('run-queued')).toBe(false);
+      // Config stays stored so QueueService can dispatch it when a job finishes
+      expect(mockState.storage.put).toHaveBeenCalledWith('config:run-queued', { base_url: 'http://example.com' });
+      expect(deletedKeys(mockState)).not.toContain('config:run-queued');
+    });
+
+    it('skips full runner and dispatches to a second runner with a free slot', async () => {
+      const stateManager = new StateManager(mockState);
+      const fullRunner = createMockWs();
+      fullRunner.serializeAttachment({ activeJobs: Array.from({ length: 10 }, (_, i) => `job-${i}`) });
+      const freeRunner = createMockWs();
+      freeRunner.serializeAttachment({ activeJobs: ['job-other'] });
+
+      mockState.getTags.mockReturnValue(['runner']);
+      stateManager.runners.add(fullRunner);
+      stateManager.runners.add(freeRunner);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', config: {} })
+      }));
+
+      expect(res.status).toBe(200);
+      expect(fullRunner.send).not.toHaveBeenCalled();
+      expect(freeRunner.send).toHaveBeenCalledTimes(1);
+      expect(stateManager.jobs.get('run1')).toBe(freeRunner);
+    });
+
+    it('queues scan (503) instead of falling back to a shared runner when the user private runner is full (Review #4)', async () => {
+      const stateManager = new StateManager(mockState);
+      const privateRunner = createMockWs();
+      privateRunner.serializeAttachment({ activeJobs: Array.from({ length: 10 }, (_, i) => `job-${i}`) });
+      const sharedRunner = createMockWs();
+      sharedRunner.serializeAttachment({ activeJobs: [] });
+
+      mockState.getTags.mockImplementation((ws: any) => {
+        if (ws === privateRunner) return ['runner', 'pubkey-user'];
+        return ['runner']; // shared
+      });
+      stateManager.runners.add(privateRunner);
+      stateManager.runners.add(sharedRunner);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-private', config: {}, userPublicKey: 'pubkey-user' })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(privateRunner.send).not.toHaveBeenCalled();
+      expect(sharedRunner.send).not.toHaveBeenCalled();
+      expect(stateManager.jobs.has('run-private')).toBe(false);
+    });
+
+    it('fails closed (returns 503) when runner attachment deserialization throws (Review #8)', async () => {
+      const stateManager = new StateManager(mockState);
+      const corruptRunner = createMockWs();
+      corruptRunner.deserializeAttachment.mockImplementation(() => {
+        throw new Error('corrupt attachment');
+      });
+      mockState.getTags.mockReturnValue(['runner']);
+      stateManager.runners.add(corruptRunner);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-corrupt', config: {} })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(corruptRunner.send).not.toHaveBeenCalled();
     });
 
     it('dispatches job to compatible runner', async () => {
