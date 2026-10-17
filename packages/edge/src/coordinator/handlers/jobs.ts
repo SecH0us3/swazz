@@ -7,6 +7,16 @@ import { RouteHandler, HandlerContext } from './types';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
 import { ScansRepository } from '../../repositories/scans';
 import { clearScanState } from '../utils';
+import { MAX_ACTIVE_JOBS_PER_RUNNER } from '../QueueService';
+
+function hasFreeSlot(ws: WebSocket): boolean {
+  try {
+    const att = ws.deserializeAttachment?.() as { activeJobs?: string[] } | null;
+    return (att?.activeJobs?.length ?? 0) < MAX_ACTIVE_JOBS_PER_RUNNER;
+  } catch {
+    return true;
+  }
+}
 
 export class DispatchHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -75,16 +85,16 @@ export class DispatchHandler implements RouteHandler {
 
     let runner = null;
     if (String(context.env.AUTH_ENABLED) === 'false') {
-      runner = activeRunners[0] || null;
+      runner = activeRunners.find(r => hasFreeSlot(r)) || null;
     } else {
       if (payload.userPublicKey) {
         runner = activeRunners.find(r => {
           const tags = context.state.getTags(r);
-          return tags.includes(payload.userPublicKey);
+          return tags.includes(payload.userPublicKey) && hasFreeSlot(r);
         });
       }
       if (!runner && !config?.settings?.disable_shared_runners) {
-        runner = activeRunners.find(r => !context.stateManager.isPrivateRunner(r)) || null;
+        runner = activeRunners.find(r => !context.stateManager.isPrivateRunner(r) && hasFreeSlot(r)) || null;
       }
     }
 

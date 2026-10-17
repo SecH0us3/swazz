@@ -43,7 +43,28 @@ export class QueueService {
       const keys = activeScans.flatMap(scan => scanStateKeys(scan.id));
       const storedData = await this.state.storage.get<any>(keys);
 
+      const isRecentJob = (id: string): boolean => {
+        const hasInRecent = (socket: WebSocket): boolean => {
+          try {
+            const att = socket.deserializeAttachment?.() as { recentJobs?: string[] } | null;
+            return !!att?.recentJobs?.includes(id);
+          } catch {
+            return false;
+          }
+        };
+        if (hasInRecent(ws)) return true;
+        for (const runnerWs of this.stateManager.runners) {
+          if (hasInRecent(runnerWs)) return true;
+        }
+        return false;
+      };
+
       for (const scan of activeScans) {
+        // Skip scans that recently finished on a runner (their 'completed'/'failed' status
+        // reaches D1 asynchronously via FINDINGS_QUEUE, so they may still appear as 'dispatched' in D1).
+        if (isRecentJob(scan.id)) {
+          continue;
+        }
         // If the job is already active in memory, skip it
         if ((scan.status === 'dispatched' || scan.status === 'paused') && this.stateManager.jobs.has(scan.id)) {
           continue;
@@ -177,15 +198,14 @@ export class QueueService {
             },
           });
 
-          // Race check across the R2 await: if already assigned, skip without sending
-          if (this.stateManager.jobs.has(runId)) {
+          // Race check across the R2 await: if already assigned or recently finished, skip without sending
+          if (this.stateManager.jobs.has(runId) || isRecentJob(runId)) {
             continue;
           }
-
-          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
+          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; recentJobs?: string[] } | null || {};
           const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
           if (activeJobs.length >= MAX_ACTIVE_JOBS_PER_RUNNER) {
-            // Leave the rest queued for another runner's connect rather than overload this one.
+            // Leave the rest queued until a slot frees up or another runner connects.
             return;
           }
 
@@ -218,9 +238,7 @@ export class QueueService {
           if (configRef) {
             await deleteScanConfig(this.env, configRef);
           }
-          // No break: queued scans are dispatched only when a runner connects (nothing retries
-          // them on job completion), so everything that queued meanwhile goes out now, up to
-          // MAX_ACTIVE_JOBS_PER_RUNNER.
+          // Continue dispatching compatible queued scans until MAX_ACTIVE_JOBS_PER_RUNNER is reached.
         }
       }
     } catch (err) {

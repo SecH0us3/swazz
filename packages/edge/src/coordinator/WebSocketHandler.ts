@@ -271,6 +271,7 @@ export class WebSocketHandler {
               recentJobs.shift();
             }
             ws.serializeAttachment({ ...attachment, activeJobs, recentJobs });
+            await this.queueService.checkAndDispatchQueuedScans(ws);
           }
         }
       } catch (e) {

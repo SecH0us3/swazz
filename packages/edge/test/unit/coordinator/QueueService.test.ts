@@ -182,6 +182,66 @@ describe('QueueService', () => {
     expect(stateManager.jobs.get('scan-1')).toBe(otherRunner);
   });
 
+  it('does not re-dispatch a recently finished scan still marked dispatched in D1 (Task 150 pitfall)', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner']);
+    // scan-finished was just cleaned up from stateManager.jobs and moved to recentJobs,
+    // while FINDINGS_QUEUE has not yet updated its D1 status from 'dispatched' to 'completed'.
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-finished', userPublicKey: null, status: 'dispatched', target_url: 'http://a.example.com' },
+      { id: 'scan-other-recent', userPublicKey: null, status: 'dispatched', target_url: 'http://b.example.com' },
+      { id: 'scan-queued', userPublicKey: null, status: 'queued', target_url: 'http://c.example.com' }
+    ]);
+
+    let attachment: any = { activeJobs: [], recentJobs: ['scan-finished'] };
+    mockWs.deserializeAttachment = vi.fn(() => attachment);
+    mockWs.serializeAttachment = vi.fn((a: any) => { attachment = a; });
+
+    const otherRunner: any = {
+      deserializeAttachment: vi.fn().mockReturnValue({ activeJobs: [], recentJobs: ['scan-other-recent'] }),
+      send: vi.fn()
+    };
+
+    const stateManager = new StateManager(mockState);
+    stateManager.runners.add(mockWs);
+    stateManager.runners.add(otherRunner);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('scan-queued');
+    expect(stateManager.jobs.has('scan-finished')).toBe(false);
+    expect(stateManager.jobs.has('scan-other-recent')).toBe(false);
+    expect(stateManager.jobs.get('scan-queued')).toBe(mockWs);
+  });
+
+  it('skips dispatch if scan enters recentJobs during R2 await', async () => {
+    const configKey = `scans/configs/scan-1/${crypto.randomUUID()}.json`;
+    const mockStorageMap = new Map();
+    mockStorageMap.set('config_ref:scan-1', configKey);
+    mockStorageMap.set('config_meta:scan-1', { disableShared: false });
+    mockState.storage.get = vi.fn().mockResolvedValue(mockStorageMap);
+
+    let attachment: any = { activeJobs: [], recentJobs: [] };
+    mockWs.deserializeAttachment = vi.fn(() => attachment);
+    mockWs.serializeAttachment = vi.fn((a: any) => { attachment = a; });
+
+    mockEnv.STORAGE.get = vi.fn().mockImplementation(async () => {
+      attachment = { activeJobs: [], recentJobs: ['scan-1'] };
+      return {
+        text: async () => JSON.stringify({ base_url: 'http://example.com' })
+      };
+    });
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).not.toHaveBeenCalled();
+    expect(stateManager.jobs.has('scan-1')).toBe(false);
+  });
+
   it('should not dispatch private scan if public key mismatches', async () => {
     mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-different']);
     const stateManager = new StateManager(mockState);

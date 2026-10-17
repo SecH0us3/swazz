@@ -11,6 +11,8 @@ import { ScansRepository } from '../../../src/repositories/scans';
 
 const mockGetCachedSwaggerDetails = vi.fn();
 const mockUpsertSwaggerCache = vi.fn();
+const mockGetActiveScans = vi.fn();
+const mockUpdateScanStatus = vi.fn();
 const mockLogError = vi.fn();
 const mockLogWarn = vi.fn();
 
@@ -20,6 +22,8 @@ vi.mock('../../../src/repositories/scans', () => {
       return {
         getCachedSwaggerDetails: mockGetCachedSwaggerDetails,
         upsertSwaggerCache: mockUpsertSwaggerCache,
+        getActiveScans: mockGetActiveScans,
+        updateScanStatus: mockUpdateScanStatus,
       };
     })
   };
@@ -41,6 +45,17 @@ describe('WebSocketHandler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockGetActiveScans.mockResolvedValue([]);
+    mockUpdateScanStatus.mockResolvedValue(true);
+    (ScansRepository as any).mockImplementation(function () {
+      return {
+        getCachedSwaggerDetails: mockGetCachedSwaggerDetails,
+        upsertSwaggerCache: mockUpsertSwaggerCache,
+        getActiveScans: mockGetActiveScans,
+        updateScanStatus: mockUpdateScanStatus,
+      };
+    });
 
     mockWs = {
       deserializeAttachment: vi.fn().mockReturnValue({}),
@@ -258,10 +273,11 @@ describe('WebSocketHandler', () => {
     expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(msg.payload));
   });
 
-  it('should cleanup active jobs on scan error or complete events', async () => {
+  it('should cleanup active jobs on scan error or complete events and trigger queued scan dispatch', async () => {
     mockState.getTags.mockReturnValue(['runner']);
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const spyDispatch = vi.spyOn(queueService, 'checkAndDispatchQueuedScans').mockResolvedValue();
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
 
     stateManager.jobs.set('run-456', mockWs);
@@ -282,6 +298,48 @@ describe('WebSocketHandler', () => {
       activeJobs: [],
       recentJobs: ['run-456']
     });
+    expect(spyDispatch).toHaveBeenCalledWith(mockWs);
+  });
+
+  it('dispatches next queued scan when a job completes without re-dispatching the just-completed job', async () => {
+    const mockGetActiveScans = vi.fn().mockResolvedValue([
+      // run-1 is still 'dispatched' in D1 because FINDINGS_QUEUE is async
+      { id: 'run-1', userPublicKey: null, status: 'dispatched', target_url: 'http://a.example.com' },
+      { id: 'run-2', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' }
+    ]);
+    const mockUpdateScanStatus = vi.fn().mockResolvedValue(true);
+    (ScansRepository as any).mockImplementation(function () {
+      return {
+        getActiveScans: mockGetActiveScans,
+        updateScanStatus: mockUpdateScanStatus,
+        processFindingsQueueMessages: vi.fn().mockResolvedValue(undefined),
+      };
+    });
+
+    mockState.getTags.mockReturnValue(['runner']);
+    let currentAttachment: any = { activeJobs: ['run-1'], recentJobs: [] };
+    mockWs.deserializeAttachment.mockImplementation(() => currentAttachment);
+    mockWs.serializeAttachment.mockImplementation((val: any) => { currentAttachment = val; });
+
+    const stateManager = new StateManager(mockState);
+    stateManager.runners.add(mockWs);
+    stateManager.jobs.set('run-1', mockWs);
+
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    await handler.handleMessage(mockWs, JSON.stringify({
+      type: 'event',
+      runId: 'run-1',
+      payload: { type: 'complete', data: {} }
+    }));
+
+    expect(stateManager.jobs.has('run-1')).toBe(false);
+    expect(stateManager.jobs.get('run-2')).toBe(mockWs);
+    expect(currentAttachment.activeJobs).toEqual(['run-2']);
+    expect(currentAttachment.recentJobs).toEqual(['run-1']);
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('run-2');
   });
 
   it('should handle runner connection close by deleting runner resources', async () => {
