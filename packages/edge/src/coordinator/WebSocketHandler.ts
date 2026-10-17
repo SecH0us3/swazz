@@ -205,6 +205,13 @@ export class WebSocketHandler {
             }
           }
 
+          let shouldCleanup = false;
+          if (msg.type === 'error') {
+            shouldCleanup = true;
+          } else if (msg.type === 'event' && msg.payload && (msg.payload.type === 'complete' || msg.payload.type === 'error')) {
+            shouldCleanup = true;
+          }
+
           if (this.env.JWT_SECRET === 'test-secret') {
             // Local dev: write findings/events straight to D1, bypassing the
             // queue emulation. Miniflare's queue broker is unstable under the
@@ -228,8 +235,19 @@ export class WebSocketHandler {
                 scanId: runId,
                 type: msg.type,
                 payload: msg.payload
-              }).catch(qErr => {
+              }).catch(async qErr => {
                 logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
+                // Fallback for terminal events so the scan never stays stuck as 'dispatched' in D1
+                if (shouldCleanup) {
+                  try {
+                    const scansRepo = new ScansRepository(this.env);
+                    await scansRepo.processFindingsQueueMessages([{
+                      body: { scanId: runId, type: msg.type, payload: msg.payload }
+                    }]);
+                  } catch (fallbackErr) {
+                    logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist terminal event to D1 after queue failure", { error: fallbackErr });
+                  }
+                }
               })
             );
           }
@@ -244,13 +262,6 @@ export class WebSocketHandler {
                 // client closed
               }
             }
-          }
-
-          let shouldCleanup = false;
-          if (msg.type === 'error') {
-            shouldCleanup = true;
-          } else if (msg.type === 'event' && msg.payload && (msg.payload.type === 'complete' || msg.payload.type === 'error')) {
-            shouldCleanup = true;
           }
 
           if (shouldCleanup && runId) {
@@ -271,7 +282,15 @@ export class WebSocketHandler {
               recentJobs.shift();
             }
             ws.serializeAttachment({ ...attachment, activeJobs, recentJobs });
-            await this.queueService.checkAndDispatchQueuedScans(ws);
+            if (this.state.storage?.put) {
+              await this.state.storage.put(`finished:${runId}`, Date.now());
+            }
+            const dispatchPromise = this.queueService.checkAndDispatchQueuedScans(ws);
+            if (typeof this.state.waitUntil === 'function') {
+              this.state.waitUntil(dispatchPromise);
+            } else {
+              await dispatchPromise;
+            }
           }
         }
       } catch (e) {

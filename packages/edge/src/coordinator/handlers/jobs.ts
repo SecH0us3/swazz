@@ -7,16 +7,6 @@ import { RouteHandler, HandlerContext } from './types';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
 import { ScansRepository } from '../../repositories/scans';
 import { clearScanState } from '../utils';
-import { MAX_ACTIVE_JOBS_PER_RUNNER } from '../QueueService';
-
-function hasFreeSlot(ws: WebSocket): boolean {
-  try {
-    const att = ws.deserializeAttachment?.() as { activeJobs?: string[] } | null;
-    return (att?.activeJobs?.length ?? 0) < MAX_ACTIVE_JOBS_PER_RUNNER;
-  } catch {
-    return true;
-  }
-}
 
 export class DispatchHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -85,16 +75,22 @@ export class DispatchHandler implements RouteHandler {
 
     let runner = null;
     if (String(context.env.AUTH_ENABLED) === 'false') {
-      runner = activeRunners.find(r => hasFreeSlot(r)) || null;
+      runner = activeRunners.find(r => context.stateManager.hasCapacity(r)) || null;
     } else {
+      let hasMatchingPrivateRunner = false;
       if (payload.userPublicKey) {
-        runner = activeRunners.find(r => {
+        const matchingPrivate = activeRunners.filter(r => {
           const tags = context.state.getTags(r);
-          return tags.includes(payload.userPublicKey) && hasFreeSlot(r);
+          return tags.includes(payload.userPublicKey);
         });
+        hasMatchingPrivateRunner = matchingPrivate.length > 0;
+        runner = matchingPrivate.find(r => context.stateManager.hasCapacity(r)) || null;
       }
-      if (!runner && !config?.settings?.disable_shared_runners) {
-        runner = activeRunners.find(r => !context.stateManager.isPrivateRunner(r) && hasFreeSlot(r)) || null;
+      // Only fall back to a shared runner if the user has no connected private runner
+      // and shared runners are not disabled. If a private runner is connected but full,
+      // keep the scan queued for that private runner.
+      if (!runner && !hasMatchingPrivateRunner && !config?.settings?.disable_shared_runners) {
+        runner = activeRunners.find(r => !context.stateManager.isPrivateRunner(r) && context.stateManager.hasCapacity(r)) || null;
       }
     }
 
@@ -181,7 +177,7 @@ export class StartRunHandler implements RouteHandler {
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
     
-    const runnerWs = activeRunners.find(r => !context.stateManager.isPrivateRunner(r));
+    const runnerWs = activeRunners.find(r => !context.stateManager.isPrivateRunner(r) && context.stateManager.hasCapacity(r));
     if (!runnerWs) {
       return new Response("No shared runners available", { status: 503 });
     }

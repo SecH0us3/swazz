@@ -291,6 +291,53 @@ describe('RequestHandler', () => {
       expect(stateManager.jobs.get('run1')).toBe(freeRunner);
     });
 
+    it('queues scan (503) instead of falling back to a shared runner when the user private runner is full (Review #4)', async () => {
+      const stateManager = new StateManager(mockState);
+      const privateRunner = createMockWs();
+      privateRunner.serializeAttachment({ activeJobs: Array.from({ length: 10 }, (_, i) => `job-${i}`) });
+      const sharedRunner = createMockWs();
+      sharedRunner.serializeAttachment({ activeJobs: [] });
+
+      mockState.getTags.mockImplementation((ws: any) => {
+        if (ws === privateRunner) return ['runner', 'pubkey-user'];
+        return ['runner']; // shared
+      });
+      stateManager.runners.add(privateRunner);
+      stateManager.runners.add(sharedRunner);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-private', config: {}, userPublicKey: 'pubkey-user' })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(privateRunner.send).not.toHaveBeenCalled();
+      expect(sharedRunner.send).not.toHaveBeenCalled();
+      expect(stateManager.jobs.has('run-private')).toBe(false);
+    });
+
+    it('fails closed (returns 503) when runner attachment deserialization throws (Review #8)', async () => {
+      const stateManager = new StateManager(mockState);
+      const corruptRunner = createMockWs();
+      corruptRunner.deserializeAttachment.mockImplementation(() => {
+        throw new Error('corrupt attachment');
+      });
+      mockState.getTags.mockReturnValue(['runner']);
+      stateManager.runners.add(corruptRunner);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run-corrupt', config: {} })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(corruptRunner.send).not.toHaveBeenCalled();
+    });
+
     it('dispatches job to compatible runner', async () => {
       const stateManager = new StateManager(mockState);
       mockState.getTags.mockReturnValue(['runner']); // shared runner

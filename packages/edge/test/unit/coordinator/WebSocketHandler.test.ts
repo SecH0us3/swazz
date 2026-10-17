@@ -73,6 +73,7 @@ describe('WebSocketHandler', () => {
       getTags: vi.fn().mockReturnValue(['client', 'run-123']),
       waitUntil: vi.fn(),
       storage: {
+        put: vi.fn().mockResolvedValue(undefined),
         get: vi.fn().mockResolvedValue(new Map()),
         delete: vi.fn().mockResolvedValue(true)
       }
@@ -334,12 +335,50 @@ describe('WebSocketHandler', () => {
       payload: { type: 'complete', data: {} }
     }));
 
+    for (const call of mockState.waitUntil.mock.calls) {
+      await call[0];
+    }
+
+    expect(mockState.storage.put).toHaveBeenCalledWith('finished:run-1', expect.any(Number));
     expect(stateManager.jobs.has('run-1')).toBe(false);
     expect(stateManager.jobs.get('run-2')).toBe(mockWs);
     expect(currentAttachment.activeJobs).toEqual(['run-2']);
     expect(currentAttachment.recentJobs).toEqual(['run-1']);
     expect(mockWs.send).toHaveBeenCalledTimes(1);
     expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('run-2');
+  });
+
+  it('falls back to processFindingsQueueMessages when FINDINGS_QUEUE.send fails on a terminal event (Review #3)', async () => {
+    const mockProcessFindings = vi.fn().mockResolvedValue(undefined);
+    (ScansRepository as any).mockImplementation(function () {
+      return {
+        getActiveScans: vi.fn().mockResolvedValue([]),
+        processFindingsQueueMessages: mockProcessFindings,
+      };
+    });
+
+    mockEnv.JWT_SECRET = 'prod-secret';
+    mockEnv.FINDINGS_QUEUE.send.mockRejectedValueOnce(new Error('Queue down'));
+    mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    await handler.handleMessage(mockWs, JSON.stringify({
+      type: 'event',
+      runId: 'run-456',
+      payload: { type: 'complete', data: {} }
+    }));
+
+    for (const call of mockState.waitUntil.mock.calls) {
+      await call[0];
+    }
+
+    expect(mockProcessFindings).toHaveBeenCalledWith([
+      { body: { scanId: 'run-456', type: 'event', payload: { type: 'complete', data: {} } } }
+    ]);
   });
 
   it('should handle runner connection close by deleting runner resources', async () => {

@@ -74,3 +74,27 @@ export function scanStateKeys(runId: string): string[] {
 export async function clearScanState(storage: DurableObjectStorage, runId: string): Promise<void> {
   await storage.delete(scanStateKeys(runId));
 }
+
+export const DO_STORAGE_BATCH_LIMIT = 128;
+
+export async function batchStorageGet<T = any>(
+  storage: DurableObjectStorage,
+  keys: string[]
+): Promise<Map<string, T>> {
+  if (keys.length === 0) {
+    return new Map();
+  }
+  if (keys.length <= DO_STORAGE_BATCH_LIMIT) {
+    return await storage.get<T>(keys);
+  }
+  const merged = new Map<string, T>();
+  for (let i = 0; i < keys.length; i += DO_STORAGE_BATCH_LIMIT) {
+    const chunk = keys.slice(i, i + DO_STORAGE_BATCH_LIMIT);
+    const part = await storage.get<T>(chunk);
+    for (const [k, v] of part.entries()) {
+      merged.set(k, v);
+    }
+  }
+  return merged;
+}
+

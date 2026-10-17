@@ -4,26 +4,77 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Env } from '../env';
-import { StateManager } from './StateManager';
-import { scanStateKeys, clearScanState } from './utils';
+import { StateManager, MAX_ACTIVE_JOBS_PER_RUNNER } from './StateManager';
+import { scanStateKeys, clearScanState, batchStorageGet } from './utils';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
 
-// Upper bound on scans one runner holds after a connect. Keeps the socket attachment
-// (activeJobs + recentJobs) well under the 2 KB Durable Object limit and bounds the
-// work done before the WebSocket upgrade response is returned.
-export const MAX_ACTIVE_JOBS_PER_RUNNER = 10;
+export { MAX_ACTIVE_JOBS_PER_RUNNER };
 
 export class QueueService {
+  private inFlightByRunner = new Map<WebSocket, Promise<void>>();
+  private pendingRerun = new Set<WebSocket>();
+
   constructor(
     private env: Env,
     private state: DurableObjectState,
     private stateManager: StateManager
   ) {}
 
-  async checkAndDispatchQueuedScans(ws: WebSocket): Promise<void> {
+  checkAndDispatchQueuedScans(ws: WebSocket): Promise<void> {
+    const existing = this.inFlightByRunner.get(ws);
+    if (existing) {
+      this.pendingRerun.add(ws);
+      return existing;
+    }
+
+    const runLoop = async () => {
+      try {
+        do {
+          this.pendingRerun.delete(ws);
+          await this.dispatchPass(ws);
+        } while (this.pendingRerun.has(ws) && this.stateManager.hasCapacity(ws));
+      } finally {
+        this.pendingRerun.delete(ws);
+        this.inFlightByRunner.delete(ws);
+      }
+    };
+
+    const p = runLoop();
+    this.inFlightByRunner.set(ws, p);
+    return p;
+  }
+
+  private collectRecentJobIds(ws: WebSocket): Set<string> {
+    const recent = new Set<string>();
+    const addFromSocket = (socket: WebSocket) => {
+      try {
+        const att = socket.deserializeAttachment?.() as { recentJobs?: unknown } | null;
+        if (Array.isArray(att?.recentJobs)) {
+          for (const id of att.recentJobs) {
+            if (typeof id === 'string') {
+              recent.add(id);
+            }
+          }
+        }
+      } catch {}
+    };
+    for (const runnerWs of this.stateManager.runners) {
+      addFromSocket(runnerWs);
+    }
+    if (!this.stateManager.runners.has(ws)) {
+      addFromSocket(ws);
+    }
+    return recent;
+  }
+
+  private async dispatchPass(ws: WebSocket): Promise<void> {
     try {
+      if (!this.stateManager.hasCapacity(ws)) {
+        return;
+      }
+
       const tags = this.state.getTags(ws);
       const runnerPubKey = tags.find(t => 
         t !== 'runner-pending' && 
@@ -40,29 +91,16 @@ export class QueueService {
         return;
       }
 
-      const keys = activeScans.flatMap(scan => scanStateKeys(scan.id));
-      const storedData = await this.state.storage.get<any>(keys);
-
-      const isRecentJob = (id: string): boolean => {
-        const hasInRecent = (socket: WebSocket): boolean => {
-          try {
-            const att = socket.deserializeAttachment?.() as { recentJobs?: string[] } | null;
-            return !!att?.recentJobs?.includes(id);
-          } catch {
-            return false;
-          }
-        };
-        if (hasInRecent(ws)) return true;
-        for (const runnerWs of this.stateManager.runners) {
-          if (hasInRecent(runnerWs)) return true;
-        }
-        return false;
-      };
+      // Request per-scan state keys + durable 'finished:<id>' markers in <=128-key batches
+      const keys = activeScans.flatMap(scan => [...scanStateKeys(scan.id), `finished:${scan.id}`]);
+      const storedData = await batchStorageGet<any>(this.state.storage, keys);
+      const recentJobs = this.collectRecentJobIds(ws);
 
       for (const scan of activeScans) {
-        // Skip scans that recently finished on a runner (their 'completed'/'failed' status
-        // reaches D1 asynchronously via FINDINGS_QUEUE, so they may still appear as 'dispatched' in D1).
-        if (isRecentJob(scan.id)) {
+        // Skip scans that recently finished on any runner (either recorded durably in DO storage
+        // under 'finished:<id>' or in a live runner's recentJobs attachment) while FINDINGS_QUEUE
+        // is still persisting the terminal status to D1.
+        if (storedData.get(`finished:${scan.id}`) || recentJobs.has(scan.id)) {
           continue;
         }
         // If the job is already active in memory, skip it
@@ -107,8 +145,7 @@ export class QueueService {
         }
 
         if (isCompatible) {
-          const current = ws.deserializeAttachment() as { activeJobs?: string[] } | null;
-          if ((current?.activeJobs?.length ?? 0) >= MAX_ACTIVE_JOBS_PER_RUNNER) {
+          if (!this.stateManager.hasCapacity(ws)) {
             // Checked before the R2 read too, so a full runner costs no config fetches.
             return;
           }
@@ -198,16 +235,22 @@ export class QueueService {
             },
           });
 
-          // Race check across the R2 await: if already assigned or recently finished, skip without sending
-          if (this.stateManager.jobs.has(runId) || isRecentJob(runId)) {
+          // Race check across the R2/D1 await: if already assigned or recently finished, skip without sending
+          if (this.stateManager.jobs.has(runId) || this.collectRecentJobIds(ws).has(runId)) {
             continue;
           }
-          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; recentJobs?: string[] } | null || {};
-          const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
-          if (activeJobs.length >= MAX_ACTIVE_JOBS_PER_RUNNER) {
+          if (configRef || scan.project_id) {
+            const postAwaitMap = await this.state.storage.get<any>([`finished:${runId}`]);
+            if (postAwaitMap instanceof Map && postAwaitMap.get(`finished:${runId}`)) {
+              continue;
+            }
+          }
+          if (!this.stateManager.hasCapacity(ws)) {
             // Leave the rest queued until a slot frees up or another runner connects.
             return;
           }
+          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; recentJobs?: string[] } | null || {};
+          const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
 
           this.stateManager.jobs.set(runId, ws);
           try {
@@ -246,3 +289,4 @@ export class QueueService {
     }
   }
 }
+

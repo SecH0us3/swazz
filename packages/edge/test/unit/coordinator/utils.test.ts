@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi } from 'vitest';
-import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, scanStateKeys, clearScanState } from '../../../src/coordinator/utils';
+import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, scanStateKeys, clearScanState, batchStorageGet, DO_STORAGE_BATCH_LIMIT } from '../../../src/coordinator/utils';
 
 describe('isVersionOutdated', () => {
   it('returns false if either version is dev', () => {
@@ -80,3 +80,33 @@ describe('scanStateKeys / clearScanState', () => {
     expect(storage.delete).toHaveBeenCalledWith(scanStateKeys('run-1'));
   });
 });
+
+describe('batchStorageGet', () => {
+  it('returns empty Map without calling storage.get when keys is empty', async () => {
+    const storage: any = { get: vi.fn() };
+    const res = await batchStorageGet(storage, []);
+    expect(res.size).toBe(0);
+    expect(storage.get).not.toHaveBeenCalled();
+  });
+
+  it('splits > 128 keys into multiple storage.get calls of at most 128 keys and merges results', async () => {
+    const keys = Array.from({ length: 300 }, (_, i) => `key-${i}`);
+    const storage: any = {
+      get: vi.fn().mockImplementation(async (chunk: string[]) => {
+        expect(chunk.length).toBeLessThanOrEqual(DO_STORAGE_BATCH_LIMIT);
+        const m = new Map<string, string>();
+        for (const k of chunk) {
+          m.set(k, `val-${k}`);
+        }
+        return m;
+      })
+    };
+
+    const res = await batchStorageGet<string>(storage, keys);
+    expect(storage.get).toHaveBeenCalledTimes(3); // 128 + 128 + 44
+    expect(res.size).toBe(300);
+    expect(res.get('key-0')).toBe('val-key-0');
+    expect(res.get('key-299')).toBe('val-key-299');
+  });
+});
+
