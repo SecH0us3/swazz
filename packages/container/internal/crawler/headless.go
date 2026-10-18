@@ -9,14 +9,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	sysRuntime "runtime"
 	"strings"
 	"sync"
@@ -208,62 +206,24 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		}
 	}
 
-	// Enable CDP page domain and inject WebMCP discovery hook
-	if err := chromedp.Run(runCtx, page.Enable()); err != nil {
-		fmt.Printf("Warning: failed to enable CDP page domain: %v\n", err)
-	}
-	hookScript := `(function() {
-		if (!window.__swazz_webmcp_tools) {
-			window.__swazz_webmcp_tools = [];
+	// WebMCP discovery: the page-side hook reports each registerTool call through
+	// a CDP binding, so tools are captured as they happen (across navigations and
+	// even if the crawl later times out) rather than read back once at the end.
+	webmcp := newWebMcpCollector(c.sniffer)
+	chromedp.ListenTarget(runCtx, func(ev interface{}) {
+		if e, ok := ev.(*cdpRuntime.EventBindingCalled); ok && e.Name == webMcpBindingName {
+			webmcp.add(e.Payload)
 		}
-		const wrap = (mc) => {
-			if (!mc || typeof mc.registerTool !== 'function' || mc.__swazz_hooked) return;
-			const orig = mc.registerTool.bind(mc);
-			mc.__swazz_hooked = true;
-			mc.registerTool = function(tool) {
-				try {
-					if (tool && typeof tool.name === 'string' && /^[a-zA-Z0-9_.\-]{1,128}$/.test(tool.name)) {
-						window.__swazz_webmcp_tools.push({
-							name: tool.name,
-							description: typeof tool.description === 'string' ? tool.description.slice(0, 1024) : '',
-							inputSchema: tool.inputSchema ? JSON.stringify(tool.inputSchema).slice(0, 16384) : '{}',
-							annotations: tool.annotations ? {
-								consequentialHint: Boolean(tool.annotations.consequentialHint || tool.annotations.consequential),
-								readOnlyHint: Boolean(tool.annotations.readOnlyHint || tool.annotations.readOnly),
-							} : null
-						});
-					}
-				} catch (e) {}
-				return orig(tool);
-			};
-		};
-		const install = (target) => {
-			if (!target) return;
-			if (target.modelContext) {
-				wrap(target.modelContext);
-				return;
-			}
-			try {
-				let currentVal = target.modelContext;
-				Object.defineProperty(target, 'modelContext', {
-					configurable: true,
-					enumerable: true,
-					get() { return currentVal; },
-					set(val) {
-						currentVal = val;
-						wrap(val);
-					}
-				});
-			} catch (e) {}
-		};
-		if (typeof navigator !== 'undefined') install(navigator);
-		if (typeof document !== 'undefined') install(document);
-	})();`
-	if err := chromedp.Run(runCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-		_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
-		return err
-	})); err != nil {
-		fmt.Printf("Warning: failed to inject WebMCP discovery script: %v\n", err)
+	})
+	if err := chromedp.Run(runCtx,
+		page.Enable(),
+		cdpRuntime.AddBinding(webMcpBindingName),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, err := page.AddScriptToEvaluateOnNewDocument(webMcpHookScript).Do(ctx)
+			return err
+		}),
+	); err != nil {
+		fmt.Printf("Warning: failed to install WebMCP discovery hook: %v\n", err)
 	}
 
 	// Navigate to target URL
@@ -393,77 +353,10 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 Done:
 	durationMs := time.Since(startTime).Milliseconds()
 
-	// Extract discovered WebMCP tools
-	var webmcpJSON string
-	evalScript := `(async function() {
-		const list = Array.isArray(window.__swazz_webmcp_tools) ? [...window.__swazz_webmcp_tools] : [];
-		const seen = new Set(list.map(t => t.name));
-		try {
-			const mc = (typeof document !== 'undefined' && document.modelContext) || (typeof navigator !== 'undefined' && navigator.modelContext);
-			if (mc && typeof mc.getTools === 'function') {
-				const nativeTools = await mc.getTools();
-				if (Array.isArray(nativeTools)) {
-					for (const t of nativeTools) {
-						if (t && typeof t.name === 'string' && /^[a-zA-Z0-9_.\-]{1,128}$/.test(t.name) && !seen.has(t.name)) {
-							seen.add(t.name);
-							list.push({
-								name: t.name,
-								description: typeof t.description === 'string' ? t.description.slice(0, 1024) : '',
-								inputSchema: t.inputSchema ? JSON.stringify(t.inputSchema).slice(0, 16384) : '{}',
-								annotations: t.annotations ? {
-									consequentialHint: Boolean(t.annotations.consequentialHint || t.annotations.consequential),
-									readOnlyHint: Boolean(t.annotations.readOnlyHint || t.annotations.readOnly),
-								} : null
-							});
-						}
-					}
-				}
-			}
-		} catch (e) {}
-		return JSON.stringify(list);
-	})()`
-	if err := chromedp.Run(runCtx, chromedp.Evaluate(evalScript, &webmcpJSON, func(p *cdpRuntime.EvaluateParams) *cdpRuntime.EvaluateParams {
-		return p.WithAwaitPromise(true)
-	})); err == nil && webmcpJSON != "" {
-		type mcpAnnotation struct {
-			ConsequentialHint bool `json:"consequentialHint"`
-			ReadOnlyHint      bool `json:"readOnlyHint"`
-		}
-		type mcpToolItem struct {
-			Name        string         `json:"name"`
-			Description string         `json:"description"`
-			InputSchema string         `json:"inputSchema"`
-			Annotations *mcpAnnotation `json:"annotations"`
-		}
-		var rawTools []mcpToolItem
-		if err := json.Unmarshal([]byte(webmcpJSON), &rawTools); err == nil {
-			nameRx := regexp.MustCompile(`^[a-zA-Z0-9_.\-]{1,128}$`)
-			for _, t := range rawTools {
-				if !nameRx.MatchString(t.Name) {
-					continue
-				}
-				schema := t.InputSchema
-				if len(schema) > 16384 {
-					schema = schema[:16384]
-				}
-				if schema == "" {
-					schema = "{}"
-				}
-				headers := make(map[string]string)
-				if t.Annotations != nil {
-					headers["X-WebMCP-Consequential"] = fmt.Sprintf("%v", t.Annotations.ConsequentialHint)
-					headers["X-WebMCP-ReadOnly"] = fmt.Sprintf("%v", t.Annotations.ReadOnlyHint)
-				}
-				c.sniffer.AddEndpoint(DiscoveredEndpoint{
-					URL:         "webmcp://tool/" + t.Name,
-					Method:      "CALL",
-					ContentType: "application/json",
-					BodySample:  schema,
-					Headers:     headers,
-				})
-			}
-		}
-	}
+	// Final sweep for tools registered before the hook could wrap registerTool.
+	// runCtx may already be expired (that is one way to reach Done), so use a
+	// short context of its own off the still-live browser context.
+	c.collectWebMcpTools(browserCtx, webmcp)
 
 	return &CrawlerResult{
 		Endpoints:    c.sniffer.GetEndpoints(),

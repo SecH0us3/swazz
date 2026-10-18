@@ -42,6 +42,22 @@ func (r *Runner) executeRequest(
 	if strings.HasPrefix(originalPath, "mcp://") {
 		return r.executeMCPRequest(ctx, originalPath, payload, profile, headers, cookies)
 	}
+	if strings.HasPrefix(originalPath, "webmcp://") {
+		// WebMCP tools live inside a browser page (navigator.modelContext) and can
+		// only be invoked from that page. There is no network executor for them yet,
+		// so fail closed: falling through would send a nonsense "CALL <base>/webmcp://..."
+		// HTTP request to the target and feed its error page to the MCP analyzers.
+		return &swagger.FuzzResult{
+			ID:           uuid.New().String(),
+			Endpoint:     originalPath,
+			ResolvedPath: originalPath,
+			Method:       method,
+			Profile:      profile,
+			Payload:      payload,
+			Error:        "webmcp:// endpoints require a browser-side executor and are not fuzzed over HTTP",
+			Timestamp:    time.Now().UnixMilli(),
+		}
+	}
 	if method == "GRPC" || strings.HasPrefix(baseURL, "grpc://") || strings.HasPrefix(baseURL, "grpcs://") {
 		return r.executeGRPCRequest(ctx, baseURL, resolvedPath, originalPath, payload, profile, generatedHeaders)
 	}

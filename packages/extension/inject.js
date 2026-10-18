@@ -339,13 +339,13 @@
     };
 
     const wrapModelContext = (mc) => {
-        if (!mc || typeof mc !== 'object') return;
+        if (!mc || (typeof mc !== 'object' && typeof mc !== 'function')) return;
         if (typeof mc.registerTool === 'function' && !mc.__swazz_hooked) {
-            const origRegister = mc.registerTool.bind(mc);
+            const origRegister = mc.registerTool;
             mc.__swazz_hooked = true;
             mc.registerTool = function(tool) {
                 recordWebMcpTool(tool);
-                return origRegister(tool);
+                return origRegister.apply(this, arguments);
             };
         }
         try {
@@ -358,32 +358,40 @@
         } catch (e) {}
     };
 
-    const installModelContextHook = (target) => {
-        if (!target) return;
-        if (target.modelContext) {
-            wrapModelContext(target.modelContext);
-            return;
-        }
-        try {
-            let currentVal = target.modelContext;
-            Object.defineProperty(target, 'modelContext', {
-                configurable: true,
-                enumerable: true,
-                get() { return currentVal; },
-                set(val) {
-                    currentVal = val;
-                    wrapModelContext(val);
-                }
-            });
-        } catch (e) {}
+    const recheckModelContext = () => {
+        try { if (typeof navigator !== 'undefined' && navigator.modelContext) wrapModelContext(navigator.modelContext); } catch (e) {}
+        try { if (typeof document !== 'undefined' && document.modelContext) wrapModelContext(document.modelContext); } catch (e) {}
     };
 
-    if (typeof navigator !== 'undefined') installModelContextHook(navigator);
-    if (typeof document !== 'undefined') installModelContextHook(document);
-    window.addEventListener('DOMContentLoaded', () => {
-        if (typeof navigator !== 'undefined' && navigator.modelContext) wrapModelContext(navigator.modelContext);
-        if (typeof document !== 'undefined' && document.modelContext) wrapModelContext(document.modelContext);
-    });
+    const isModelContextTarget = (obj, prop) => prop === 'modelContext' && (
+        (typeof navigator !== 'undefined' && obj === navigator) ||
+        (typeof document !== 'undefined' && obj === document)
+    );
+
+    try {
+        const origDefine = Object.defineProperty;
+        Object.defineProperty = function defineProperty(obj, prop) {
+            const r = origDefine.apply(this, arguments);
+            if (isModelContextTarget(obj, prop)) recheckModelContext();
+            return r;
+        };
+        if (typeof Reflect !== 'undefined' && typeof Reflect.defineProperty === 'function') {
+            const origReflect = Reflect.defineProperty;
+            Reflect.defineProperty = function defineProperty(obj, prop) {
+                const r = origReflect.apply(this, arguments);
+                if (isModelContextTarget(obj, prop)) recheckModelContext();
+                return r;
+            };
+        }
+    } catch (e) {}
+
+    recheckModelContext();
+    if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('DOMContentLoaded', recheckModelContext);
+    }
+    if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('load', recheckModelContext);
+    }
 })();
 
 
