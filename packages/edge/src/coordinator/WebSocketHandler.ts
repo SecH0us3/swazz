@@ -100,7 +100,13 @@ export class WebSocketHandler {
         const msg = JSON.parse(messageStr);
         
         if (msg.type === 'parse_result') {
+          // Only the runner the request was sent to may answer it; anything else is ignored.
+          if (this.stateManager.pendingParseRunners.get(msg.reqId) !== ws) {
+            return;
+          }
+          this.stateManager.pendingParseRunners.delete(msg.reqId);
           const resolve = this.stateManager.pendingParses.get(msg.reqId);
+          // Per-user cache key (see swaggerCacheKey), so this runner can only fill its requester's cache.
           const urlStr = this.stateManager.pendingParseUrls.get(msg.reqId);
           this.stateManager.pendingParseUrls.delete(msg.reqId);
           

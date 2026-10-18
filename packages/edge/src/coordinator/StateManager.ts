@@ -18,6 +18,8 @@ export class StateManager {
   pendingChallenges = new Map<WebSocket, string>();
   pendingParses = new Map<string, (r: Response) => void>();
   pendingParseUrls = new Map<string, string>();
+  // The runner each parse request went to; only that runner may answer it.
+  pendingParseRunners = new Map<string, WebSocket>();
   sseStreams = new Map<string, ReadableStreamDefaultController>();
 
   constructor(private state: DurableObjectState) {

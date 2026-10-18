@@ -9,6 +9,15 @@ import { logError } from '../../../../common/logging/logger';
 import { ulid } from 'ulidx';
 import { isRunnerOwnedBy } from '../runnerAccess';
 
+/**
+ * The swagger_cache key for a spec URL as one caller sees it. Entries are per user: a spec fetched
+ * with one tenant's credentials must not be served to another, and a result written by one
+ * tenant's runner must not become what another tenant imports.
+ */
+export function swaggerCacheKey(userId: string | undefined, url: string): string {
+  return `user:${userId || 'anonymous'}|${url}`;
+}
+
 export class ParseHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
     let body: {
@@ -45,7 +54,7 @@ export class ParseHandler implements RouteHandler {
     if (body.url && !body.forceRebuild) {
       try {
         const scansRepo = new ScansRepository(context.env);
-        const cached = await scansRepo.getCachedSwagger(body.url);
+        const cached = await scansRepo.getCachedSwagger(swaggerCacheKey(body.userId, body.url));
           
         if (cached && cached.endpoints_r2_key) {
           const r2Object = await context.env.STORAGE.get(cached.endpoints_r2_key);
@@ -74,7 +83,7 @@ export class ParseHandler implements RouteHandler {
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) return new Response(JSON.stringify({ error: "No active runners connected to Coordinator" }), { status: 503 });
     const reqId = ulid();
-    context.stateManager.pendingParseUrls.set(reqId, body.url || 'rawSpec');
+    context.stateManager.pendingParseUrls.set(reqId, body.url ? swaggerCacheKey(body.userId, body.url) : 'rawSpec');
     
     let runnerWs = null;
     if (body.userId) {
@@ -90,9 +99,11 @@ export class ParseHandler implements RouteHandler {
 
     if (!runnerWs) {
       context.stateManager.pendingParseUrls.delete(reqId);
+      context.stateManager.pendingParseRunners.delete(reqId);
       return new Response(JSON.stringify({ error: "No compatible runner connected to Coordinator" }), { status: 503, headers: { 'Content-Type': 'application/json' } });
     }
 
+    context.stateManager.pendingParseRunners.set(reqId, runnerWs);
     try {
       runnerWs.send(JSON.stringify({
         type: 'parse_request',
@@ -106,6 +117,7 @@ export class ParseHandler implements RouteHandler {
       }));
     } catch (err) {
       context.stateManager.pendingParseUrls.delete(reqId);
+      context.stateManager.pendingParseRunners.delete(reqId);
       return new Response(JSON.stringify({ error: "Failed to send parse request to runner" }), { status: 500 });
     }
     
@@ -115,6 +127,7 @@ export class ParseHandler implements RouteHandler {
         if (context.stateManager.pendingParses.has(reqId)) {
           context.stateManager.pendingParses.delete(reqId);
           context.stateManager.pendingParseUrls.delete(reqId);
+          context.stateManager.pendingParseRunners.delete(reqId);
           resolve(new Response(JSON.stringify({ error: "Parse timeout from Go runner" }), { status: 504 }));
         }
       }, 30000);

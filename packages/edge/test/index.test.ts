@@ -811,10 +811,14 @@ describe("Anonymous Limits", () => {
     const body = await loginRes.json() as { token: string };
     userToken = body.token;
 
-    // Prep swagger_cache and R2 for parse testing
-    await env.DB.prepare('INSERT OR REPLACE INTO swagger_cache (url, base_path, endpoints_hash, endpoints_r2_key, raw_spec_r2_key) VALUES (?, ?, ?, ?, ?)')
-      .bind('http://example.com/swagger.json', '/api', 'hash123', 'specs/parsed/test.json', 'specs/raw/test.json')
-      .run();
+    // Prep swagger_cache and R2 for parse testing. Cache entries are per user, so seed the
+    // anonymous scope and the logged-in user's scope.
+    const limitUser = await env.DB.prepare("SELECT id FROM users WHERE username = 'limituser'").first<{ id: string }>();
+    for (const scope of ['anonymous', limitUser!.id]) {
+      await env.DB.prepare('INSERT OR REPLACE INTO swagger_cache (url, base_path, endpoints_hash, endpoints_r2_key, raw_spec_r2_key) VALUES (?, ?, ?, ?, ?)')
+        .bind(`user:${scope}|http://example.com/swagger.json`, '/api', 'hash123', 'specs/parsed/test.json', 'specs/raw/test.json')
+        .run();
+    }
     await env.STORAGE.put('specs/parsed/test.json', JSON.stringify([{ path: '/users', method: 'GET' }]));
   });
 

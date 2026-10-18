@@ -911,6 +911,28 @@ describe('RequestHandler', () => {
       expect(data.endpoints).toEqual({ '/api': {} });
     });
 
+    it('looks up and fills the spec cache only under the caller\'s own key', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
+      stateManager.runners.add(mockWs);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      mockGetCachedSwagger.mockResolvedValue(null);
+
+      const pending = handler.handle(new Request('http://localhost/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://internal-api.corp.example/openapi.json', userId: 'tenant-b' })
+      }));
+      await vi.waitFor(() => expect(stateManager.pendingParseUrls.size).toBe(1));
+
+      expect(mockGetCachedSwagger).toHaveBeenCalledWith('user:tenant-b|https://internal-api.corp.example/openapi.json');
+      const [reqId, cacheKey] = [...stateManager.pendingParseUrls.entries()][0];
+      expect(cacheKey).toBe('user:tenant-b|https://internal-api.corp.example/openapi.json');
+      expect(stateManager.pendingParseRunners.get(reqId)).toBe(mockWs);
+      stateManager.pendingParses.get(reqId)!(new Response('{}'));
+      await pending;
+    });
+
     it('logs error and falls back on cache DB retrieval fail', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
