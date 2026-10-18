@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RbacService } from '../../../src/services/rbac';
+import { PERMISSIONS } from '../../../src/config/rbac';
 import { Env } from '../../../src/env';
 
 describe('RbacService', () => {
@@ -49,6 +50,10 @@ describe('RbacService', () => {
       acceptInvitation: vi.fn().mockResolvedValue({ id: 'inv1', project_id: 'p1' }),
       declineInvitation: vi.fn().mockResolvedValue(true),
       checkExistingInvitationByEmailOrUsername: vi.fn().mockResolvedValue(null),
+      // The caller is an owner unless a test says otherwise.
+      getEffectivePermissions: vi.fn().mockResolvedValue(Object.keys(PERMISSIONS)),
+      resolveRolePermissions: vi.fn().mockResolvedValue([]),
+      isProjectMember: vi.fn().mockResolvedValue(true),
     };
     service = new RbacService(mockEnv, mockRepo);
   });
@@ -156,6 +161,38 @@ describe('RbacService', () => {
       const res = await service.removeMember('p1', 'u1', 'm1');
       expect(res.status).toBe('removed');
       expect(mockRepo.removeProjectMember).toHaveBeenCalledWith('p1', 'm1');
+    });
+  });
+
+  describe('role grant ceiling', () => {
+    it('updateMemberRoles refuses to grant permissions the caller lacks', async () => {
+      mockRepo.getEffectivePermissions.mockResolvedValue(['put:/api/projects/:id/members/:user_id']);
+      mockRepo.resolveRolePermissions.mockResolvedValue(['delete:/api/projects/:id']);
+      await expect(service.updateMemberRoles('p1', 'u1', 'u2', { roles: ['owner'] })).rejects.toThrow('|403');
+      expect(mockRepo.updateMemberRoles).not.toHaveBeenCalled();
+    });
+
+    it('updateMemberRoles refuses a user who is not a member', async () => {
+      mockRepo.isProjectMember.mockResolvedValue(false);
+      await expect(service.updateMemberRoles('p1', 'u1', 'u2', { roles: ['viewer'] })).rejects.toThrow('Member not found|404');
+      expect(mockRepo.updateMemberRoles).not.toHaveBeenCalled();
+    });
+
+    it('createInvitation refuses to grant permissions the caller lacks', async () => {
+      mockRepo.getEffectivePermissions.mockResolvedValue(['post:/api/projects/:id/invitations']);
+      mockRepo.resolveRolePermissions.mockResolvedValue(['delete:/api/projects/:id']);
+      await expect(service.createInvitation('p1', 'u1', { username: 'alt', roles: ['owner'] })).rejects.toThrow('|403');
+      expect(mockRepo.createInvitation).not.toHaveBeenCalled();
+    });
+
+    it('createCustomRole refuses permissions the caller lacks', async () => {
+      mockRepo.getEffectivePermissions.mockResolvedValue(['post:/api/projects/:id/roles']);
+      await expect(service.createCustomRole('p1', 'u1', { name: 'x', permissions: ['delete:/api/projects/:id'] })).rejects.toThrow('|403');
+      expect(mockRepo.createCustomRole).not.toHaveBeenCalled();
+    });
+
+    it('rejects the runner pseudo-role as a member role', async () => {
+      await expect(service.updateMemberRoles('p1', 'u1', 'u2', { roles: ['runner'] })).rejects.toThrow('Invalid role(s): runner|400');
     });
   });
 

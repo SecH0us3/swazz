@@ -332,7 +332,7 @@ export function registerProjectsRoutes(
       optStringArray(body.roles, 'roles', 20, LIMITS.SHORT_TEXT);
       
       try {
-        const result = await services.createProjectMemberAccount(projectId, body);
+        const result = await services.createProjectMemberAccount(projectId, body, await getUserIdFromRequest(c));
         c.set('auditDetails', {
           username: result.username,
           userId: result.id,

@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PERMISSIONS } from '../../../src/config/rbac';
 import { ProjectService } from '../../../src/services/projects';
 
 const mockCheckUsernameExists = vi.fn();
@@ -57,7 +58,10 @@ describe('ProjectService', () => {
     };
     rbacRepo = {
       checkPermission: vi.fn(),
-      checkCustomRolesExist: vi.fn()
+      checkCustomRolesExist: vi.fn(),
+      // The caller is an owner unless a test says otherwise.
+      getEffectivePermissions: vi.fn().mockResolvedValue(Object.keys(PERMISSIONS)),
+      resolveRolePermissions: vi.fn().mockResolvedValue([]),
     };
     service = new ProjectService(env, projectRepo, rbacRepo);
   });
@@ -188,38 +192,38 @@ describe('ProjectService', () => {
 
   describe('createProjectMemberAccount', () => {
     it('throws if username is not a string', async () => {
-      await expect(service.createProjectMemberAccount('p1', { username: 123 })).rejects.toThrow('Username is required|400');
+      await expect(service.createProjectMemberAccount('p1', { username: 123 }, 'owner1')).rejects.toThrow('Username is required|400');
     });
 
     it('throws if username is invalid', async () => {
-      await expect(service.createProjectMemberAccount('p1', { username: 'ab' })).rejects.toThrow('Username must be 3-20 characters long');
-      await expect(service.createProjectMemberAccount('p1', { username: 'a'.repeat(21) })).rejects.toThrow('Username must be 3-20 characters long');
-      await expect(service.createProjectMemberAccount('p1', { username: 'user name' })).rejects.toThrow('Username must be 3-20 characters long');
+      await expect(service.createProjectMemberAccount('p1', { username: 'ab' }, 'owner1')).rejects.toThrow('Username must be 3-20 characters long');
+      await expect(service.createProjectMemberAccount('p1', { username: 'a'.repeat(21) }, 'owner1')).rejects.toThrow('Username must be 3-20 characters long');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user name' }, 'owner1')).rejects.toThrow('Username must be 3-20 characters long');
     });
 
     it('throws if email is invalid', async () => {
-      await expect(service.createProjectMemberAccount('p1', { username: 'user123', email: 'invalid' })).rejects.toThrow('Invalid email format|400');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', email: 'invalid' }, 'owner1')).rejects.toThrow('Invalid email format|400');
     });
 
     it('throws if roles is not assigned or not an array', async () => {
-      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: 'editor' })).rejects.toThrow('At least one role must be assigned|400');
-      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: [] })).rejects.toThrow('At least one role must be assigned|400');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: 'editor' }, 'owner1')).rejects.toThrow('At least one role must be assigned|400');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: [] }, 'owner1')).rejects.toThrow('At least one role must be assigned|400');
     });
 
     it('throws if custom roles are invalid', async () => {
       rbacRepo.checkCustomRolesExist.mockResolvedValue([]);
-      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: ['custom-role'] })).rejects.toThrow('One or more custom roles are invalid|400');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: ['custom-role'] }, 'owner1')).rejects.toThrow('One or more custom roles are invalid|400');
     });
 
     it('throws if username already exists', async () => {
       mockCheckUsernameExists.mockResolvedValue(true);
-      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: ['editor'] })).rejects.toThrow('Username already exists|400');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: ['editor'] }, 'owner1')).rejects.toThrow('Username already exists|400');
     });
 
     it('throws if email already exists', async () => {
       mockCheckUsernameExists.mockResolvedValue(false);
       mockGetUserByEmail.mockResolvedValue({ id: 'u123' });
-      await expect(service.createProjectMemberAccount('p1', { username: 'user123', email: 'test@example.com', roles: ['editor'] })).rejects.toThrow('Email already exists|400');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', email: 'test@example.com', roles: ['editor'] }, 'owner1')).rejects.toThrow('Email already exists|400');
     });
 
     it('successfully provisions interactive user', async () => {
@@ -231,13 +235,29 @@ describe('ProjectService', () => {
         email: 'test@example.com',
         roles: ['editor', 'custom-role'],
         is_interactive: true
-      });
+      }, 'owner1');
 
       expect(res.status).toBe('ok');
       expect(res.username).toBe('newuser');
       expect(res.password).toBeDefined();
       expect(res.password?.length).toBe(16);
       expect(env.DB.batch).toHaveBeenCalled();
+    });
+
+    it('refuses to provision roles beyond what the caller holds', async () => {
+      mockCheckUsernameExists.mockResolvedValue(false);
+      rbacRepo.getEffectivePermissions.mockResolvedValue(['get:/api/projects/:id', 'post:/api/projects/:id/members/create']);
+      rbacRepo.resolveRolePermissions.mockResolvedValue(Object.keys(PERMISSIONS));
+
+      await expect(service.createProjectMemberAccount('p1', { username: 'svc1', roles: ['owner'], is_interactive: false }, 'editor1'))
+        .rejects.toThrow('|403');
+      expect(env.DB.batch).not.toHaveBeenCalled();
+    });
+
+    it('refuses to provision without a known caller', async () => {
+      mockCheckUsernameExists.mockResolvedValue(false);
+      await expect(service.createProjectMemberAccount('p1', { username: 'svc1', roles: ['viewer'] }, null))
+        .rejects.toThrow('Unauthorized|401');
     });
 
     it('successfully provisions service account', async () => {
@@ -247,7 +267,7 @@ describe('ProjectService', () => {
         username: 'service-acc',
         roles: ['viewer'],
         is_interactive: false
-      });
+      }, 'owner1');
 
       expect(res.status).toBe('ok');
       expect(res.username).toBe('service-acc');

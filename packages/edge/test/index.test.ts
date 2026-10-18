@@ -2403,6 +2403,8 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         // 2. Add as a member of the project
         await testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'viewer')")
           .bind(projectId, memberUserId).run();
+        await testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'viewer')")
+          .bind(projectId, memberUserId).run();
 
         // 3. Owner fetches login history for memberUserId - succeeds (200 OK)
         const resOwner = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/members/${memberUserId}/login-history` as any, {
@@ -2634,6 +2636,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         await testEnv.DB.batch([
           testEnv.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Owner Project', 'Private Project')").bind(projectId),
           testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, userIdOwner),
+          testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, userIdOwner),
           testEnv.DB.prepare("INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, 'http://example.com', 'default', 'completed')").bind(scanId, projectId),
           testEnv.DB.prepare("INSERT INTO findings (id, scan_id, rule_id, level, message, evidence) VALUES (?, ?, 'swazz/bola-idor', 'High', 'Vulnerability', 'evidence')").bind(findingId, scanId)
         ]);
@@ -2755,7 +2758,8 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       await testEnv.DB.batch([
         testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, is_guest) VALUES (?, ?, 'hash', 1)").bind(guestUserId, guestUsername),
         testEnv.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Guest Proj', '')").bind(projectId),
-        testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, guestUserId)
+        testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, guestUserId),
+        testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, guestUserId)
       ]);
 
       const payload = {

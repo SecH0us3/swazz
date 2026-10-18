@@ -27,6 +27,30 @@ export interface IRbacService {
   declineInvitation(userId: string | null, body: any): Promise<{ status: string }>;
 }
 
+/**
+ * Refuses a grant that would hand out any permission the caller does not hold in the project.
+ * Every path that assigns roles (member edits, invitations, provisioned accounts, custom role
+ * definitions) goes through this, so holding one member-management permission is never a route
+ * to owner.
+ */
+export async function assertCanGrant(
+  rbacRepo: IRbacRepository,
+  projectId: string,
+  callerId: string | null,
+  grant: { roles?: string[]; permissions?: string[] }
+): Promise<void> {
+  if (!callerId) throw new Error('Unauthorized|401');
+  const [callerPermissions, rolePermissions] = await Promise.all([
+    rbacRepo.getEffectivePermissions(callerId, projectId),
+    rbacRepo.resolveRolePermissions(projectId, grant.roles || []),
+  ]);
+  const held = new Set(callerPermissions);
+  const requested = [...rolePermissions, ...(grant.permissions || [])];
+  if (requested.some(p => !held.has(p))) {
+    throw new Error('Forbidden: You cannot grant permissions you do not hold|403');
+  }
+}
+
 export class RbacService implements IRbacService {
   constructor(private env: Env, private rbacRepo: IRbacRepository) {}
 
@@ -44,6 +68,17 @@ export class RbacService implements IRbacService {
     const found = await this.rbacRepo.checkCustomRolesExist(projectId, [roleId]);
     if (!found.includes(roleId)) {
       throw new Error('Role not found|404');
+    }
+  }
+
+  private async assertRolesExist(projectId: string, roles: string[]): Promise<void> {
+    const customRoles = roles.filter((r: string) => !Object.keys(DEFAULT_ROLES).includes(r));
+    if (customRoles.length > 0) {
+      const foundIds = await this.rbacRepo.checkCustomRolesExist(projectId, customRoles);
+      const missing = customRoles.filter((r: string) => !foundIds.includes(r));
+      if (missing.length > 0) {
+        throw new Error(`Invalid role(s): ${missing.join(', ')}|400`);
+      }
     }
   }
 
@@ -119,6 +154,8 @@ export class RbacService implements IRbacService {
       }
     }
 
+    await assertCanGrant(this.rbacRepo, projectId, userId, { roles: includedRoles, permissions });
+
     const nameExists = await this.rbacRepo.checkRoleNameExists(projectId, roleName);
     if (nameExists) {
       throw new Error('A role with this name already exists|400');
@@ -179,22 +216,19 @@ export class RbacService implements IRbacService {
       throw new Error('At least one role must be specified|400');
     }
 
-    // Validate roles exist
-    const defaultRoles = ['owner', 'editor', 'viewer', 'runner'];
-    const customRoles = body.roles.filter((r: string) => !defaultRoles.includes(r));
-    if (customRoles.length > 0) {
-      const foundIds = await this.rbacRepo.checkCustomRolesExist(projectId, customRoles);
-      const missing = customRoles.filter((r: string) => !foundIds.includes(r));
-      if (missing.length > 0) {
-        throw new Error(`Invalid role(s): ${missing.join(', ')}|400`);
-      }
-    }
+    await this.assertRolesExist(projectId, body.roles);
+    await assertCanGrant(this.rbacRepo, projectId, userId, { roles: body.roles });
 
     // Check if invitation
     const isInvite = await this.rbacRepo.checkInvitationExists(memberId, projectId);
     if (isInvite) {
       await this.rbacRepo.updateInvitationRoles(memberId, body.roles);
       return { status: 'updated' };
+    }
+
+    // Only existing members can be edited; writing roles for any user ID would add them.
+    if (!(await this.rbacRepo.isProjectMember(projectId, memberId))) {
+      throw new Error('Member not found|404');
     }
 
     // Update active member roles
@@ -289,6 +323,8 @@ export class RbacService implements IRbacService {
       }
     }
 
+    await assertCanGrant(this.rbacRepo, projectId, userId, { roles: includedRoles, permissions });
+
     await this.rbacRepo.updateCustomRole(projectId, roleId, roleName, permissions, includedRoles);
     await this.rbacRepo.invalidateProjectRBAC(projectId);
 
@@ -351,16 +387,8 @@ export class RbacService implements IRbacService {
       }
     }
 
-    // Validate roles exist
-    const defaultRoles = ['owner', 'editor', 'viewer', 'runner'];
-    const customRoles = body.roles.filter((r: string) => !defaultRoles.includes(r));
-    if (customRoles.length > 0) {
-      const foundIds = await this.rbacRepo.checkCustomRolesExist(projectId, customRoles);
-      const missing = customRoles.filter((r: string) => !foundIds.includes(r));
-      if (missing.length > 0) {
-        throw new Error(`Invalid role(s): ${missing.join(', ')}|400`);
-      }
-    }
+    await this.assertRolesExist(projectId, body.roles);
+    await assertCanGrant(this.rbacRepo, projectId, userId, { roles: body.roles });
 
     const id = ulid();
     const token = ulid() + ulid();

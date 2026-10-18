@@ -43,6 +43,9 @@ export interface IRbacRepository {
   invalidateProjectRBAC(projectId: string): Promise<void>;
   invalidateUserRBAC(projectId: string, userId: string): Promise<void>;
   checkPermission(userId: string, projectId: string, requiredPermission: string): Promise<boolean>;
+  getEffectivePermissions(userId: string, projectId: string): Promise<string[]>;
+  resolveRolePermissions(projectId: string, roleIds: string[]): Promise<string[]>;
+  isProjectMember(projectId: string, userId: string): Promise<boolean>;
 }
 
 import { DEFAULT_ROLES } from '../config/rbac';
@@ -92,22 +95,30 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     if (!isValidId(projectId) || !isValidId(userId)) {
       return false;
     }
+    const permissions = await this.getEffectivePermissions(userId, projectId);
+    return permissions.includes(requiredPermission);
+  }
+
+  async getEffectivePermissions(userId: string, projectId: string): Promise<string[]> {
+    if (!isValidId(projectId) || !isValidId(userId)) {
+      return [];
+    }
     const cacheKey = `rbac:${projectId}:${userId}`;
     
     if (this.env.SESSION_CACHE) {
       const cached = await this.env.SESSION_CACHE.get<{permissions: string[]}>(cacheKey, 'json');
       if (cached) {
-        return cached.permissions.includes(requiredPermission);
+        return cached.permissions;
       }
     }
 
-    // Use a recursive CTE to get all role IDs for the user, including inherited ones up to depth 3
+    // Use a recursive CTE to get all role IDs for the user, including inherited ones up to depth 3.
+    // project_member_roles is the only role source: the legacy project_members.role column is not
+    // rewritten on every role change, so reading it would keep revoked privileges alive.
     const { results: roleResults } = await this.db.prepare(`
       WITH RECURSIVE
         user_roles AS (
           SELECT role_id FROM project_member_roles WHERE project_id = ?1 AND user_id = ?2
-          UNION
-          SELECT role as role_id FROM project_members WHERE project_id = ?1 AND user_id = ?2
         ),
         role_hierarchy(role_id, depth) AS (
           SELECT role_id, 0 as depth FROM user_roles
@@ -125,10 +136,48 @@ export class RbacRepository extends BaseService implements IRbacRepository {
       if (this.env.SESSION_CACHE) {
         await this.env.SESSION_CACHE.put(cacheKey, JSON.stringify({ permissions: [] }), { expirationTtl: 300 });
       }
-      return false;
+      return [];
     }
 
-    const roleIds = roleResults.map(r => r.role_id);
+    const permsArray = await this.permissionsForRoleIds(projectId, roleResults.map(r => r.role_id));
+    // Cache for 24 hours. Will be actively invalidated on role/member changes.
+    if (this.env.SESSION_CACHE) {
+      await this.env.SESSION_CACHE.put(cacheKey, JSON.stringify({ permissions: permsArray }), { expirationTtl: 86400 });
+    }
+
+    return permsArray;
+  }
+
+  /** Every permission the given roles carry in this project, following custom-role inheritance. */
+  async resolveRolePermissions(projectId: string, roleIds: string[]): Promise<string[]> {
+    if (!isValidId(projectId) || roleIds.length === 0) {
+      return [];
+    }
+    const { results } = await this.db.prepare(`
+      WITH RECURSIVE
+        role_hierarchy(role_id, depth) AS (
+          SELECT value, 0 as depth FROM json_each(?2)
+          UNION ALL
+          SELECT cri.child_role_id, rh.depth + 1
+          FROM role_hierarchy rh
+          JOIN custom_role_inheritance cri ON rh.role_id = cri.parent_role_id
+          JOIN project_custom_roles pcr ON pcr.id = cri.parent_role_id AND pcr.project_id = ?1
+          WHERE rh.depth < 3
+        )
+      SELECT DISTINCT role_id FROM role_hierarchy;
+    `).bind(projectId, JSON.stringify(roleIds)).all<{ role_id: string }>();
+
+    return this.permissionsForRoleIds(projectId, (results || []).map(r => r.role_id));
+  }
+
+  async isProjectMember(projectId: string, userId: string): Promise<boolean> {
+    const row = await this.db.prepare(
+      'SELECT 1 FROM project_member_roles WHERE project_id = ? AND user_id = ? LIMIT 1'
+    ).bind(projectId, userId).first();
+    return !!row;
+  }
+
+  private async permissionsForRoleIds(projectId: string, roleIds: string[]): Promise<string[]> {
     const permissions = new Set<string>();
 
     // 1. Resolve default roles in memory
@@ -156,13 +205,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
       }
     }
 
-    const permsArray = Array.from(permissions);
-    // Cache for 24 hours. Will be actively invalidated on role/member changes.
-    if (this.env.SESSION_CACHE) {
-      await this.env.SESSION_CACHE.put(cacheKey, JSON.stringify({ permissions: permsArray }), { expirationTtl: 86400 });
-    }
-
-    return permissions.has(requiredPermission);
+    return Array.from(permissions);
   }
 
   async isGuestUser(userId: string): Promise<boolean> {
@@ -282,12 +325,8 @@ export class RbacRepository extends BaseService implements IRbacRepository {
 
   async getProjectOwnersCount(projectId: string): Promise<number> {
     const ownersCount = await this.db.prepare(`
-      SELECT COUNT(DISTINCT user_id) as count FROM (
-        SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner'
-        UNION
-        SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner'
-      )
-    `).bind(projectId, projectId).first<{ count: number }>();
+      SELECT COUNT(DISTINCT user_id) as count FROM project_member_roles WHERE project_id = ? AND role_id = 'owner'
+    `).bind(projectId).first<{ count: number }>();
     return ownersCount ? ownersCount.count : 0;
   }
 
@@ -299,6 +338,10 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     roles.forEach((r: string) => {
       stmts.push(this.db.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, userId, r));
     });
+
+    // Keep the legacy single-role column (still read for audit logs) in step with the real roles.
+    const legacyRole = roles.includes('owner') ? 'owner' : roles.includes('editor') ? 'editor' : 'viewer';
+    stmts.push(this.db.prepare('UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?').bind(legacyRole, projectId, userId));
 
     await this.db.batch(stmts);
   }

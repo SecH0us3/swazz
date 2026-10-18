@@ -242,7 +242,8 @@ describe('RbacRepository Unit Tests', () => {
     const repo = new RbacRepository(mockEnv);
     await repo.updateMemberRoles('proj-123', 'u1', ['role1', 'role2']);
 
-    expect(mockPrepare).toHaveBeenCalledTimes(3); // 1 delete + 2 inserts
+    expect(mockPrepare).toHaveBeenCalledTimes(4); // 1 delete + 2 inserts + legacy role sync
+    expect(mockPrepare).toHaveBeenCalledWith('UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?');
     expect(mockBatch).toHaveBeenCalled();
   });
 
