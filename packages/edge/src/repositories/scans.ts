@@ -75,6 +75,31 @@ function normalizeAIRelevance(val: unknown): boolean {
   return false;
 }
 
+const MAX_FINDINGS_PER_EVENT = 1000;
+const FINDING_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+const FINDING_TEXT_LIMIT = 64 * 1024;
+
+/**
+ * Normalizes one runner-reported finding. Runners are tenant-controlled, so anything that is not
+ * an object is dropped and every field is coerced to a bounded string; the runner's id is kept
+ * (AI triage refers back to it) only when it is a plain identifier.
+ */
+export function sanitizeRunnerFinding(raw: unknown): { id: string; ruleId: string; level: string; message: string; evidence: string | null } | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const f = raw as Record<string, unknown>;
+  const text = (v: unknown, max: number) => (typeof v === 'string' ? v : v == null ? '' : String(v)).slice(0, max);
+  const ruleId = text(f.ruleId, 256);
+  if (!ruleId) return null;
+  const evidence = f.evidence == null || f.evidence === '' ? null : text(f.evidence, FINDING_TEXT_LIMIT);
+  return {
+    id: typeof f.id === 'string' && FINDING_ID_PATTERN.test(f.id) ? f.id : crypto.randomUUID(),
+    ruleId,
+    level: text(f.level, 32),
+    message: text(f.message, FINDING_TEXT_LIMIT),
+    evidence,
+  };
+}
+
 export class ScansRepository extends BaseService implements IScansRepository {
   constructor(env: Env) {
     super(env);
@@ -522,12 +547,14 @@ export class ScansRepository extends BaseService implements IScansRepository {
     for (const msg of messages) {
       const id = crypto.randomUUID();
       const { scanId, type, payload } = msg.body;
-      const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
+      const payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
+      const eventType = typeof type === 'string' && type ? type : 'event';
       
       statements.push(
         this.db.prepare(
           `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
-        ).bind(id, scanId, type, payloadStr)
+        ).bind(id, scanId, eventType, payloadStr)
       );
 
       const projInfo = scanToProject[scanId];
@@ -581,20 +608,16 @@ export class ScansRepository extends BaseService implements IScansRepository {
       }
 
       if (payload && payload.type === 'result' && payload.data && Array.isArray(payload.data.analyzerFindings)) {
-        for (const finding of payload.data.analyzerFindings) {
-          const findingId = finding.id || crypto.randomUUID();
+        for (const raw of payload.data.analyzerFindings.slice(0, MAX_FINDINGS_PER_EVENT)) {
+          const finding = sanitizeRunnerFinding(raw);
+          if (!finding) continue;
+          // OR IGNORE: a repeated or colliding id must never fail the whole batch, which mixes
+          // every tenant's events.
           statements.push(
             this.db.prepare(
-              `INSERT INTO findings (id, scan_id, rule_id, level, message, evidence)
+              `INSERT OR IGNORE INTO findings (id, scan_id, rule_id, level, message, evidence)
                VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(
-              findingId,
-              scanId,
-              finding.ruleId,
-              finding.level,
-              finding.message,
-              finding.evidence || null
-            )
+            ).bind(finding.id, scanId, finding.ruleId, finding.level, finding.message, finding.evidence)
           );
         }
       }

@@ -206,6 +206,20 @@ export class QueueService {
           if (!config) {
             config = {};
           }
+          // A tenant-supplied config that is not an object would throw below, abort the whole
+          // pass at this (oldest) scan and starve every scan queued behind it. Fail it instead.
+          if (typeof config !== 'object' || Array.isArray(config)) {
+            logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Scan ${scan.id} has a non-object config; marking it failed`);
+            try {
+              if (await scansRepo.markFailedIfActive(scan.id)) {
+                await clearScanState(this.state.storage, scan.id);
+                if (configRef) await deleteScanConfig(this.env, configRef);
+              }
+            } catch (dbErr) {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
+            }
+            continue;
+          }
           if (!config.base_url) {
             config.base_url = scan.target_url;
           }

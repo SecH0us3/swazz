@@ -253,6 +253,9 @@ export class RunnersService implements IRunnersService {
     if (!isValidRunId(runId)) {
       throw new Error('Invalid runId|400');
     }
+    if (body.config !== undefined && body.config !== null && (typeof body.config !== 'object' || Array.isArray(body.config))) {
+      throw new Error('config must be an object|400');
+    }
 
     const { body: configBody } = serializeScanConfig(body.config || {});
 

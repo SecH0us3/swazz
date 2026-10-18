@@ -176,6 +176,14 @@ describe('RunnersService Unit Tests', () => {
     expect(res.status).toBe(200);
   });
 
+  test('queueRun rejects a config that is not an object before storing anything', async () => {
+    for (const config of ['x', 5, true, [1]]) {
+      await expect(runnersService.queueRun({ config }, 'user-1', false, false)).rejects.toThrow('config must be an object|400');
+    }
+    expect(mockRunnersRepo.createScanRecord).not.toHaveBeenCalled();
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
+  });
+
   test('queueRun should update scan status and return run info', async () => {
     mockCoordinatorFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'r1', status: 'queued' }) });
     const res = await runnersService.queueRun({ scanId: 'scan-1' }, 'user-1', true, false);

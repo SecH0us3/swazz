@@ -358,6 +358,23 @@ describe('QueueService', () => {
     expect(stateManager.jobs.get('scan-1')).toBe(mockWs);
   });
 
+  it('fails a scan whose stored config is not an object and keeps dispatching the scans behind it', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-poison', userPublicKey: null, status: 'queued', target_url: 'http://a.example.com' },
+      { id: 'scan-good', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' }
+    ]);
+    const stored = new Map<string, any>([['config:scan-poison', 'x'], ['config:scan-good', { settings: {} }]]);
+    mockState.storage.get = vi.fn().mockResolvedValue(stored);
+
+    const stateManager = new StateManager(mockState);
+    await new QueueService(mockEnv, mockState, stateManager).checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-poison');
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('scan-good');
+  });
+
   it('should not dispatch public scan to shared runner if disable_shared_runners is set to true', async () => {
     mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
     mockGetActiveScans.mockResolvedValue([
