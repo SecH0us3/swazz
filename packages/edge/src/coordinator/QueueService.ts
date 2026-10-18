@@ -4,20 +4,77 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Env } from '../env';
-import { StateManager } from './StateManager';
+import { StateManager, MAX_ACTIVE_JOBS_PER_RUNNER } from './StateManager';
+import { scanStateKeys, clearScanState, batchStorageGet, FINISHED_SCANS_KEY, getFinishedScans } from './utils';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
 
+export { MAX_ACTIVE_JOBS_PER_RUNNER };
+
 export class QueueService {
+  private inFlightByRunner = new Map<WebSocket, Promise<void>>();
+  private pendingRerun = new Set<WebSocket>();
+
   constructor(
     private env: Env,
     private state: DurableObjectState,
     private stateManager: StateManager
   ) {}
 
-  async checkAndDispatchQueuedScans(ws: WebSocket): Promise<void> {
+  checkAndDispatchQueuedScans(ws: WebSocket): Promise<void> {
+    const existing = this.inFlightByRunner.get(ws);
+    if (existing) {
+      this.pendingRerun.add(ws);
+      return existing;
+    }
+
+    const runLoop = async () => {
+      try {
+        do {
+          this.pendingRerun.delete(ws);
+          await this.dispatchPass(ws);
+        } while (this.pendingRerun.has(ws) && this.stateManager.hasCapacity(ws));
+      } finally {
+        this.pendingRerun.delete(ws);
+        this.inFlightByRunner.delete(ws);
+      }
+    };
+
+    const p = runLoop();
+    this.inFlightByRunner.set(ws, p);
+    return p;
+  }
+
+  private collectRecentJobIds(ws: WebSocket): Set<string> {
+    const recent = new Set<string>();
+    const addFromSocket = (socket: WebSocket) => {
+      try {
+        const att = socket.deserializeAttachment?.() as { recentJobs?: unknown } | null;
+        if (Array.isArray(att?.recentJobs)) {
+          for (const id of att.recentJobs) {
+            if (typeof id === 'string') {
+              recent.add(id);
+            }
+          }
+        }
+      } catch {}
+    };
+    for (const runnerWs of this.stateManager.runners) {
+      addFromSocket(runnerWs);
+    }
+    if (!this.stateManager.runners.has(ws)) {
+      addFromSocket(ws);
+    }
+    return recent;
+  }
+
+  private async dispatchPass(ws: WebSocket): Promise<void> {
     try {
+      if (!this.stateManager.hasCapacity(ws)) {
+        return;
+      }
+
       const tags = this.state.getTags(ws);
       const runnerPubKey = tags.find(t => 
         t !== 'runner-pending' && 
@@ -34,24 +91,30 @@ export class QueueService {
         return;
       }
 
-      const keys = activeScans.flatMap(scan => [
-        `config:${scan.id}`,
-        `config_ref:${scan.id}`,
-        `config_meta:${scan.id}`,
-        `user_public_key:${scan.id}`
-      ]);
-      const storedData = await this.state.storage.get<any>(keys);
+      // Request per-scan state keys + the bounded finished_runs ring buffer in <=128-key batches
+      const keys = [...activeScans.flatMap(scan => scanStateKeys(scan.id)), FINISHED_SCANS_KEY];
+      const storedData = await batchStorageGet<any>(this.state.storage, keys);
+      const finishedList = storedData.get(FINISHED_SCANS_KEY);
+      const finishedScans = new Set<string>(Array.isArray(finishedList) ? finishedList : []);
+      const recentJobs = this.collectRecentJobIds(ws);
 
       for (const scan of activeScans) {
+        // Skip scans that recently finished on any runner (either recorded durably in DO storage
+        // under 'finished_runs' or in a live runner's recentJobs attachment) while FINDINGS_QUEUE
+        // is still persisting the terminal status to D1.
+        if (finishedScans.has(scan.id) || recentJobs.has(scan.id)) {
+          continue;
+        }
         // If the job is already active in memory, skip it
         if ((scan.status === 'dispatched' || scan.status === 'paused') && this.stateManager.jobs.has(scan.id)) {
           continue;
         }
 
-        const scanUserPubKey = storedData.get(`user_public_key:${scan.id}`) || scan.userPublicKey || "";
-        const legacyConfig = storedData.get(`config:${scan.id}`);
-        const configRef: string | undefined = storedData.get(`config_ref:${scan.id}`);
-        const configMeta: { disableShared?: boolean } | undefined = storedData.get(`config_meta:${scan.id}`);
+        const [configKey, configRefKey, configMetaKey, userPubKeyKey] = scanStateKeys(scan.id);
+        const scanUserPubKey = storedData.get(userPubKeyKey) || scan.userPublicKey || "";
+        const legacyConfig = storedData.get(configKey);
+        const configRef: string | undefined = storedData.get(configRefKey);
+        const configMeta: { disableShared?: boolean } | undefined = storedData.get(configMetaKey);
 
         let isCompatible = false;
         if (String(this.env.AUTH_ENABLED) === 'false') {
@@ -84,6 +147,10 @@ export class QueueService {
         }
 
         if (isCompatible) {
+          if (!this.stateManager.hasCapacity(ws)) {
+            // Checked before the R2 read too, so a full runner costs no config fetches.
+            return;
+          }
           const runId = scan.id;
           let config: any = null;
 
@@ -99,10 +166,7 @@ export class QueueService {
               try {
                 const marked = await scansRepo.markFailedIfActive(scan.id);
                 if (marked) {
-                  await this.state.storage.delete(`config:${scan.id}`);
-                  await this.state.storage.delete(`config_ref:${scan.id}`);
-                  await this.state.storage.delete(`config_meta:${scan.id}`);
-                  await this.state.storage.delete(`user_public_key:${scan.id}`);
+                  await clearScanState(this.state.storage, scan.id);
                 }
               } catch (dbErr) {
                 logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
@@ -121,10 +185,7 @@ export class QueueService {
                 try {
                   const marked = await scansRepo.markFailedIfActive(scan.id);
                   if (marked) {
-                    await this.state.storage.delete(`config:${scan.id}`);
-                    await this.state.storage.delete(`config_ref:${scan.id}`);
-                    await this.state.storage.delete(`config_meta:${scan.id}`);
-                    await this.state.storage.delete(`user_public_key:${scan.id}`);
+                    await clearScanState(this.state.storage, scan.id);
                   }
                 } catch (dbErr) {
                   logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
@@ -176,20 +237,41 @@ export class QueueService {
             },
           });
 
-          // Race check across the R2 await: if already assigned, skip without sending
-          if (this.stateManager.jobs.has(runId)) {
+          // Race check across the R2/D1 await: if already assigned or recently finished, skip without sending
+          if (this.stateManager.jobs.has(runId) || this.collectRecentJobIds(ws).has(runId)) {
             continue;
           }
+          if (configRef || scan.project_id) {
+            const latestFinished = await getFinishedScans(this.state.storage);
+            if (latestFinished.has(runId)) {
+              continue;
+            }
+          }
+          if (!this.stateManager.hasCapacity(ws)) {
+            // Leave the rest queued until a slot frees up or another runner connects.
+            return;
+          }
+          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; recentJobs?: string[] } | null || {};
+          const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
 
           this.stateManager.jobs.set(runId, ws);
-          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
-          const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
-          if (!activeJobs.includes(runId)) {
-            activeJobs.push(runId);
-            ws.serializeAttachment({ ...attachment, activeJobs });
+          try {
+            if (!activeJobs.includes(runId)) {
+              activeJobs.push(runId);
+              ws.serializeAttachment({ ...attachment, activeJobs });
+            }
+            ws.send(dispatchMsg);
+          } catch (sendErr) {
+            // Same rollback as the /dispatch handler: the socket is unusable, so stop here
+            // and leave this and every later scan queued for the next connect.
+            this.stateManager.jobs.delete(runId);
+            this.stateManager.runners.delete(ws);
+            try {
+              ws.serializeAttachment({ ...attachment, activeJobs: activeJobs.filter(id => id !== runId) });
+            } catch {}
+            logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to dispatch queued scan ${runId}`, { error: sendErr });
+            return;
           }
-
-          ws.send(dispatchMsg);
 
           try {
             await scansRepo.updateScanStatus(runId, 'dispatched');
@@ -197,14 +279,11 @@ export class QueueService {
             logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to dispatched", { error: dbErr });
           }
 
-          await this.state.storage.delete(`config:${runId}`);
-          await this.state.storage.delete(`config_ref:${runId}`);
-          await this.state.storage.delete(`config_meta:${runId}`);
-          await this.state.storage.delete(`user_public_key:${runId}`);
+          await clearScanState(this.state.storage, runId);
           if (configRef) {
             await deleteScanConfig(this.env, configRef);
           }
-          break;
+          // Continue dispatching compatible queued scans until MAX_ACTIVE_JOBS_PER_RUNNER is reached.
         }
       }
     } catch (err) {
@@ -212,3 +291,4 @@ export class QueueService {
     }
   }
 }
+

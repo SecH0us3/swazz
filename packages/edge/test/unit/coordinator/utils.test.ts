@@ -3,8 +3,20 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { describe, it, expect } from 'vitest';
-import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags } from '../../../src/coordinator/utils';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  isVersionOutdated,
+  getPublicKeyFromTags,
+  getRunIdFromTags,
+  scanStateKeys,
+  clearScanState,
+  batchStorageGet,
+  DO_STORAGE_BATCH_LIMIT,
+  markScanFinished,
+  getFinishedScans,
+  MAX_FINISHED_SCANS,
+  FINISHED_SCANS_KEY
+} from '../../../src/coordinator/utils';
 
 describe('isVersionOutdated', () => {
   it('returns false if either version is dev', () => {
@@ -65,3 +77,70 @@ describe('getRunIdFromTags', () => {
     expect(getRunIdFromTags(tags)).toBeUndefined();
   });
 });
+
+describe('scanStateKeys / clearScanState', () => {
+  it('lists every per-scan key the coordinator stores', () => {
+    expect(scanStateKeys('run-1')).toEqual([
+      'config:run-1', 'config_ref:run-1', 'config_meta:run-1', 'user_public_key:run-1'
+    ]);
+  });
+
+  it('deletes all of them in a single storage call', async () => {
+    const storage: any = { delete: vi.fn().mockResolvedValue(4) };
+    await clearScanState(storage, 'run-1');
+    expect(storage.delete).toHaveBeenCalledTimes(1);
+    expect(storage.delete).toHaveBeenCalledWith(scanStateKeys('run-1'));
+  });
+});
+
+describe('batchStorageGet', () => {
+  it('returns empty Map without calling storage.get when keys is empty', async () => {
+    const storage: any = { get: vi.fn() };
+    const res = await batchStorageGet(storage, []);
+    expect(res.size).toBe(0);
+    expect(storage.get).not.toHaveBeenCalled();
+  });
+
+  it('splits > 128 keys into multiple storage.get calls of at most 128 keys and merges results', async () => {
+    const keys = Array.from({ length: 300 }, (_, i) => `key-${i}`);
+    const storage: any = {
+      get: vi.fn().mockImplementation(async (chunk: string[]) => {
+        expect(chunk.length).toBeLessThanOrEqual(DO_STORAGE_BATCH_LIMIT);
+        const m = new Map<string, string>();
+        for (const k of chunk) {
+          m.set(k, `val-${k}`);
+        }
+        return m;
+      })
+    };
+
+    const res = await batchStorageGet<string>(storage, keys);
+    expect(storage.get).toHaveBeenCalledTimes(3); // 128 + 128 + 44
+    expect(res.size).toBe(300);
+    expect(res.get('key-0')).toBe('val-key-0');
+    expect(res.get('key-299')).toBe('val-key-299');
+  });
+});
+
+describe('markScanFinished / getFinishedScans', () => {
+  it('stores finished scan IDs in a single bounded FIFO list capped at MAX_FINISHED_SCANS', async () => {
+    let storedList: string[] = Array.from({ length: MAX_FINISHED_SCANS }, (_, i) => `run-${i}`);
+    const storage: any = {
+      get: vi.fn().mockImplementation(async () => new Map([[FINISHED_SCANS_KEY, storedList]])),
+      put: vi.fn().mockImplementation(async (_k: string, val: string[]) => {
+        storedList = val;
+      })
+    };
+
+    await markScanFinished(storage, 'run-newest');
+    expect(storedList).toHaveLength(MAX_FINISHED_SCANS);
+    expect(storedList[0]).toBe('run-1');
+    expect(storedList[MAX_FINISHED_SCANS - 1]).toBe('run-newest');
+
+    const set = await getFinishedScans(storage);
+    expect(set.has('run-0')).toBe(false);
+    expect(set.has('run-newest')).toBe(true);
+  });
+});
+
+

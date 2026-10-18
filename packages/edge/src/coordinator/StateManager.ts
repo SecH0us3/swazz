@@ -5,6 +5,11 @@
 
 import { getPublicKeyFromTags, getRunIdFromTags } from './utils';
 
+// Upper bound on scans one runner holds concurrently. Keeps the socket attachment
+// (activeJobs + recentJobs) well under the 2 KB Durable Object limit and bounds the
+// work done before the WebSocket upgrade response is returned.
+export const MAX_ACTIVE_JOBS_PER_RUNNER = 10;
+
 export class StateManager {
   runners = new Set<WebSocket>();
   clients = new Map<string, Set<WebSocket>>();
@@ -49,4 +54,24 @@ export class StateManager {
     const tags = this.state.getTags(ws);
     return !!getPublicKeyFromTags(tags);
   }
+
+  hasCapacity(ws: WebSocket): boolean {
+    if (typeof ws.deserializeAttachment !== 'function') {
+      return true;
+    }
+    try {
+      const att = ws.deserializeAttachment() as { activeJobs?: unknown } | null;
+      if (att !== null && att !== undefined && typeof att !== 'object') {
+        return false;
+      }
+      if (att?.activeJobs !== undefined && !Array.isArray(att.activeJobs)) {
+        return false;
+      }
+      return (att?.activeJobs?.length ?? 0) < MAX_ACTIVE_JOBS_PER_RUNNER;
+    } catch {
+      // Fail closed on corrupt or unreadable attachment
+      return false;
+    }
+  }
 }
+

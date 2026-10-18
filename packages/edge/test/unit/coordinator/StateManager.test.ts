@@ -56,4 +56,46 @@ describe('StateManager', () => {
     const manager = new StateManager(mockState);
     expect(manager.clients.get('run-abc')?.has(mockWs)).toBe(true);
   });
+
+  describe('hasCapacity', () => {
+    const mockState = {
+      getWebSockets: vi.fn().mockReturnValue([]),
+      getTags: vi.fn().mockReturnValue(['runner'])
+    } as any;
+
+    it('returns true when activeJobs is below MAX_ACTIVE_JOBS_PER_RUNNER', () => {
+      const manager = new StateManager(mockState);
+      const ws = { deserializeAttachment: vi.fn().mockReturnValue({ activeJobs: ['a', 'b'] }) } as any;
+      expect(manager.hasCapacity(ws)).toBe(true);
+    });
+
+    it('returns false when activeJobs reaches MAX_ACTIVE_JOBS_PER_RUNNER (10)', () => {
+      const manager = new StateManager(mockState);
+      const ws = {
+        deserializeAttachment: vi.fn().mockReturnValue({
+          activeJobs: Array.from({ length: 10 }, (_, i) => `job-${i}`)
+        })
+      } as any;
+      expect(manager.hasCapacity(ws)).toBe(false);
+    });
+
+    it('fails closed (returns false) when deserializeAttachment throws', () => {
+      const manager = new StateManager(mockState);
+      const ws = {
+        deserializeAttachment: vi.fn().mockImplementation(() => {
+          throw new Error('corrupt attachment');
+        })
+      } as any;
+      expect(manager.hasCapacity(ws)).toBe(false);
+    });
+
+    it('fails closed (returns false) when activeJobs is not an array', () => {
+      const manager = new StateManager(mockState);
+      const ws = {
+        deserializeAttachment: vi.fn().mockReturnValue({ activeJobs: 'not-an-array' })
+      } as any;
+      expect(manager.hasCapacity(ws)).toBe(false);
+    });
+  });
 });
+
