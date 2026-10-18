@@ -553,6 +553,31 @@ describe('Auth Routes Unit Tests', () => {
       const res = await liveApp.request('http://example.com/api/auth/callback/github?code=123&state=state123');
       expect(res.status).toBe(302);
     });
+    it('login binds the flow to this browser with an HttpOnly, Lax nonce cookie embedded in the state', async () => {
+      mockAuthService.handleGithubLogin.mockResolvedValue('https://github.com/login');
+      const res = await app.request('/api/auth/login/github');
+      const cookie = res.headers.get('Set-Cookie') || '';
+      const nonce = /swazz_oauth_nonce=([0-9a-f]{64})/.exec(cookie)?.[1];
+      expect(nonce).toBeDefined();
+      expect(cookie).toContain('HttpOnly');
+      expect(cookie).toContain('SameSite=Lax');
+      expect(cookie).toContain('Path=/api/auth/callback');
+      expect(mockAuthService.handleGithubLogin.mock.calls[0][2]).toBe(nonce);
+    });
+
+    it('callback hands the browser nonce to the service and clears it', async () => {
+      mockAuthService.handleGithubCallback.mockResolvedValue({ redirectUrl: 'http://localhost:5173' });
+      const res = await app.request('/api/auth/callback/github?code=1&state=s', { headers: { Cookie: 'swazz_oauth_nonce=abc' } });
+      expect(mockAuthService.handleGithubCallback.mock.calls[0][4]).toBe('abc');
+      expect(res.headers.get('Set-Cookie')).toMatch(/swazz_oauth_nonce=;.*Max-Age=0/);
+    });
+
+    it('callback without the nonce cookie passes no nonce', async () => {
+      mockAuthService.handleGithubCallback.mockResolvedValue({ redirectUrl: 'http://localhost:5173' });
+      await app.request('/api/auth/callback/github?code=1&state=s');
+      expect(mockAuthService.handleGithubCallback.mock.calls[0][4]).toBeUndefined();
+    });
+
     it('GET /api/auth/callback/github missing code', async () => {
       const res = await app.request('/api/auth/callback/github');
       expect(res.status).toBe(302); // Redirects to /?error=...

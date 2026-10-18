@@ -4,7 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AuthService, parseTransports, pickVerifiedGithubEmail } from '../../../src/services/auth';
+import { AuthService, parseTransports, pickVerifiedGithubEmail, createOAuthState, verifyOAuthState } from '../../../src/services/auth';
+import { sign as signJwt } from 'hono/jwt';
 import { IAuthRepository } from '../../../src/repositories/auth';
 import { Env, AppEnv } from '../../../src/env';
 import { Context } from 'hono';
@@ -433,7 +434,7 @@ describe('AuthService', () => {
 
   describe('Github OAuth', () => {
     it('handleGithubLogin generates url', async () => {
-      const url = await service.handleGithubLogin('u1', 'redirect');
+      const url = await service.handleGithubLogin('u1', 'redirect', 'n1');
       expect(url).toContain('https://github.com/login/oauth/authorize');
     });
 
@@ -455,8 +456,7 @@ describe('AuthService', () => {
     });
 
     it('handleGithubCallback handles full login flow', async () => {
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'login', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'login', userId: null }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -473,14 +473,13 @@ describe('AuthService', () => {
       mockRepo.checkUsernameExists.mockResolvedValue(false);
       mockRepo.createGithubUser.mockResolvedValue({ id: 'u1' });
 
-      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('exchange_code');
       expect(mockRepo.createGithubUser).toHaveBeenCalled();
     });
 
     it('handleGithubCallback handles linking user', async () => {
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'link', userId: 'u1', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'link', userId: 'u1' }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -497,14 +496,13 @@ describe('AuthService', () => {
 
       mockRepo.linkGithubUser.mockResolvedValue(true);
 
-      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('status=github_linked');
       expect(mockRepo.linkGithubUser).toHaveBeenCalledWith('u1', '12345');
     });
 
     it('handleGithubCallback link fails if non-interactive service account', async () => {
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'link', userId: 'u1', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'link', userId: 'u1' }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -521,13 +519,12 @@ describe('AuthService', () => {
 
       mockRepo.getUserById.mockResolvedValue({ username: 'u', is_interactive: 0 });
 
-      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('error=' + encodeURIComponent('Linking GitHub is not allowed for non-interactive service accounts'));
     });
 
     it('handleGithubCallback login fails if non-interactive service account', async () => {
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'login', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'login', userId: null }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -541,13 +538,13 @@ describe('AuthService', () => {
 
       mockRepo.getUserByGithubId.mockResolvedValue({ id: 'u1', is_interactive: 0 });
 
-      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('error=' + encodeURIComponent('Interactive login restricted for this account'));
     });
 
     it('handleGitlabLogin returns authorization URL', async () => {
       mockEnv.GITLAB_CLIENT_ID = 'gl-client';
-      const url = await service.handleGitlabLogin('u1', 'http://redirect');
+      const url = await service.handleGitlabLogin('u1', 'http://redirect', 'n1');
       expect(url).toContain('https://gitlab.com/oauth/authorize');
       expect(url).toContain('client_id=gl-client');
     });
@@ -557,8 +554,7 @@ describe('AuthService', () => {
       mockEnv.GITLAB_CLIENT_SECRET = 'gl-secret';
       mockEnv.GITLAB_REDIRECT_URI = 'http://localhost/api/auth/callback/gitlab';
 
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'link', userId: 'u1', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'link', userId: 'u1' }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -573,7 +569,7 @@ describe('AuthService', () => {
       mockRepo.getUserById.mockResolvedValue({ username: 'u1', is_interactive: 1 });
       mockRepo.linkGitlabUser.mockResolvedValue(true);
 
-      const res = await service.handleGitlabCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGitlabCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('status=gitlab_linked');
       expect(mockRepo.linkGitlabUser).toHaveBeenCalledWith('u1', '98765');
     });
@@ -627,5 +623,28 @@ describe('pickVerifiedGithubEmail', () => {
   it('returns null for a malformed response', () => {
     expect(pickVerifiedGithubEmail({ message: 'Bad credentials' })).toBeNull();
     expect(pickVerifiedGithubEmail(null)).toBeNull();
+  });
+});
+
+describe('OAuth state is bound to the browser that started the flow', () => {
+  it('accepts a state whose nonce matches the browser cookie', async () => {
+    const state = await createOAuthState('k', { action: 'login', userId: null }, 'browser-nonce');
+    expect(await verifyOAuthState('k', state, 'browser-nonce')).toEqual({ action: 'login', userId: null });
+  });
+
+  it('rejects an attacker\'s state replayed in a browser that did not start the flow', async () => {
+    const attackerState = await createOAuthState('k', { action: 'login', userId: null }, 'attacker-nonce');
+    expect(await verifyOAuthState('k', attackerState, 'victim-nonce')).toBeNull();
+    expect(await verifyOAuthState('k', attackerState, undefined)).toBeNull();
+  });
+
+  it('rejects a session JWT, or any token signed with the session key, as a state', async () => {
+    const sessionLike = await signJwt({ action: 'login', nonce: 'n', typ: 'oauth_state', exp: Math.floor(Date.now() / 1000) + 60 }, 'k');
+    expect(await verifyOAuthState('k', sessionLike, 'n')).toBeNull();
+  });
+
+  it('a link state for one account cannot be completed in another browser', async () => {
+    const linkState = await createOAuthState('k', { action: 'link', userId: 'attacker' }, 'attacker-nonce');
+    expect(await verifyOAuthState('k', linkState, 'victim-nonce')).toBeNull();
   });
 });

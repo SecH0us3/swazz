@@ -3,11 +3,12 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { errorStatus } from '../utils/http';
-import { IAuthService, AuthService } from '../services/auth';
+import { IAuthService, AuthService, OAUTH_NONCE_COOKIE, OAUTH_STATE_TTL_SECONDS } from '../services/auth';
 import { AuthRepository } from '../repositories/auth';
 import { LicenseService } from '../services/license';
 import { ValidationError, isValidId, isValidCredentialId, LIMITS, readJsonBody, reqString, optString } from '../utils/validation';
@@ -16,6 +17,28 @@ import { ValidationError, isValidId, isValidCredentialId, LIMITS, readJsonBody, 
 // or the switch only changes what the UI shows.
 const passwordAuthDisabled = (c: { env: Env }) => c.env.PASSWORD_AUTH_ENABLED === 'false';
 const PASSWORD_AUTH_DISABLED_ERROR = 'Password authentication is disabled';
+
+const OAUTH_CALLBACK_PATH = '/api/auth/callback';
+
+/** Ties a new OAuth flow to this browser; returns the nonce to embed in the state. */
+function startOAuthFlow(c: Context<AppEnv>): string {
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
+  setCookie(c, OAUTH_NONCE_COOKIE, nonce, {
+    path: OAUTH_CALLBACK_PATH,
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax', // sent on the provider's top-level redirect back to the callback
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  });
+  return nonce;
+}
+
+/** Reads and clears this browser's OAuth nonce; each one is good for a single callback. */
+function finishOAuthFlow(c: Context<AppEnv>): string | undefined {
+  const nonce = getCookie(c, OAUTH_NONCE_COOKIE);
+  deleteCookie(c, OAUTH_NONCE_COOKIE, { path: OAUTH_CALLBACK_PATH, secure: true });
+  return nonce;
+}
 
 export function registerAuthRoutes(
   app: Hono<AppEnv>,
@@ -590,7 +613,7 @@ export function registerAuthRoutes(
       const redirectUri = c.env.GITHUB_REDIRECT_URI || `${requestUrl.origin}/api/auth/callback/github`;
 
       const services = authServicesFactory(c.env);
-      const url = await services.handleGithubLogin(userId, redirectUri);
+      const url = await services.handleGithubLogin(userId, redirectUri, startOAuthFlow(c));
       return c.redirect(url);
     } catch (err: any) {
       if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
@@ -625,7 +648,7 @@ export function registerAuthRoutes(
       }
 
       const services = authServicesFactory(c.env);
-      const result = await services.handleGithubCallback(code, state, frontendUrl, c);
+      const result = await services.handleGithubCallback(code, state, frontendUrl, c, finishOAuthFlow(c));
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);
@@ -643,7 +666,7 @@ export function registerAuthRoutes(
       const redirectUri = c.env.GITLAB_REDIRECT_URI || `${requestUrl.origin}/api/auth/callback/gitlab`;
 
       const services = authServicesFactory(c.env);
-      const url = await services.handleGitlabLogin(userId, redirectUri);
+      const url = await services.handleGitlabLogin(userId, redirectUri, startOAuthFlow(c));
       return c.redirect(url);
     } catch (err: any) {
       if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
@@ -678,7 +701,7 @@ export function registerAuthRoutes(
       }
 
       const services = authServicesFactory(c.env);
-      const result = await services.handleGitlabCallback(code, state, frontendUrl, c);
+      const result = await services.handleGitlabCallback(code, state, frontendUrl, c, finishOAuthFlow(c));
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);

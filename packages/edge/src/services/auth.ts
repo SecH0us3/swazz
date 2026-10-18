@@ -84,10 +84,10 @@ export interface IAuthService {
   getPasskeys(userId: string): Promise<any>;
   deletePasskey(userId: string, id: string): Promise<any>;
   updateAdminUserPlan(adminSecret: string, providedSecret: string | undefined, body: any): Promise<any>;
-  handleGithubLogin(userId: string | null, redirectUri: string): Promise<string>;
-  handleGithubCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>): Promise<{ redirectUrl: string }>;
-  handleGitlabLogin(userId: string | null, redirectUri: string): Promise<string>;
-  handleGitlabCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>): Promise<{ redirectUrl: string }>;
+  handleGithubLogin(userId: string | null, redirectUri: string, browserNonce: string): Promise<string>;
+  handleGithubCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>, browserNonce?: string): Promise<{ redirectUrl: string }>;
+  handleGitlabLogin(userId: string | null, redirectUri: string, browserNonce: string): Promise<string>;
+  handleGitlabCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>, browserNonce?: string): Promise<{ redirectUrl: string }>;
   exchangeOauthToken(body: any, c: Context<AppEnv>): Promise<any>;
 }
 
@@ -95,6 +95,35 @@ export interface IAuthService {
  * Picks the address to store from GitHub's /user/emails list. The account is created with the
  * address marked verified, so only an address GitHub itself has verified may be taken.
  */
+export const OAUTH_NONCE_COOKIE = 'swazz_oauth_nonce';
+export const OAUTH_STATE_TTL_SECONDS = 600;
+
+// OAuth state is signed with a key derived for that purpose only, so a session JWT is never a
+// valid state and a state is never a valid session.
+const oauthStateKey = (jwtSecret: string) => `${jwtSecret}:oauth-state`;
+
+/**
+ * Signs the OAuth state for one flow. The nonce is also set as an HttpOnly cookie on the browser
+ * that started the flow, and the callback requires both to match: a callback URL carrying someone
+ * else's code and state is useless in a browser that did not start that flow (login CSRF).
+ */
+export async function createOAuthState(jwtSecret: string, payload: { action: 'login' | 'link'; userId: string | null }, nonce: string): Promise<string> {
+  return sign({ ...payload, nonce, typ: 'oauth_state', exp: Math.floor(Date.now() / 1000) + OAUTH_STATE_TTL_SECONDS }, oauthStateKey(jwtSecret));
+}
+
+export async function verifyOAuthState(jwtSecret: string, state: string, browserNonce: string | undefined): Promise<{ action: 'login' | 'link'; userId: string | null } | null> {
+  if (!browserNonce) return null;
+  let decoded: any;
+  try {
+    decoded = await verify(state, oauthStateKey(jwtSecret), 'HS256');
+  } catch {
+    return null;
+  }
+  if (!decoded || decoded.typ !== 'oauth_state' || typeof decoded.nonce !== 'string' || decoded.nonce !== browserNonce) return null;
+  if (decoded.action !== 'login' && decoded.action !== 'link') return null;
+  return { action: decoded.action, userId: decoded.userId ?? null };
+}
+
 export function pickVerifiedGithubEmail(emails: unknown): string | null {
   if (!Array.isArray(emails)) return null;
   const verified = emails.filter((e: any) => e && e.verified === true && typeof e.email === 'string');
@@ -742,12 +771,10 @@ export class AuthService implements IAuthService {
     return { status: 'ok', username, plan };
   }
 
-  async handleGithubLogin(userId: string | null, redirectUri: string): Promise<string> {
+  async handleGithubLogin(userId: string | null, redirectUri: string, browserNonce: string): Promise<string> {
     const clientId = this.env.GITHUB_CLIENT_ID;
     if (!clientId) throw new Error('GitHub OAuth not configured|500');
-    const statePayload = { action: userId ? 'link' : 'login', userId: userId || null, exp: Math.floor(Date.now() / 1000) + 60 * 10 };
-    const secret = this.env.JWT_SECRET;
-    const state = await sign(statePayload, secret);
+    const state = await createOAuthState(this.env.JWT_SECRET, { action: userId ? 'link' : 'login', userId: userId || null }, browserNonce);
     const githubAuthUrl = new URL('https://github.com/login/oauth/authorize');
     githubAuthUrl.searchParams.set('client_id', clientId);
     githubAuthUrl.searchParams.set('redirect_uri', redirectUri);
@@ -756,12 +783,9 @@ export class AuthService implements IAuthService {
     return githubAuthUrl.toString();
   }
 
-  async handleGithubCallback(code: string, state: string, frontendUrl: string, c: any): Promise<{ redirectUrl: string }> {
-    const secret = this.env.JWT_SECRET;
-    let decodedState: any;
-    try {
-      decodedState = await verify(state, secret, "HS256");
-    } catch {
+  async handleGithubCallback(code: string, state: string, frontendUrl: string, c: any, browserNonce?: string): Promise<{ redirectUrl: string }> {
+    const decodedState = await verifyOAuthState(this.env.JWT_SECRET, state, browserNonce);
+    if (!decodedState) {
       return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}` };
     }
     if (!decodedState || (decodedState.action !== 'login' && decodedState.action !== 'link')) {
@@ -839,7 +863,7 @@ export class AuthService implements IAuthService {
         await this.authRepo.recordLoginHistory(userId, 'success', 'github', user ? user.two_factor_enabled === 1 : false, this.extractLoginMeta(c));
         
         const payload = { sub: userId, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 };
-        const jwtToken = await sign(payload, secret);
+        const jwtToken = await sign(payload, this.env.JWT_SECRET);
         const exchangeCode = crypto.randomUUID();
         
         if (this.env.SESSION_CACHE) {
@@ -855,12 +879,10 @@ export class AuthService implements IAuthService {
     }
   }
 
-  async handleGitlabLogin(userId: string | null, redirectUri: string): Promise<string> {
+  async handleGitlabLogin(userId: string | null, redirectUri: string, browserNonce: string): Promise<string> {
     const clientId = this.env.GITLAB_CLIENT_ID;
     if (!clientId) throw new Error('GitLab OAuth not configured|500');
-    const statePayload = { action: userId ? 'link' : 'login', userId: userId || null, exp: Math.floor(Date.now() / 1000) + 60 * 10 };
-    const secret = this.env.JWT_SECRET;
-    const state = await sign(statePayload, secret);
+    const state = await createOAuthState(this.env.JWT_SECRET, { action: userId ? 'link' : 'login', userId: userId || null }, browserNonce);
     const gitlabAuthUrl = new URL('https://gitlab.com/oauth/authorize');
     gitlabAuthUrl.searchParams.set('client_id', clientId);
     gitlabAuthUrl.searchParams.set('redirect_uri', redirectUri);
@@ -870,12 +892,9 @@ export class AuthService implements IAuthService {
     return gitlabAuthUrl.toString();
   }
 
-  async handleGitlabCallback(code: string, state: string, frontendUrl: string, c: any): Promise<{ redirectUrl: string }> {
-    const secret = this.env.JWT_SECRET;
-    let decodedState: any;
-    try {
-      decodedState = await verify(state, secret, "HS256");
-    } catch {
+  async handleGitlabCallback(code: string, state: string, frontendUrl: string, c: any, browserNonce?: string): Promise<{ redirectUrl: string }> {
+    const decodedState = await verifyOAuthState(this.env.JWT_SECRET, state, browserNonce);
+    if (!decodedState) {
       return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}` };
     }
     if (!decodedState || (decodedState.action !== 'login' && decodedState.action !== 'link')) {
@@ -948,7 +967,7 @@ export class AuthService implements IAuthService {
         await this.authRepo.recordLoginHistory(userId, 'success', 'gitlab', user ? user.two_factor_enabled === 1 : false, this.extractLoginMeta(c));
         
         const payload = { sub: userId, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 };
-        const jwtToken = await sign(payload, secret);
+        const jwtToken = await sign(payload, this.env.JWT_SECRET);
         const exchangeCode = crypto.randomUUID();
         
         if (this.env.SESSION_CACHE) {
