@@ -189,7 +189,7 @@ else
   echo "y" | "$WRANGLER" d1 migrations apply swazz_db --local --cwd packages/edge || true
   echo "→ Starting Edge Coordinator (with watchdog)..."
   start_watchdog 8787 "Edge Coordinator" edge.log \
-    env NODE_OPTIONS="--max-old-space-size=1536" "$WRANGLER" dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --inspector-port 0 --var JWT_SECRET:test-secret --var PASSWORD_AUTH_ENABLED:true --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error
+    env NODE_OPTIONS="--max-old-space-size=1536" "$WRANGLER" dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --var ALLOW_PRIVATE_PROXY_TARGETS:true --inspector-port 0 --var JWT_SECRET:test-secret --var PASSWORD_AUTH_ENABLED:true --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error
   wait_for_port 8787 "Edge Coordinator"
 fi
 

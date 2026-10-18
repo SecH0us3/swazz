@@ -41,7 +41,7 @@ npm run dev:frontend > web.log 2>&1 &
 
 # 5. Start Edge Coordinator (Port 8787)
 echo "→ Starting Edge Coordinator on http://localhost:8787 ..."
-NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --var JWT_SECRET:test-secret --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error --inspector-port=9230 > edge.log 2>&1 &
+NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --var ALLOW_PRIVATE_PROXY_TARGETS:true --var JWT_SECRET:test-secret --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error --inspector-port=9230 > edge.log 2>&1 &
 
 # 6. Start Vulnerable Demo API (Port 8788)
 echo "→ Starting Vulnerable Demo API on http://localhost:8788 ..."

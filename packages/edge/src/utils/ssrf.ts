@@ -254,25 +254,66 @@ export async function validateWebhookUrl(url: string, env?: Env): Promise<URL> {
     throw new Error('Webhook URL must use a domain name, direct IP addresses are not permitted|400');
   }
 
-  // 2. Check against blocked hostname patterns (localhost, .internal, instance-data, etc.)
+  await assertPublicHost(hostname, 'Webhook URL cannot target private, loopback, or reserved network addresses|400');
+  return parsed;
+}
+
+/**
+ * The one check every outbound fetch to a user-chosen host goes through: the hostname is not a
+ * blocked name, and neither it (when it is an IP literal) nor anything it resolves to is a
+ * private, loopback, link-local or otherwise reserved address. Throws `error` otherwise.
+ */
+async function assertPublicHost(hostname: string, error: string, opts: { requireResolution?: boolean } = {}): Promise<void> {
+  // Blocked hostname patterns (localhost, .internal, instance-data, etc.)
   if (isBlockedHostname(hostname)) {
-    throw new Error('Webhook URL cannot target private, loopback, or reserved network addresses|400');
+    throw new Error(error);
   }
 
-  // 4. Resolve hostname via DNS and check all resolved IPs (DNS rebinding prevention)
+  const isBlockedIp = (ip: string) => {
+    const v4 = parseIPv4(ip);
+    if (v4) return isBlockedIPv4(v4);
+    const v6 = parseIPv6(ip.startsWith('[') && ip.endsWith(']') ? ip.slice(1, -1) : ip);
+    return v6 ? isBlockedIPv6(v6) : false;
+  };
+
+  if (isBlockedIp(hostname)) {
+    throw new Error(error);
+  }
+
+  // Resolve hostname via DNS and check all resolved IPs (DNS rebinding prevention)
   const resolvedIPs = await resolveHostIPs(hostname);
+  // Fail closed when asked: a name public DNS cannot resolve may still resolve inside the
+  // deployment (a Docker service name, a split-horizon zone) when fetch() runs.
+  if (opts.requireResolution && resolvedIPs.length === 0) {
+    throw new Error(error);
+  }
   for (const ip of resolvedIPs) {
-    const resolvedV4 = parseIPv4(ip);
-    if (resolvedV4 && isBlockedIPv4(resolvedV4)) {
-      throw new Error('Webhook URL cannot target private, loopback, or reserved network addresses|400');
-    }
-    const cleanResolvedV6 = ip.startsWith('[') && ip.endsWith(']') ? ip.slice(1, -1) : ip;
-    const resolvedV6 = parseIPv6(cleanResolvedV6);
-    if (resolvedV6 && isBlockedIPv6(resolvedV6)) {
-      throw new Error('Webhook URL cannot target private, loopback, or reserved network addresses|400');
+    if (isBlockedIp(ip)) {
+      throw new Error(error);
     }
   }
+}
 
+/**
+ * Validates a target for the replay proxy (/api/proxy). Unlike webhooks, a public IP literal is
+ * fine (scan targets are often addressed by IP), but private and reserved ranges are not: a scan
+ * target is whatever the user typed, so it is no authorization to reach the Worker's network.
+ * ALLOW_PRIVATE_PROXY_TARGETS='true' lifts this for local development only.
+ */
+export async function validateProxyTargetUrl(url: string, env?: Env): Promise<URL> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Invalid target url|400');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only HTTP and HTTPS protocols are allowed|400');
+  }
+  if (env?.ALLOW_PRIVATE_PROXY_TARGETS === 'true') {
+    return parsed;
+  }
+  await assertPublicHost(parsed.hostname, 'Target cannot be a private, loopback, or reserved network address|403', { requireResolution: true });
   return parsed;
 }
 

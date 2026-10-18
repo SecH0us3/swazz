@@ -47,6 +47,7 @@ These configurations apply to the Edge Coordinator service located in `packages/
 | **`TURNSTILE_SITE_KEY`** | Public site key for Cloudflare Turnstile CAPTCHA. | `0x4AAAAAAD...` |
 | **`VERSION`** | Deployed Edge Worker version. | `"1.0.0"` |
 | **`SHARED_RUNNERS_ALLOW_PRIVATE_IPS`** | When not `"true"`, the coordinator forces a scan's `security.allow_private_ips` to `false` before handing the scan to a shared runner, so one tenant cannot point the operator's runners at private networks or cloud metadata. Set `"true"` only for single-tenant or local setups (the dev and e2e scripts do). | unset (`false`) |
+| **`ALLOW_PRIVATE_PROXY_TARGETS`** | `"true"` lets the request replay proxy (`/api/proxy`) reach private, loopback and reserved addresses, and hostnames public DNS cannot resolve. Without it the proxy refuses them even when the host is one of your scan targets. Local development only (the dev scripts set it). | unset (`false`) |
 | **`PASSWORD_AUTH_ENABLED`** | `"false"` turns off password sign-up and sign-in on the server (`/api/auth/register`, `/api/auth/login/step1` and `/api/auth/login` return 403), not only in the dashboard. | `"true"` |
 | `BETA_MODE_ENABLED`| `true` | (Optional) Set to `false` to disable the closed beta limits and hide beta banners entirely. |
 | `BETA_USER_LIMIT`| `50` | (Optional) The maximum number of users allowed to register before requiring an invite code (when beta is enabled). |

@@ -56,6 +56,61 @@ describe('MiscService.proxy', () => {
       .rejects.toThrow('Unauthorized|401');
   });
 
+  describe('never relays into private networks, even for a host the user entered as a scan target', () => {
+    it.each([
+      'http://127.0.0.1:8788/admin',
+      'http://10.0.0.5:8080/admin',
+      'http://169.254.169.254/latest/meta-data/',
+      'http://[::1]/',
+      'http://localhost:8787/api/admin',
+    ])('refuses %s', async (url) => {
+      (mockMiscRepo.getUserScanTargetUrls as any).mockResolvedValue([url]);
+      globalThis.fetch = vi.fn() as any;
+      await expect(miscService.proxy({ url, method: 'DELETE' }, 'u1')).rejects.toThrow('|403');
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('refuses a name that resolves to a private address', async () => {
+      const url = 'http://rebind.attacker.test/';
+      (mockMiscRepo.getUserScanTargetUrls as any).mockResolvedValue([url]);
+      const fetchMock = vi.fn(async (input: any) => {
+        if (String(input).includes('dns-query') && String(input).endsWith('type=A')) {
+          return new Response(JSON.stringify({ Answer: [{ type: 1, data: '10.1.2.3' }] }), { status: 200 });
+        }
+        if (String(input).includes('dns-query')) return new Response(JSON.stringify({}), { status: 200 });
+        return new Response('should not be reached');
+      });
+      globalThis.fetch = fetchMock as any;
+      await expect(miscService.proxy({ url }, 'u1')).rejects.toThrow('|403');
+      expect(fetchMock.mock.calls.every(c => String(c[0]).includes('dns-query'))).toBe(true);
+    });
+
+    it('refuses a name public DNS cannot resolve (fails closed)', async () => {
+      const url = 'http://backend:8080/';
+      (mockMiscRepo.getUserScanTargetUrls as any).mockResolvedValue([url]);
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 }));
+      globalThis.fetch = fetchMock as any;
+      await expect(miscService.proxy({ url }, 'u1')).rejects.toThrow('|403');
+      expect(fetchMock.mock.calls.every(c => String((c as any[])[0]).includes('dns-query'))).toBe(true);
+    });
+
+    it('still proxies a public IP literal', async () => {
+      const url = 'http://93.184.216.34/health';
+      (mockMiscRepo.getUserScanTargetUrls as any).mockResolvedValue([url]);
+      globalThis.fetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 })) as any;
+      const res = await miscService.proxy({ url }, 'u1');
+      expect(res.status).toBe(200);
+    });
+
+    it('allows private targets only when the deployment opts in for local development', async () => {
+      (mockEnv as any).ALLOW_PRIVATE_PROXY_TARGETS = 'true';
+      (mockMiscRepo.getUserScanTargetUrls as any).mockResolvedValue(['http://127.0.0.1:8788']);
+      globalThis.fetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 })) as any;
+      const res = await miscService.proxy({ url: 'http://127.0.0.1:8788/x' }, 'u1');
+      expect(res.status).toBe(200);
+    });
+  });
+
   it('throws 429 when per-user rate limit is exceeded', async () => {
     (mockAuthRepo.checkIpRateLimit as any).mockResolvedValueOnce({ limited: true });
 

@@ -6,6 +6,7 @@
 import { Env } from '../env';
 import { IMiscRepository } from '../repositories/misc';
 import { IAuthRepository, AuthRepository } from '../repositories/auth';
+import { validateProxyTargetUrl } from '../utils/ssrf';
 
 export function normalizeHostname(urlStr: string): string | null {
   if (!urlStr || typeof urlStr !== 'string') return null;
@@ -87,6 +88,10 @@ export class MiscService implements IMiscService {
     if (!allowedHostnames.has(reqHostname)) {
       throw new Error('Target host not authorized for replay|403');
     }
+
+    // Being someone's scan target is not enough: the Worker must not be turned into a relay into
+    // private networks. Redirects are not followed (redirect: 'manual'), so this covers every hop.
+    await validateProxyTargetUrl(targetUrl, this.env);
 
     const startTime = Date.now();
     const headers = { ...(payload.headers || {}) };

@@ -52,7 +52,7 @@ echo "→ Starting Vulnerable WebSocket Demo API (Port 50052)..."
 (cd demo/ws && go run main.go --port 50052) > ws-demo.log 2>&1 &
 
 echo "→ Starting Edge Coordinator (Port 8787)..."
-NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --inspector-port 9229 --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --var JWT_SECRET:test-secret --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error > edge.log 2>&1 &
+NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --inspector-port 9229 --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --var ALLOW_PRIVATE_PROXY_TARGETS:true --var JWT_SECRET:test-secret --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error > edge.log 2>&1 &
 
 echo "→ Starting React Web Frontend (Port 5173)..."
 npm run dev:frontend > web.log 2>&1 &

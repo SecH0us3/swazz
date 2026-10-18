@@ -31,7 +31,7 @@ disown
 
 # Start Edge Coordinator
 echo "Starting Edge Coordinator..."
-NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --inspector-port 9231 < /dev/null > edge.log 2>&1 &
+NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --var ALLOW_PRIVATE_PROXY_TARGETS:true --inspector-port 9231 < /dev/null > edge.log 2>&1 &
 disown
 
 # Start React Web Frontend

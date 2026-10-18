@@ -85,7 +85,7 @@ wait_for_port 8789 "Mock SSE MCP Server"
 echo "→ Applying local database migrations..."
 npx wrangler d1 migrations apply swazz_db --local --cwd packages/edge || true
 echo "→ Starting Edge Coordinator (wrangler dev on port 8787)..."
-NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --port 8787 --log-level error > edge.log 2>&1 &
+NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --var ALLOW_PRIVATE_PROXY_TARGETS:true --port 8787 --log-level error > edge.log 2>&1 &
 PIDS+=($!)
 wait_for_port 8787 "Edge Coordinator"
 
