@@ -237,8 +237,27 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 				return orig(tool);
 			};
 		};
-		if (typeof navigator !== 'undefined' && navigator.modelContext) wrap(navigator.modelContext);
-		if (typeof document !== 'undefined' && document.modelContext) wrap(document.modelContext);
+		const install = (target) => {
+			if (!target) return;
+			if (target.modelContext) {
+				wrap(target.modelContext);
+				return;
+			}
+			try {
+				let currentVal = target.modelContext;
+				Object.defineProperty(target, 'modelContext', {
+					configurable: true,
+					enumerable: true,
+					get() { return currentVal; },
+					set(val) {
+						currentVal = val;
+						wrap(val);
+					}
+				});
+			} catch (e) {}
+		};
+		if (typeof navigator !== 'undefined') install(navigator);
+		if (typeof document !== 'undefined') install(document);
 	})();`
 	if err := chromedp.Run(runCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 		_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)

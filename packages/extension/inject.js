@@ -322,25 +322,68 @@
     }
 
     // 5. Intercept WebMCP tool registrations (navigator.modelContext & document.modelContext)
-    const wrapModelContext = (mc) => {
-        if (!mc || typeof mc.registerTool !== 'function' || mc.__swazz_hooked) return;
-        const origRegister = mc.registerTool.bind(mc);
-        mc.__swazz_hooked = true;
-        mc.registerTool = function(tool) {
-            try {
-                if (tool && typeof tool.name === 'string' && /^[a-zA-Z0-9_.\-]{1,128}$/.test(tool.name)) {
-                    sendRequestLog(
-                        `webmcp://tool/${tool.name}`,
-                        'CALL',
-                        { 'content-type': 'application/json', 'x-webmcp-annotations': JSON.stringify(tool.annotations || {}) },
-                        JSON.stringify(tool.inputSchema || {})
-                    );
-                }
-            } catch (e) {}
-            return origRegister(tool);
-        };
+    const reportedWebMcpTools = new Set();
+    const recordWebMcpTool = (tool) => {
+        try {
+            if (tool && typeof tool.name === 'string' && /^[a-zA-Z0-9_.\-]{1,128}$/.test(tool.name)) {
+                if (reportedWebMcpTools.has(tool.name)) return;
+                reportedWebMcpTools.add(tool.name);
+                sendRequestLog(
+                    `webmcp://tool/${tool.name}`,
+                    'CALL',
+                    { 'content-type': 'application/json', 'x-webmcp-annotations': JSON.stringify(tool.annotations || {}) },
+                    JSON.stringify(tool.inputSchema || {})
+                );
+            }
+        } catch (e) {}
     };
-    if (typeof navigator !== 'undefined' && navigator.modelContext) wrapModelContext(navigator.modelContext);
-    if (typeof document !== 'undefined' && document.modelContext) wrapModelContext(document.modelContext);
+
+    const wrapModelContext = (mc) => {
+        if (!mc || typeof mc !== 'object') return;
+        if (typeof mc.registerTool === 'function' && !mc.__swazz_hooked) {
+            const origRegister = mc.registerTool.bind(mc);
+            mc.__swazz_hooked = true;
+            mc.registerTool = function(tool) {
+                recordWebMcpTool(tool);
+                return origRegister(tool);
+            };
+        }
+        try {
+            const fn = mc.getTools || mc.listTools;
+            if (typeof fn === 'function') {
+                const res = fn.call(mc);
+                if (Array.isArray(res)) res.forEach(recordWebMcpTool);
+                else if (res && typeof res.then === 'function') res.then(arr => Array.isArray(arr) && arr.forEach(recordWebMcpTool)).catch(() => {});
+            }
+        } catch (e) {}
+    };
+
+    const installModelContextHook = (target) => {
+        if (!target) return;
+        if (target.modelContext) {
+            wrapModelContext(target.modelContext);
+            return;
+        }
+        try {
+            let currentVal = target.modelContext;
+            Object.defineProperty(target, 'modelContext', {
+                configurable: true,
+                enumerable: true,
+                get() { return currentVal; },
+                set(val) {
+                    currentVal = val;
+                    wrapModelContext(val);
+                }
+            });
+        } catch (e) {}
+    };
+
+    if (typeof navigator !== 'undefined') installModelContextHook(navigator);
+    if (typeof document !== 'undefined') installModelContextHook(document);
+    window.addEventListener('DOMContentLoaded', () => {
+        if (typeof navigator !== 'undefined' && navigator.modelContext) wrapModelContext(navigator.modelContext);
+        if (typeof document !== 'undefined' && document.modelContext) wrapModelContext(document.modelContext);
+    });
 })();
+
 
