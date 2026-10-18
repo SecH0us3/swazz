@@ -806,9 +806,6 @@ export class AuthService implements IAuthService {
     if (!decodedState) {
       return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}` };
     }
-    if (!decodedState || (decodedState.action !== 'login' && decodedState.action !== 'link')) {
-      return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid state payload')}` };
-    }
 
     const clientId = this.env.GITHUB_CLIENT_ID;
     const clientSecret = this.env.GITHUB_CLIENT_SECRET;
@@ -914,9 +911,6 @@ export class AuthService implements IAuthService {
     const decodedState = await verifyOAuthState(this.env.JWT_SECRET, state, browserNonce);
     if (!decodedState) {
       return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}` };
-    }
-    if (!decodedState || (decodedState.action !== 'login' && decodedState.action !== 'link')) {
-      return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid state payload')}` };
     }
 
     const clientId = this.env.GITLAB_CLIENT_ID;

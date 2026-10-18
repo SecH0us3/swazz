@@ -47,6 +47,21 @@ export class QueueService {
     return p;
   }
 
+  /**
+   * Marks a scan that can never be dispatched as failed and drops its coordinator state. Pass
+   * ownConfigRef only when the stored config object belongs to this scan and should be deleted.
+   */
+  private async failScan(scansRepo: ScansRepository, scanId: string, ownConfigRef?: string): Promise<void> {
+    try {
+      if (await scansRepo.markFailedIfActive(scanId)) {
+        await clearScanState(this.state.storage, scanId);
+        if (ownConfigRef) await deleteScanConfig(this.env, ownConfigRef);
+      }
+    } catch (dbErr) {
+      logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
+    }
+  }
+
   private connectedRunnerOwners(): Set<string> {
     const owners = new Set<string>();
     for (const runnerWs of this.stateManager.runners) {
@@ -173,14 +188,8 @@ export class QueueService {
 
             if (!isScanConfigKeyForRun(configRef, scan.id)) {
               logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Invalid scan config key in storage for scan ${scan.id}: ${configRef}`);
-              try {
-                const marked = await scansRepo.markFailedIfActive(scan.id);
-                if (marked) {
-                  await clearScanState(this.state.storage, scan.id);
-                }
-              } catch (dbErr) {
-                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
-              }
+              // The ref names another run's object, so it must not be deleted here.
+              await this.failScan(scansRepo, scan.id);
               continue;
             }
 
@@ -192,14 +201,7 @@ export class QueueService {
               }
               if (err instanceof ScanConfigNotFoundError) {
                 logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Scan config not found in R2 for scan ${scan.id}`, { error: err });
-                try {
-                  const marked = await scansRepo.markFailedIfActive(scan.id);
-                  if (marked) {
-                    await clearScanState(this.state.storage, scan.id);
-                  }
-                } catch (dbErr) {
-                  logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
-                }
+                await this.failScan(scansRepo, scan.id);
               } else {
                 logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to load scan config from R2 for scan ${scan.id}`, { error: err });
               }
@@ -223,14 +225,7 @@ export class QueueService {
           // pass at this (oldest) scan and starve every scan queued behind it. Fail it instead.
           if (typeof config !== 'object' || Array.isArray(config)) {
             logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Scan ${scan.id} has a non-object config; marking it failed`);
-            try {
-              if (await scansRepo.markFailedIfActive(scan.id)) {
-                await clearScanState(this.state.storage, scan.id);
-                if (configRef) await deleteScanConfig(this.env, configRef);
-              }
-            } catch (dbErr) {
-              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to failed", { error: dbErr });
-            }
+            await this.failScan(scansRepo, scan.id, configRef);
             continue;
           }
           if (!config.base_url) {
