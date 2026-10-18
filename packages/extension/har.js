@@ -93,9 +93,13 @@
                     }
                 }
 
+                const baseOrigin = (urlObj.origin && urlObj.origin !== 'null')
+                    ? urlObj.origin
+                    : `${urlObj.protocol}//${urlObj.host}`;
+
                 queryList.forEach(q => {
                     bodyList.forEach(b => {
-                        const variantUrl = new URL(urlObj.origin + urlObj.pathname + q);
+                        const variantUrl = new URL(baseOrigin + urlObj.pathname + q);
                         const vQueryParams = [];
                         variantUrl.searchParams.forEach((val, name) => {
                             vQueryParams.push({ name, value: val });
@@ -247,8 +251,9 @@
             }
 
             const method = (req.method || 'GET').toUpperCase();
-            const path = parsedUrl.pathname || '/';
-            const normalized = normalizePath(path);
+            const isWebMcp = parsedUrl.protocol === 'webmcp:';
+            const path = isWebMcp ? req.url : (parsedUrl.pathname || '/');
+            const normalized = isWebMcp ? req.url : normalizePath(path);
             const key = `${method}:${normalized}`;
 
             const headers = {};

@@ -82,3 +82,25 @@ func TestCrawl_ContextTimeout(t *testing.T) {
 		t.Logf("Crawl error: %v", err)
 	}
 }
+
+func TestSniffer_WebMCPEndpoint(t *testing.T) {
+	sniffer := NewSniffer()
+	sniffer.AddEndpoint(DiscoveredEndpoint{
+		URL:         "webmcp://tool/swazz_ui_start_scan",
+		Method:      "CALL",
+		ContentType: "application/json",
+		BodySample:  "{}",
+		Headers: map[string]string{
+			"X-WebMCP-Consequential": "true",
+			"X-WebMCP-ReadOnly":      "false",
+		},
+	})
+
+	eps := sniffer.GetEndpoints()
+	assert.Len(t, eps, 1)
+	assert.Equal(t, "webmcp://tool/swazz_ui_start_scan", eps[0].URL)
+	assert.Equal(t, "CALL", eps[0].Method)
+	assert.Equal(t, "true", eps[0].Headers["X-WebMCP-Consequential"])
+	assert.Equal(t, "false", eps[0].Headers["X-WebMCP-ReadOnly"])
+}
+

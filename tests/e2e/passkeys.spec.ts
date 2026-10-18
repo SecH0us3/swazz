@@ -11,7 +11,7 @@ test.describe('Passkeys E2E Tests', () => {
     // 1. Setup virtual authenticator using CDP session
     const client = await context.newCDPSession(page);
     await client.send('WebAuthn.enable');
-    await client.send('WebAuthn.addVirtualAuthenticator', {
+    const { authenticatorId } = (await client.send('WebAuthn.addVirtualAuthenticator', {
       options: {
         protocol: 'ctap2',
         transport: 'internal',
@@ -19,7 +19,7 @@ test.describe('Passkeys E2E Tests', () => {
         hasUserVerification: true,
         isUserVerified: true
       }
-    });
+    })) as { authenticatorId: string };
 
     // 2. Navigate to the frontend and register a new user
     await page.goto('/');
@@ -70,6 +70,11 @@ test.describe('Passkeys E2E Tests', () => {
     const passkeyItem = page.locator('.passkey-item').first();
     await expect(passkeyItem).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
+    // Verify credential was saved and record initial signCount
+    const credsBefore: any = await client.send('WebAuthn.getCredentials', { authenticatorId });
+    expect(credsBefore.credentials.length).toBe(1);
+    const initialSignCount = credsBefore.credentials[0].signCount ?? 0;
+
     // 5. Log out
     await accountBtn.click();
     const logoutBtn = page.locator('button:has-text("Logout")');
@@ -88,5 +93,10 @@ test.describe('Passkeys E2E Tests', () => {
 
     // Verify successful login
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
+
+    // Verify virtual authenticator signCount incremented on passkey sign-in
+    const credsAfter: any = await client.send('WebAuthn.getCredentials', { authenticatorId });
+    expect(credsAfter.credentials.length).toBe(1);
+    expect(credsAfter.credentials[0].signCount).toBeGreaterThan(initialSignCount);
   });
 });

@@ -263,4 +263,50 @@ describe('Service worker lifecycle and request accounting', () => {
         expect(typeof background.whenHydrated).toBe('function');
         expect(background.isHydrated()).toBe(true); // no chrome API under test
     });
+
+    it('captures WebMCP tool registration from an in-scope sender tab', () => {
+        background.setRecording(true);
+        background.setTargetDomains(['example.com']);
+
+        const senderTab = { id: 1, url: 'https://example.com/app' };
+        const reqData = {
+            url: 'webmcp://tool/search_data',
+            method: 'CALL',
+            headers: {
+                'content-type': 'application/json',
+                'x-webmcp-annotations': JSON.stringify({ consequentialHint: true })
+            },
+            body: '{"type":"object","properties":{"query":{"type":"string"}}}'
+        };
+
+        background.processCapturedRequest(reqData, senderTab);
+
+        const captured = background.getCapturedRequests();
+        const entry = captured['CALL:webmcp://tool/search_data'];
+        expect(entry).toBeDefined();
+        expect(entry.method).toBe('CALL');
+        expect(entry.path).toBe('webmcp://tool/search_data');
+        expect(entry.headers['content-type']).toBe('application/json');
+        expect(entry.bodyVariations).toContain('{"type":"object","properties":{"query":{"type":"string"}}}');
+        expect(background.getDroppedOutOfScope()).toBe(0);
+    });
+
+    it('drops WebMCP tool registration from an out-of-scope sender tab', () => {
+        background.setRecording(true);
+        background.setTargetDomains(['example.com']);
+
+        const senderTab = { id: 2, url: 'https://malicious.org/page' };
+        const reqData = {
+            url: 'webmcp://tool/evil_tool',
+            method: 'CALL',
+            headers: { 'content-type': 'application/json' },
+            body: '{}'
+        };
+
+        background.processCapturedRequest(reqData, senderTab);
+
+        const captured = background.getCapturedRequests();
+        expect(captured['CALL:webmcp://tool/evil_tool']).toBeUndefined();
+        expect(background.getDroppedOutOfScope()).toBe(1);
+    });
 });

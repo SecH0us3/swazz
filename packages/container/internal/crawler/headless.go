@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	cdpRuntime "github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
@@ -144,6 +145,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		chromedp.DisableGPU,
 		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("enable-features", "WebMCP"),
 	)
 
 	if c.config.Headless {
@@ -202,6 +204,26 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		if err := InjectCookies(runCtx, targetURL, c.config.Cookies); err != nil {
 			fmt.Printf("Warning: cookie injection failed: %v\n", err)
 		}
+	}
+
+	// WebMCP discovery: the page-side hook reports each registerTool call through
+	// a CDP binding, so tools are captured as they happen (across navigations and
+	// even if the crawl later times out) rather than read back once at the end.
+	webmcp := newWebMcpCollector(c.sniffer)
+	chromedp.ListenTarget(runCtx, func(ev interface{}) {
+		if e, ok := ev.(*cdpRuntime.EventBindingCalled); ok && e.Name == webMcpBindingName {
+			webmcp.add(e.Payload)
+		}
+	})
+	if err := chromedp.Run(runCtx,
+		page.Enable(),
+		cdpRuntime.AddBinding(webMcpBindingName),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, err := page.AddScriptToEvaluateOnNewDocument(webMcpHookScript).Do(ctx)
+			return err
+		}),
+	); err != nil {
+		fmt.Printf("Warning: failed to install WebMCP discovery hook: %v\n", err)
 	}
 
 	// Navigate to target URL
@@ -330,6 +352,11 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 
 Done:
 	durationMs := time.Since(startTime).Milliseconds()
+
+	// Final sweep for tools registered before the hook could wrap registerTool.
+	// runCtx may already be expired (that is one way to reach Done), so use a
+	// short context of its own off the still-live browser context.
+	c.collectWebMcpTools(browserCtx, webmcp)
 
 	return &CrawlerResult{
 		Endpoints:    c.sniffer.GetEndpoints(),

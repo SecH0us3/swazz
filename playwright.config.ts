@@ -41,6 +41,10 @@ export default defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
+        screen: undefined,
+        launchOptions: {
+          args: ['--enable-features=WebMCP'],
+        },
       },
     },
   ],

@@ -37,6 +37,7 @@ import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
 import { TipsOffNotice } from './components/DidYouKnow/TipsOffNotice.js';
 import { explainFindingWithChromeAI, getAlgorithmicFindingAnalysis } from './services/chromeAiService.js';
 import { matchesFinding } from './utils/findings.js';
+import { useWebMcp } from './hooks/useWebMcp.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -282,6 +283,13 @@ export default function App() {
         saveRun,
         getDb,
         showToast,
+    });
+
+    useWebMcp({
+        enabled: Boolean(token || isGuest),
+        updateConfig,
+        updateProfiles,
+        startScan: handleStart,
     });
 
     // Auto-hide and restore side panels when navigating to settings

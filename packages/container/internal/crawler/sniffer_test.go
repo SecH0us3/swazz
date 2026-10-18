@@ -369,3 +369,31 @@ func TestSniffer_OnResponseReceived_BecomesNoise(t *testing.T) {
 	// Should have been deleted
 	assert.Len(t, sniffer.GetEndpoints(), 0)
 }
+
+func TestSniffer_WebMcpToOpenAPIAndHAR(t *testing.T) {
+	sniffer := NewSniffer()
+	sniffer.AddEndpoint(DiscoveredEndpoint{
+		URL:         "webmcp://tool/delete_account",
+		Method:      "CALL",
+		ContentType: "application/json",
+		BodySample:  `{"type":"object","properties":{"confirm":{"type":"boolean"}}}`,
+		Headers: map[string]string{
+			"X-WebMCP-Consequential": "true",
+		},
+	})
+
+	endpoints := sniffer.GetEndpoints()
+	require.Len(t, endpoints, 1)
+	assert.Equal(t, "webmcp://tool/delete_account", endpoints[0].URL)
+	assert.Equal(t, "CALL", endpoints[0].Method)
+
+	openAPIRaw, err := sniffer.ToOpenAPI()
+	require.NoError(t, err)
+	assert.Contains(t, string(openAPIRaw), "webmcp://tool/delete_account")
+	assert.Contains(t, string(openAPIRaw), `"confirm"`)
+
+	harRaw, err := sniffer.ToHAR()
+	require.NoError(t, err)
+	assert.Contains(t, string(harRaw), "webmcp://tool/delete_account")
+}
+

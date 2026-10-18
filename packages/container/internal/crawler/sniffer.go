@@ -330,14 +330,19 @@ func (s *Sniffer) ToOpenAPI() ([]byte, error) {
 	pathsMap := make(map[string]map[string]openAPIOp)
 
 	for _, ep := range endpoints {
-		u, err := url.Parse(ep.URL)
+		isWebMcp := strings.HasPrefix(ep.URL, "webmcp://")
 		var pathStr string
-		if err != nil || u.Path == "" {
-			pathStr = "/"
+		if isWebMcp {
+			pathStr = ep.URL
 		} else {
-			pathStr = u.Path
+			u, err := url.Parse(ep.URL)
+			if err != nil || u.Path == "" {
+				pathStr = "/"
+			} else {
+				pathStr = u.Path
+			}
+			pathStr = ParameterizeRoute(pathStr)
 		}
-		pathStr = ParameterizeRoute(pathStr)
 
 		methodLower := strings.ToLower(ep.Method)
 		if methodLower == "" {
@@ -376,20 +381,29 @@ func (s *Sniffer) ToOpenAPI() ([]byte, error) {
 			if ct == "" {
 				ct = "application/json"
 			}
+			var schemaObj map[string]any
 			var exampleVal any = ep.BodySample
 			if strings.Contains(strings.ToLower(ct), "json") {
 				var parsed any
 				if err := json.Unmarshal([]byte(ep.BodySample), &parsed); err == nil {
 					exampleVal = parsed
+					if isWebMcp {
+						if m, ok := parsed.(map[string]any); ok {
+							schemaObj = m
+						}
+					}
+				}
+			}
+			if schemaObj == nil {
+				schemaObj = map[string]any{
+					"type":    "object",
+					"example": exampleVal,
 				}
 			}
 			reqBody = &openAPIReqBody{
 				Content: map[string]openAPIMediaType{
 					ct: {
-						Schema: map[string]any{
-							"type":    "object",
-							"example": exampleVal,
-						},
+						Schema: schemaObj,
 					},
 				},
 			}

@@ -35,10 +35,20 @@ export async function mockEnterpriseLicense(page: Page, features: string[] = ['*
 }
 
 /**
- * Ensures Config Sidebar is open and disables the Boundary profile
- * to prevent excessive combinatorial payloads during E2E testing.
+ * Fast-forward disables the Boundary profile to prevent excessive
+ * combinatorial payloads during E2E testing. Uses WebMCP fast-path
+ * when available, falling back to manual DOM toggling.
  */
 export async function disableBoundaryProfile(page: Page): Promise<void> {
+  try {
+    if (page.webmcp) {
+      await page.webmcp.callTool('swazz_ui_configure_scan', {
+        profiles: ['RANDOM', 'MALICIOUS'],
+      });
+      return;
+    }
+  } catch {}
+
   const configSidebar = page.locator('.config-sidebar');
   if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
     const configToggle = page.locator('.workspace-config-toggle-btn');
@@ -53,6 +63,24 @@ export async function disableBoundaryProfile(page: Page): Promise<void> {
       await expect(boundaryToggle).not.toHaveClass(/active/);
     }
   }
+}
+
+/**
+ * Fast-forward switches active dashboard tab for feature tests,
+ * using WebMCP when available with fallback to DOM click.
+ */
+export async function switchDashboardTab(page: Page, tab: string): Promise<void> {
+  try {
+    if (page.webmcp) {
+      await page.webmcp.callTool('swazz_ui_switch_tab', { tab: tab.toLowerCase() });
+      return;
+    }
+  } catch {}
+
+  const tabBtn = page.locator(`button.tab-bar-btn:has-text("${tab}")`);
+  await expect(tabBtn).toBeVisible();
+  await tabBtn.click();
+  await expect(tabBtn).toHaveClass(/active/);
 }
 
 /**
