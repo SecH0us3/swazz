@@ -176,7 +176,9 @@ export class StartRunHandler implements RouteHandler {
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
     
-    const runnerWs = activeRunners.find(r => context.stateManager.isSharedRunner(r) && context.stateManager.hasCapacity(r));
+    // Auth-disabled (local) mode has no tenants, so any runner will do, as in dispatch.
+    const authDisabled = String(context.env.AUTH_ENABLED) === 'false';
+    const runnerWs = activeRunners.find(r => (authDisabled || context.stateManager.isSharedRunner(r)) && context.stateManager.hasCapacity(r));
     if (!runnerWs) {
       return new Response("No shared runners available", { status: 503 });
     }

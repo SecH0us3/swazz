@@ -973,6 +973,32 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(503);
     });
 
+    it('uses any connected runner when auth is disabled (local mode has no tenants)', async () => {
+      mockEnv.AUTH_ENABLED = 'false';
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner', 'user_id:anon-dev-user']);
+      stateManager.runners.add(mockWs);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      mockGetCachedSwagger.mockResolvedValue(null);
+
+      const pending = handler.handle(new Request('http://localhost/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'http://example.com/swagger.json', userId: '' })
+      }));
+      await vi.waitFor(() => expect(mockWs.send).toHaveBeenCalled());
+      const reqId = [...stateManager.pendingParses.keys()][0];
+      stateManager.pendingParses.get(reqId)!(new Response('{}'));
+      expect((await pending).status).toBe(200);
+
+      const startRes = await handler.handle(new Request('http://localhost/start-run?runId=r-local', {
+        method: 'POST',
+        body: JSON.stringify({ config: {} })
+      }));
+      expect(startRes.status).toBe(200);
+      delete mockEnv.AUTH_ENABLED;
+    });
+
     it('never sends a parse request (with its headers and cookies) to another tenant\'s runner', async () => {
       const stateManager = new StateManager(mockState);
       mockState.getTags.mockReturnValue(['runner', 'pubkey-abc', 'user_id:someone-else']); // Private runner

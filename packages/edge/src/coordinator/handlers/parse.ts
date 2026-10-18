@@ -86,7 +86,10 @@ export class ParseHandler implements RouteHandler {
     context.stateManager.pendingParseUrls.set(reqId, body.url ? swaggerCacheKey(body.userId, body.url) : 'rawSpec');
     
     let runnerWs = null;
-    if (body.userId) {
+    if (String(context.env.AUTH_ENABLED) === 'false') {
+      // Auth-disabled (local) mode has no tenants: every runner is the operator's, as in dispatch.
+      runnerWs = activeRunners[0] || null;
+    } else if (body.userId) {
       runnerWs = activeRunners.find(r =>
         !context.stateManager.isSharedRunner(r) && isRunnerOwnedBy(context.state.getTags(r), body.userId)
       );
