@@ -50,6 +50,12 @@ export interface IRbacRepository {
 
 import { DEFAULT_ROLES } from '../config/rbac';
 
+// Bump the version whenever the way permissions are computed changes: entries cached under the
+// old rules (for 24h) would otherwise keep granting what the new rules no longer do. v2 dropped
+// the legacy project_members.role source and scoped custom roles to their project.
+const RBAC_CACHE_VERSION = 'v2';
+export const rbacCacheKey = (projectId: string, userId: string) => `rbac:${RBAC_CACHE_VERSION}:${projectId}:${userId}`;
+
 export class RbacRepository extends BaseService implements IRbacRepository {
   constructor(env: Env) {
     super(env);
@@ -78,13 +84,13 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     `).bind(projectId, projectId).all<{ user_id: string }>();
 
     if (results && results.length > 0) {
-      await Promise.all(results.map(r => this.env.SESSION_CACHE!.delete(`rbac:${projectId}:${r.user_id}`)));
+      await Promise.all(results.map(r => this.env.SESSION_CACHE!.delete(rbacCacheKey(projectId, r.user_id))));
     }
   }
 
   async invalidateUserRBAC(projectId: string, userId: string): Promise<void> {
     if (!isValidId(projectId) || !isValidId(userId) || !this.env.SESSION_CACHE) return;
-    await this.env.SESSION_CACHE.delete(`rbac:${projectId}:${userId}`);
+    await this.env.SESSION_CACHE.delete(rbacCacheKey(projectId, userId));
   }
 
   async checkPermission(
@@ -103,7 +109,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     if (!isValidId(projectId) || !isValidId(userId)) {
       return [];
     }
-    const cacheKey = `rbac:${projectId}:${userId}`;
+    const cacheKey = rbacCacheKey(projectId, userId);
     
     if (this.env.SESSION_CACHE) {
       const cached = await this.env.SESSION_CACHE.get<{permissions: string[]}>(cacheKey, 'json');

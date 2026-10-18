@@ -53,6 +53,14 @@ describe('RbacRepository Unit Tests', () => {
     expect(mockBind).toHaveBeenCalledWith('proj-123');
   });
 
+  it('ignores permission sets cached under the previous (unversioned) key format', async () => {
+    // Entries written before v2 were computed with the legacy role source; they must not be read.
+    mockKV.get.mockImplementation(async (key: string) => key === 'rbac:proj-123:u1' ? { permissions: ['delete:/api/projects/:id'] } : null);
+    mockAll.mockResolvedValueOnce({ results: [] });
+    const repo = new RbacRepository(mockEnv);
+    expect(await repo.checkPermission('u1', 'proj-123', 'delete:/api/projects/:id')).toBe(false);
+  });
+
   it('invalidateProjectRBAC deletes cache keys for all project members', async () => {
     mockAll.mockResolvedValue({
       results: [{ user_id: 'u1' }, { user_id: 'u2' }]
@@ -62,14 +70,14 @@ describe('RbacRepository Unit Tests', () => {
     await repo.invalidateProjectRBAC('proj-123');
 
     expect(mockKV.delete).toHaveBeenCalledTimes(2);
-    expect(mockKV.delete).toHaveBeenCalledWith('rbac:proj-123:u1');
-    expect(mockKV.delete).toHaveBeenCalledWith('rbac:proj-123:u2');
+    expect(mockKV.delete).toHaveBeenCalledWith('rbac:v2:proj-123:u1');
+    expect(mockKV.delete).toHaveBeenCalledWith('rbac:v2:proj-123:u2');
   });
 
   it('invalidateUserRBAC deletes single user cache key', async () => {
     const repo = new RbacRepository(mockEnv);
     await repo.invalidateUserRBAC('proj-123', 'u1');
-    expect(mockKV.delete).toHaveBeenCalledWith('rbac:proj-123:u1');
+    expect(mockKV.delete).toHaveBeenCalledWith('rbac:v2:proj-123:u1');
   });
 
   describe('checkPermission', () => {
@@ -80,7 +88,7 @@ describe('RbacRepository Unit Tests', () => {
       const hasPerm = await repo.checkPermission('u1', 'proj-123', 'write:project');
 
       expect(hasPerm).toBe(true);
-      expect(mockKV.get).toHaveBeenCalledWith('rbac:proj-123:u1', 'json');
+      expect(mockKV.get).toHaveBeenCalledWith('rbac:v2:proj-123:u1', 'json');
       expect(mockPrepare).not.toHaveBeenCalled();
     });
 
@@ -93,7 +101,7 @@ describe('RbacRepository Unit Tests', () => {
 
       expect(hasPerm).toBe(false);
       expect(mockKV.put).toHaveBeenCalledWith(
-        'rbac:proj-123:u1',
+        'rbac:v2:proj-123:u1',
         JSON.stringify({ permissions: [] }),
         { expirationTtl: 300 }
       );
@@ -112,7 +120,7 @@ describe('RbacRepository Unit Tests', () => {
       expect(hasPerm).toBe(true);
       // Verify resolved permissions are cached for 24h (86400)
       expect(mockKV.put).toHaveBeenCalledWith(
-        'rbac:proj-123:u1',
+        'rbac:v2:proj-123:u1',
         expect.stringContaining('post:/api/projects/:id/invitations'),
         { expirationTtl: 86400 }
       );
