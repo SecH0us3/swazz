@@ -6,6 +6,7 @@
 // ─── Fuzzing Profiles ────────────────────────────────────
 
 export type FuzzingProfile = 'RANDOM' | 'BOUNDARY' | 'MALICIOUS';
+export type FuzzProfile = FuzzingProfile;
 
 // ─── JSON Schema Types ──────────────────────────────────
 
