@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Env } from '../env';
+import { isRunnerOwnedBy } from './runnerAccess';
 import { StateManager, MAX_ACTIVE_JOBS_PER_RUNNER } from './StateManager';
 import { scanStateKeys, clearScanState, batchStorageGet, FINISHED_SCANS_KEY, getFinishedScans } from './utils';
 import { ScansRepository } from '../repositories/scans';
@@ -120,7 +121,7 @@ export class QueueService {
         if (String(this.env.AUTH_ENABLED) === 'false') {
           isCompatible = true;
         } else if (runnerPubKey) {
-          if (scanUserPubKey === runnerPubKey) {
+          if (isRunnerOwnedBy(tags, scan.user_id)) {
             isCompatible = true;
           }
         } else {

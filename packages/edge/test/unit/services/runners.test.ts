@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { RunnersService } from '../../../src/services/runners';
+import { RunnersService, filterRunnersForUser } from '../../../src/services/runners';
 import { IRunnersRepository } from '../../../src/repositories/runners';
 import { IRbacRepository } from '../../../src/repositories/rbac';
 import { Env } from '../../../src/env';
@@ -49,7 +49,7 @@ describe('RunnersService Unit Tests', () => {
         store.delete(key);
       }),
     };
-    mockCoordinatorFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ runners: [{ publicKey: 'test-key' }], status: 'ok' })));
+    mockCoordinatorFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ runners: [{ publicKey: 'test-key', ownerId: 'user-1' }], status: 'ok' })));
     mockEnv = {
       AUTH_ENABLED: 'true',
       STORAGE: mockStorage,
@@ -322,18 +322,42 @@ describe('RunnersService Unit Tests', () => {
     expect(res.status).toBe('restarted');
   });
 
-  test('restartRunner should throw 500 on db error', async () => {
-    mockRunnersRepo.getUserPublicKey.mockRejectedValueOnce(new Error('db error'));
-    await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('Internal Server Error|500');
-  });
-
-  test('restartRunner should throw 403 if no public key', async () => {
-    mockRunnersRepo.getUserPublicKey.mockResolvedValueOnce(null);
-    await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('Forbidden: You do not own any runners|403');
+  test('restartRunner asks the coordinator to check ownership by user id, not by public key', async () => {
+    await runnersService.restartRunner('conn-1', 'user-1');
+    const url = new URL(mockCoordinatorFetch.mock.calls.at(-1)![0].url);
+    expect(url.searchParams.get('userId')).toBe('user-1');
+    expect(url.searchParams.has('userPublicKey')).toBe(false);
+    expect(mockRunnersRepo.getUserPublicKey).not.toHaveBeenCalled();
   });
 
   test('restartRunner should throw error if DO returns !ok', async () => {
     mockCoordinatorFetch.mockResolvedValueOnce({ ok: false, text: async () => 'DO Error', status: 400 });
     await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('DO Error|400');
+  });
+});
+
+describe('filterRunnersForUser', () => {
+  const runners = [
+    { connectionId: 'c-mine', name: 'mine', ownerId: 'user-1', publicKey: 'k1', isShared: false, status: 'connected', version: 'v1', activeJobs: ['r1'] },
+    { connectionId: 'c-other', name: 'theirs', ownerId: 'user-2', publicKey: 'k2', isShared: false, status: 'connected', version: 'v1', activeJobs: ['r2'] },
+    { connectionId: 'c-shared', name: 'pool', ownerId: null, publicKey: null, isShared: true, status: 'connected', version: 'v1', activeJobs: ['r3'] },
+  ];
+
+  test('shows the caller their own runners in full', () => {
+    const mine = filterRunnersForUser(runners, 'user-1').find(r => r.name === 'mine');
+    expect(mine).toMatchObject({ connectionId: 'c-mine', publicKey: 'k1', activeJobs: ['r1'], isMine: true });
+    expect(mine).not.toHaveProperty('ownerId');
+  });
+
+  test('hides other tenants\' runners entirely', () => {
+    const visible = filterRunnersForUser(runners, 'user-1');
+    expect(visible.map(r => r.name)).not.toContain('theirs');
+    expect(JSON.stringify(visible)).not.toContain('k2');
+    expect(JSON.stringify(visible)).not.toContain('r2');
+  });
+
+  test('shows shared runners without connection ids, keys or job ids', () => {
+    const shared = filterRunnersForUser(runners, 'user-1').find(r => r.name === 'pool');
+    expect(shared).toEqual({ name: 'pool', status: 'connected', isShared: true, version: 'v1', isMine: false });
   });
 });

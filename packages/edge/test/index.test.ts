@@ -1046,7 +1046,8 @@ describe("Projects & Runners API", () => {
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
 
-    const connectPrivateReq = new Request(`http://localhost/connect-runner?name=PrivateRunner1&public_key=${pubKeyHex}`, {
+    const caller = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind("projuser").first<{ id: string }>();
+    const connectPrivateReq = new Request(`http://localhost/connect-runner?name=PrivateRunner1&public_key=${pubKeyHex}&user_id=${caller!.id}`, {
       headers: { "Upgrade": "websocket" }
     });
     const connectPrivateRes = await stub.fetch(connectPrivateReq as any);
@@ -1098,12 +1099,35 @@ describe("Projects & Runners API", () => {
     const sharedRunner = body.runners.find(r => r.name === 'SharedRunner1');
     expect(sharedRunner).toBeDefined();
     expect(sharedRunner.isShared).toBe(true);
-    expect(sharedRunner.publicKey).toBeNull();
+    // Shared runners are listed without anything that identifies or targets them.
+    expect(sharedRunner.publicKey).toBeUndefined();
+    expect(sharedRunner.connectionId).toBeUndefined();
+    expect(sharedRunner.activeJobs).toBeUndefined();
 
     const privateRunner = body.runners.find(r => r.name === 'PrivateRunner1');
     expect(privateRunner).toBeDefined();
     expect(privateRunner.isShared).toBe(false);
+    expect(privateRunner.isMine).toBe(true);
     expect(privateRunner.publicKey).toBe(pubKeyHex);
+    expect(privateRunner).not.toHaveProperty('ownerId');
+  });
+
+  it("GET /api/runners hides other tenants' private runners", async () => {
+    const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = env.COORDINATOR_DO.get(id);
+    const otherKey = 'ab'.repeat(32);
+    const res = await stub.fetch(new Request(`http://localhost/connect-runner?name=SomeoneElsesRunner&public_key=${otherKey}&user_id=someone-else`, {
+      headers: { "Upgrade": "websocket" }
+    }) as any);
+    expect(res.status).toBe(101);
+    res.webSocket!.accept();
+
+    const listRes = await appFetchWrapper(new Request("http://localhost/api/runners", {
+      headers: { "Authorization": `Bearer ${userToken}` }
+    }) as any, testEnv);
+    const listText = await listRes.text();
+    expect(listText).not.toContain('SomeoneElsesRunner');
+    expect(listText).not.toContain(otherKey);
   });
 
   describe("GET /api/projects/:id/analytics", () => {
@@ -1169,24 +1193,13 @@ describe("Projects & Runners API", () => {
       expect(res.status).toBe(401);
     });
 
-    it("returns 500 when database query fails during restart", async () => {
-      const originalPrepare = testEnv.DB.prepare;
-      testEnv.DB.prepare = () => {
-        throw new Error("DB Query Error");
-      };
-
-      try {
-        const req = new Request("http://localhost/api/runners/some-conn-id/restart", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${userToken}` }
-        });
-        const res = await appFetchWrapper(req as any, testEnv);
-        expect(res.status).toBe(500);
-        const body = await res.json() as { error: string };
-        expect(body.error).toBe("Internal Server Error");
-      } finally {
-        testEnv.DB.prepare = originalPrepare;
-      }
+    it("returns 404 for a runner that is not connected", async () => {
+      const req = new Request("http://localhost/api/runners/01HZZZZZZZZZZZZZZZZZZZZZZZ/restart", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userToken}` }
+      });
+      const res = await appFetchWrapper(req as any, testEnv);
+      expect(res.status).toBe(404);
     });
 
     it("returns 403 when trying to restart shared runner or owned runner without public_key", async () => {
@@ -1201,13 +1214,9 @@ describe("Projects & Runners API", () => {
       const sharedWs = connectSharedRes.webSocket!;
       sharedWs.accept();
 
-      // Get connectionId
-      const listReq = new Request("http://localhost/api/runners" as any, {
-        headers: { "Authorization": `Bearer ${userToken}` }
-      });
-      const listRes = await appFetchWrapper(listReq as any, testEnv);
-      const listBody = await listRes.json() as { runners: any[] };
-      const sharedRunner = listBody.runners.find(r => r.name === 'SharedRunnerRestart');
+      // The public list no longer exposes shared runners' connection ids; read it from the coordinator.
+      const doList = await (await stub.fetch(new Request("http://do/runners") as any)).json() as { runners: any[] };
+      const sharedRunner = doList.runners.find(r => r.name === 'SharedRunnerRestart');
       expect(sharedRunner).toBeDefined();
       expect(sharedRunner.connectionId).toBeDefined();
 
@@ -2121,7 +2130,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const id = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(id);
 
-        const connectReq = new Request(`http://localhost/connect-runner?name=QueueRunnerPrivate&public_key=${pubKeyHex}`, {
+        const connectReq = new Request(`http://localhost/connect-runner?name=QueueRunnerPrivate&public_key=${pubKeyHex}&user_id=${userId}`, {
           headers: { "Upgrade": "websocket" }
         });
         const connectRes = await stub.fetch(connectReq as any);

@@ -5,6 +5,7 @@
 
 import { RouteHandler, HandlerContext } from './types';
 import { isVersionOutdated, getPublicKeyFromTags } from '../utils';
+import { getRunnerOwnerId, isRunnerOwnedBy } from '../runnerAccess';
 import { logWarn } from '../../../../common/logging/logger';
 import { ulid } from 'ulidx';
 
@@ -38,6 +39,7 @@ export class RunnersHandler implements RouteHandler {
       runnerList.push({
         connectionId,
         name,
+        ownerId: getRunnerOwnerId(tags),
         publicKey: pubKey,
         status: isPending ? 'authenticating' : 'connected',
         isShared: !pubKey,
@@ -55,7 +57,7 @@ export class RunnersHandler implements RouteHandler {
 export class RestartRunnerHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
     const connectionId = url.searchParams.get('connectionId');
-    const userPublicKey = url.searchParams.get('userPublicKey');
+    const userId = url.searchParams.get('userId');
     if (!connectionId) {
       return new Response('Missing connectionId', { status: 400 });
     }
@@ -82,7 +84,7 @@ export class RestartRunnerHandler implements RouteHandler {
       return new Response('Forbidden: Shared runners cannot be restarted', { status: 403 });
     }
 
-    if (pubKey !== userPublicKey) {
+    if (!isRunnerOwnedBy(tags, userId)) {
       return new Response('Forbidden: You do not own this runner', { status: 403 });
     }
 

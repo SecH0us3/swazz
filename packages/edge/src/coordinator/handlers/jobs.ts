@@ -7,6 +7,7 @@ import { RouteHandler, HandlerContext } from './types';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
 import { ScansRepository } from '../../repositories/scans';
 import { clearScanState } from '../utils';
+import { isRunnerOwnedBy } from '../runnerAccess';
 
 export class DispatchHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -78,11 +79,10 @@ export class DispatchHandler implements RouteHandler {
       runner = activeRunners.find(r => context.stateManager.hasCapacity(r)) || null;
     } else {
       let hasMatchingPrivateRunner = false;
-      if (payload.userPublicKey) {
-        const matchingPrivate = activeRunners.filter(r => {
-          const tags = context.state.getTags(r);
-          return tags.includes(payload.userPublicKey);
-        });
+      if (payload.userId) {
+        const matchingPrivate = activeRunners.filter(r =>
+          context.stateManager.isPrivateRunner(r) && isRunnerOwnedBy(context.state.getTags(r), payload.userId)
+        );
         hasMatchingPrivateRunner = matchingPrivate.length > 0;
         runner = matchingPrivate.find(r => context.stateManager.hasCapacity(r)) || null;
       }

@@ -532,7 +532,8 @@ export default {
               runId: msg.body.runId,
               configKey: msg.body.configKey,
               config: msg.body.config,
-              userPublicKey: msg.body.userPublicKey || ""
+              userPublicKey: msg.body.userPublicKey || "",
+              userId: msg.body.userId || ""
             }),
           });
           const doRes = await stub.fetch(doReq);

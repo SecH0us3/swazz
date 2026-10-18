@@ -299,7 +299,7 @@ describe('RequestHandler', () => {
       sharedRunner.serializeAttachment({ activeJobs: [] });
 
       mockState.getTags.mockImplementation((ws: any) => {
-        if (ws === privateRunner) return ['runner', 'pubkey-user'];
+        if (ws === privateRunner) return ['runner', 'pubkey-user', 'user_id:user-1'];
         return ['runner']; // shared
       });
       stateManager.runners.add(privateRunner);
@@ -309,7 +309,7 @@ describe('RequestHandler', () => {
       const res = await handler.handle(new Request('http://localhost/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId: 'run-private', config: {}, userPublicKey: 'pubkey-user' })
+        body: JSON.stringify({ runId: 'run-private', config: {}, userPublicKey: 'pubkey-user', userId: 'user-1' })
       }));
 
       expect(res.status).toBe(503);
@@ -356,20 +356,36 @@ describe('RequestHandler', () => {
       expect(deletedKeys(mockState)).toContain('config:run1');
     });
 
-    it('dispatches job to private runner if matching public key', async () => {
+    it('dispatches job to the private runner owned by the scan owner', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc']); // private runner
+      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc', 'user_id:user-1']); // private runner
       stateManager.runners.add(mockWs);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
       const res = await handler.handle(new Request('http://localhost/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId: 'run1', config: {}, userPublicKey: 'pubkey-abc' })
+        body: JSON.stringify({ runId: 'run1', config: {}, userPublicKey: 'pubkey-abc', userId: 'user-1' })
       }));
 
       expect(res.status).toBe(200);
       expect(stateManager.jobs.get('run1')).toBe(mockWs);
+    });
+
+    it('never dispatches to another user\'s private runner, even when the scan owner claimed its key', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc', 'user_id:victim']);
+      stateManager.runners.add(mockWs);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', config: {}, userPublicKey: 'pubkey-abc', userId: 'attacker' })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(mockWs.send).not.toHaveBeenCalled();
     });
 
     it('handles dispatch failure gracefully', async () => {
@@ -1091,7 +1107,7 @@ describe('RequestHandler', () => {
     it('returns active runners list', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner', 'name:runner-1', 'version:v1.2.3', 'pubkey-abc']);
+      mockState.getTags.mockReturnValue(['runner', 'name:runner-1', 'version:v1.2.3', 'pubkey-abc', 'user_id:user-1']);
       mockWs.deserializeAttachment.mockReturnValue({ connectionId: 'conn123', activeJobs: ['job1'] });
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
@@ -1103,6 +1119,7 @@ describe('RequestHandler', () => {
       expect(data.runners[0]).toEqual({
         connectionId: 'conn123',
         name: 'runner-1',
+        ownerId: 'user-1',
         publicKey: 'pubkey-abc',
         status: 'connected',
         isShared: false,
@@ -1170,11 +1187,11 @@ describe('RequestHandler', () => {
     it('restarts runner owned by user', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc']);
+      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc', 'user_id:user-1']);
       mockWs.deserializeAttachment.mockReturnValue({ connectionId: 'conn123' });
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
-      const res = await handler.handle(new Request('http://localhost/runners/restart?connectionId=conn123&userPublicKey=pubkey-abc', {
+      const res = await handler.handle(new Request('http://localhost/runners/restart?connectionId=conn123&userId=user-1', {
         method: 'POST'
       }));
 
@@ -1198,14 +1215,14 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(403);
     });
 
-    it('returns 403 if user public key does not match', async () => {
+    it('returns 403 if the caller does not own the runner', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc']);
+      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc', 'user_id:victim']);
       mockWs.deserializeAttachment.mockReturnValue({ connectionId: 'conn123' });
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
-      const res = await handler.handle(new Request('http://localhost/runners/restart?connectionId=conn123&userPublicKey=pubkey-different', {
+      const res = await handler.handle(new Request('http://localhost/runners/restart?connectionId=conn123&userId=attacker', {
         method: 'POST'
       }));
 
@@ -1215,14 +1232,14 @@ describe('RequestHandler', () => {
     it('returns 500 if send restart command throws error', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc']);
+      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc', 'user_id:user-1']);
       mockWs.deserializeAttachment.mockReturnValue({ connectionId: 'conn123' });
       mockWs.send.mockImplementation(() => {
         throw new Error('dropped connection');
       });
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
-      const res = await handler.handle(new Request('http://localhost/runners/restart?connectionId=conn123&userPublicKey=pubkey-abc', {
+      const res = await handler.handle(new Request('http://localhost/runners/restart?connectionId=conn123&userId=user-1', {
         method: 'POST'
       }));
 

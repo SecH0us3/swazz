@@ -226,7 +226,9 @@ export class MiscService implements IMiscService {
     try {
       parsedBody = JSON.parse(bodyText);
     } catch { /* ignored */ }
+    // Both fields are overwritten so a client cannot choose whose runner parses its request.
     parsedBody.userPublicKey = userPublicKey;
+    parsedBody.userId = userId || '';
     const newBodyText = JSON.stringify(parsedBody);
 
     const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');

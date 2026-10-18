@@ -33,6 +33,22 @@ export interface IRunnersService {
   restartRunner(connectionId: string, userId: string | null): Promise<{ status: string }>;
 }
 
+/**
+ * The runner list a caller may see: their own runners in full, shared runners without anything
+ * that identifies or targets them, and nothing at all about other tenants' runners.
+ */
+export function filterRunnersForUser(runners: any[], userId: string): any[] {
+  const visible: any[] = [];
+  for (const { ownerId, ...r } of runners) {
+    if (ownerId && ownerId === userId) {
+      visible.push({ ...r, isMine: true });
+    } else if (r.isShared) {
+      visible.push({ name: r.name, status: r.status, isShared: true, version: r.version, isMine: false });
+    }
+  }
+  return visible;
+}
+
 export class RunnersService implements IRunnersService {
   constructor(
     private env: Env, 
@@ -70,6 +86,7 @@ export class RunnersService implements IRunnersService {
     if (String(this.env.AUTH_ENABLED) === 'false') {
       userId = "anon-dev-user";
     } else if (publicKey) {
+      publicKey = publicKey.toLowerCase();
       const user = await this.runnersRepo.getUserByPublicKey(publicKey);
       if (!user) {
         return new Response('Unauthorized: Invalid public key', { status: 401 });
@@ -120,8 +137,6 @@ export class RunnersService implements IRunnersService {
       throw new Error('Unauthorized|401');
     }
 
-    let userPublicKey = await this.runnersRepo.getUserPublicKey(userId);
-
     const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
     const stub = this.env.COORDINATOR_DO.get(id);
     const res = await stub.fetch(new Request('http://do/runners'));
@@ -130,12 +145,7 @@ export class RunnersService implements IRunnersService {
     }
 
     const data = await res.json() as { runners: any[] };
-    const mappedRunners = data.runners.map(r => ({
-      ...r,
-      isMine: userPublicKey && r.publicKey === userPublicKey,
-    }));
-
-    return { runners: mappedRunners };
+    return { runners: filterRunnersForUser(data.runners, userId) };
   }
 
   async connectClient(
@@ -334,25 +344,10 @@ export class RunnersService implements IRunnersService {
       throw new Error('Unauthorized|401');
     }
 
-    let userPublicKey = "";
-    try {
-      const key = await this.runnersRepo.getUserPublicKey(userId);
-      if (key) {
-        userPublicKey = key;
-      }
-    } catch (dbErr) {
-      console.error("Failed to query user public key in /api/runners/.../restart:", dbErr);
-      throw new Error('Internal Server Error|500');
-    }
-
-    if (!userPublicKey) {
-      throw new Error('Forbidden: You do not own any runners|403');
-    }
-
     const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
     const stub = this.env.COORDINATOR_DO.get(id);
     const doRes = await stub.fetch(
-      new Request(`http://do/runners/restart?connectionId=${encodeURIComponent(connectionId)}&userPublicKey=${encodeURIComponent(userPublicKey)}`, {
+      new Request(`http://do/runners/restart?connectionId=${encodeURIComponent(connectionId)}&userId=${encodeURIComponent(userId)}`, {
         method: 'POST'
       })
     );

@@ -33,6 +33,7 @@ export interface IAuthRepository {
   getUserByUsername(username: string): Promise<any>;
   updateUserApiKey(userId: string, hashedApiKey: string): Promise<void>;
   updateUserPublicKey(userId: string, publicKey: string | null): Promise<void>;
+  isPublicKeyTakenByOther(publicKey: string, userId: string): Promise<boolean>;
   scheduleUserDeletion(userId: string): Promise<void>;
   cancelUserDeletion(userId: string): Promise<void>;
 
@@ -148,6 +149,11 @@ export class AuthRepository extends BaseService implements IAuthRepository {
 
   async updateUserPublicKey(userId: string, publicKey: string | null): Promise<void> {
     await this.db.prepare('UPDATE users SET public_key = ? WHERE id = ?').bind(publicKey, userId).run();
+  }
+
+  async isPublicKeyTakenByOther(publicKey: string, userId: string): Promise<boolean> {
+    const row = await this.db.prepare('SELECT 1 FROM users WHERE public_key = ? AND id != ?').bind(publicKey, userId).first();
+    return !!row;
   }
 
   async scheduleUserDeletion(userId: string): Promise<void> {

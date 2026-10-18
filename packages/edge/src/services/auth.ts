@@ -321,7 +321,16 @@ export class AuthService implements IAuthService {
 
   async updatePublicKey(userId: string, publicKey: string | undefined | null): Promise<any> {
     const val = (publicKey === '' || publicKey === null || publicKey === undefined) ? null : publicKey.toLowerCase();
-    await this.authRepo.updateUserPublicKey(userId, val);
+    // A runner connecting with this key is attributed to whoever holds it, so a key already
+    // registered to another account must never be taken over.
+    const conflict = 'This public key is already registered to another account|409';
+    if (val && await this.authRepo.isPublicKeyTakenByOther(val, userId)) throw new Error(conflict);
+    try {
+      await this.authRepo.updateUserPublicKey(userId, val);
+    } catch (err: any) {
+      if (String(err?.message ?? err).includes('UNIQUE')) throw new Error(conflict);
+      throw err;
+    }
     return { status: 'ok', public_key: val };
   }
 

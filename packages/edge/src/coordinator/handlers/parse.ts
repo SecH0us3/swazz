@@ -7,6 +7,7 @@ import { RouteHandler, HandlerContext } from './types';
 import { ScansRepository } from '../../repositories/scans';
 import { logError } from '../../../../common/logging/logger';
 import { ulid } from 'ulidx';
+import { isRunnerOwnedBy } from '../runnerAccess';
 
 export class ParseHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -15,6 +16,7 @@ export class ParseHandler implements RouteHandler {
       rawSpec?: string;
       forceRebuild?: boolean;
       userPublicKey?: string;
+      userId?: string;
       headers?: Record<string, string>;
       cookies?: Record<string, string>;
     } | null = null;
@@ -75,11 +77,10 @@ export class ParseHandler implements RouteHandler {
     context.stateManager.pendingParseUrls.set(reqId, body.url || 'rawSpec');
     
     let runnerWs = null;
-    if (body.userPublicKey) {
-      runnerWs = activeRunners.find(r => {
-        const tags = context.state.getTags(r);
-        return tags.includes(body.userPublicKey!);
-      });
+    if (body.userId) {
+      runnerWs = activeRunners.find(r =>
+        context.stateManager.isPrivateRunner(r) && isRunnerOwnedBy(context.state.getTags(r), body.userId)
+      );
     }
     if (!runnerWs) {
       runnerWs = activeRunners.find(r => !context.stateManager.isPrivateRunner(r)) || null;

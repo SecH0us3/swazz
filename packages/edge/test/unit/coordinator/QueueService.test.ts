@@ -50,7 +50,7 @@ describe('QueueService', () => {
 
     mockState = {
       getWebSockets: vi.fn().mockReturnValue([]),
-      getTags: vi.fn().mockReturnValue(['runner', 'key-123']),
+      getTags: vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-1']),
       storage: {
         get: vi.fn().mockResolvedValue(new Map()),
         delete: vi.fn().mockResolvedValue(true)
@@ -65,7 +65,7 @@ describe('QueueService', () => {
     };
     
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', target_url: 'http://example.com' }
     ]);
     mockUpdateScanStatus.mockResolvedValue(true);
     mockMarkFailedIfActive.mockResolvedValue(true);
@@ -329,8 +329,9 @@ describe('QueueService', () => {
     expect(mockWs.send).toHaveBeenCalledTimes(1);
   });
 
-  it('should not dispatch private scan if public key mismatches', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-different']);
+  it('should not dispatch a scan to a private runner owned by someone else, even with the same key', async () => {
+    // A user who copied the runner's key into their own profile must not get its jobs.
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-2']);
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
 
@@ -376,9 +377,9 @@ describe('QueueService', () => {
   });
 
   it('should fallback to fetching scan config from project in DB if not in DO storage', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-1']);
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
     ]);
     
     mockGetScanConfigByProject.mockResolvedValue(JSON.stringify({
@@ -398,9 +399,9 @@ describe('QueueService', () => {
   });
 
   it('should default base_url to target_url if not present in config', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-1']);
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', target_url: 'http://example.com' }
     ]);
 
     const stateManager = new StateManager(mockState);
@@ -415,7 +416,7 @@ describe('QueueService', () => {
 
   it('should handle DB errors during scan status update gracefully without failing execution', async () => {
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', target_url: 'http://example.com' }
     ]);
     mockUpdateScanStatus.mockRejectedValue(new Error('D1 connection failure'));
 
@@ -427,9 +428,9 @@ describe('QueueService', () => {
   });
 
   it('should handle errors during config fetching from DB gracefully', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-1']);
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
     ]);
     mockGetScanConfigByProject.mockRejectedValue(new Error('DB failure'));
 
@@ -478,7 +479,7 @@ describe('QueueService', () => {
   it('marks scan failed in D1 and deletes storage keys when R2 config retrieval fails (Issue 4c)', async () => {
     const configKey = `scans/configs/scan-1/${crypto.randomUUID()}.json`;
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
     ]);
     const mockStorageMap = new Map();
     mockStorageMap.set('config_ref:scan-1', configKey);

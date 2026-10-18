@@ -65,6 +65,7 @@ describe('AuthService', () => {
       getUserById: vi.fn(),
       updateUserApiKey: vi.fn(),
       updateUserPublicKey: vi.fn(),
+      isPublicKeyTakenByOther: vi.fn().mockResolvedValue(false),
       checkLoginRateLimit: vi.fn().mockResolvedValue({ locked: false, retryAfter: 0 }),
       getUserByUsername: vi.fn(),
       recordFailedLogin: vi.fn(),
