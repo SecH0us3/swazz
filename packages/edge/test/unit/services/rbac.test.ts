@@ -29,11 +29,11 @@ describe('RbacService', () => {
       getMemberRoles: vi.fn().mockResolvedValue([]),
       updateMemberRoles: vi.fn().mockResolvedValue(undefined),
       removeMember: vi.fn().mockResolvedValue(undefined),
-      deleteCustomRole: vi.fn().mockResolvedValue(undefined),
+      deleteCustomRole: vi.fn().mockResolvedValue(true),
       clearRoleFromMembers: vi.fn().mockResolvedValue(undefined),
       clearRoleFromInheritance: vi.fn().mockResolvedValue(undefined),
       clearRoleFromInvitations: vi.fn().mockResolvedValue(undefined),
-      updateCustomRole: vi.fn().mockResolvedValue(undefined),
+      updateCustomRole: vi.fn().mockResolvedValue(true),
       getUserInvitations: vi.fn().mockResolvedValue([]),
       checkExistingInvitation: vi.fn().mockResolvedValue(false),
       checkIsMember: vi.fn().mockResolvedValue(false),
@@ -54,6 +54,8 @@ describe('RbacService', () => {
       getEffectivePermissions: vi.fn().mockResolvedValue(Object.keys(PERMISSIONS)),
       resolveRolePermissions: vi.fn().mockResolvedValue([]),
       isProjectMember: vi.fn().mockResolvedValue(true),
+      getRoleHolders: vi.fn().mockResolvedValue([]),
+      getInvitationRoles: vi.fn().mockResolvedValue([]),
     };
     service = new RbacService(mockEnv, mockRepo);
   });

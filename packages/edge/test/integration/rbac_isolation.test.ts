@@ -217,6 +217,41 @@ describe('RBAC cross-project isolation', () => {
       expect(await repo.isProjectMember(project, ownerB)).toBe(true);
     });
 
+    it('an editor cannot strip or delete a custom role held by someone they do not outrank', async () => {
+      const project = await seedProject('B');
+      const owner = await seedUser();
+      const admin = await seedUser();
+      const editor = await seedUser();
+      await addMember(project, owner, ['owner']);
+      const adminRole = await seedCustomRole(project, ['get:/api/projects/:id', 'delete:/api/projects/:id']);
+      await addMember(project, admin, [adminRole]);
+      await addMember(project, editor, ['editor']);
+
+      await expect(service.updateCustomRole(project, editor, adminRole, { name: 'cut', permissions: ['get:/api/projects/:id'] }))
+        .rejects.toThrow('|403');
+      await expect(service.deleteCustomRole(project, editor, adminRole)).rejects.toThrow('|403');
+      expect(await rolePermissions(adminRole)).toEqual(['delete:/api/projects/:id', 'get:/api/projects/:id']);
+      expect(await repo.getMemberRoles(project, admin)).toEqual([adminRole]);
+
+      // The owner, who outranks the holder, still can.
+      await service.deleteCustomRole(project, owner, adminRole);
+      expect(await repo.getMemberRoles(project, admin)).toEqual([]);
+    });
+
+    it('an editor cannot rewrite or revoke an invitation that grants owner', async () => {
+      const project = await seedProject('B');
+      const owner = await seedUser();
+      const editor = await seedUser();
+      await addMember(project, owner, ['owner']);
+      await addMember(project, editor, ['editor']);
+      await service.createInvitation(project, owner, { username: 'newowner', roles: ['owner'] });
+      const [invite] = await repo.getPendingInvitations(project);
+
+      await expect(service.updateMemberRoles(project, editor, invite.id, { roles: ['viewer'] })).rejects.toThrow('|403');
+      await expect(service.removeMember(project, editor, invite.id)).rejects.toThrow('|403');
+      expect(JSON.parse((await repo.getPendingInvitations(project))[0].target_role_ids)).toEqual(['owner']);
+    });
+
     it('an editor can still manage a viewer, and an owner can manage an editor', async () => {
       const project = await seedProject('B');
       const owner = await seedUser();

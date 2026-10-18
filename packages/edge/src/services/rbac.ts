@@ -39,15 +39,34 @@ export async function assertCanGrant(
   callerId: string | null,
   grant: { roles?: string[]; permissions?: string[] }
 ): Promise<void> {
+  await assertCallerCovers(rbacRepo, projectId, callerId, { grant });
+}
+
+/**
+ * The one check behind every role change: the caller must hold every permission that is being
+ * handed out (grant) and every permission held by anyone the change affects (members). The
+ * caller's own permissions are loaded once.
+ */
+export async function assertCallerCovers(
+  rbacRepo: IRbacRepository,
+  projectId: string,
+  callerId: string | null,
+  scope: { grant?: { roles?: string[]; permissions?: string[] }; members?: string[] }
+): Promise<void> {
   if (!callerId) throw new Error('Unauthorized|401');
-  const [callerPermissions, rolePermissions] = await Promise.all([
+  const members = (scope.members || []).filter(m => m !== callerId);
+  const [callerPermissions, rolePermissions, ...memberPermissions] = await Promise.all([
     rbacRepo.getEffectivePermissions(callerId, projectId),
-    rbacRepo.resolveRolePermissions(projectId, grant.roles || []),
+    rbacRepo.resolveRolePermissions(projectId, scope.grant?.roles || []),
+    ...members.map(m => rbacRepo.getEffectivePermissions(m, projectId)),
   ]);
   const held = new Set(callerPermissions);
-  const requested = [...rolePermissions, ...(grant.permissions || [])];
-  if (requested.some(p => !held.has(p))) {
+  const granted = [...rolePermissions, ...(scope.grant?.permissions || [])];
+  if (granted.some(p => !held.has(p))) {
     throw new Error('Forbidden: You cannot grant permissions you do not hold|403');
+  }
+  if (memberPermissions.some(perms => perms.some(p => !held.has(p)))) {
+    throw new Error('Forbidden: You cannot change a member who holds permissions you do not|403');
   }
 }
 
@@ -61,15 +80,7 @@ export async function assertOutranks(
   callerId: string | null,
   targetUserId: string
 ): Promise<void> {
-  if (!callerId) throw new Error('Unauthorized|401');
-  const [callerPermissions, targetPermissions] = await Promise.all([
-    rbacRepo.getEffectivePermissions(callerId, projectId),
-    rbacRepo.getEffectivePermissions(targetUserId, projectId),
-  ]);
-  const held = new Set(callerPermissions);
-  if (targetPermissions.some(p => !held.has(p))) {
-    throw new Error('Forbidden: You cannot change a member who holds permissions you do not|403');
-  }
+  await assertCallerCovers(rbacRepo, projectId, callerId, { members: [targetUserId] });
 }
 
 export class RbacService implements IRbacService {
@@ -237,11 +248,14 @@ export class RbacService implements IRbacService {
     }
 
     await this.assertRolesExist(projectId, body.roles);
-    await assertCanGrant(this.rbacRepo, projectId, userId, { roles: body.roles });
 
     // Check if invitation
     const isInvite = await this.rbacRepo.checkInvitationExists(memberId, projectId);
     if (isInvite) {
+      // Both what the invitation grants now and what it would grant must be within the caller's
+      // own permissions, or a narrow member manager could rewrite an owner's invitation.
+      const currentRoles = await this.rbacRepo.getInvitationRoles(memberId, projectId);
+      await assertCanGrant(this.rbacRepo, projectId, userId, { roles: [...currentRoles, ...body.roles] });
       await this.rbacRepo.updateInvitationRoles(memberId, body.roles);
       return { status: 'updated' };
     }
@@ -250,7 +264,7 @@ export class RbacService implements IRbacService {
     if (!(await this.rbacRepo.isProjectMember(projectId, memberId))) {
       throw new Error('Member not found|404');
     }
-    await assertOutranks(this.rbacRepo, projectId, userId, memberId);
+    await assertCallerCovers(this.rbacRepo, projectId, userId, { grant: { roles: body.roles }, members: [memberId] });
 
     // Update active member roles
     const currentRoles = await this.rbacRepo.getMemberRoles(projectId, memberId);
@@ -280,6 +294,8 @@ export class RbacService implements IRbacService {
 
     const isInvite = await this.rbacRepo.checkInvitationExists(memberId, projectId);
     if (isInvite) {
+      const invitedRoles = await this.rbacRepo.getInvitationRoles(memberId, projectId);
+      await assertCanGrant(this.rbacRepo, projectId, userId, { roles: invitedRoles });
       await this.rbacRepo.revokeInvitation(memberId);
       return { status: 'revoked' };
     }
@@ -345,9 +361,13 @@ export class RbacService implements IRbacService {
       }
     }
 
-    await assertCanGrant(this.rbacRepo, projectId, userId, { roles: includedRoles, permissions });
+    // Editing a role changes the access of everyone holding it, so the caller must outrank them.
+    const holders = await this.rbacRepo.getRoleHolders(projectId, roleId);
+    await assertCallerCovers(this.rbacRepo, projectId, userId, { grant: { roles: includedRoles, permissions }, members: holders });
 
-    await this.rbacRepo.updateCustomRole(projectId, roleId, roleName, permissions, includedRoles);
+    if (!(await this.rbacRepo.updateCustomRole(projectId, roleId, roleName, permissions, includedRoles))) {
+      throw new Error('Role not found|404');
+    }
     await this.rbacRepo.invalidateProjectRBAC(projectId);
 
     return { status: 'updated' };
@@ -362,8 +382,12 @@ export class RbacService implements IRbacService {
       throw new Error('Default roles cannot be deleted|400');
     }
     await this.assertCustomRoleInProject(projectId, roleId);
+    const holders = await this.rbacRepo.getRoleHolders(projectId, roleId);
+    await assertCallerCovers(this.rbacRepo, projectId, userId, { members: holders });
 
-    await this.rbacRepo.deleteCustomRole(projectId, roleId);
+    if (!(await this.rbacRepo.deleteCustomRole(projectId, roleId))) {
+      throw new Error('Role not found|404');
+    }
     await this.rbacRepo.invalidateProjectRBAC(projectId);
 
     return { status: 'deleted' };

@@ -269,41 +269,39 @@ describe('RbacRepository Unit Tests', () => {
     expect(mockBatch).toHaveBeenCalled();
   });
 
-  it('updateCustomRole updates role detail and resets perms/inheritance in batch transaction', async () => {
-    mockAll.mockResolvedValueOnce({ results: [{ id: 'r1' }] }); // ownership check
+  it('updateCustomRole scopes every statement of the batch to the role\'s project', async () => {
+    mockBatch.mockResolvedValueOnce([{ meta: { changes: 1 } }]);
     const repo = new RbacRepository(mockEnv);
-    await repo.updateCustomRole('proj-1', 'r1', 'NewName', ['p1'], ['child1']);
+    expect(await repo.updateCustomRole('proj-1', 'r1', 'NewName', ['p1'], ['child1'])).toBe(true);
 
-    // ownership check + update + delete_perms + delete_inh + insert_perm + insert_inh
-    expect(mockPrepare).toHaveBeenCalledTimes(6);
-    expect(mockPrepare).toHaveBeenCalledWith('UPDATE project_custom_roles SET name = ? WHERE id = ? AND project_id = ?');
-    expect(mockBatch).toHaveBeenCalled();
-  });
-
-  it('updateCustomRole writes nothing for a role of another project', async () => {
-    mockAll.mockResolvedValueOnce({ results: [] });
-    const repo = new RbacRepository(mockEnv);
-    await repo.updateCustomRole('proj-1', 'r-foreign', 'NewName', ['p1'], []);
-
-    expect(mockBatch).not.toHaveBeenCalled();
-  });
-
-  it('deleteCustomRole removes role and cascading permissions/inheritance in batch transaction', async () => {
-    mockAll.mockResolvedValueOnce({ results: [{ id: 'r1' }] });
-    const repo = new RbacRepository(mockEnv);
-    await repo.deleteCustomRole('proj-1', 'r1');
-
+    // update + delete_perms + delete_inh + insert_perm + insert_inh, no separate ownership read
     expect(mockPrepare).toHaveBeenCalledTimes(5);
-    expect(mockPrepare).toHaveBeenCalledWith('DELETE FROM project_member_roles WHERE role_id = ? AND project_id = ?');
-    expect(mockBatch).toHaveBeenCalled();
+    expect(mockPrepare).toHaveBeenCalledWith('UPDATE project_custom_roles SET name = ? WHERE id = ? AND project_id = ?');
+    for (const [sql] of mockPrepare.mock.calls.slice(1)) {
+      expect(sql).toContain('EXISTS (SELECT 1 FROM project_custom_roles WHERE id = ? AND project_id = ?)');
+    }
   });
 
-  it('deleteCustomRole deletes nothing for a role of another project', async () => {
-    mockAll.mockResolvedValueOnce({ results: [] });
+  it('updateCustomRole reports false when no role of that project was updated', async () => {
+    mockBatch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
     const repo = new RbacRepository(mockEnv);
-    await repo.deleteCustomRole('proj-1', 'r-foreign');
+    expect(await repo.updateCustomRole('proj-1', 'r-foreign', 'NewName', ['p1'], [])).toBe(false);
+  });
 
-    expect(mockBatch).not.toHaveBeenCalled();
+  it('deleteCustomRole deletes dependants first, guarded by ownership, and the role row last', async () => {
+    mockBatch.mockResolvedValueOnce([{}, {}, {}, { meta: { changes: 1 } }]);
+    const repo = new RbacRepository(mockEnv);
+    expect(await repo.deleteCustomRole('proj-1', 'r1')).toBe(true);
+
+    expect(mockPrepare).toHaveBeenCalledTimes(4);
+    expect(mockPrepare).toHaveBeenCalledWith('DELETE FROM project_member_roles WHERE role_id = ? AND project_id = ?');
+    expect(mockPrepare.mock.calls[3][0]).toBe('DELETE FROM project_custom_roles WHERE id = ? AND project_id = ?');
+  });
+
+  it('deleteCustomRole reports false when no role of that project was deleted', async () => {
+    mockBatch.mockResolvedValueOnce([{}, {}, {}, { meta: { changes: 0 } }]);
+    const repo = new RbacRepository(mockEnv);
+    expect(await repo.deleteCustomRole('proj-1', 'r-foreign')).toBe(false);
   });
 
   it('getUserDetails returns profile username and email', async () => {

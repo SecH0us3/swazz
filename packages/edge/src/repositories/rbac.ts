@@ -28,8 +28,10 @@ export interface IRbacRepository {
   revokeInvitation(id: string): Promise<void>;
   removeProjectMember(projectId: string, userId: string): Promise<void>;
   
-  updateCustomRole(projectId: string, roleId: string, name: string, permissions: string[], includedRoles: string[]): Promise<void>;
-  deleteCustomRole(projectId: string, roleId: string): Promise<void>;
+  updateCustomRole(projectId: string, roleId: string, name: string, permissions: string[], includedRoles: string[]): Promise<boolean>;
+  deleteCustomRole(projectId: string, roleId: string): Promise<boolean>;
+  getRoleHolders(projectId: string, roleId: string): Promise<string[]>;
+  getInvitationRoles(id: string, projectId: string): Promise<string[]>;
   
   getUserDetails(userId: string): Promise<{ email: string; username: string; email_verified?: number | null } | null>;
   getUserInvitations(email: string | null, username: string, emailVerified: boolean): Promise<any[]>;
@@ -368,32 +370,54 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     name: string,
     permissions: string[],
     includedRoles: string[]
-  ): Promise<void> {
-    const owned = await this.checkCustomRolesExist(projectId, [roleId]);
-    if (!owned.includes(roleId)) return;
-
+  ): Promise<boolean> {
+    // Every statement re-checks that the role belongs to the project inside the same batch, so
+    // nothing is written through a role of another project, or one deleted meanwhile.
+    const owned = 'EXISTS (SELECT 1 FROM project_custom_roles WHERE id = ? AND project_id = ?)';
     const stmts = [
       this.db.prepare('UPDATE project_custom_roles SET name = ? WHERE id = ? AND project_id = ?').bind(name, roleId, projectId),
-      this.db.prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
-      this.db.prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ?').bind(roleId)
+      this.db.prepare(`DELETE FROM custom_role_permissions WHERE role_id = ? AND ${owned}`).bind(roleId, roleId, projectId),
+      this.db.prepare(`DELETE FROM custom_role_inheritance WHERE parent_role_id = ? AND ${owned}`).bind(roleId, roleId, projectId)
     ];
 
-    permissions.forEach(p => stmts.push(this.db.prepare('INSERT INTO custom_role_permissions (role_id, permission_key) VALUES (?, ?)').bind(roleId, p)));
-    includedRoles.forEach(child => stmts.push(this.db.prepare('INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) VALUES (?, ?)').bind(roleId, child)));
+    permissions.forEach(p => stmts.push(this.db.prepare(`INSERT INTO custom_role_permissions (role_id, permission_key) SELECT ?, ? WHERE ${owned}`).bind(roleId, p, roleId, projectId)));
+    includedRoles.forEach(child => stmts.push(this.db.prepare(`INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) SELECT ?, ? WHERE ${owned}`).bind(roleId, child, roleId, projectId)));
 
-    await this.db.batch(stmts);
+    const results = await this.db.batch(stmts);
+    return ((results?.[0] as any)?.meta?.changes ?? 0) > 0;
   }
 
-  async deleteCustomRole(projectId: string, roleId: string): Promise<void> {
-    const owned = await this.checkCustomRolesExist(projectId, [roleId]);
-    if (!owned.includes(roleId)) return;
-
-    await this.db.batch([
-      this.db.prepare('DELETE FROM project_custom_roles WHERE id = ? AND project_id = ?').bind(roleId, projectId),
-      this.db.prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
-      this.db.prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ? OR child_role_id = ?').bind(roleId, roleId),
-      this.db.prepare('DELETE FROM project_member_roles WHERE role_id = ? AND project_id = ?').bind(roleId, projectId)
+  async deleteCustomRole(projectId: string, roleId: string): Promise<boolean> {
+    // Dependent rows go first, each guarded by the role still belonging to the project; the role
+    // row itself goes last, and its change count says whether anything was deleted.
+    const owned = 'EXISTS (SELECT 1 FROM project_custom_roles WHERE id = ? AND project_id = ?)';
+    const results = await this.db.batch([
+      this.db.prepare(`DELETE FROM custom_role_permissions WHERE role_id = ? AND ${owned}`).bind(roleId, roleId, projectId),
+      this.db.prepare(`DELETE FROM custom_role_inheritance WHERE (parent_role_id = ? OR child_role_id = ?) AND ${owned}`).bind(roleId, roleId, roleId, projectId),
+      this.db.prepare('DELETE FROM project_member_roles WHERE role_id = ? AND project_id = ?').bind(roleId, projectId),
+      this.db.prepare('DELETE FROM project_custom_roles WHERE id = ? AND project_id = ?').bind(roleId, projectId)
     ]);
+    return ((results?.[3] as any)?.meta?.changes ?? 0) > 0;
+  }
+
+  async getRoleHolders(projectId: string, roleId: string): Promise<string[]> {
+    const { results } = await this.db.prepare(
+      'SELECT DISTINCT user_id FROM project_member_roles WHERE project_id = ? AND role_id = ?'
+    ).bind(projectId, roleId).all<{ user_id: string }>();
+    return (results || []).map(r => r.user_id);
+  }
+
+  async getInvitationRoles(id: string, projectId: string): Promise<string[]> {
+    const row = await this.db.prepare(
+      'SELECT target_role_ids FROM project_invitations WHERE id = ? AND project_id = ?'
+    ).bind(id, projectId).first<{ target_role_ids: string }>();
+    if (!row) return [];
+    try {
+      const roles = JSON.parse(row.target_role_ids);
+      return Array.isArray(roles) ? roles.filter((r: unknown): r is string => typeof r === 'string') : [];
+    } catch {
+      return [];
+    }
   }
 
   async getUserDetails(userId: string): Promise<{ email: string; username: string; email_verified?: number | null } | null> {
