@@ -191,6 +191,13 @@ describe('RbacService', () => {
       expect(mockRepo.createCustomRole).not.toHaveBeenCalled();
     });
 
+    it('removeMember refuses to remove a member who holds permissions the caller lacks', async () => {
+      mockRepo.getEffectivePermissions.mockImplementation(async (uid: string) =>
+        uid === 'u1' ? ['delete:/api/projects/:id/members/:user_id'] : ['delete:/api/projects/:id']);
+      await expect(service.removeMember('p1', 'u1', 'owner2')).rejects.toThrow('|403');
+      expect(mockRepo.removeProjectMember).not.toHaveBeenCalled();
+    });
+
     it('rejects the runner pseudo-role as a member role', async () => {
       await expect(service.updateMemberRoles('p1', 'u1', 'u2', { roles: ['runner'] })).rejects.toThrow('Invalid role(s): runner|400');
     });

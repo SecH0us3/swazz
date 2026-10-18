@@ -190,6 +190,49 @@ describe('RBAC cross-project isolation', () => {
     });
   });
 
+  describe('no member can be changed or removed by someone they outrank', () => {
+    it('an editor cannot demote an owner, even when there are two owners', async () => {
+      const project = await seedProject('B');
+      const ownerA = await seedUser();
+      const ownerB = await seedUser();
+      const editor = await seedUser();
+      await addMember(project, ownerA, ['owner']);
+      await addMember(project, ownerB, ['owner']);
+      await addMember(project, editor, ['editor']);
+
+      await expect(service.updateMemberRoles(project, editor, ownerB, { roles: ['viewer'] })).rejects.toThrow('|403');
+      expect(await repo.getMemberRoles(project, ownerB)).toEqual(['owner']);
+    });
+
+    it('an editor cannot remove an owner', async () => {
+      const project = await seedProject('B');
+      const ownerA = await seedUser();
+      const ownerB = await seedUser();
+      const editor = await seedUser();
+      await addMember(project, ownerA, ['owner']);
+      await addMember(project, ownerB, ['owner']);
+      await addMember(project, editor, ['editor']);
+
+      await expect(service.removeMember(project, editor, ownerB)).rejects.toThrow('|403');
+      expect(await repo.isProjectMember(project, ownerB)).toBe(true);
+    });
+
+    it('an editor can still manage a viewer, and an owner can manage an editor', async () => {
+      const project = await seedProject('B');
+      const owner = await seedUser();
+      const editor = await seedUser();
+      const viewer = await seedUser();
+      await addMember(project, owner, ['owner']);
+      await addMember(project, editor, ['editor']);
+      await addMember(project, viewer, ['viewer']);
+
+      await service.updateMemberRoles(project, editor, viewer, { roles: ['editor'] });
+      expect(await repo.getMemberRoles(project, viewer)).toEqual(['editor']);
+      await service.removeMember(project, owner, editor);
+      expect(await repo.isProjectMember(project, editor)).toBe(false);
+    });
+  });
+
   describe('member role edits', () => {
     it('cannot attach a user who is not a member of the project', async () => {
       const project = await seedProject('B');

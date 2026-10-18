@@ -51,6 +51,27 @@ export async function assertCanGrant(
   }
 }
 
+/**
+ * Refuses to change or remove a member who holds any permission the caller lacks. Capping only
+ * what is granted is not enough: a narrow member manager could otherwise demote or evict an owner.
+ */
+export async function assertOutranks(
+  rbacRepo: IRbacRepository,
+  projectId: string,
+  callerId: string | null,
+  targetUserId: string
+): Promise<void> {
+  if (!callerId) throw new Error('Unauthorized|401');
+  const [callerPermissions, targetPermissions] = await Promise.all([
+    rbacRepo.getEffectivePermissions(callerId, projectId),
+    rbacRepo.getEffectivePermissions(targetUserId, projectId),
+  ]);
+  const held = new Set(callerPermissions);
+  if (targetPermissions.some(p => !held.has(p))) {
+    throw new Error('Forbidden: You cannot change a member who holds permissions you do not|403');
+  }
+}
+
 export class RbacService implements IRbacService {
   constructor(private env: Env, private rbacRepo: IRbacRepository) {}
 
@@ -230,6 +251,7 @@ export class RbacService implements IRbacService {
     if (!(await this.rbacRepo.isProjectMember(projectId, memberId))) {
       throw new Error('Member not found|404');
     }
+    await assertOutranks(this.rbacRepo, projectId, userId, memberId);
 
     // Update active member roles
     const currentRoles = await this.rbacRepo.getMemberRoles(projectId, memberId);
@@ -262,6 +284,8 @@ export class RbacService implements IRbacService {
       await this.rbacRepo.revokeInvitation(memberId);
       return { status: 'revoked' };
     }
+
+    await assertOutranks(this.rbacRepo, projectId, userId, memberId);
 
     const currentRoles = await this.rbacRepo.getMemberRoles(projectId, memberId);
     const hasOwner = currentRoles.includes('owner');
