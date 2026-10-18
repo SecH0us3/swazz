@@ -3,6 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
+import { reportKeyForScan } from '../repositories/cleanup';
 import { Env } from '../env';
 import { IScansRepository } from '../repositories/scans';
 import { IRbacRepository } from '../repositories/rbac';
@@ -67,6 +68,24 @@ export class ScansService implements IScansService {
     }
 
     const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'get:/api/projects/:id/scans');
+    if (!hasAccess) throw new Error('Forbidden|403');
+  }
+
+  /**
+   * Write access to a scan. A project scan needs current project permission: having created it
+   * grants nothing once the creator's membership is gone. Only a standalone scan (no project)
+   * falls back to its creator, as in checkScanAccess.
+   */
+  private async checkScanWriteAccess(scan: any, userId: string | null | undefined, isAuthEnabled: boolean | undefined): Promise<void> {
+    if (!isAuthEnabled) return;
+    if (!userId) throw new Error('Unauthorized|401');
+
+    if (!scan.project_id) {
+      if (scan.user_id !== userId) throw new Error('Forbidden|403');
+      return;
+    }
+
+    const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
     if (!hasAccess) throw new Error('Forbidden|403');
   }
 
@@ -250,7 +269,7 @@ export class ScansService implements IScansService {
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
-    const r2Key = `reports/${scanId}.enc`;
+    const r2Key = reportKeyForScan(scanId);
     const secret = this.env.JWT_SECRET;
     if (!secret) throw new Error('Internal server error: auth not configured|500');
 
@@ -365,11 +384,7 @@ export class ScansService implements IScansService {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
 
-    if (isAuthEnabled) {
-      if (!userId) throw new Error('Unauthorized|401');
-      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
-      if (!hasAccess && scan.user_id !== userId) throw new Error('Forbidden|403');
-    }
+    await this.checkScanWriteAccess(scan, userId, isAuthEnabled);
 
     const updatedCount = await this.scansRepo.batchUpdateFindingsAI(scanId, updates);
     return { success: true, updated_count: updatedCount };
@@ -379,11 +394,7 @@ export class ScansService implements IScansService {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
 
-    if (isAuthEnabled) {
-      if (!userId) throw new Error('Unauthorized|401');
-      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
-      if (!hasAccess && scan.user_id !== userId) throw new Error('Forbidden|403');
-    }
+    await this.checkScanWriteAccess(scan, userId, isAuthEnabled);
 
     await this.scansRepo.saveWAFPatchReport(scanId, report);
     return { success: true };

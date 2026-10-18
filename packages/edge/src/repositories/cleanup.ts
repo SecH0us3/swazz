@@ -19,6 +19,8 @@ export interface ICleanupRepository {
   deleteUsersData(userIds: string[], projectIds: string[], usernames: string[]): Promise<void>;
 }
 
+export const reportKeyForScan = (scanId: string) => `reports/${scanId}.enc`;
+
 export class CleanupRepository extends BaseService<Env | { DB: D1Database }> implements ICleanupRepository {
   constructor(env: Env | { DB: D1Database }) {
     super(env);
@@ -98,7 +100,7 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
   async getScanReportUrls(userIds: string[], projectIds: string[]): Promise<string[]> {
     if (userIds.length === 0) return [];
     const userPlaceholders = userIds.map(() => '?').join(',');
-    let scansQuery = `SELECT report_url FROM scans WHERE user_id IN (${userPlaceholders})`;
+    let scansQuery = `SELECT id, report_url FROM scans WHERE user_id IN (${userPlaceholders})`;
     const scansParams: any[] = [...userIds];
 
     if (projectIds.length > 0) {
@@ -107,10 +109,12 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
       scansParams.push(...projectIds);
     }
 
-    const res = await this.db.prepare(scansQuery).bind(...scansParams).all<{ report_url: string | null }>();
-    return res.results
-      ? res.results.map(s => s.report_url).filter((url): url is string => !!url)
-      : [];
+    const res = await this.db.prepare(scansQuery).bind(...scansParams).all<{ id: string; report_url: string | null }>();
+    // The R2 key is rebuilt from the trusted scan id; a stored value that is not exactly that
+    // scan's own report key is never handed to STORAGE.delete().
+    return (res.results || [])
+      .filter(s => !!s.report_url && s.report_url === reportKeyForScan(s.id))
+      .map(s => reportKeyForScan(s.id));
   }
 
   async getUserApiKeys(userIds: string[]): Promise<string[]> {

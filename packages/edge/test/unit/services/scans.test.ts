@@ -498,6 +498,26 @@ describe('ScansService Unit Tests', () => {
       await expect(scansService.saveWAFPatchReport('s1', {}, 'u1', true)).rejects.toThrow('Forbidden|403');
     });
 
+    it('refuses a removed member, even for a scan they created in the project', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', user_id: 'u1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.saveWAFPatchReport('s1', {}, 'u1', true)).rejects.toThrow('Forbidden|403');
+      expect(mockScansRepo.saveWAFPatchReport).not.toHaveBeenCalled();
+    });
+
+    it('lets the creator of a standalone scan (no project) save the report', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: '', user_id: 'u1' });
+      const res = await scansService.saveWAFPatchReport('s1', {}, 'u1', true);
+      expect(res.success).toBe(true);
+      expect(mockRbacRepo.checkPermission).not.toHaveBeenCalled();
+    });
+
+    it('AI triage updates also refuse a removed member who created the scan', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', user_id: 'u1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.batchUpdateFindingsAI('s1', [], 'u1', true)).rejects.toThrow('Forbidden|403');
+    });
+
     it('saves report successfully', async () => {
       mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', user_id: 'u1' });
       const report = { totalBypasses: 1, bundles: {} };

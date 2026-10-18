@@ -465,14 +465,22 @@ describe("D1 Database Migrations & API", () => {
     expect(members?.role).toBe('owner');
 
     // 4. Create a scan with a report URL for the project
-    const reportUrl = 'reports/test-scan-report.enc';
     const scanId = 'scan-to-be-deleted';
+    const reportUrl = `reports/${scanId}.enc`;
     await env.DB.prepare('INSERT INTO scans (id, project_id, target_url, profile, status, user_id, report_url) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .bind(scanId, projectId, 'http://test.com', 'default', 'pending', userId, reportUrl)
       .run();
 
     // Write a mock report file to storage
     await env.STORAGE.put(reportUrl, "encrypted fuzzer report contents");
+
+    // A second scan whose report_url was pointed at another tenant's object must not get that
+    // object deleted along with this account.
+    const victimKey = 'reports/someone-elses-scan.enc';
+    await env.STORAGE.put(victimKey, "another tenant's report");
+    await env.DB.prepare('INSERT INTO scans (id, project_id, target_url, profile, status, user_id, report_url) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind('scan-pointing-elsewhere', projectId, 'http://test.com', 'default', 'pending', userId, victimKey)
+      .run();
 
     // 5. Create a runner
     const runnerId = 'runner-to-be-deleted';
@@ -593,6 +601,7 @@ describe("D1 Database Migrations & API", () => {
     const scanPost = await env.DB.prepare('SELECT id FROM scans WHERE id = ?').bind(scanId).first();
     const runnerPost = await env.DB.prepare('SELECT id FROM runners WHERE id = ?').bind(runnerId).first();
     const storagePost = await env.STORAGE.get(reportUrl);
+    expect(await env.STORAGE.get(victimKey)).not.toBeNull();
 
     expect(userPost).toBeNull();
     expect(projPost).toBeNull();

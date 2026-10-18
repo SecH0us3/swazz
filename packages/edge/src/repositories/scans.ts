@@ -169,7 +169,9 @@ export class ScansRepository extends BaseService implements IScansRepository {
   }
 
   async updateScan(scanId: string, fields: Record<string, any>): Promise<any> {
-    const allowedFields = ['status', 'summary_stats', 'report_url', 'completed_at'] as const;
+    // report_url is not client-writable: only uploadReport sets it (to reports/<scanId>.enc), and
+    // account-deletion cleanup deletes R2 objects by it.
+    const allowedFields = ['status', 'summary_stats', 'completed_at'] as const;
     const setClauses: string[] = [];
     const values: any[] = [];
 
