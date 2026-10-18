@@ -38,6 +38,8 @@ export interface IAuthRepository {
   cancelUserDeletion(userId: string): Promise<void>;
 
   updateUserTwoFactorSecret(userId: string, encryptedSecret: string | null, enabled: number): Promise<void>;
+  consumeTotpCounter(userId: string, counter: number): Promise<boolean>;
+  consumePasskeyChallenge(challenge: string): Promise<boolean>;
 
   getPasskeysByUserId(userId: string): Promise<any[]>;
   getPasskeyByCredentialId(credentialId: string): Promise<any>;
@@ -173,7 +175,25 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async updateUserTwoFactorSecret(userId: string, encryptedSecret: string | null, enabled: number): Promise<void> {
-    await this.db.prepare('UPDATE users SET two_factor_secret = ?, two_factor_enabled = ? WHERE id = ?').bind(encryptedSecret, enabled, userId).run();
+    // Turning 2FA off forgets the replay marker; a later secret starts fresh.
+    const sql = encryptedSecret === null
+      ? 'UPDATE users SET two_factor_secret = ?, two_factor_enabled = ?, two_factor_last_counter = NULL WHERE id = ?'
+      : 'UPDATE users SET two_factor_secret = ?, two_factor_enabled = ? WHERE id = ?';
+    await this.db.prepare(sql).bind(encryptedSecret, enabled, userId).run();
+  }
+
+  /** Atomically marks a WebAuthn login challenge as spent; false if it was spent already. */
+  async consumePasskeyChallenge(challenge: string): Promise<boolean> {
+    const res = await this.db.prepare('INSERT OR IGNORE INTO used_passkey_challenges (challenge) VALUES (?)').bind(challenge).run();
+    return (res.meta?.changes ?? 0) > 0;
+  }
+
+  /** Atomically records a TOTP step as used; false if it (or a newer one) was used already. */
+  async consumeTotpCounter(userId: string, counter: number): Promise<boolean> {
+    const res = await this.db.prepare(
+      'UPDATE users SET two_factor_last_counter = ?1 WHERE id = ?2 AND (two_factor_last_counter IS NULL OR two_factor_last_counter < ?1)'
+    ).bind(counter, userId).run();
+    return (res.meta?.changes ?? 0) > 0;
   }
 
   async getPasskeysByUserId(userId: string): Promise<any[]> {

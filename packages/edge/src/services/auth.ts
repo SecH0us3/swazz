@@ -14,7 +14,7 @@ import {
   hashUsername, verifyDummyPassword, verifyTurnstile, deletionCache,
   safeCompare
 } from '../utils/auth';
-import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../utils/totp';
+import { generateTOTPSecret, matchTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../utils/totp';
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -500,7 +500,7 @@ export class AuthService implements IAuthService {
         await enforceUniformDelay(startTime);
         throw new Error('Invalid credentials|401');
       }
-      const isValid2fa = await verifyTOTP(decryptedSecret, body.two_factor_code);
+      const isValid2fa = await this.acceptTotp(user.id, decryptedSecret, body.two_factor_code);
       if (!isValid2fa) {
         await this.authRepo.recordFailedLogin(username);
         const postRateLimit = await this.authRepo.checkLoginRateLimit(username);
@@ -577,11 +577,18 @@ export class AuthService implements IAuthService {
       throw new Error('Invalid password or 2FA code|401');
     }
 
-    const isValid = await verifyTOTP(decryptedSecret, body.code);
+    const isValid = await this.acceptTotp(userId, decryptedSecret, body.code);
     if (!isValid) throw new Error('Invalid password or 2FA code|401');
 
     await this.authRepo.updateUserTwoFactorSecret(userId, userPass.two_factor_secret, 1);
     return { status: 'ok' };
+  }
+
+  /** A valid code is accepted once: its time step is recorded and never accepted again. */
+  private async acceptTotp(userId: string, secret: string, code: string): Promise<boolean> {
+    const counter = await matchTOTP(secret, code);
+    if (counter === null) return false;
+    return this.authRepo.consumeTotpCounter(userId, counter);
   }
 
   async disable2FA(userId: string, body: any): Promise<any> {
@@ -601,7 +608,7 @@ export class AuthService implements IAuthService {
       throw new Error('Invalid password or 2FA code|401');
     }
 
-    const isValid = await verifyTOTP(decryptedSecret, body.code);
+    const isValid = await this.acceptTotp(userId, decryptedSecret, body.code);
     if (!isValid) throw new Error('Invalid password or 2FA code|401');
 
     await this.authRepo.updateUserTwoFactorSecret(userId, null, 0);
@@ -724,8 +731,16 @@ export class AuthService implements IAuthService {
         } catch {}
       }
       await this.env.SESSION_CACHE.delete("passkey_login:" + pk.user_id);
+      if (expectedChallenge) {
+        await this.env.SESSION_CACHE.delete("passkey_login_challenge:" + expectedChallenge);
+      }
     }
     if (!expectedChallenge) throw new Error('Challenge expired or not found|400');
+    // Spend the challenge before verifying, whichever lookup found it: a captured assertion must
+    // not log in a second time. Synced passkeys report counter 0, so the counter cannot catch it.
+    if (!(await this.authRepo.consumePasskeyChallenge(expectedChallenge))) {
+      throw new Error('Challenge expired or not found|400');
+    }
 
     try {
       const verification = await verifyAuthenticationResponse({

@@ -688,6 +688,19 @@ describe("D1 Database Migrations & API", () => {
     const loginRes4 = await appFetchWrapper(loginReq4 as any, testEnv);
     expect(loginRes4.status).toBe(401);
 
+    // The code that enabled 2FA was used once already; replaying it must fail.
+    const replayRes = await appFetchWrapper(new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "Password123!", two_factor_code: validCode })
+    }) as any, testEnv);
+    expect(replayRes.status).toBe(401);
+
+    // Each code is single-use per 30 s step, so move the clock on before asking for a new one.
+    const realNow = Date.now();
+    let clockOffset = 30_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => realNow + clockOffset);
+
     const freshCode = await generateTOTP(setupBody.secret);
     const loginReq5 = new Request("http://localhost/api/auth/login", {
       method: "POST",
@@ -711,6 +724,7 @@ describe("D1 Database Migrations & API", () => {
     const disableRes1 = await appFetchWrapper(disableReq1 as any, testEnv);
     expect(disableRes1.status).toBe(401);
 
+    clockOffset += 30_000;
     const disableCode = await generateTOTP(setupBody.secret);
     const disableReq2 = new Request("http://localhost/api/auth/2fa/disable", {
       method: "POST",
@@ -722,6 +736,7 @@ describe("D1 Database Migrations & API", () => {
     });
     const disableRes2 = await appFetchWrapper(disableReq2 as any, testEnv);
     expect(disableRes2.status).toBe(200);
+    nowSpy.mockRestore();
 
     const loginReq6 = new Request("http://localhost/api/auth/login", {
       method: "POST",

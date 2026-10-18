@@ -11,7 +11,7 @@ import { Env, AppEnv } from '../../../src/env';
 import { Context } from 'hono';
 import * as simplewebauthn from '@simplewebauthn/server';
 import { verifyTurnstile, hashPassword, verifyPassword, hashApiKey, hashUsername, verifyDummyPassword } from '../../../src/utils/auth';
-import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../../../src/utils/totp';
+import { generateTOTPSecret, matchTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../../../src/utils/totp';
 
 // Mock utils
 vi.mock('../../../src/utils/auth', async (importOriginal) => {
@@ -32,7 +32,7 @@ vi.mock('../../../src/utils/auth', async (importOriginal) => {
 
 vi.mock('../../../src/utils/totp', () => ({
   generateTOTPSecret: vi.fn(),
-  verifyTOTP: vi.fn(),
+  matchTOTP: vi.fn(),
   encryptTOTPSecret: vi.fn(),
   decryptTOTPSecret: vi.fn()
 }));
@@ -67,6 +67,8 @@ describe('AuthService', () => {
       updateUserApiKey: vi.fn(),
       updateUserPublicKey: vi.fn(),
       isPublicKeyTakenByOther: vi.fn().mockResolvedValue(false),
+      consumeTotpCounter: vi.fn().mockResolvedValue(true),
+      consumePasskeyChallenge: vi.fn().mockResolvedValue(true),
       checkLoginRateLimit: vi.fn().mockResolvedValue({ locked: false, retryAfter: 0 }),
       getUserByUsername: vi.fn(),
       recordFailedLogin: vi.fn(),
@@ -265,17 +267,40 @@ describe('AuthService', () => {
       mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
-      vi.mocked(verifyTOTP).mockResolvedValue(true);
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
 
       const res = await service.login({ username: 'test', password: 'pw', two_factor_code: '123' }, '127.0.0.1', undefined, undefined, mockContext);
       expect(res.status).toBe('ok');
     });
     
+    it('refuses a valid 2fa code that was already used (replay)', async () => {
+      mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+      vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
+      mockRepo.consumeTotpCounter.mockResolvedValue(false);
+
+      await expect(service.login({ username: 'test', password: 'pw', two_factor_code: '123456' }, '127.0.0.1', undefined, undefined, mockContext)).rejects.toThrow('Invalid credentials|401');
+      expect(mockRepo.consumeTotpCounter).toHaveBeenCalledWith('u1', 57000000);
+    });
+
+    it('refuses a replayed code when disabling 2fa', async () => {
+      mockRepo.getUserById.mockResolvedValue({ username: 'test' });
+      mockRepo.getUserByUsername.mockResolvedValue({ password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+      vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
+      mockRepo.consumeTotpCounter.mockResolvedValue(false);
+
+      await expect(service.disable2FA('u1', { password: 'pw', code: '123456' })).rejects.toThrow('|401');
+      expect(mockRepo.updateUserTwoFactorSecret).not.toHaveBeenCalled();
+    });
+
     it('fails 2fa code correctly', async () => {
       mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
-      vi.mocked(verifyTOTP).mockResolvedValue(false);
+      vi.mocked(matchTOTP).mockResolvedValue(null);
 
       await expect(service.login({ username: 'test', password: 'pw', two_factor_code: 'bad' }, '127.0.0.1', undefined, undefined, mockContext)).rejects.toThrow('Invalid credentials|401');
     });
@@ -299,7 +324,7 @@ describe('AuthService', () => {
       mockRepo.getUserByUsername.mockResolvedValue({ password_hash: 'hash', two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
-      vi.mocked(verifyTOTP).mockResolvedValue(true);
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
 
       const res = await service.verify2FA('u1', { password: 'pw', code: '123' });
       expect(res.status).toBe('ok');
@@ -311,7 +336,7 @@ describe('AuthService', () => {
       mockRepo.getUserByUsername.mockResolvedValue({ password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
-      vi.mocked(verifyTOTP).mockResolvedValue(true);
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
 
       const res = await service.disable2FA('u1', { password: 'pw', code: '123' });
       expect(res.status).toBe('ok');
@@ -394,6 +419,18 @@ describe('AuthService', () => {
       const res = await service.verifyPasskeyLogin({ id: '1' }, 'ip', 'origin', 'rp', mockContext);
       expect(res.status).toBe('ok');
       expect(res.token).toBeDefined();
+    });
+
+    it('verifyPasskeyLogin spends the challenge before verifying and refuses a replay', async () => {
+      mockRepo.getPasskeyByCredentialId.mockResolvedValue({ user_id: 'u1', public_key: 'AAAA', counter: 0, transports: '' });
+      mockRepo.getUserById.mockResolvedValue({ username: 'u' });
+      mockSessionCacheGet.mockResolvedValue('chal-1');
+      mockRepo.consumePasskeyChallenge.mockResolvedValue(false); // already spent by the first login
+      vi.mocked(simplewebauthn.verifyAuthenticationResponse).mockClear();
+
+      await expect(service.verifyPasskeyLogin({ id: '1' }, 'ip', 'origin', 'rp', mockContext)).rejects.toThrow('Challenge expired or not found|400');
+      expect(mockRepo.consumePasskeyChallenge).toHaveBeenCalledWith('chal-1');
+      expect(simplewebauthn.verifyAuthenticationResponse).not.toHaveBeenCalled();
     });
 
     it('generatePasskeyLoginOptions fails if non-interactive service account', async () => {

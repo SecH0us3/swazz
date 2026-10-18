@@ -25,15 +25,17 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
   }
 
   async cleanupSecurityTables(): Promise<{ challenges: number; rateLimits: number; loginHistory: number; auditLogs: number }> {
-    const [challengesRes, rateLimitsRes, historyRes, auditRes] = await Promise.all([
+    const [challengesRes, usedPasskeyRes, rateLimitsRes, historyRes, auditRes] = await Promise.all([
       this.db.prepare("DELETE FROM login_challenges WHERE expires_at < datetime('now')").run(),
+      // Login challenges expire after 5 minutes, so a day-old spent marker can never matter again.
+      this.db.prepare("DELETE FROM used_passkey_challenges WHERE used_at < datetime('now', '-1 day')").run(),
       this.db.prepare("DELETE FROM rate_limits WHERE reset_at < datetime('now')").run(),
       this.db.prepare("DELETE FROM user_login_history WHERE created_at < datetime('now', '-90 days')").run(),
       this.db.prepare("DELETE FROM audit_logs WHERE timestamp < datetime('now', '-45 days')").run(),
     ]);
 
     return {
-      challenges: challengesRes.meta?.changes || 0,
+      challenges: (challengesRes.meta?.changes || 0) + (usedPasskeyRes.meta?.changes || 0),
       rateLimits: rateLimitsRes.meta?.changes || 0,
       loginHistory: historyRes.meta?.changes || 0,
       auditLogs: auditRes.meta?.changes || 0,
