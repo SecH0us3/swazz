@@ -30,6 +30,7 @@ func (a *MCPStatusAnalyzer) isMCPEndpoint(input *AnalysisInput) bool {
 		input.Method == "READ" ||
 		input.Method == "PROMPT" ||
 		strings.HasPrefix(input.Endpoint, "mcp://") ||
+		strings.HasPrefix(input.Endpoint, "webmcp://") ||
 		strings.Contains(input.Endpoint, "/mcp/")
 }
 
