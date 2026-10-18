@@ -358,6 +358,23 @@ describe('QueueService', () => {
     expect(stateManager.jobs.get('scan-1')).toBe(mockWs);
   });
 
+  it('leaves a scan queued for its owner\'s own busy runner instead of giving it to a shared runner', async () => {
+    const ownRunner = { send: vi.fn(), deserializeAttachment: vi.fn().mockReturnValue({ activeJobs: Array.from({ length: 10 }, (_, i) => `j${i}`) }), serializeAttachment: vi.fn() } as any;
+    mockState.getTags = vi.fn((socket: any) => socket === ownRunner ? ['runner', 'user_id:user-1'] : ['runner', 'shared']);
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-mine', user_id: 'user-1', userPublicKey: null, status: 'queued', target_url: 'http://a.example.com' },
+      { id: 'scan-other', user_id: 'user-2', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' }
+    ]);
+
+    const stateManager = new StateManager(mockState);
+    stateManager.runners.add(ownRunner);
+    stateManager.runners.add(mockWs);
+    await new QueueService(mockEnv, mockState, stateManager).checkAndDispatchQueuedScans(mockWs);
+
+    const sent = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]).payload.runId);
+    expect(sent).toEqual(['scan-other']);
+  });
+
   it('fails a scan whose stored config is not an object and keeps dispatching the scans behind it', async () => {
     mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
     mockGetActiveScans.mockResolvedValue([

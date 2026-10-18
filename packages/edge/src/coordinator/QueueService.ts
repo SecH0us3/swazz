@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Env } from '../env';
-import { isRunnerOwnedBy, isSharedRunnerTags, configForRunner } from './runnerAccess';
+import { isRunnerOwnedBy, isSharedRunnerTags, configForRunner, getRunnerOwnerId } from './runnerAccess';
 import { StateManager, MAX_ACTIVE_JOBS_PER_RUNNER } from './StateManager';
 import { scanStateKeys, clearScanState, batchStorageGet, FINISHED_SCANS_KEY, getFinishedScans, getPublicKeyFromTags } from './utils';
 import { ScansRepository } from '../repositories/scans';
@@ -45,6 +45,16 @@ export class QueueService {
     const p = runLoop();
     this.inFlightByRunner.set(ws, p);
     return p;
+  }
+
+  private connectedRunnerOwners(): Set<string> {
+    const owners = new Set<string>();
+    for (const runnerWs of this.stateManager.runners) {
+      const tags = this.state.getTags(runnerWs);
+      const owner = isSharedRunnerTags(tags) ? null : getRunnerOwnerId(tags);
+      if (owner) owners.add(owner);
+    }
+    return owners;
   }
 
   private collectRecentJobIds(ws: WebSocket): Set<string> {
@@ -93,6 +103,9 @@ export class QueueService {
       const finishedList = storedData.get(FINISHED_SCANS_KEY);
       const finishedScans = new Set<string>(Array.isArray(finishedList) ? finishedList : []);
       const recentJobs = this.collectRecentJobIds(ws);
+      // Owners with a runner of their own connected: their scans wait for it, even when it is
+      // busy, rather than going to a shared runner (the same rule as DispatchHandler).
+      const ownersWithOwnRunner = isShared ? this.connectedRunnerOwners() : new Set<string>();
 
       for (const scan of activeScans) {
         // Skip scans that recently finished on any runner (either recorded durably in DO storage
@@ -138,7 +151,7 @@ export class QueueService {
               logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to fetch config from scan_configs", { error: err });
             }
           }
-          if (!scanUserPubKey && !disableShared) {
+          if (!scanUserPubKey && !disableShared && !(scan.user_id && ownersWithOwnRunner.has(scan.user_id))) {
             isCompatible = true;
           }
         }
