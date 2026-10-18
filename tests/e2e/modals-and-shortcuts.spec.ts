@@ -32,7 +32,7 @@ test.describe('Keyboard Shortcuts and Modals Dismissals E2E Tests', () => {
 
     // 3. Verify modal is displayed and lists valid shortcuts
     await expect(modal).toBeVisible();
-    await expect(modal.locator('h2')).toHaveText('Keyboard Shortcuts');
+    await expect(page.locator('h2').within(modal)).toHaveText('Keyboard Shortcuts');
     await expect(page.locator('.hotkeys-desc:has-text("Trigger / Run Fuzzer")')).toBeVisible();
 
     // 4. Press Escape key and verify that modal closes
@@ -60,7 +60,7 @@ test.describe('Keyboard Shortcuts and Modals Dismissals E2E Tests', () => {
     await expect(modal).toBeVisible();
 
     // 5. Click the close button
-    const closeBtn = modal.locator('.modal-close');
+    const closeBtn = page.locator('.modal-close').within(modal);
     await expect(closeBtn).toBeVisible();
     await closeBtn.click();
 

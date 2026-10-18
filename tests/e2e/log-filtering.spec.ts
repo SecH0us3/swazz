@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile, switchDashboardTab } from './helpers';
 
 test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
   test('should correctly filter fuzzer request logs by status and path', async ({ page }) => {
@@ -46,9 +46,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 6. Switch to Logs tab
-    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
-    await expect(requestLogsTab).toBeVisible();
-    await requestLogsTab.click();
+    await switchDashboardTab(page, 'Logs');
 
     // Wait for logs list to render
     const logPaths = page.locator('.log-path');
@@ -64,10 +62,11 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     const tab5xx = page.locator('.inspector-tab:has-text("5xx")');
     await expect(tab5xx).toBeVisible();
     await tab5xx.click();
+    await expect(tab5xx).toHaveClass(/active/);
 
-    // Verify all visible rows have status-5xx class (wait for first row to be updated)
-    const first5xxRow = page.locator('.log-row:not(.log-header)').first();
-    await expect(first5xxRow).toHaveClass(/status-5xx/);
+    // Wait for the filter to take effect: non-5xx rows must disappear
+    await expect(page.locator('.log-row:not(.log-header):not(.status-5xx)')).toHaveCount(0, { timeout: TIMEOUTS.DEFAULT });
+
     const visible5xxRows = page.locator('.log-row:not(.log-header)');
     const count5xx = await visible5xxRows.count();
     

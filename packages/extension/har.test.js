@@ -287,6 +287,38 @@ describe('SwazzHar module', () => {
             expect(har.log.entries).toHaveLength(1);
             expect(har.log.entries[0].request.url).toBe('https://example.com/valid');
         });
+
+        it('round-trips webmcp://tool/<name> endpoints without losing scheme or throwing', () => {
+            const requests = {
+                'CALL:webmcp://tool/search_data': {
+                    key: 'CALL:webmcp://tool/search_data',
+                    method: 'CALL',
+                    path: 'webmcp://tool/search_data',
+                    exampleUrl: 'webmcp://tool/search_data',
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-webmcp-annotations': '{"readOnlyHint":true}'
+                    },
+                    count: 1,
+                    lastCaptured: 1710000030000,
+                    queryKeys: [],
+                    queryVariations: [],
+                    bodyVariations: ['{"type":"object","properties":{"q":{"type":"string"}}}'],
+                    statuses: {}
+                }
+            };
+            const har = SwazzHar.buildHarPayload(requests);
+            expect(har.log.entries).toHaveLength(1);
+            expect(har.log.entries[0].request.url).toBe('webmcp://tool/search_data');
+            expect(har.log.entries[0].request.method).toBe('CALL');
+
+            const parsed = SwazzHar.parseHarIntoRequests(har);
+            expect(parsed['CALL:webmcp://tool/search_data']).toBeDefined();
+            expect(parsed['CALL:webmcp://tool/search_data'].path).toBe('webmcp://tool/search_data');
+            expect(parsed['CALL:webmcp://tool/search_data'].bodyVariations).toEqual([
+                '{"type":"object","properties":{"q":{"type":"string"}}}'
+            ]);
+        });
     });
 
     describe('parseHarIntoRequests error handling', () => {
