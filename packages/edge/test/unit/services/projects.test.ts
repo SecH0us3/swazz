@@ -254,6 +254,13 @@ describe('ProjectService', () => {
       expect(env.DB.batch).not.toHaveBeenCalled();
     });
 
+    it('rejects the retired runner pseudo-role, like member edits and invitations do', async () => {
+      mockCheckUsernameExists.mockResolvedValue(false);
+      rbacRepo.checkCustomRolesExist.mockResolvedValue([]);
+      await expect(service.createProjectMemberAccount('p1', { username: 'svc1', roles: ['runner'] }, 'owner1'))
+        .rejects.toThrow('One or more custom roles are invalid|400');
+    });
+
     it('refuses to provision without a known caller', async () => {
       mockCheckUsernameExists.mockResolvedValue(false);
       await expect(service.createProjectMemberAccount('p1', { username: 'svc1', roles: ['viewer'] }, null))

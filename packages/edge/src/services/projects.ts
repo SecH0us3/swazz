@@ -7,6 +7,7 @@ import { Env } from '../env';
 import { IProjectRepository } from '../repositories/projects';
 import { IRbacRepository } from '../repositories/rbac';
 import { assertCanGrant } from './rbac';
+import { isBuiltInRole } from '../config/rbac';
 import { signWebhookPayload } from '../utils/webhooks';
 import { validateWebhookUrl, safeFetchWebhook } from '../utils/ssrf';
 import { ulid } from 'ulidx';
@@ -368,8 +369,7 @@ export class ProjectService implements IProjectService {
 
     const uniqueRoles = Array.from(new Set(roles));
 
-    const defaultRoles = ['owner', 'editor', 'viewer'];
-    const customRoles = uniqueRoles.filter(r => !defaultRoles.includes(r));
+    const customRoles = uniqueRoles.filter(r => !isBuiltInRole(r));
     if (customRoles.length > 0) {
       const existingCustom = await this.rbacRepo.checkCustomRolesExist(projectId, customRoles);
       if (existingCustom.length !== customRoles.length) {

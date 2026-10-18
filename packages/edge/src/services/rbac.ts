@@ -5,7 +5,7 @@
 
 import { Env } from '../env';
 import { IRbacRepository } from '../repositories/rbac';
-import { PERMISSIONS, DEFAULT_ROLES } from '../config/rbac';
+import { PERMISSIONS, DEFAULT_ROLES, isBuiltInRole, isReservedRoleId } from '../config/rbac';
 import { sendProjectInvitationEmail } from './email';
 import { verifyTurnstile } from '../utils/auth';
 
@@ -93,7 +93,7 @@ export class RbacService implements IRbacService {
   }
 
   private async assertRolesExist(projectId: string, roles: string[]): Promise<void> {
-    const customRoles = roles.filter((r: string) => !Object.keys(DEFAULT_ROLES).includes(r));
+    const customRoles = roles.filter((r: string) => !isBuiltInRole(r));
     if (customRoles.length > 0) {
       const foundIds = await this.rbacRepo.checkCustomRolesExist(projectId, customRoles);
       const missing = customRoles.filter((r: string) => !foundIds.includes(r));
@@ -161,8 +161,7 @@ export class RbacService implements IRbacService {
 
     // Validate included roles
     if (includedRoles.length > 0) {
-      const defaultRoleIds = Object.keys(DEFAULT_ROLES);
-      const customCandidates = includedRoles.filter(id => !defaultRoleIds.includes(id));
+      const customCandidates = includedRoles.filter(id => !isBuiltInRole(id));
       if (customCandidates.length > 0) {
         const foundIds = await this.rbacRepo.checkCustomRolesExist(projectId, customCandidates);
         const missing = customCandidates.filter(id => !foundIds.includes(id));
@@ -308,7 +307,7 @@ export class RbacService implements IRbacService {
     if (!roleId || typeof roleId !== 'string' || roleId.trim() === '') throw new Error('Invalid role ID|400');
     await this.assertNotGuest(userId);
 
-    if (Object.keys(DEFAULT_ROLES).includes(roleId) || roleId === 'runner') {
+    if (isReservedRoleId(roleId)) {
       throw new Error('Default roles cannot be edited|400');
     }
     await this.assertCustomRoleInProject(projectId, roleId);
@@ -333,8 +332,7 @@ export class RbacService implements IRbacService {
     }
 
     if (includedRoles.length > 0) {
-      const defaultRoleIds = Object.keys(DEFAULT_ROLES);
-      const customCandidates = includedRoles.filter(id => !defaultRoleIds.includes(id));
+      const customCandidates = includedRoles.filter(id => !isBuiltInRole(id));
       if (customCandidates.length > 0) {
         const foundIds = await this.rbacRepo.checkCustomRolesExist(projectId, customCandidates);
         const missing = customCandidates.filter(id => !foundIds.includes(id));
@@ -360,7 +358,7 @@ export class RbacService implements IRbacService {
     if (!roleId || typeof roleId !== 'string' || roleId.trim() === '') throw new Error('Invalid role ID|400');
     await this.assertNotGuest(userId);
 
-    if (Object.keys(DEFAULT_ROLES).includes(roleId) || roleId === 'runner') {
+    if (isReservedRoleId(roleId)) {
       throw new Error('Default roles cannot be deleted|400');
     }
     await this.assertCustomRoleInProject(projectId, roleId);

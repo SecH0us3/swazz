@@ -48,7 +48,7 @@ export interface IRbacRepository {
   isProjectMember(projectId: string, userId: string): Promise<boolean>;
 }
 
-import { DEFAULT_ROLES } from '../config/rbac';
+import { DEFAULT_ROLES, isBuiltInRole } from '../config/rbac';
 
 // Bump the version whenever the way permissions are computed changes: entries cached under the
 // old rules (for 24h) would otherwise keep granting what the new rules no longer do. v2 dropped
@@ -194,8 +194,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     }
 
     // 2. Resolve custom roles in DB only if there are custom role IDs
-    const defaultRoles = ['owner', 'editor', 'viewer', 'runner'];
-    const customRoleIds = roleIds.filter(rid => !defaultRoles.includes(rid));
+    const customRoleIds = roleIds.filter(rid => !isBuiltInRole(rid));
 
     if (customRoleIds.length > 0) {
       const placeholders = customRoleIds.map(() => '?').join(',');
