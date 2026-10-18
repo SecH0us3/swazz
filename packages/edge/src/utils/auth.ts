@@ -179,8 +179,9 @@ export async function verifyPassword(password: string, storedHash: string): Prom
  * Returns true if verification succeeds, false otherwise.
  */
 export async function verifyTurnstile(token: string, secret: string, remoteip?: string): Promise<boolean> {
-  // Always pass for dummy test keys or mock tokens in local development
-  if (secret === '1x00000000000000000000000000000000' || token === 'mock-token' || token.startsWith('mock-')) {
+  // The token comes from the unauthenticated request body, so nothing about it may skip
+  // verification. Only a dummy secret, which the operator configures, does.
+  if (secret === '1x00000000000000000000000000000000') {
     return true;
   }
 

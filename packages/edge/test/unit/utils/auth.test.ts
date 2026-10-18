@@ -253,10 +253,20 @@ describe('Auth Utils - Additional functions', () => {
   });
 
   describe('verifyTurnstile', () => {
-    it('bypasses siteverify for mock tokens and dummy secret keys', async () => {
-      expect(await verifyTurnstile('mock-token', 'sec')).toBe(true);
+    it('bypasses siteverify only for the dummy secret key', async () => {
       expect(await verifyTurnstile('tok', '1x00000000000000000000000000000000')).toBe(true);
-      expect(await verifyTurnstile('mock-123', 'sec')).toBe(true);
+    });
+
+    it('never trusts a client-chosen token value, whatever it looks like', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: false }) });
+      vi.stubGlobal('fetch', mockFetch);
+      try {
+        expect(await verifyTurnstile('mock-token', 'real-secret')).toBe(false);
+        expect(await verifyTurnstile('mock-123', 'real-secret')).toBe(false);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it('queries turnstile siteverify endpoint', async () => {
