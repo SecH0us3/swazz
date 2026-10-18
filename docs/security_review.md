@@ -56,6 +56,9 @@ graph TD
 ### Trust Levels & Boundaries
 - **User Dashboard to Edge API (HTTP/TLS)**: Users authenticate via username/password or token. Once authenticated, users can manage projects and trigger scans. Data access is restricted using row-level ownership checks (e.g. project/scan membership).
 - **Go Runner Agent to Edge Coordinator (WSS/TLS)**: The agent executes in a potentially untrusted environment (e.g., local developer machines or shared runner networks). It must authenticate before being permitted to receive jobs or upload spec parses.
+  - A runner authenticated with a user's API key or registered Ed25519 key belongs to that user (the Worker tags it with the authenticated `user_id`). It receives only that user's scans and spec imports, and only that user can see or restart it. A public key can be registered to one account only.
+  - A **shared runner**, which takes every tenant's scans and their target credentials, must present the operator's `SHARED_RUNNER_TOKEN`. The coordinator forces a scan's `allow_private_ips` off before handing the scan to a shared runner, unless `SHARED_RUNNERS_ALLOW_PRIVATE_IPS=true`.
+  - Runner-reported data (events, findings, parse results) is tenant-controlled input. It is validated before it is stored, accepted only from the runner a job or parse request was sent to, and cannot fail other tenants' queue batches.
 - **Go Runner Agent to Target API (HTTP/S)**: The fuzzer issues massive quantities of highly mutated and potentially malicious payloads. This outbound execution line is heavily guarded to prevent exploitation of the runner's own network.
 
 ---
@@ -212,7 +215,8 @@ sequenceDiagram
     Worker->>DO: Dispatch run job (runId, url, userPublicKey)
     
     %% Cache Check
-    DO->>DB: SELECT base_path, endpoints_r2_key FROM swagger_cache WHERE url = ?
+    Note over DO,DB: swagger_cache is keyed per requesting user ("user:<id>|<url>"), so one tenant never reads or writes another's entries
+    DO->>DB: SELECT base_path, endpoints_r2_key FROM swagger_cache WHERE url = <per-user key>
     alt Cache Hit
         DB-->>DO: Return cache records (base_path, endpoints_r2_key)
         DO->>R2: GET key (endpoints_r2_key)
@@ -225,7 +229,7 @@ sequenceDiagram
         Agent-->>DO: WS message: parse_result { reqId, base_path, endpoints, raw_swagger }
         DO->>R2: PUT raw_swagger & endpoints JSON
         R2-->>DO: Return storage keys
-        DO->>DB: INSERT INTO swagger_cache (url, base_path, endpoints_r2_key, fetched_at)
+        DO->>DB: INSERT INTO swagger_cache (<per-user key>, base_path, endpoints_r2_key, fetched_at)
         DO->>Agent: Dispatch job with config & endpoints
     end
 ```
