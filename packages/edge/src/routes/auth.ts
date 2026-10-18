@@ -5,6 +5,7 @@
 
 import { Hono, Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import { decode as decodeJwt } from 'hono/jwt';
 import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { errorStatus } from '../utils/http';
@@ -20,23 +21,41 @@ const PASSWORD_AUTH_DISABLED_ERROR = 'Password authentication is disabled';
 
 const OAUTH_CALLBACK_PATH = '/api/auth/callback';
 
+// Each flow gets its own cookie, named after the start of its nonce, so two flows started in the
+// same browser (link GitHub in one tab, sign in with GitLab in another) do not overwrite each other.
+const oauthNonceCookieName = (nonce: string) => `${OAUTH_NONCE_COOKIE}_${nonce.slice(0, 16)}`;
+// Secure only over HTTPS: some browsers refuse Secure cookies on http://localhost in local dev.
+const isHttps = (c: Context<AppEnv>) => new URL(c.req.url).protocol === 'https:';
+
 /** Ties a new OAuth flow to this browser; returns the nonce to embed in the state. */
 function startOAuthFlow(c: Context<AppEnv>): string {
   const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
-  setCookie(c, OAUTH_NONCE_COOKIE, nonce, {
+  setCookie(c, oauthNonceCookieName(nonce), nonce, {
     path: OAUTH_CALLBACK_PATH,
     httpOnly: true,
-    secure: true,
+    secure: isHttps(c),
     sameSite: 'Lax', // sent on the provider's top-level redirect back to the callback
     maxAge: OAUTH_STATE_TTL_SECONDS,
   });
   return nonce;
 }
 
-/** Reads and clears this browser's OAuth nonce; each one is good for a single callback. */
-function finishOAuthFlow(c: Context<AppEnv>): string | undefined {
-  const nonce = getCookie(c, OAUTH_NONCE_COOKIE);
-  deleteCookie(c, OAUTH_NONCE_COOKIE, { path: OAUTH_CALLBACK_PATH, secure: true });
+/**
+ * Reads and clears the nonce cookie of the flow this state belongs to; each is good for one
+ * callback. The state is only decoded here to find the cookie; the service still verifies its
+ * signature and that the nonce matches.
+ */
+function finishOAuthFlow(c: Context<AppEnv>, state: string): string | undefined {
+  let claimed: unknown;
+  try {
+    claimed = decodeJwt(state).payload?.nonce;
+  } catch {
+    return undefined;
+  }
+  if (typeof claimed !== 'string' || !/^[0-9a-f]{64}$/.test(claimed)) return undefined;
+  const name = oauthNonceCookieName(claimed);
+  const nonce = getCookie(c, name);
+  deleteCookie(c, name, { path: OAUTH_CALLBACK_PATH, secure: isHttps(c) });
   return nonce;
 }
 
@@ -648,7 +667,7 @@ export function registerAuthRoutes(
       }
 
       const services = authServicesFactory(c.env);
-      const result = await services.handleGithubCallback(code, state, frontendUrl, c, finishOAuthFlow(c));
+      const result = await services.handleGithubCallback(code, state, frontendUrl, c, finishOAuthFlow(c, state));
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);
@@ -701,7 +720,7 @@ export function registerAuthRoutes(
       }
 
       const services = authServicesFactory(c.env);
-      const result = await services.handleGitlabCallback(code, state, frontendUrl, c, finishOAuthFlow(c));
+      const result = await services.handleGitlabCallback(code, state, frontendUrl, c, finishOAuthFlow(c, state));
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);

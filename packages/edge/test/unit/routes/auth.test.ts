@@ -553,23 +553,40 @@ describe('Auth Routes Unit Tests', () => {
       const res = await liveApp.request('http://example.com/api/auth/callback/github?code=123&state=state123');
       expect(res.status).toBe(302);
     });
-    it('login binds the flow to this browser with an HttpOnly, Lax nonce cookie embedded in the state', async () => {
+    it('login binds the flow to this browser with its own HttpOnly, Lax nonce cookie', async () => {
       mockAuthService.handleGithubLogin.mockResolvedValue('https://github.com/login');
       const res = await app.request('/api/auth/login/github');
       const cookie = res.headers.get('Set-Cookie') || '';
-      const nonce = /swazz_oauth_nonce=([0-9a-f]{64})/.exec(cookie)?.[1];
-      expect(nonce).toBeDefined();
+      const match = /swazz_oauth_nonce_([0-9a-f]{16})=([0-9a-f]{64})/.exec(cookie);
+      expect(match).not.toBeNull();
+      expect(match![2].startsWith(match![1])).toBe(true);
       expect(cookie).toContain('HttpOnly');
       expect(cookie).toContain('SameSite=Lax');
       expect(cookie).toContain('Path=/api/auth/callback');
-      expect(mockAuthService.handleGithubLogin.mock.calls[0][2]).toBe(nonce);
+      expect(cookie).not.toContain('Secure'); // plain http in this test
+      expect(mockAuthService.handleGithubLogin.mock.calls[0][2]).toBe(match![2]);
     });
 
-    it('callback hands the browser nonce to the service and clears it', async () => {
+    it('marks the nonce cookie Secure over https', async () => {
+      mockAuthService.handleGithubLogin.mockResolvedValue('https://github.com/login');
+      const res = await app.request('https://swazz.example/api/auth/login/github');
+      expect(res.headers.get('Set-Cookie')).toContain('Secure');
+    });
+
+    it('two flows in one browser keep separate nonces; each callback reads and clears its own', async () => {
+      const nonceA = 'a'.repeat(64);
+      const nonceB = 'b'.repeat(64);
+      const stateFor = (nonce: string) => `e30.${btoa(JSON.stringify({ nonce })).replace(/=+$/, '')}.sig`;
       mockAuthService.handleGithubCallback.mockResolvedValue({ redirectUrl: 'http://localhost:5173' });
-      const res = await app.request('/api/auth/callback/github?code=1&state=s', { headers: { Cookie: 'swazz_oauth_nonce=abc' } });
-      expect(mockAuthService.handleGithubCallback.mock.calls[0][4]).toBe('abc');
-      expect(res.headers.get('Set-Cookie')).toMatch(/swazz_oauth_nonce=;.*Max-Age=0/);
+
+      const res = await app.request(`/api/auth/callback/github?code=1&state=${stateFor(nonceA)}`, {
+        headers: { Cookie: `swazz_oauth_nonce_${nonceA.slice(0, 16)}=${nonceA}; swazz_oauth_nonce_${nonceB.slice(0, 16)}=${nonceB}` }
+      });
+
+      expect(mockAuthService.handleGithubCallback.mock.calls[0][4]).toBe(nonceA);
+      const setCookie = res.headers.get('Set-Cookie') || '';
+      expect(setCookie).toMatch(new RegExp(`swazz_oauth_nonce_${nonceA.slice(0, 16)}=;.*Max-Age=0`));
+      expect(setCookie).not.toContain(nonceB.slice(0, 16));
     });
 
     it('callback without the nonce cookie passes no nonce', async () => {
