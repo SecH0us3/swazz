@@ -10,9 +10,9 @@ services:
     environment:
       # Operator credential for the shared runner below. Generate one with: openssl rand -hex 32
       SWAZZ_RUNNER_TOKEN: ${SWAZZ_RUNNER_TOKEN:?Set SWAZZ_RUNNER_TOKEN in .env (openssl rand -hex 32)}
-      # This all-in-one stack is single-tenant, so scans may opt into private targets on the
-      # shared runner. Set to false if other people can sign in to this coordinator.
-      SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS: ${SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS:-true}
+      # Off by default: with it on, anyone who can sign in can aim the shared runner at this
+      # host's private network. Set to true only when you are the coordinator's only user.
+      SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS: ${SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS:-false}
     restart: unless-stopped
 
   frontend:

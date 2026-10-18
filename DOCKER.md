@@ -45,7 +45,7 @@ docker run --rm -it ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> run-agent \
 - **Shared runner** (takes every user's scans): connects with the operator token `SWAZZ_RUNNER_TOKEN`, which the coordinator reads as `SHARED_RUNNER_TOKEN` (at least 32 characters). Treat it like a password.
 - **Personal runner**: connects with a user's own API key, or with a registered Ed25519 public key, and only ever receives that user's scans and spec imports.
 - A shared runner sees every user's scan configuration, target credentials included, so run it only on infrastructure you operate.
-- `SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS` (`SHARED_RUNNERS_ALLOW_PRIVATE_IPS` on the coordinator) decides whether a scan's `allow_private_ips` survives on the shared runner. Keep it `false` when other people can sign in.
+- `SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS` (`SHARED_RUNNERS_ALLOW_PRIVATE_IPS` on the coordinator) decides whether a scan's `allow_private_ips` survives on the shared runner. It defaults to `false`. Set it to `true` in `.env` only when you are the coordinator's only user (for example, to fuzz a service on your own Docker network).
 
 ### CORS Configuration
 - **Development**: `ALLOWED_ORIGIN=http://localhost` ✅
