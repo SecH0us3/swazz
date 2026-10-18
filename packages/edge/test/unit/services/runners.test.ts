@@ -422,6 +422,27 @@ describe('configForRunner', () => {
     expect(configForRunner(config, ['runner', 'shared'], { SHARED_RUNNERS_ALLOW_PRIVATE_IPS: 'true' })).toBe(config);
   });
 
+  // The Go agent decodes with encoding/json, which matches keys case-insensitively (with Unicode
+  // folding) and keeps the last match. Each of these turned private IPs back on before the fix,
+  // verified against the real Go decoder.
+  test.each([
+    { security: { allow_private_ips: true, ALLOW_PRIVATE_IPS: true } },
+    { security: {}, Security: { allow_private_ips: true } },
+    { '\u017fecurity': { 'allow_private_ip\u017f': true } },
+    { security: { Allow_Private_IPs: true } },
+  ])('leaves no key the agent could read as allow_private_ips: %j', (attack) => {
+    const out = configForRunner(attack, ['runner', 'shared'], {});
+    const keys = (o: object) => Object.keys(o).map(k => k.toUpperCase().toLowerCase());
+    expect(keys(out).filter(k => k === 'security')).toEqual(['security']);
+    expect(keys(out.security).filter(k => k === 'allow_private_ips')).toEqual(['allow_private_ips']);
+    expect(out.security.allow_private_ips).toBe(false);
+  });
+
+  test('keeps the other security settings from every security-like key', () => {
+    const out = configForRunner({ security: { timeout: 5 }, Security: { retries: 2 }, base_url: 'x' }, ['runner', 'shared'], {});
+    expect(out).toEqual({ base_url: 'x', security: { timeout: 5, retries: 2, allow_private_ips: false } });
+  });
+
   test('adds the guard when the config has no security block', () => {
     expect(configForRunner({ base_url: 'x' }, ['runner', 'shared'], {})).toEqual({ base_url: 'x', security: { allow_private_ips: false } });
   });

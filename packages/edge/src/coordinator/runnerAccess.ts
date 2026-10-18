@@ -34,7 +34,32 @@ export function isSharedRunnerTags(tags: string[]): boolean {
  */
 export function configForRunner(config: any, tags: string[], env: { SHARED_RUNNERS_ALLOW_PRIVATE_IPS?: string }): any {
   if (!isSharedRunnerTags(tags) || env.SHARED_RUNNERS_ALLOW_PRIVATE_IPS === 'true') return config;
-  if (!config || typeof config !== 'object' || Array.isArray(config)) return config;
-  const security = config.security && typeof config.security === 'object' && !Array.isArray(config.security) ? config.security : {};
-  return { ...config, security: { ...security, allow_private_ips: false } };
+  if (!isPlainObject(config)) return config;
+  // Every key the agent's decoder would read as "security" is folded into one object, and every
+  // key it would read as "allow_private_ips" inside it is dropped, before the forced value is set.
+  let security: Record<string, unknown> = {};
+  const rest: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (goJsonFold(key) === 'security') {
+      if (isPlainObject(value)) security = { ...security, ...value };
+    } else {
+      rest[key] = value;
+    }
+  }
+  const guarded: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(security)) {
+    if (goJsonFold(key) !== 'allow_private_ips') guarded[key] = value;
+  }
+  return { ...rest, security: { ...guarded, allow_private_ips: false } };
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Folds a JSON key the way Go's encoding/json matches it to a struct field: case-insensitively,
+ * including the Unicode folds of 's' (U+017F) and 'k' (U+212A). The Go agent decodes the scan
+ * config, so a key that differs from "security" only in case still lands in that field there.
+ */
+export function goJsonFold(key: string): string {
+  return key.toUpperCase().toLowerCase();
 }
