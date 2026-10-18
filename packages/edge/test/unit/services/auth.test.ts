@@ -296,6 +296,18 @@ describe('AuthService', () => {
       expect(mockRepo.updateUserTwoFactorSecret).not.toHaveBeenCalled();
     });
 
+    it('stores a bounded User-Agent in login history', async () => {
+      mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+      vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
+      vi.mocked(matchTOTP).mockResolvedValue(null);
+      (mockContext.req.header as any).mockImplementation((name: string) => name === 'User-Agent' ? '=HYPERLINK("x")' + 'A'.repeat(5000) : undefined);
+
+      await expect(service.login({ username: 'test', password: 'pw', two_factor_code: 'bad' }, '127.0.0.1', undefined, undefined, mockContext)).rejects.toThrow('|401');
+      const meta = mockRepo.recordLoginHistory.mock.calls.at(-1)![4];
+      expect(meta.userAgent.length).toBe(512);
+    });
+
     it('fails 2fa code correctly', async () => {
       mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);

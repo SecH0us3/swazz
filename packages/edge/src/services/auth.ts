@@ -95,6 +95,8 @@ export interface IAuthService {
  * Picks the address to store from GitHub's /user/emails list. The account is created with the
  * address marked verified, so only an address GitHub itself has verified may be taken.
  */
+const MAX_STORED_USER_AGENT = 512;
+
 export const OAUTH_NONCE_COOKIE = 'swazz_oauth_nonce';
 export const OAUTH_STATE_TTL_SECONDS = 600;
 
@@ -138,7 +140,8 @@ export class AuthService implements IAuthService {
     const cf = (c.req.raw as Request & { cf?: IncomingRequestCfProperties }).cf;
     return {
       ipAddress: getClientIp(c),
-      userAgent: c.req.header('User-Agent') || null,
+      // Attacker-controlled (any failed login against a username records it), so keep it bounded.
+      userAgent: c.req.header('User-Agent')?.slice(0, MAX_STORED_USER_AGENT) || null,
       cfRay: c.req.header('CF-Ray') || null,
       country: cf?.country || c.req.header('CF-IPCountry') || null,
       city: cf?.city || null,
