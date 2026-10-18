@@ -182,18 +182,19 @@ export class StartRunHandler implements RouteHandler {
     if (!runnerWs) {
       return new Response("No shared runners available", { status: 503 });
     }
+    // Parse before reserving a slot: a rejected body must not leave a phantom job on the runner.
+    let parsedConfig: any;
+    try {
+      parsedConfig = JSON.parse(configText).config;
+    } catch (err) {
+      return new Response('Invalid JSON config', { status: 400 });
+    }
     context.stateManager.jobs.set(runId, runnerWs);
     const attachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
     const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
     if (!activeJobs.includes(runId)) {
       activeJobs.push(runId);
       runnerWs.serializeAttachment({ ...attachment, activeJobs });
-    }
-    let parsedConfig: any;
-    try {
-      parsedConfig = JSON.parse(configText).config;
-    } catch (err) {
-      return new Response('Invalid JSON config', { status: 400 });
     }
     try {
       runnerWs.send(JSON.stringify({ type: 'start', runId, config: configForRunner(parsedConfig, context.state.getTags(runnerWs), context.env) }));

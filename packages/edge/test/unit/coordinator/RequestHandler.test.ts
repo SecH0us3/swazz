@@ -1143,6 +1143,19 @@ describe('RequestHandler', () => {
   });
 
   describe('/start-run', () => {
+    it('does not reserve a runner slot for a body that fails to parse', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
+      stateManager.runners.add(mockWs);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+
+      const res = await handler.handle(new Request('http://localhost/start-run?runId=bad-1', { method: 'POST', body: '{not json' }));
+
+      expect(res.status).toBe(400);
+      expect(stateManager.jobs.has('bad-1')).toBe(false);
+      expect(mockWs.serializeAttachment).not.toHaveBeenCalled();
+    });
+
     it('returns 503 if no runners available', async () => {
       const stateManager = new StateManager(mockState);
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
