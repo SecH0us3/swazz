@@ -31,12 +31,12 @@ export interface IRbacRepository {
   updateCustomRole(projectId: string, roleId: string, name: string, permissions: string[], includedRoles: string[]): Promise<void>;
   deleteCustomRole(projectId: string, roleId: string): Promise<void>;
   
-  getUserDetails(userId: string): Promise<{ email: string; username: string } | null>;
-  getUserInvitations(email: string, username: string): Promise<any[]>;
+  getUserDetails(userId: string): Promise<{ email: string; username: string; email_verified?: number | null } | null>;
+  getUserInvitations(email: string | null, username: string, emailVerified: boolean): Promise<any[]>;
   getInvitationByToken(token: string): Promise<{ username: string | null; email: string | null } | null>;
   createInvitation(id: string, projectId: string, email: string | null, username: string | null, roles: string[], token: string, expiresAt: string): Promise<void>;
-  acceptInvitation(token: string, username: string, email: string, userId: string): Promise<any | null>;
-  declineInvitation(token: string, username: string, email: string): Promise<boolean>;
+  acceptInvitation(token: string, username: string, email: string | null, emailVerified: boolean, userId: string): Promise<any | null>;
+  declineInvitation(token: string, username: string, email: string | null, emailVerified: boolean): Promise<boolean>;
   getProjectSessionTimeout(projectId: string): Promise<number | null>;
   getProjectName(projectId: string): Promise<string | null>;
 
@@ -391,20 +391,26 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     ]);
   }
 
-  async getUserDetails(userId: string): Promise<{ email: string; username: string } | null> {
-    const user = await this.db.prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{ email: string; username: string }>();
+  async getUserDetails(userId: string): Promise<{ email: string; username: string; email_verified?: number | null } | null> {
+    const user = await this.db.prepare('SELECT email, username, email_verified FROM users WHERE id = ?').bind(userId)
+      .first<{ email: string; username: string; email_verified: number | null }>();
     return user || null;
   }
 
-  async getUserInvitations(email: string, username: string): Promise<any[]> {
+  // An email address only identifies a user once they have proven they own it: anyone can
+  // register, or have an account provisioned, with an arbitrary unverified address.
+  async getUserInvitations(email: string | null, username: string, emailVerified: boolean): Promise<any[]> {
     const { results } = await this.db.prepare(`
       SELECT i.id, i.token, i.project_id, p.name as project_name, i.expires_at 
       FROM project_invitations i
       JOIN projects p ON i.project_id = p.id
       WHERE i.status = 'Pending' 
         AND strftime('%s', i.expires_at) > strftime('%s', 'now')
-        AND (i.email = ?1 OR i.username = ?2)
-    `).bind(email, username).all();
+        AND (
+          (i.email IS NOT NULL AND ?3 = 1 AND lower(i.email) = lower(?1))
+          OR (i.username IS NOT NULL AND i.username = ?2)
+        )
+    `).bind(email, username, emailVerified ? 1 : 0).all();
     return results || [];
   }
 
@@ -430,7 +436,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     `).bind(id, projectId, email, username, JSON.stringify(roles), token, expiresAt).run();
   }
 
-  async acceptInvitation(token: string, username: string, email: string, userId: string): Promise<any | null> {
+  async acceptInvitation(token: string, username: string, email: string | null, emailVerified: boolean, userId: string): Promise<any | null> {
     const inv = await this.db.prepare(`
       UPDATE project_invitations 
       SET status = 'Accepted' 
@@ -438,9 +444,9 @@ export class RbacRepository extends BaseService implements IRbacRepository {
         AND status = 'Pending' 
         AND strftime('%s', expires_at) > strftime('%s', 'now')
         AND (username IS NULL OR username = ?2)
-        AND (email IS NULL OR email = ?3)
+        AND (email IS NULL OR (?4 = 1 AND lower(email) = lower(?3)))
       RETURNING *
-    `).bind(token, username, email).first<any>();
+    `).bind(token, username, email, emailVerified ? 1 : 0).first<any>();
 
     if (!inv) return null;
 
@@ -456,15 +462,15 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     return inv;
   }
 
-  async declineInvitation(token: string, username: string, email: string): Promise<boolean> {
+  async declineInvitation(token: string, username: string, email: string | null, emailVerified: boolean): Promise<boolean> {
     const res = await this.db.prepare(`
       UPDATE project_invitations 
       SET status = 'Revoked' 
       WHERE token = ?1 
         AND status = 'Pending' 
         AND (username IS NULL OR username = ?2)
-        AND (email IS NULL OR email = ?3)
-    `).bind(token, username, email).run();
+        AND (email IS NULL OR (?4 = 1 AND lower(email) = lower(?3)))
+    `).bind(token, username, email, emailVerified ? 1 : 0).run();
     return res.meta.changes > 0;
   }
 

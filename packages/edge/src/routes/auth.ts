@@ -12,12 +12,18 @@ import { AuthRepository } from '../repositories/auth';
 import { LicenseService } from '../services/license';
 import { ValidationError, isValidId, isValidCredentialId, LIMITS, readJsonBody, reqString, optString } from '../utils/validation';
 
+// The dashboard hides the password forms when this is off; the API must refuse them too,
+// or the switch only changes what the UI shows.
+const passwordAuthDisabled = (c: { env: Env }) => c.env.PASSWORD_AUTH_ENABLED === 'false';
+const PASSWORD_AUTH_DISABLED_ERROR = 'Password authentication is disabled';
+
 export function registerAuthRoutes(
   app: Hono<AppEnv>,
   authServicesFactory: (env: Env) => IAuthService = (env) => new AuthService(env, new AuthRepository(env)),
   licenseServiceFactory: (env: Env) => { verifyToken(token: string): Promise<any> } = (env) => new LicenseService(env, new AuthRepository(env))
 ) {
   app.post('/api/auth/register', async (c) => {
+    if (passwordAuthDisabled(c)) return c.json({ error: PASSWORD_AUTH_DISABLED_ERROR }, 403);
     try {
       const body = await readJsonBody(c);
       if (typeof body.username !== 'string' || typeof body.password !== 'string') {
@@ -224,6 +230,7 @@ export function registerAuthRoutes(
   });
 
   app.post('/api/auth/login/step1', async (c) => {
+    if (passwordAuthDisabled(c)) return c.json({ error: PASSWORD_AUTH_DISABLED_ERROR }, 403);
     try {
       const body = await readJsonBody(c);
       if (!body.username) return c.json({ error: 'Missing username' }, 400);
@@ -250,6 +257,7 @@ export function registerAuthRoutes(
   });
 
   app.post('/api/auth/login', async (c) => {
+    if (passwordAuthDisabled(c)) return c.json({ error: PASSWORD_AUTH_DISABLED_ERROR }, 403);
     try {
       const body = await readJsonBody(c);
       const isTestEnv = c.env.JWT_SECRET === 'test-secret';

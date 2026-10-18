@@ -311,7 +311,8 @@ describe('RbacRepository Unit Tests', () => {
     mockAll.mockResolvedValue({ results: invites });
 
     const repo = new RbacRepository(mockEnv);
-    expect(await repo.getUserInvitations('a@b.com', 'alex')).toBe(invites);
+    expect(await repo.getUserInvitations('a@b.com', 'alex', true)).toBe(invites);
+    expect(mockBind).toHaveBeenCalledWith('a@b.com', 'alex', 1);
   });
 
   it('getInvitationByToken returns invitation email and username', async () => {
@@ -343,7 +344,7 @@ describe('RbacRepository Unit Tests', () => {
       mockAll.mockResolvedValue(null);
 
       const repo = new RbacRepository(mockEnv);
-      const res = await repo.acceptInvitation('token-1', 'alex', 'a@b.com', 'u1');
+      const res = await repo.acceptInvitation('token-1', 'alex', 'a@b.com', true, 'u1');
 
       expect(res).toBeNull();
     });
@@ -357,7 +358,7 @@ describe('RbacRepository Unit Tests', () => {
       mockAll.mockResolvedValueOnce(invitation); // update invitation RETURNING *
 
       const repo = new RbacRepository(mockEnv);
-      const res = await repo.acceptInvitation('token-1', 'alex', 'a@b.com', 'u1');
+      const res = await repo.acceptInvitation('token-1', 'alex', 'a@b.com', true, 'u1');
 
       expect(res).toBe(invitation);
       expect(mockPrepare).toHaveBeenCalledTimes(4); // 1 update + 2 role inserts + 1 member insert
@@ -368,9 +369,9 @@ describe('RbacRepository Unit Tests', () => {
   it('declineInvitation updates status and returns true if changed', async () => {
     mockAll.mockResolvedValue({ meta: { changes: 1 } });
     const repo = new RbacRepository(mockEnv);
-    expect(await repo.declineInvitation('token-1', 'alex', 'a@b.com')).toBe(true);
+    expect(await repo.declineInvitation('token-1', 'alex', 'a@b.com', true)).toBe(true);
 
     mockAll.mockResolvedValue({ meta: { changes: 0 } });
-    expect(await repo.declineInvitation('token-1', 'alex', 'a@b.com')).toBe(false);
+    expect(await repo.declineInvitation('token-1', 'alex', 'a@b.com', true)).toBe(false);
   });
 });

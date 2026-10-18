@@ -91,6 +91,17 @@ export interface IAuthService {
   exchangeOauthToken(body: any, c: Context<AppEnv>): Promise<any>;
 }
 
+/**
+ * Picks the address to store from GitHub's /user/emails list. The account is created with the
+ * address marked verified, so only an address GitHub itself has verified may be taken.
+ */
+export function pickVerifiedGithubEmail(emails: unknown): string | null {
+  if (!Array.isArray(emails)) return null;
+  const verified = emails.filter((e: any) => e && e.verified === true && typeof e.email === 'string');
+  const chosen = verified.find((e: any) => e.primary === true) || verified[0];
+  return chosen ? chosen.email : null;
+}
+
 export class AuthService implements IAuthService {
   constructor(private env: Env, private authRepo: IAuthRepository) {}
 
@@ -772,11 +783,7 @@ export class AuthService implements IAuthService {
         const emailsRes = await fetch('https://api.github.com/user/emails', {
           headers: { 'Authorization': `token ${tokenData.access_token}`, 'User-Agent': 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)', 'Accept': 'application/json' },
         });
-        const emailsData = (await emailsRes.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
-        if (Array.isArray(emailsData)) {
-          const primaryEmail = emailsData.find(e => e.primary && e.verified) || emailsData.find(e => e.primary) || emailsData[0];
-          if (primaryEmail) email = primaryEmail.email;
-        }
+        email = pickVerifiedGithubEmail(await emailsRes.json());
       }
 
       if (decodedState.action === 'link') {

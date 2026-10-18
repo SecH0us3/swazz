@@ -353,7 +353,7 @@ export class RbacService implements IRbacService {
     const user = await this.rbacRepo.getUserDetails(userId);
     if (!user) throw new Error('User not found|404');
 
-    const invitations = await this.rbacRepo.getUserInvitations(user.email, user.username);
+    const invitations = await this.rbacRepo.getUserInvitations(user.email, user.username, user.email_verified === 1);
     return { invitations };
   }
 
@@ -442,7 +442,8 @@ export class RbacService implements IRbacService {
     const user = await this.rbacRepo.getUserDetails(userId);
     if (!user) throw new Error('User not found|404');
 
-    const inv = await this.rbacRepo.acceptInvitation(body.token, user.username, user.email, userId);
+    const emailVerified = user.email_verified === 1;
+    const inv = await this.rbacRepo.acceptInvitation(body.token, user.username, user.email, emailVerified, userId);
 
     if (!inv) {
       const existing = await this.rbacRepo.getInvitationByToken(body.token);
@@ -450,8 +451,11 @@ export class RbacService implements IRbacService {
         if (existing.username && existing.username !== user.username) {
           throw new Error('Invitation is for a different username|403');
         }
-        if (existing.email && existing.email !== user.email) {
+        if (existing.email && existing.email.toLowerCase() !== (user.email || '').toLowerCase()) {
           throw new Error('Invitation is for a different email|403');
+        }
+        if (existing.email && !emailVerified) {
+          throw new Error('Verify your email address to accept this invitation|403');
         }
       }
       throw new Error('Invalid or expired invitation|400');
@@ -470,7 +474,7 @@ export class RbacService implements IRbacService {
     const user = await this.rbacRepo.getUserDetails(userId);
     if (!user) throw new Error('User not found|404');
 
-    const success = await this.rbacRepo.declineInvitation(body.token, user.username, user.email);
+    const success = await this.rbacRepo.declineInvitation(body.token, user.username, user.email, user.email_verified === 1);
     if (!success) {
       throw new Error('Invalid or expired invitation|400');
     }

@@ -140,6 +140,56 @@ describe('RBAC cross-project isolation', () => {
     });
   });
 
+  describe('invitations addressed to an email', () => {
+    async function seedUserWithEmail(email: string, verified: boolean): Promise<string> {
+      const id = await seedUser();
+      await env.DB.prepare('UPDATE users SET email = ?, email_verified = ? WHERE id = ?').bind(email, verified ? 1 : 0, id).run();
+      return id;
+    }
+
+    async function invite(email: string): Promise<{ project: string; token: string }> {
+      const project = await seedProject('P');
+      const owner = await seedUser();
+      await addMember(project, owner, ['owner']);
+      const { token } = await service.createInvitation(project, owner, { email, roles: ['editor'] });
+      return { project, token };
+    }
+
+    it('are not listed or accepted by an account whose matching email is unverified', async () => {
+      const email = `alice_${ulid().toLowerCase()}@corp.example`;
+      const { project, token } = await invite(email);
+      const squatter = await seedUserWithEmail(email, false);
+
+      expect((await service.getInvitations(squatter)).invitations).toHaveLength(0);
+      await expect(service.acceptInvitation(squatter, { token })).rejects.toThrow('|403');
+      await expect(service.declineInvitation(squatter, { token })).rejects.toThrow('|400');
+      expect(await repo.getMemberRoles(project, squatter)).toEqual([]);
+    });
+
+    it('are listed and accepted by the verified owner of the address, case-insensitively', async () => {
+      const email = `bob_${ulid().toLowerCase()}@corp.example`;
+      const { project, token } = await invite(email);
+      const invitee = await seedUserWithEmail(email.toUpperCase(), true);
+
+      const { invitations } = await service.getInvitations(invitee);
+      expect(invitations.map((i: any) => i.token)).toEqual([token]);
+      await service.acceptInvitation(invitee, { token });
+      expect(await repo.getMemberRoles(project, invitee)).toEqual(['editor']);
+    });
+
+    it('addressed to a username still work without an email', async () => {
+      const project = await seedProject('P');
+      const owner = await seedUser();
+      const invitee = await seedUser();
+      await addMember(project, owner, ['owner']);
+      const user = await repo.getUserDetails(invitee);
+      const { token } = await service.createInvitation(project, owner, { username: user!.username, roles: ['viewer'] });
+
+      await service.acceptInvitation(invitee, { token });
+      expect(await repo.getMemberRoles(project, invitee)).toEqual(['viewer']);
+    });
+  });
+
   describe('member role edits', () => {
     it('cannot attach a user who is not a member of the project', async () => {
       const project = await seedProject('B');

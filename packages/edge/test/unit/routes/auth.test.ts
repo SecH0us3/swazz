@@ -100,6 +100,36 @@ describe('Auth Routes Unit Tests', () => {
     });
   });
 
+  describe('PASSWORD_AUTH_ENABLED=false', () => {
+    let disabledApp: Hono<AppEnv>;
+
+    beforeEach(() => {
+      disabledApp = new Hono<AppEnv>();
+      disabledApp.use('*', async (c, next) => {
+        c.env = { JWT_SECRET: 'test-secret', PASSWORD_AUTH_ENABLED: 'false' } as unknown as Env;
+        await next();
+      });
+      registerAuthRoutes(disabledApp, () => mockAuthService, () => mockLicenseService);
+    });
+
+    it.each(['/api/auth/register', '/api/auth/login/step1', '/api/auth/login'])('refuses %s on the server', async (path) => {
+      const res = await disabledApp.request(path, {
+        method: 'POST',
+        body: JSON.stringify({ username: 'user', password: 'securepassword123', token: 't', nonce: 1 }),
+      });
+      expect(res.status).toBe(403);
+      expect(mockAuthService.register).not.toHaveBeenCalled();
+      expect(mockAuthService.loginStep1).not.toHaveBeenCalled();
+      expect(mockAuthService.login).not.toHaveBeenCalled();
+    });
+
+    it('still serves guest sign-in', async () => {
+      mockAuthService.registerGuestStep1.mockResolvedValue({ status: 'ok' });
+      const res = await disabledApp.request('/api/auth/guest/step1', { method: 'POST' });
+      expect(res.status).toBe(200);
+    });
+  });
+
   // POST /api/auth/guest/step1
   describe('POST /api/auth/guest/step1', () => {
     it('handles valid request', async () => {

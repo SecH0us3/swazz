@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AuthService, parseTransports } from '../../../src/services/auth';
+import { AuthService, parseTransports, pickVerifiedGithubEmail } from '../../../src/services/auth';
 import { IAuthRepository } from '../../../src/repositories/auth';
 import { Env, AppEnv } from '../../../src/env';
 import { Context } from 'hono';
@@ -604,5 +604,27 @@ describe('AuthService', () => {
       expect(parseTransports(null)).toBeUndefined();
       expect(parseTransports(undefined)).toBeUndefined();
     });
+  });
+});
+
+describe('pickVerifiedGithubEmail', () => {
+  it('prefers the verified primary address', () => {
+    expect(pickVerifiedGithubEmail([
+      { email: 'other@x.io', primary: false, verified: true },
+      { email: 'main@x.io', primary: true, verified: true },
+    ])).toBe('main@x.io');
+  });
+
+  it('never takes an unverified address, even the primary one', () => {
+    expect(pickVerifiedGithubEmail([{ email: 'victim@corp.io', primary: true, verified: false }])).toBeNull();
+    expect(pickVerifiedGithubEmail([
+      { email: 'victim@corp.io', primary: true, verified: false },
+      { email: 'mine@x.io', primary: false, verified: true },
+    ])).toBe('mine@x.io');
+  });
+
+  it('returns null for a malformed response', () => {
+    expect(pickVerifiedGithubEmail({ message: 'Bad credentials' })).toBeNull();
+    expect(pickVerifiedGithubEmail(null)).toBeNull();
   });
 });
