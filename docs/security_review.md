@@ -74,6 +74,7 @@ Swazz implements a **dual-layer SSRF mitigation engine** with DNS pinning to blo
    When running in cloud/agent mode, outbound connections to private, loopback, link-local, and unspecified addresses are blocked by default. 
    - Blocked CIDRs include: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (RFC 1918), `127.0.0.0/8` (Loopback), `169.254.0.0/16` (Link-local/Cloud Metadata), `::1/128` (IPv6 Loopback), `fe80::/10` (IPv6 Link-local), and `0.0.0.0/8` / `::/128` (Unspecified).
    - This check is bypassable for local debug setups only if `AllowLocalNetwork` is explicitly configured.
+   - **Edge replay proxy and webhooks (`packages/edge/src/utils/ssrf.ts`)**: private, reserved and DoH-unresolvable targets are refused. **Non-goal:** DNS rebinding between the DoH check and `fetch()`, because the Workers runtime cannot pin the checked address. On Cloudflare's edge, resolver caching bounds this; a self-hosted coordinator should be kept off networks it must not reach, or have its egress firewalled.
 2. **Local CLI Mode (`packages/container/internal/security/ssrf.go`)**:
    Provides custom SSRF protection wrapping the standard Go transport. It restricts access to private IPs unless `--allow-private-ips=true` is passed on the command line or `security.allow_private_ips` is set in the scan config; both default to `false`.
 

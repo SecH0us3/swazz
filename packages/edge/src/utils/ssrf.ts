@@ -295,6 +295,13 @@ async function assertPublicHost(hostname: string, error: string, opts: { require
 }
 
 /**
+ * Non-goal (applies to webhooks too): DNS rebinding between this check and fetch(). The Workers
+ * fetch() API cannot pin the address checked here, so a name that resolves to a public IP via DoH
+ * and to a private one when fetch() resolves it again passes. On Cloudflare's edge, resolver
+ * caching and the absence of a local network bound this; a self-hosted coordinator (wrangler dev
+ * in a container) has no such bound, so keep it off networks it must not reach, or leave
+ * ALLOW_PRIVATE_PROXY_TARGETS unset and firewall its egress.
+ *
  * Validates a target for the replay proxy (/api/proxy). Unlike webhooks, a public IP literal is
  * fine (scan targets are often addressed by IP), but private and reserved ranges are not: a scan
  * target is whatever the user typed, so it is no authorization to reach the Worker's network.

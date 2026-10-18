@@ -91,10 +91,6 @@ export interface IAuthService {
   exchangeOauthToken(body: any, c: Context<AppEnv>): Promise<any>;
 }
 
-/**
- * Picks the address to store from GitHub's /user/emails list. The account is created with the
- * address marked verified, so only an address GitHub itself has verified may be taken.
- */
 const MAX_STORED_USER_AGENT = 512;
 
 export const OAUTH_NONCE_COOKIE = 'swazz_oauth_nonce';
@@ -126,6 +122,10 @@ export async function verifyOAuthState(jwtSecret: string, state: string, browser
   return { action: decoded.action, userId: decoded.userId ?? null };
 }
 
+/**
+ * Picks the address to store from GitHub's /user/emails list. The account is created with the
+ * address marked verified, so only an address GitHub itself has verified may be taken.
+ */
 export function pickVerifiedGithubEmail(emails: unknown): string | null {
   if (!Array.isArray(emails)) return null;
   const verified = emails.filter((e: any) => e && e.verified === true && typeof e.email === 'string');
