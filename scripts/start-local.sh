@@ -64,7 +64,7 @@ echo "Compiling and starting Go Runner..."
 ./packages/container/swazz-engine run-agent \
   --coordinator ws://127.0.0.1:8787/api/runners/connect \
   --token "$SWAZZ_RUNNER_TOKEN" \
-  --dangerous-no-container < /dev/null > packages/container/agent.log 2>&1 &
+  --dangerous-no-container --allow-private-networks < /dev/null > packages/container/agent.log 2>&1 &
 disown
 
 echo "=== All services started successfully ==="

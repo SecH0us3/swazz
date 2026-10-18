@@ -59,6 +59,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
       '--coordinator', 'ws://127.0.0.1:8787/api/runners/connect',
       '--token', sharedRunnerToken(),
       '--dangerous-no-container',
+      '--allow-private-networks',
       '--name', agentName
     ]);
 

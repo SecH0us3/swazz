@@ -58,8 +58,11 @@ per container:
 - **Development**: `swazz-engine start --allow-private-ips=true`, or `"security": {"allow_private_ips": true}` in `swazz.config.json` ✅ (safe, isolated local network)
 - **Production**: leave it unset ✅ (prevents fuzzer scans from reaching internal cloud IPs)
 
-The `runner` compose service passes `--dangerous-no-container`, which lifts the
-restriction for the local demo stack — drop that flag for anything production-like.
+The `runner` compose service passes `--dangerous-no-container`, which only skips the
+container-runtime check; it does not open private networks. Whether a scan may reach private
+targets on that shared runner is decided by `SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS` (default
+`false`). `--allow-private-networks` opens private networks for every job regardless of the scan;
+use it only on a runner whose operator is its only user.
 
 ### Base Images
 Docker images are configured for supply-chain security:

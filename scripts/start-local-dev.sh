@@ -72,7 +72,7 @@ echo "→ Starting Go Runner Agent..."
 ./packages/container/swazz-engine run-agent \
   --coordinator ws://127.0.0.1:8787/api/runners/connect \
   --token "$SWAZZ_RUNNER_TOKEN" \
-  --dangerous-no-container > packages/container/agent.log 2>&1 &
+  --dangerous-no-container --allow-private-networks > packages/container/agent.log 2>&1 &
 
 echo "=== Swazz is now running! ==="
 echo "  - Web Dashboard: http://localhost:5173"
