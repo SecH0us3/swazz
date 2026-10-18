@@ -320,4 +320,27 @@
             return originalSendBeacon.apply(this, arguments);
         };
     }
+
+    // 5. Intercept WebMCP tool registrations (navigator.modelContext & document.modelContext)
+    const wrapModelContext = (mc) => {
+        if (!mc || typeof mc.registerTool !== 'function' || mc.__swazz_hooked) return;
+        const origRegister = mc.registerTool.bind(mc);
+        mc.__swazz_hooked = true;
+        mc.registerTool = function(tool) {
+            try {
+                if (tool && typeof tool.name === 'string' && /^[a-zA-Z0-9_.\-]{1,128}$/.test(tool.name)) {
+                    sendRequestLog(
+                        `webmcp://tool/${tool.name}`,
+                        'CALL',
+                        { 'content-type': 'application/json', 'x-webmcp-annotations': JSON.stringify(tool.annotations || {}) },
+                        JSON.stringify(tool.inputSchema || {})
+                    );
+                }
+            } catch (e) {}
+            return origRegister(tool);
+        };
+    };
+    if (typeof navigator !== 'undefined' && navigator.modelContext) wrapModelContext(navigator.modelContext);
+    if (typeof document !== 'undefined' && document.modelContext) wrapModelContext(document.modelContext);
 })();
+
