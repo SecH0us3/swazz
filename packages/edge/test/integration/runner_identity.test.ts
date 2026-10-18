@@ -86,3 +86,18 @@ describe('runner public keys belong to one account', () => {
     await expect(seedUser(unique.toLowerCase())).rejects.toThrow(/UNIQUE/);
   });
 });
+
+describe('unscoped spec cache rows are dropped', () => {
+  it('removes bare-URL rows and keeps per-user ones', async () => {
+    const { default: dropMigration } = await import('../../migrations/0040_drop_unscoped_swagger_cache.sql?raw');
+    const insert = (url: string) => env.DB.prepare('INSERT OR REPLACE INTO swagger_cache (url, base_path, endpoints_hash, endpoints_r2_key, raw_spec_r2_key) VALUES (?, ?, ?, ?, ?)')
+      .bind(url, '/', 'h', 'specs/parsed/x.json', 'specs/raw/x.json').run();
+    await insert('https://legacy.example/openapi.json');
+    await insert('user:u1|https://legacy.example/openapi.json');
+
+    for (const statement of splitSql(dropMigration)) await env.DB.prepare(statement).run();
+
+    const { results } = await env.DB.prepare("SELECT url FROM swagger_cache WHERE url LIKE '%legacy.example%' ORDER BY url").all<{ url: string }>();
+    expect(results.map(r => r.url)).toEqual(['user:u1|https://legacy.example/openapi.json']);
+  });
+});
