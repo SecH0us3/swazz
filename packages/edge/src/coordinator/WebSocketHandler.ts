@@ -3,6 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
+import { UNCACHED_PARSE } from './handlers/parse';
 import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
@@ -113,7 +114,7 @@ export class WebSocketHandler {
           if (resolve) {
             this.stateManager.pendingParses.delete(msg.reqId);
             
-            if (msg.payload && !msg.payload.error && urlStr && urlStr !== 'rawSpec') {
+            if (msg.payload && !msg.payload.error && urlStr && urlStr !== UNCACHED_PARSE) {
               const scansRepo = new ScansRepository(this.env);
               const storage = this.env.STORAGE;
               

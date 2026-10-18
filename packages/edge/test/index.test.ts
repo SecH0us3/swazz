@@ -835,14 +835,23 @@ describe("Anonymous Limits", () => {
     const body = await loginRes.json() as { token: string };
     userToken = body.token;
 
-    // Prep swagger_cache and R2 for parse testing. Cache entries are per user, so seed the
-    // anonymous scope and the logged-in user's scope.
+    // Prep swagger_cache and R2 for parse testing. Cache entries are per user and anonymous
+    // parses bypass the cache, so seed the logged-in user's scope and connect a shared runner
+    // that answers the anonymous requests.
     const limitUser = await env.DB.prepare("SELECT id FROM users WHERE username = 'limituser'").first<{ id: string }>();
-    for (const scope of ['anonymous', limitUser!.id]) {
-      await env.DB.prepare('INSERT OR REPLACE INTO swagger_cache (url, base_path, endpoints_hash, endpoints_r2_key, raw_spec_r2_key) VALUES (?, ?, ?, ?, ?)')
-        .bind(`user:${scope}|http://example.com/swagger.json`, '/api', 'hash123', 'specs/parsed/test.json', 'specs/raw/test.json')
-        .run();
-    }
+    await env.DB.prepare('INSERT OR REPLACE INTO swagger_cache (url, base_path, endpoints_hash, endpoints_r2_key, raw_spec_r2_key) VALUES (?, ?, ?, ?, ?)')
+      .bind(`user:${limitUser!.id}|http://example.com/swagger.json`, '/api', 'hash123', 'specs/parsed/test.json', 'specs/raw/test.json')
+      .run();
+    const stub = env.COORDINATOR_DO.get(env.COORDINATOR_DO.idFromName('global-coordinator'));
+    const runnerRes = await stub.fetch(new Request("http://localhost/connect-runner?name=AnonLimitParser&shared=1", { headers: { "Upgrade": "websocket" } }) as any);
+    const runnerWs = runnerRes.webSocket!;
+    runnerWs.accept();
+    runnerWs.addEventListener("message", (evt) => {
+      const msg = JSON.parse(evt.data as string);
+      if (msg.type === "parse_request") {
+        runnerWs.send(JSON.stringify({ type: "parse_result", reqId: msg.reqId, payload: { basePath: "/api", endpoints: [{ path: "/users", method: "GET" }] } }));
+      }
+    });
     await env.STORAGE.put('specs/parsed/test.json', JSON.stringify([{ path: '/users', method: 'GET' }]));
   });
 

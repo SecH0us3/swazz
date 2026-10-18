@@ -18,6 +18,19 @@ export function swaggerCacheKey(userId: string | undefined, url: string): string
   return `user:${userId || 'anonymous'}|${url}`;
 }
 
+/** Marks a pending parse whose result must not be written to swagger_cache. */
+export const UNCACHED_PARSE = 'rawSpec';
+
+/**
+ * Whether a parse may use swagger_cache at all. Anonymous callers would all share one bucket, and
+ * a spec fetched with the caller's own headers or cookies must not be stored where a later request
+ * without them could read it. Auth-disabled (local) mode has no tenants, so it may cache.
+ */
+export function isCacheableParse(body: { userId?: string; headers?: Record<string, string>; cookies?: Record<string, string> }, authDisabled: boolean): boolean {
+  const hasCredentials = Object.keys(body.headers || {}).length > 0 || Object.keys(body.cookies || {}).length > 0;
+  return !hasCredentials && (authDisabled || !!body.userId);
+}
+
 export class ParseHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
     let body: {
@@ -51,7 +64,8 @@ export class ParseHandler implements RouteHandler {
       return new Response(JSON.stringify({ error: "Missing required parameter: url or rawSpec" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
     
-    if (body.url && !body.forceRebuild) {
+    const cacheable = !!body.url && isCacheableParse(body, String(context.env.AUTH_ENABLED) === 'false');
+    if (body.url && cacheable && !body.forceRebuild) {
       try {
         const scansRepo = new ScansRepository(context.env);
         const cached = await scansRepo.getCachedSwagger(swaggerCacheKey(body.userId, body.url));
@@ -83,7 +97,7 @@ export class ParseHandler implements RouteHandler {
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) return new Response(JSON.stringify({ error: "No active runners connected to Coordinator" }), { status: 503 });
     const reqId = ulid();
-    context.stateManager.pendingParseUrls.set(reqId, body.url ? swaggerCacheKey(body.userId, body.url) : 'rawSpec');
+    context.stateManager.pendingParseUrls.set(reqId, body.url && cacheable ? swaggerCacheKey(body.userId, body.url!) : UNCACHED_PARSE);
     
     let runnerWs = null;
     if (String(context.env.AUTH_ENABLED) === 'false') {

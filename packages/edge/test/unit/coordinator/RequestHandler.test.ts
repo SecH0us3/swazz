@@ -901,7 +901,7 @@ describe('RequestHandler', () => {
       const res = await handler.handle(new Request('http://localhost/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: 'http://example.com/swagger.json' })
+        body: JSON.stringify({ url: 'http://example.com/swagger.json', userId: 'caller' })
       }));
 
       expect(res.status).toBe(200);
@@ -951,11 +951,36 @@ describe('RequestHandler', () => {
       const res = await handler.handle(new Request('http://localhost/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: 'http://example.com/swagger.json' })
+        body: JSON.stringify({ url: 'http://example.com/swagger.json', userId: 'caller' })
       }));
 
       expect(res.status).toBe(200);
       expect(mockLogError).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an anonymous caller', { url: 'http://example.com/swagger.json' }],
+      ['a caller sending headers', { url: 'http://example.com/swagger.json', userId: 'caller', headers: { Authorization: 'Bearer t' } }],
+      ['a caller sending cookies', { url: 'http://example.com/swagger.json', userId: 'caller', cookies: { sid: 's' } }],
+    ])('neither reads nor fills the spec cache for %s', async (_who, body) => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
+      stateManager.runners.add(mockWs);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      mockGetCachedSwagger.mockClear();
+
+      const pending = handler.handle(new Request('http://localhost/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }));
+      await vi.waitFor(() => expect(stateManager.pendingParseUrls.size).toBe(1));
+
+      expect(mockGetCachedSwagger).not.toHaveBeenCalled();
+      const [reqId, cacheKey] = [...stateManager.pendingParseUrls.entries()][0];
+      expect(cacheKey).toBe('rawSpec');
+      stateManager.pendingParses.get(reqId)!(new Response('{}'));
+      await pending;
     });
 
     it('returns 503 if no active runners are connected', async () => {
