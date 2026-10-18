@@ -1347,6 +1347,19 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(403);
     });
 
+    it('lets anyone restart a runner when auth is disabled (local mode has no tenants)', async () => {
+      mockEnv.AUTH_ENABLED = 'false';
+      const stateManager = new StateManager(mockState);
+      stateManager.runners.add(mockWs);
+      mockState.getTags.mockReturnValue(['runner', 'user_id:anon-dev-user']);
+      mockWs.deserializeAttachment.mockReturnValue({ connectionId: 'conn123' });
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/runners/restart?connectionId=conn123&userId=real-user', { method: 'POST' }));
+      expect(res.status).toBe(200);
+      delete mockEnv.AUTH_ENABLED;
+    });
+
     it('returns 403 if the caller does not own the runner', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);

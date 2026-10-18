@@ -127,6 +127,13 @@ describe('RunnersService Unit Tests', () => {
     expect(res.runners[0].isMine).toBe(true);
   });
 
+  test('getRunners lists every runner as the caller\'s own when auth is disabled', async () => {
+    mockEnv.AUTH_ENABLED = 'false';
+    mockCoordinatorFetch.mockResolvedValueOnce(new Response(JSON.stringify({ runners: [{ name: 'local', ownerId: 'anon-dev-user', isShared: false }] })));
+    const res = await runnersService.getRunners('real-user-id');
+    expect(res.runners).toEqual([{ name: 'local', isShared: false, isMine: true }]);
+  });
+
   test('getRunners should throw if unauthorized', async () => {
     await expect(runnersService.getRunners(null)).rejects.toThrow('Unauthorized|401');
   });

@@ -169,6 +169,10 @@ export class RunnersService implements IRunnersService {
     }
 
     const data = await res.json() as { runners: any[] };
+    if (String(this.env.AUTH_ENABLED) === 'false') {
+      // Auth-disabled (local) mode has no tenants: every runner is the operator's own.
+      return { runners: data.runners.map(({ ownerId, ...r }) => ({ ...r, isMine: true })) };
+    }
     return { runners: filterRunnersForUser(data.runners, userId) };
   }
 

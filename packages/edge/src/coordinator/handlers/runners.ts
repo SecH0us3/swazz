@@ -83,7 +83,8 @@ export class RestartRunnerHandler implements RouteHandler {
       return new Response('Forbidden: Shared runners cannot be restarted', { status: 403 });
     }
 
-    if (!isRunnerOwnedBy(tags, userId)) {
+    // Auth-disabled (local) mode has no tenants, so every runner is the operator's own.
+    if (String(context.env.AUTH_ENABLED) !== 'false' && !isRunnerOwnedBy(tags, userId)) {
       return new Response('Forbidden: You do not own this runner', { status: 403 });
     }
 
