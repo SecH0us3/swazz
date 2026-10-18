@@ -4,7 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { RunnersService, filterRunnersForUser } from '../../../src/services/runners';
+import { RunnersService, filterRunnersForUser, isSharedRunnerToken } from '../../../src/services/runners';
+import { configForRunner } from '../../../src/coordinator/runnerAccess';
 import { IRunnersRepository } from '../../../src/repositories/runners';
 import { IRbacRepository } from '../../../src/repositories/rbac';
 import { Env } from '../../../src/env';
@@ -128,6 +129,40 @@ describe('RunnersService Unit Tests', () => {
 
   test('getRunners should throw if unauthorized', async () => {
     await expect(runnersService.getRunners(null)).rejects.toThrow('Unauthorized|401');
+  });
+
+  describe('connect: who a token runner works for', () => {
+    const OPERATOR_TOKEN = 'op_' + 'x'.repeat(40);
+    const forwardedUrl = () => new URL(mockCoordinatorFetch.mock.calls.at(-1)![0].url);
+
+    test('a user API token connects a runner bound to that user, never a shared one', async () => {
+      mockEnv.SHARED_RUNNER_TOKEN = OPERATOR_TOKEN;
+      await runnersService.connect('websocket', 'swazz_live_user', undefined, 'http://localhost/connect', {});
+      expect(forwardedUrl().searchParams.get('user_id')).toBe('user-1');
+      expect(forwardedUrl().searchParams.has('shared')).toBe(false);
+    });
+
+    test('the operator token connects a shared runner with no owner', async () => {
+      mockEnv.SHARED_RUNNER_TOKEN = OPERATOR_TOKEN;
+      await runnersService.connect('websocket', OPERATOR_TOKEN, undefined, 'http://localhost/connect', {});
+      expect(forwardedUrl().searchParams.get('shared')).toBe('1');
+      expect(forwardedUrl().searchParams.has('user_id')).toBe(false);
+      expect(mockRunnersRepo.getUserByApiKey).not.toHaveBeenCalled();
+    });
+
+    test('a client cannot make itself shared or pick an owner through the query string', async () => {
+      mockEnv.SHARED_RUNNER_TOKEN = OPERATOR_TOKEN;
+      await runnersService.connect('websocket', 'swazz_live_user', undefined, 'http://localhost/connect?shared=1&user_id=victim', {});
+      expect(forwardedUrl().searchParams.has('shared')).toBe(false);
+      expect(forwardedUrl().searchParams.getAll('user_id')).toEqual(['user-1']);
+    });
+
+    test('a short or missing operator token never grants shared status', async () => {
+      expect(await isSharedRunnerToken('short', 'short')).toBe(false);
+      expect(await isSharedRunnerToken('anything', undefined)).toBe(false);
+      expect(await isSharedRunnerToken(OPERATOR_TOKEN, OPERATOR_TOKEN)).toBe(true);
+      expect(await isSharedRunnerToken(OPERATOR_TOKEN + 'y', OPERATOR_TOKEN)).toBe(false);
+    });
   });
 
   test('connectClient should upgrade websocket for clients', async () => {
@@ -359,5 +394,27 @@ describe('filterRunnersForUser', () => {
   test('shows shared runners without connection ids, keys or job ids', () => {
     const shared = filterRunnersForUser(runners, 'user-1').find(r => r.name === 'pool');
     expect(shared).toEqual({ name: 'pool', status: 'connected', isShared: true, version: 'v1', isMine: false });
+  });
+});
+
+describe('configForRunner', () => {
+  const config = { base_url: 'http://10.0.0.5', security: { allow_private_ips: true, timeout: 5 } };
+
+  test('forces allow_private_ips off for shared runners', () => {
+    expect(configForRunner(config, ['runner', 'shared'], {}).security).toEqual({ allow_private_ips: false, timeout: 5 });
+    expect(config.security.allow_private_ips).toBe(true); // input not mutated
+  });
+
+  test('leaves configs for a user\'s own runner untouched', () => {
+    expect(configForRunner(config, ['runner', 'user_id:u1'], {})).toBe(config);
+    expect(configForRunner(config, ['runner', 'k', 'user_id:u1'], {})).toBe(config);
+  });
+
+  test('honours the operator opt-in for shared runners', () => {
+    expect(configForRunner(config, ['runner', 'shared'], { SHARED_RUNNERS_ALLOW_PRIVATE_IPS: 'true' })).toBe(config);
+  });
+
+  test('adds the guard when the config has no security block', () => {
+    expect(configForRunner({ base_url: 'x' }, ['runner', 'shared'], {})).toEqual({ base_url: 'x', security: { allow_private_ips: false } });
   });
 });

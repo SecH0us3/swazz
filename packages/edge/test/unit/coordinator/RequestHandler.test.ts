@@ -231,7 +231,7 @@ describe('RequestHandler', () => {
 
     it('returns 503 if no runner could accept job (due to disable_shared_runners)', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner']); // shared runner
+      mockState.getTags.mockReturnValue(['runner', 'shared']); // shared runner
       stateManager.runners.add(mockWs);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
@@ -248,7 +248,7 @@ describe('RequestHandler', () => {
 
     it('returns 503 and leaves scan state in DO storage when compatible runner has reached MAX_ACTIVE_JOBS_PER_RUNNER', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       mockWs.serializeAttachment({ activeJobs: Array.from({ length: 10 }, (_, i) => `job-${i}`) });
       stateManager.runners.add(mockWs);
 
@@ -274,7 +274,7 @@ describe('RequestHandler', () => {
       const freeRunner = createMockWs();
       freeRunner.serializeAttachment({ activeJobs: ['job-other'] });
 
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       stateManager.runners.add(fullRunner);
       stateManager.runners.add(freeRunner);
 
@@ -300,7 +300,7 @@ describe('RequestHandler', () => {
 
       mockState.getTags.mockImplementation((ws: any) => {
         if (ws === privateRunner) return ['runner', 'pubkey-user', 'user_id:user-1'];
-        return ['runner']; // shared
+        return ['runner', 'shared']; // shared
       });
       stateManager.runners.add(privateRunner);
       stateManager.runners.add(sharedRunner);
@@ -324,7 +324,7 @@ describe('RequestHandler', () => {
       corruptRunner.deserializeAttachment.mockImplementation(() => {
         throw new Error('corrupt attachment');
       });
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       stateManager.runners.add(corruptRunner);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
@@ -340,7 +340,7 @@ describe('RequestHandler', () => {
 
     it('dispatches job to compatible runner', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner']); // shared runner
+      mockState.getTags.mockReturnValue(['runner', 'shared']); // shared runner
       stateManager.runners.add(mockWs);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
@@ -354,6 +354,72 @@ describe('RequestHandler', () => {
       expect(mockWs.send).toHaveBeenCalled();
       expect(stateManager.jobs.get('run1')).toBe(mockWs);
       expect(deletedKeys(mockState)).toContain('config:run1');
+    });
+
+    it('forces allow_private_ips off for a job sent to a shared runner', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
+      stateManager.runners.add(mockWs);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', config: { base_url: 'http://169.254.169.254/', security: { allow_private_ips: true, timeout: 5 } } })
+      }));
+
+      expect(res.status).toBe(200);
+      const sent = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sent.payload.config.security).toEqual({ allow_private_ips: false, timeout: 5 });
+    });
+
+    it('keeps allow_private_ips for a job sent to the owner\'s own runner', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner', 'user_id:user-1']);
+      stateManager.runners.add(mockWs);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', userId: 'user-1', config: { security: { allow_private_ips: true } } })
+      }));
+
+      const sent = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sent.payload.config.security.allow_private_ips).toBe(true);
+    });
+
+    it('never sends another user\'s scan to a runner connected with a user API token', async () => {
+      const stateManager = new StateManager(mockState);
+      // Keyless, not shared: a runner some other user connected with their own API key.
+      mockState.getTags.mockReturnValue(['runner', 'user_id:attacker']);
+      stateManager.runners.add(mockWs);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', userId: 'victim', config: { global_headers: { Authorization: 'Bearer secret' } } })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(mockWs.send).not.toHaveBeenCalled();
+    });
+
+    it('does not fall back to a shared runner for an owner who registered a private runner key', async () => {
+      const stateManager = new StateManager(mockState);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
+      stateManager.runners.add(mockWs);
+
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: 'run1', userId: 'user-1', userPublicKey: 'pubkey-offline', config: {} })
+      }));
+
+      expect(res.status).toBe(503);
+      expect(mockWs.send).not.toHaveBeenCalled();
     });
 
     it('dispatches job to the private runner owned by the scan owner', async () => {
@@ -390,7 +456,7 @@ describe('RequestHandler', () => {
 
     it('handles dispatch failure gracefully', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       mockWs.send.mockImplementation(() => {
         throw new Error('send error');
       });
@@ -410,7 +476,7 @@ describe('RequestHandler', () => {
 
     it('loads config from R2 and honours settings.disable_shared_runners from R2 (Threat model invariant 6)', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner']); // shared runner
+      mockState.getTags.mockReturnValue(['runner', 'shared']); // shared runner
       stateManager.runners.add(mockWs);
 
       const configKey = `scans/configs/run1/${crypto.randomUUID()}.json`;
@@ -522,7 +588,7 @@ describe('RequestHandler', () => {
 
     it('deletes R2 object and config_ref after successful send (Threat model invariant 7)', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       stateManager.runners.add(mockWs);
 
       const configKey = `scans/configs/run1/${crypto.randomUUID()}.json`;
@@ -542,7 +608,7 @@ describe('RequestHandler', () => {
       const dispatchMsg = JSON.parse(mockWs.send.mock.calls[0][0]);
       expect(dispatchMsg.type).toBe('job_dispatch');
       expect(dispatchMsg.payload.runId).toBe('run1');
-      expect(dispatchMsg.payload.config).toEqual({ base_url: 'http://test' });
+      expect(dispatchMsg.payload.config).toEqual({ base_url: 'http://test', security: { allow_private_ips: false } });
       expect(dispatchMsg.payload.configKey).toBeUndefined();
 
       expect(deletedKeys(mockState)).toContain('config_ref:run1');
@@ -552,7 +618,7 @@ describe('RequestHandler', () => {
 
     it('keeps R2 object and storage ref after send failure (Threat model invariant 7)', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       mockWs.send.mockImplementation(() => {
         throw new Error('send error');
       });
@@ -797,7 +863,7 @@ describe('RequestHandler', () => {
     it('maps local/test bbad.secmy.app URLs correctly', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       mockGetCachedSwagger.mockResolvedValue(null);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
@@ -848,7 +914,7 @@ describe('RequestHandler', () => {
     it('logs error and falls back on cache DB retrieval fail', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
       mockGetCachedSwagger.mockRejectedValue(new Error('DB connection failed'));
@@ -885,36 +951,29 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(503);
     });
 
-    it('falls back to the only connected private runner when no public key matches', async () => {
+    it('never sends a parse request (with its headers and cookies) to another tenant\'s runner', async () => {
       const stateManager = new StateManager(mockState);
-      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc']); // Private runner
+      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc', 'user_id:someone-else']); // Private runner
       stateManager.runners.add(mockWs);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
       mockGetCachedSwagger.mockResolvedValue(null);
 
-      // The request carries no userPublicKey; the handler falls back to the
-      // only connected runner and awaits the parse response.
-      setTimeout(() => {
-        const reqId = Array.from(stateManager.pendingParses.keys())[0];
-        const resolve = stateManager.pendingParses.get(reqId);
-        resolve?.(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-      }, 50);
-
       const res = await handler.handle(new Request('http://localhost/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: 'http://example.com/swagger.json' })
+        body: JSON.stringify({ url: 'http://example.com/swagger.json', userId: 'caller', headers: { Authorization: 'Bearer secret' } })
       }));
 
-      expect(res.status).toBe(200);
-      expect(mockWs.send).toHaveBeenCalled();
+      expect(res.status).toBe(503);
+      expect(mockWs.send).not.toHaveBeenCalled();
+      expect(stateManager.pendingParseUrls.size).toBe(0);
     });
 
     it('sends parse_request to matching private runner and awaits response', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc']); // Private runner
+      mockState.getTags.mockReturnValue(['runner', 'pubkey-abc', 'user_id:caller']); // Private runner
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
       mockGetCachedSwagger.mockResolvedValue(null);
@@ -928,7 +987,7 @@ describe('RequestHandler', () => {
       const res = await handler.handle(new Request('http://localhost/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: 'http://example.com/swagger.json', userPublicKey: 'pubkey-abc' })
+        body: JSON.stringify({ url: 'http://example.com/swagger.json', userPublicKey: 'pubkey-abc', userId: 'caller' })
       }));
 
       expect(res.status).toBe(200);
@@ -938,7 +997,7 @@ describe('RequestHandler', () => {
     it('sends parse_request to runner and awaits response', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
       mockGetCachedSwagger.mockResolvedValue(null);
@@ -967,7 +1026,7 @@ describe('RequestHandler', () => {
     it('handles runner send throw error in /parse', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       mockWs.send.mockImplementation(() => {
         throw new Error('connection lost');
       });
@@ -989,7 +1048,7 @@ describe('RequestHandler', () => {
 
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
       mockGetCachedSwagger.mockResolvedValue(null);
@@ -1037,7 +1096,7 @@ describe('RequestHandler', () => {
     it('sends start command to shared runner', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']); // shared runner
+      mockState.getTags.mockReturnValue(['runner', 'shared']); // shared runner
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
       const res = await handler.handle(new Request('http://localhost/start-run?runId=run1', {
@@ -1055,7 +1114,7 @@ describe('RequestHandler', () => {
     it('handles runnerWs.send throwing error in /start-run', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       mockWs.send.mockImplementation(() => {
         throw new Error('lost connection');
       });
@@ -1131,7 +1190,7 @@ describe('RequestHandler', () => {
     it('returns active runners list with fallback defaults if name/version tags are missing', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       mockWs.deserializeAttachment.mockReturnValue(null);
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
@@ -1204,7 +1263,7 @@ describe('RequestHandler', () => {
     it('returns 403 for shared runners (no public key)', async () => {
       const stateManager = new StateManager(mockState);
       stateManager.runners.add(mockWs);
-      mockState.getTags.mockReturnValue(['runner']);
+      mockState.getTags.mockReturnValue(['runner', 'shared']);
       mockWs.deserializeAttachment.mockReturnValue({ connectionId: 'conn123' });
 
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);

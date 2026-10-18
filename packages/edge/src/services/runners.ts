@@ -33,6 +33,19 @@ export interface IRunnersService {
   restartRunner(connectionId: string, userId: string | null): Promise<{ status: string }>;
 }
 
+const MIN_SHARED_RUNNER_TOKEN_LENGTH = 32;
+
+/** Constant-time check of a runner token against the operator's SHARED_RUNNER_TOKEN. */
+export async function isSharedRunnerToken(token: string, expected: string | undefined): Promise<boolean> {
+  if (!expected || expected.length < MIN_SHARED_RUNNER_TOKEN_LENGTH) return false;
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(token)),
+    crypto.subtle.digest('SHA-256', enc.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(a, b);
+}
+
 /**
  * The runner list a caller may see: their own runners in full, shared runners without anything
  * that identifies or targets them, and nothing at all about other tenants' runners.
@@ -83,8 +96,11 @@ export class RunnersService implements IRunnersService {
     }
 
     let userId = "";
+    let isShared = false;
     if (String(this.env.AUTH_ENABLED) === 'false') {
       userId = "anon-dev-user";
+    } else if (!publicKey && token && await isSharedRunnerToken(token, this.env.SHARED_RUNNER_TOKEN)) {
+      isShared = true;
     } else if (publicKey) {
       publicKey = publicKey.toLowerCase();
       const user = await this.runnersRepo.getUserByPublicKey(publicKey);
@@ -113,9 +129,11 @@ export class RunnersService implements IRunnersService {
       return new Response('Unauthorized: Missing token or X-Runner-Public-Key header', { status: 401 });
     }
 
-    const deleteRequestedAt = await this.runnersRepo.getDeleteRequestedAt(userId);
-    if (deleteRequestedAt !== null) {
-      return new Response('Forbidden: Account is scheduled for deletion', { status: 403 });
+    if (!isShared) {
+      const deleteRequestedAt = await this.runnersRepo.getDeleteRequestedAt(userId);
+      if (deleteRequestedAt !== null) {
+        return new Response('Forbidden: Account is scheduled for deletion', { status: 403 });
+      }
     }
 
     const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
@@ -123,10 +141,16 @@ export class RunnersService implements IRunnersService {
     const req = new Request(originalUrl, rawRequest);
     const url = new URL(req.url);
     url.pathname = '/connect-runner';
+    // The coordinator trusts these parameters, so whatever the client put in the query is replaced.
+    url.searchParams.delete('public_key');
+    url.searchParams.delete('user_id');
+    url.searchParams.delete('shared');
     if (publicKey) {
       url.searchParams.set('public_key', publicKey);
     }
-    if (userId) {
+    if (isShared) {
+      url.searchParams.set('shared', '1');
+    } else if (userId) {
       url.searchParams.set('user_id', userId);
     }
     return stub.fetch(new Request(url.toString(), req));

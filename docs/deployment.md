@@ -97,6 +97,9 @@ The entire stack is deployed on a single virtual machine (VM) using **Docker Com
    ```
    Ensure the service is monitored (e.g., via `systemd` or as a Kubernetes Deployment with a restart policy).
 
+   A key-authenticated runner serves only the account that registered its public key. A key can be registered to one account only.
+3. To operate a **shared runner** that takes every user's scans, set the `SHARED_RUNNER_TOKEN` secret on the coordinator (`wrangler secret put SHARED_RUNNER_TOKEN`, at least 32 characters). Then start the agent with `--token <that value>`. A shared runner receives other users' target credentials, so run it only on infrastructure you control. Leave `SHARED_RUNNERS_ALLOW_PRIVATE_IPS` unset so tenants cannot aim it at your private network.
+
 ---
 
 ## 3. Option B: Self-Hosted Docker Compose Walkthrough

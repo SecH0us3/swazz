@@ -317,7 +317,7 @@ describe('WebSocketHandler', () => {
       };
     });
 
-    mockState.getTags.mockReturnValue(['runner']);
+    mockState.getTags.mockReturnValue(['runner', 'shared']);
     let currentAttachment: any = { activeJobs: ['run-1'], recentJobs: [] };
     mockWs.deserializeAttachment.mockImplementation(() => currentAttachment);
     mockWs.serializeAttachment.mockImplementation((val: any) => { currentAttachment = val; });

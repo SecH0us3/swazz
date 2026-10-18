@@ -1027,7 +1027,7 @@ describe("Projects & Runners API", () => {
     const stub = env.COORDINATOR_DO.get(id);
 
     // 1. Connect a shared runner (no public_key)
-    const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunner1", {
+    const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunner1&shared=1", {
       headers: { "Upgrade": "websocket" }
     });
     const connectSharedRes = await stub.fetch(connectSharedReq as any);
@@ -1207,7 +1207,7 @@ describe("Projects & Runners API", () => {
       const stub = env.COORDINATOR_DO.get(id);
 
       // Connect shared runner
-      const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunnerRestart", {
+      const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunnerRestart&shared=1", {
         headers: { "Upgrade": "websocket" }
       });
       const connectSharedRes = await stub.fetch(connectSharedReq as any);
@@ -2004,7 +2004,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const id = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(id);
 
-        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerShared", {
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerShared&shared=1", {
           headers: { "Upgrade": "websocket" }
         });
         const connectRes = await stub.fetch(connectReq as any);
@@ -2050,7 +2050,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const id = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(id);
 
-        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedPrivateCheck", {
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedPrivateCheck&shared=1", {
           headers: { "Upgrade": "websocket" }
         });
         const connectRes = await stub.fetch(connectReq as any);
@@ -2085,7 +2085,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const id = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(id);
 
-        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedDisabledCheck", {
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedDisabledCheck&shared=1", {
           headers: { "Upgrade": "websocket" }
         });
         const connectRes = await stub.fetch(connectReq as any);

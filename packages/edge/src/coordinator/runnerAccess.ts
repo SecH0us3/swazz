@@ -18,3 +18,23 @@ export function getRunnerOwnerId(tags: string[]): string | null {
 export function isRunnerOwnedBy(tags: string[], userId: string | null | undefined): boolean {
   return !!userId && getRunnerOwnerId(tags) === userId;
 }
+
+// Marks a platform shared runner. Only the Worker adds it, and only after the connection presented
+// the operator's SHARED_RUNNER_TOKEN; every other runner belongs to exactly one user.
+export const SHARED_RUNNER_TAG = 'shared';
+
+export function isSharedRunnerTags(tags: string[]): boolean {
+  return tags.includes(SHARED_RUNNER_TAG);
+}
+
+/**
+ * The scan config as a given runner may receive it. A shared runner sits on the operator's
+ * network, so a tenant must not be able to switch off its SSRF guard: allow_private_ips is
+ * forced off there unless the operator opted in with SHARED_RUNNERS_ALLOW_PRIVATE_IPS.
+ */
+export function configForRunner(config: any, tags: string[], env: { SHARED_RUNNERS_ALLOW_PRIVATE_IPS?: string }): any {
+  if (!isSharedRunnerTags(tags) || env.SHARED_RUNNERS_ALLOW_PRIVATE_IPS === 'true') return config;
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return config;
+  const security = config.security && typeof config.security === 'object' && !Array.isArray(config.security) ? config.security : {};
+  return { ...config, security: { ...security, allow_private_ips: false } };
+}

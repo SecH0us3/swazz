@@ -79,18 +79,13 @@ export class ParseHandler implements RouteHandler {
     let runnerWs = null;
     if (body.userId) {
       runnerWs = activeRunners.find(r =>
-        context.stateManager.isPrivateRunner(r) && isRunnerOwnedBy(context.state.getTags(r), body.userId)
+        !context.stateManager.isSharedRunner(r) && isRunnerOwnedBy(context.state.getTags(r), body.userId)
       );
     }
+    // The request carries the caller's target URL, headers and cookies, so it goes only to the
+    // caller's own runner or to an operator shared runner, never to another tenant's runner.
     if (!runnerWs) {
-      runnerWs = activeRunners.find(r => !context.stateManager.isPrivateRunner(r)) || null;
-    }
-
-    // If still no runner, fall back to any available runner.
-    // This handles cases where all connected runners are private (keyed) but the
-    // userPublicKey lookup failed (e.g. user hasn't saved their public key yet).
-    if (!runnerWs) {
-      runnerWs = activeRunners[0] || null;
+      runnerWs = activeRunners.find(r => context.stateManager.isSharedRunner(r)) || null;
     }
 
     if (!runnerWs) {

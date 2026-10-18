@@ -37,6 +37,13 @@ export interface Env {
   SWAZZ_LICENSE_PRIVKEY?: string;
   NODE_ENV?: string;
   ALLOW_PRIVATE_WEBHOOKS?: string;
+  // Operator credential for platform shared runners, which take any tenant's scans. A runner that
+  // authenticates with an ordinary user API key only ever serves that user. At least 32 chars.
+  SHARED_RUNNER_TOKEN?: string;
+  // 'true' keeps a scan's security.allow_private_ips when it runs on a shared runner. Only for
+  // single-tenant or local setups: otherwise any tenant could aim the operator's runners at
+  // their private network.
+  SHARED_RUNNERS_ALLOW_PRIVATE_IPS?: string;
   WAF_CHECKER_URL?: string;
   SEND_EMAIL?: SendEmailBinding;
   AI?: WorkersAIBinding;

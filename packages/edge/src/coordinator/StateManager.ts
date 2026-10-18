@@ -3,7 +3,8 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { getPublicKeyFromTags, getRunIdFromTags } from './utils';
+import { getRunIdFromTags } from './utils';
+import { isSharedRunnerTags } from './runnerAccess';
 
 // Upper bound on scans one runner holds concurrently. Keeps the socket attachment
 // (activeJobs + recentJobs) well under the 2 KB Durable Object limit and bounds the
@@ -50,9 +51,9 @@ export class StateManager {
     }
   }
 
-  isPrivateRunner(ws: WebSocket): boolean {
-    const tags = this.state.getTags(ws);
-    return !!getPublicKeyFromTags(tags);
+  /** A platform runner that may take any tenant's scans; every other runner serves one user. */
+  isSharedRunner(ws: WebSocket): boolean {
+    return isSharedRunnerTags(this.state.getTags(ws));
   }
 
   hasCapacity(ws: WebSocket): boolean {

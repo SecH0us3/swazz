@@ -32,6 +32,7 @@ These configurations apply to the Edge Coordinator service located in `packages/
 | **`GITHUB_REDIRECT_URI`** | Custom redirect URI for GitHub OAuth callback. | `https://your-domain.com/api/auth/callback/github` |
 | **`GITLAB_CLIENT_ID`** | Client ID (Application ID) for GitLab OAuth 2.0 application. | *Secret string* |
 | **`GITLAB_CLIENT_SECRET`** | Secret for GitLab OAuth 2.0 application. | *Secret string* |
+| **`SHARED_RUNNER_TOKEN`** | Operator credential for **shared runners**, which take every user's scans and spec imports (target credentials included). An agent started with `--token <this value>` registers as a shared runner. Runners that connect with a user's own API key or registered Ed25519 key serve only that user. Unset or shorter than 32 characters means no shared runners. | *Secret string* (`openssl rand -hex 32`) |
 | **`GITLAB_REDIRECT_URI`** | Custom redirect URI for GitLab OAuth callback. | `https://your-domain.com/api/auth/callback/gitlab` |
 
 ### 3. Config Vars (Environment Variables)
@@ -45,6 +46,8 @@ These configurations apply to the Edge Coordinator service located in `packages/
 | **`ALLOWED_ORIGINS`** | CORS allowed origins list. | `"*"` |
 | **`TURNSTILE_SITE_KEY`** | Public site key for Cloudflare Turnstile CAPTCHA. | `0x4AAAAAAD...` |
 | **`VERSION`** | Deployed Edge Worker version. | `"1.0.0"` |
+| **`SHARED_RUNNERS_ALLOW_PRIVATE_IPS`** | When not `"true"`, the coordinator forces a scan's `security.allow_private_ips` to `false` before handing the scan to a shared runner, so one tenant cannot point the operator's runners at private networks or cloud metadata. Set `"true"` only for single-tenant or local setups (the dev and e2e scripts do). | unset (`false`) |
+| **`PASSWORD_AUTH_ENABLED`** | `"false"` turns off password sign-up and sign-in on the server (`/api/auth/register`, `/api/auth/login/step1` and `/api/auth/login` return 403), not only in the dashboard. | `"true"` |
 | `BETA_MODE_ENABLED`| `true` | (Optional) Set to `false` to disable the closed beta limits and hide beta banners entirely. |
 | `BETA_USER_LIMIT`| `50` | (Optional) The maximum number of users allowed to register before requiring an invite code (when beta is enabled). |
 | `BETA_BYPASS_CODE`| `SWAZZ_BETA_2026` | (Optional) The invite code that allows bypassing the beta limit. |

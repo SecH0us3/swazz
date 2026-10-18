@@ -4,8 +4,13 @@ set -e
 # 1. Run migrations for D1 SQLite database
 npx wrangler d1 migrations apply swazz_db --local --yes
 
-# 2. Seed the default CI user for local runner agent connections
-npx wrangler d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', 'swazz_live_citoken1234567890', 'Supporter Plan');"
+# 2. Shared runners authenticate with an operator token supplied at start; the image ships no
+#    built-in credential. Without SWAZZ_RUNNER_TOKEN, runners can still connect with a user's own
+#    API key, and then serve only that user's scans.
+if [ -n "${SWAZZ_RUNNER_TOKEN:-}" ]; then
+  set -- --var "SHARED_RUNNER_TOKEN:${SWAZZ_RUNNER_TOKEN}" \
+         --var "SHARED_RUNNERS_ALLOW_PRIVATE_IPS:${SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS:-false}"
+fi
 
 # 3. Start wrangler dev in local mode, listening on all interfaces
-exec npx wrangler dev src/index.ts --ip 0.0.0.0 --port 8080 --local
+exec npx wrangler dev src/index.ts --ip 0.0.0.0 --port 8080 --local "$@"

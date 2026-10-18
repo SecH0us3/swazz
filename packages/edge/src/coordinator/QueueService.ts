@@ -4,9 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Env } from '../env';
-import { isRunnerOwnedBy } from './runnerAccess';
+import { isRunnerOwnedBy, isSharedRunnerTags, configForRunner } from './runnerAccess';
 import { StateManager, MAX_ACTIVE_JOBS_PER_RUNNER } from './StateManager';
-import { scanStateKeys, clearScanState, batchStorageGet, FINISHED_SCANS_KEY, getFinishedScans } from './utils';
+import { scanStateKeys, clearScanState, batchStorageGet, FINISHED_SCANS_KEY, getFinishedScans, getPublicKeyFromTags } from './utils';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
@@ -77,13 +77,8 @@ export class QueueService {
       }
 
       const tags = this.state.getTags(ws);
-      const runnerPubKey = tags.find(t => 
-        t !== 'runner-pending' && 
-        t !== 'runner' && 
-        !t.startsWith('name:') && 
-        !t.startsWith('version:') && 
-        !t.startsWith('user_id:')
-      ) || null;
+      const runnerPubKey = getPublicKeyFromTags(tags) || null;
+      const isShared = isSharedRunnerTags(tags);
 
       const scansRepo = new ScansRepository(this.env);
       const activeScans = await scansRepo.getActiveScans();
@@ -120,7 +115,8 @@ export class QueueService {
         let isCompatible = false;
         if (String(this.env.AUTH_ENABLED) === 'false') {
           isCompatible = true;
-        } else if (runnerPubKey) {
+        } else if (!isShared) {
+          // A runner that is not an operator shared runner serves its owner's scans only.
           if (isRunnerOwnedBy(tags, scan.user_id)) {
             isCompatible = true;
           }
@@ -233,7 +229,7 @@ export class QueueService {
             type: 'job_dispatch',
             payload: {
               runId,
-              config,
+              config: configForRunner(config, tags, this.env),
               userPublicKey: runnerPubKey || "",
             },
           });

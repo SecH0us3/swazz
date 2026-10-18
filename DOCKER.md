@@ -7,8 +7,9 @@ This guide explains how to run the Swazz application stack locally using Docker 
 The easiest way to run the entire Swazz system locally in an offline, all-in-one setup is via Docker Compose.
 
 ```bash
-# 1. Copy the example env file
+# 1. Copy the example env file and set the shared runner token
 cp .env.example .env
+echo "SWAZZ_RUNNER_TOKEN=$(openssl rand -hex 32)" >> .env
 
 # 2. Start all services
 docker compose up --build
@@ -19,7 +20,7 @@ docker compose up --build
 ```
 
 This Docker Compose setup starts three containers:
-1. **`backend`**: The Cloudflare Edge Coordinator (Hono + local Wrangler emulator) on port 8081. It automatically runs SQLite migrations and seeds a default CI user with API Key `swazz_live_citoken1234567890` for runner connections.
+1. **`backend`**: The Cloudflare Edge Coordinator (Hono + local Wrangler emulator) on port 8081. It automatically runs SQLite migrations and accepts the shared runner that presents `SWAZZ_RUNNER_TOKEN` from your `.env` (compose refuses to start without it; generate one with `openssl rand -hex 32`). No credential is built into the image.
 2. **`frontend`**: The React 19 web dashboard served via Nginx on port 3000. It proxies `/api` to the coordinator and includes WebSocket upgrade headers.
 3. **`runner`**: The Go-based fuzzer runner agent. It runs headlessly, connects to the coordinator WebSocket endpoint (`ws://backend:8080/api/runners/connect`), and executes fuzzer runs.
 
@@ -34,11 +35,17 @@ docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
 # Run the fuzzer agent on the host network, connecting to the compose coordinator:
 docker run --rm -it ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> run-agent \
   --coordinator ws://localhost:8081/api/runners/connect \
-  --token swazz_live_citoken1234567890 \
+  --token "$SWAZZ_RUNNER_TOKEN" \
   --dangerous-no-container
 ```
 
 ## Security Considerations
+
+### Runner Credentials
+- **Shared runner** (takes every user's scans): connects with the operator token `SWAZZ_RUNNER_TOKEN`, which the coordinator reads as `SHARED_RUNNER_TOKEN` (at least 32 characters). Treat it like a password.
+- **Personal runner**: connects with a user's own API key, or with a registered Ed25519 public key, and only ever receives that user's scans and spec imports.
+- A shared runner sees every user's scan configuration, target credentials included, so run it only on infrastructure you operate.
+- `SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS` (`SHARED_RUNNERS_ALLOW_PRIVATE_IPS` on the coordinator) decides whether a scan's `allow_private_ips` survives on the shared runner. Keep it `false` when other people can sign in.
 
 ### CORS Configuration
 - **Development**: `ALLOWED_ORIGIN=http://localhost` ✅

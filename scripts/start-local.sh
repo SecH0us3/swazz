@@ -7,6 +7,10 @@ lsof -ti :8788,8787,5173 | xargs kill -9 2>/dev/null || true
 pkill -f "swazz-engine" || true
 sleep 1
 
+# Shared runner credential for this local coordinator (see scripts/runner-token.sh).
+SWAZZ_RUNNER_TOKEN="${SWAZZ_RUNNER_TOKEN:-$(bash "scripts/runner-token.sh")}"
+export SWAZZ_RUNNER_TOKEN
+
 # Exports SWAZZ_LICENSE_PUBKEY (dev key, unless already set) for both the edge
 # worker and the locally built Go engine, which embeds no default public key.
 # shellcheck source=scripts/dev-license-keys.sh
@@ -27,7 +31,7 @@ disown
 
 # Start Edge Coordinator
 echo "Starting Edge Coordinator..."
-NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --inspector-port 9231 < /dev/null > edge.log 2>&1 &
+NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --inspector-port 9231 < /dev/null > edge.log 2>&1 &
 disown
 
 # Start React Web Frontend
@@ -59,7 +63,7 @@ echo "Compiling and starting Go Runner..."
 (cd packages/container && go build -o swazz-engine)
 ./packages/container/swazz-engine run-agent \
   --coordinator ws://127.0.0.1:8787/api/runners/connect \
-  --token swazz_live_citoken1234567890 \
+  --token "$SWAZZ_RUNNER_TOKEN" \
   --dangerous-no-container < /dev/null > packages/container/agent.log 2>&1 &
 disown
 
