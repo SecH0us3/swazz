@@ -35,19 +35,40 @@ export async function mockEnterpriseLicense(page: Page, features: string[] = ['*
 }
 
 /**
+ * Calls a dashboard WebMCP tool as a test fast path. Returns null when WebMCP is off
+ * (SWAZZ_E2E_WEBMCP=0) or the tool is not registered, so the caller takes its DOM path. A tool
+ * that is registered but fails, or answers isError, fails the test: silently falling back would
+ * hide a broken tool and leave the UI in a state the test never asked for.
+ */
+export async function callWebMcpTool(page: Page, name: string, args: Record<string, unknown>): Promise<any | null> {
+  if (process.env.SWAZZ_E2E_WEBMCP === '0' || !page.webmcp) return null;
+  let available: { name: string }[];
+  try {
+    available = await page.webmcp.tools();
+  } catch {
+    return null; // WebMCP not supported in this browser context
+  }
+  if (!available.some(t => t.name === name)) return null;
+
+  const result: any = await page.webmcp.callTool(name, args);
+  if (result?.isError) {
+    throw new Error(`WebMCP tool ${name} failed: ${JSON.stringify(result.content)}`);
+  }
+  return result;
+}
+
+/**
  * Fast-forward disables the Boundary profile to prevent excessive
  * combinatorial payloads during E2E testing. Uses WebMCP fast-path
  * when available, falling back to manual DOM toggling.
  */
 export async function disableBoundaryProfile(page: Page): Promise<void> {
-  try {
-    if (page.webmcp) {
-      await page.webmcp.callTool('swazz_ui_configure_scan', {
-        profiles: ['RANDOM', 'MALICIOUS'],
-      });
-      return;
-    }
-  } catch {}
+  const profiles = ['RANDOM', 'MALICIOUS'];
+  const result = await callWebMcpTool(page, 'swazz_ui_configure_scan', { profiles });
+  if (result) {
+    expect(JSON.parse(result.content[0].text).profiles).toEqual(profiles);
+    return;
+  }
 
   const configSidebar = page.locator('.config-sidebar');
   if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
@@ -70,12 +91,9 @@ export async function disableBoundaryProfile(page: Page): Promise<void> {
  * using WebMCP when available with fallback to DOM click.
  */
 export async function switchDashboardTab(page: Page, tab: string): Promise<void> {
-  try {
-    if (page.webmcp) {
-      await page.webmcp.callTool('swazz_ui_switch_tab', { tab: tab.toLowerCase() });
-      return;
-    }
-  } catch {}
+  if (await callWebMcpTool(page, 'swazz_ui_switch_tab', { tab: tab.toLowerCase() })) {
+    return;
+  }
 
   const tabBtn = page.locator(`button.tab-bar-btn:has-text("${tab}")`);
   await expect(tabBtn).toBeVisible();
