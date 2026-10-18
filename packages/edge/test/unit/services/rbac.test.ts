@@ -164,6 +164,16 @@ describe('RbacService', () => {
       await expect(service.updateCustomRole('p1', 'u1', 'owner', { name: 'Test' })).rejects.toThrow('Default roles cannot be edited|400');
     });
 
+    it('rejects the runner pseudo-role', async () => {
+      await expect(service.updateCustomRole('p1', 'u1', 'runner', { name: 'Test' })).rejects.toThrow('Default roles cannot be edited|400');
+    });
+
+    it('rejects a role that does not belong to the project', async () => {
+      mockRepo.checkCustomRolesExist.mockResolvedValue([]);
+      await expect(service.updateCustomRole('p1', 'u1', 'c_other', { name: 'Test' })).rejects.toThrow('Role not found|404');
+      expect(mockRepo.updateCustomRole).not.toHaveBeenCalled();
+    });
+
     it('updates custom role', async () => {
       mockRepo.checkCustomRolesExist.mockResolvedValue(['c_1']);
       const res = await service.updateCustomRole('p1', 'u1', 'c_1', { name: 'Test', permissions: ['get:/api/projects/:id'] });
@@ -176,10 +186,17 @@ describe('RbacService', () => {
       await expect(service.deleteCustomRole('p1', 'u1', 'owner')).rejects.toThrow('Default roles cannot be deleted|400');
     });
 
+    it('rejects a role that does not belong to the project', async () => {
+      mockRepo.checkCustomRolesExist.mockResolvedValue([]);
+      await expect(service.deleteCustomRole('p1', 'u1', 'c_other')).rejects.toThrow('Role not found|404');
+      expect(mockRepo.deleteCustomRole).not.toHaveBeenCalled();
+    });
+
     it('deletes custom role', async () => {
       mockRepo.checkCustomRolesExist.mockResolvedValue(['c_1']);
       const res = await service.deleteCustomRole('p1', 'u1', 'c_1');
       expect(res.status).toBe('deleted');
+      expect(mockRepo.deleteCustomRole).toHaveBeenCalledWith('p1', 'c_1');
     });
   });
 

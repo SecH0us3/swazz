@@ -28,8 +28,8 @@ export interface IRbacRepository {
   revokeInvitation(id: string): Promise<void>;
   removeProjectMember(projectId: string, userId: string): Promise<void>;
   
-  updateCustomRole(roleId: string, name: string, permissions: string[], includedRoles: string[]): Promise<void>;
-  deleteCustomRole(roleId: string): Promise<void>;
+  updateCustomRole(projectId: string, roleId: string, name: string, permissions: string[], includedRoles: string[]): Promise<void>;
+  deleteCustomRole(projectId: string, roleId: string): Promise<void>;
   
   getUserDetails(userId: string): Promise<{ email: string; username: string } | null>;
   getUserInvitations(email: string, username: string): Promise<any[]>;
@@ -115,6 +115,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
           SELECT cri.child_role_id, rh.depth + 1
           FROM role_hierarchy rh
           JOIN custom_role_inheritance cri ON rh.role_id = cri.parent_role_id
+          JOIN project_custom_roles pcr ON pcr.id = cri.parent_role_id AND pcr.project_id = ?1
           WHERE rh.depth < 3
         )
       SELECT DISTINCT role_id FROM role_hierarchy;
@@ -143,8 +144,12 @@ export class RbacRepository extends BaseService implements IRbacRepository {
 
     if (customRoleIds.length > 0) {
       const placeholders = customRoleIds.map(() => '?').join(',');
-      const query = `SELECT permission_key FROM custom_role_permissions WHERE role_id IN (${placeholders})`;
-      const { results: permResults } = await this.db.prepare(query).bind(...customRoleIds).all<{ permission_key: string }>();
+      // Only roles owned by this project grant permissions here, so a role row of another
+      // project can never widen access even if it was assigned or inherited by mistake.
+      const query = `SELECT crp.permission_key FROM custom_role_permissions crp
+        JOIN project_custom_roles pcr ON pcr.id = crp.role_id
+        WHERE pcr.project_id = ? AND crp.role_id IN (${placeholders})`;
+      const { results: permResults } = await this.db.prepare(query).bind(projectId, ...customRoleIds).all<{ permission_key: string }>();
       
       if (permResults) {
         permResults.forEach(r => permissions.add(r.permission_key));
@@ -310,13 +315,17 @@ export class RbacRepository extends BaseService implements IRbacRepository {
   }
 
   async updateCustomRole(
+    projectId: string,
     roleId: string,
     name: string,
     permissions: string[],
     includedRoles: string[]
   ): Promise<void> {
+    const owned = await this.checkCustomRolesExist(projectId, [roleId]);
+    if (!owned.includes(roleId)) return;
+
     const stmts = [
-      this.db.prepare('UPDATE project_custom_roles SET name = ? WHERE id = ?').bind(name, roleId),
+      this.db.prepare('UPDATE project_custom_roles SET name = ? WHERE id = ? AND project_id = ?').bind(name, roleId, projectId),
       this.db.prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
       this.db.prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ?').bind(roleId)
     ];
@@ -327,12 +336,15 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     await this.db.batch(stmts);
   }
 
-  async deleteCustomRole(roleId: string): Promise<void> {
+  async deleteCustomRole(projectId: string, roleId: string): Promise<void> {
+    const owned = await this.checkCustomRolesExist(projectId, [roleId]);
+    if (!owned.includes(roleId)) return;
+
     await this.db.batch([
-      this.db.prepare('DELETE FROM project_custom_roles WHERE id = ?').bind(roleId),
+      this.db.prepare('DELETE FROM project_custom_roles WHERE id = ? AND project_id = ?').bind(roleId, projectId),
       this.db.prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
       this.db.prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ? OR child_role_id = ?').bind(roleId, roleId),
-      this.db.prepare('DELETE FROM project_member_roles WHERE role_id = ?').bind(roleId)
+      this.db.prepare('DELETE FROM project_member_roles WHERE role_id = ? AND project_id = ?').bind(roleId, projectId)
     ]);
   }
 

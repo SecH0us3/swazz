@@ -38,6 +38,15 @@ export class RbacService implements IRbacService {
     }
   }
 
+  // The route authorizes the caller on :id only, so a role ID taken from the path must be
+  // proven to belong to that project before anything is written through it.
+  private async assertCustomRoleInProject(projectId: string, roleId: string): Promise<void> {
+    const found = await this.rbacRepo.checkCustomRolesExist(projectId, [roleId]);
+    if (!found.includes(roleId)) {
+      throw new Error('Role not found|404');
+    }
+  }
+
   getPermissions() {
     return { permissions: PERMISSIONS };
   }
@@ -241,9 +250,10 @@ export class RbacService implements IRbacService {
     if (!roleId || typeof roleId !== 'string' || roleId.trim() === '') throw new Error('Invalid role ID|400');
     await this.assertNotGuest(userId);
 
-    if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
+    if (Object.keys(DEFAULT_ROLES).includes(roleId) || roleId === 'runner') {
       throw new Error('Default roles cannot be edited|400');
     }
+    await this.assertCustomRoleInProject(projectId, roleId);
 
     if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
       throw new Error('Role name is required and must be a non-empty string|400');
@@ -279,7 +289,7 @@ export class RbacService implements IRbacService {
       }
     }
 
-    await this.rbacRepo.updateCustomRole(roleId, roleName, permissions, includedRoles);
+    await this.rbacRepo.updateCustomRole(projectId, roleId, roleName, permissions, includedRoles);
     await this.rbacRepo.invalidateProjectRBAC(projectId);
 
     return { status: 'updated' };
@@ -290,11 +300,12 @@ export class RbacService implements IRbacService {
     if (!roleId || typeof roleId !== 'string' || roleId.trim() === '') throw new Error('Invalid role ID|400');
     await this.assertNotGuest(userId);
 
-    if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
+    if (Object.keys(DEFAULT_ROLES).includes(roleId) || roleId === 'runner') {
       throw new Error('Default roles cannot be deleted|400');
     }
+    await this.assertCustomRoleInProject(projectId, roleId);
 
-    await this.rbacRepo.deleteCustomRole(roleId);
+    await this.rbacRepo.deleteCustomRole(projectId, roleId);
     await this.rbacRepo.invalidateProjectRBAC(projectId);
 
     return { status: 'deleted' };
