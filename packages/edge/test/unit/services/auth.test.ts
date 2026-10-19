@@ -492,11 +492,25 @@ describe('AuthService', () => {
       await expect(service.exchangeOauthToken({ code: 'code' }, mockContext)).rejects.toThrow('Invalid or expired exchange code|400');
     });
 
-    it('exchangeOauthToken succeeds', async () => {
-      mockSessionCacheGet.mockResolvedValue('jwt');
-      const res = await service.exchangeOauthToken({ code: 'code' }, mockContext);
+    it('exchangeOauthToken succeeds in the browser holding the code\'s binding', async () => {
+      mockSessionCacheGet.mockResolvedValue(JSON.stringify({ token: 'jwt', binding: 'b'.repeat(64) }));
+      const res = await service.exchangeOauthToken({ code: 'code' }, mockContext, 'b'.repeat(64));
       expect(res.status).toBe('ok');
       expect(res.token).toBe('jwt');
+    });
+
+    it.each([
+      ['no binding (a code sent to another browser)', undefined],
+      ['a different browser\'s binding', 'c'.repeat(64)],
+    ])('exchangeOauthToken refuses %s and still spends the code', async (_case, binding) => {
+      mockSessionCacheGet.mockResolvedValue(JSON.stringify({ token: 'attacker-jwt', binding: 'b'.repeat(64) }));
+      await expect(service.exchangeOauthToken({ code: 'code' }, mockContext, binding)).rejects.toThrow('Invalid or expired exchange code|400');
+      expect((mockEnv as any).SESSION_CACHE.delete).toHaveBeenCalledWith('oauth_code:code');
+    });
+
+    it('exchangeOauthToken refuses a code stored before codes were browser-bound', async () => {
+      mockSessionCacheGet.mockResolvedValue('legacy-plain-jwt');
+      await expect(service.exchangeOauthToken({ code: 'code' }, mockContext, 'anything')).rejects.toThrow('|400');
     });
     
     it('handleGithubCallback handles bad state payload', async () => {
@@ -525,6 +539,13 @@ describe('AuthService', () => {
       const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('exchange_code');
       expect(mockRepo.createGithubUser).toHaveBeenCalled();
+      // The code is bound to this browser: the route puts the secret in a cookie, KV keeps both.
+      const code = new URL(res.redirectUrl).searchParams.get('exchange_code');
+      expect(res.exchangeBinding?.code).toBe(code);
+      expect(res.exchangeBinding?.secret).toMatch(/^[0-9a-f]{64}$/);
+      const [key, value] = (mockEnv as any).SESSION_CACHE.put.mock.calls.at(-1);
+      expect(key).toBe(`oauth_code:${code}`);
+      expect(JSON.parse(value).binding).toBe(res.exchangeBinding?.secret);
     });
 
     it('handleGithubCallback handles linking user', async () => {
