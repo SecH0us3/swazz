@@ -49,6 +49,7 @@ type WSMessageIn struct {
 	RunID   string          `json:"runId,omitempty"`
 	UUID    string          `json:"uuid,omitempty"`
 	Seq     uint64          `json:"seq,omitempty"`
+	Exec    string          `json:"exec,omitempty"`
 }
 
 type JobDispatchPayload struct {
@@ -60,8 +61,9 @@ type WSEventOut struct {
 	Type    string      `json:"type"`
 	RunID   string      `json:"runId"`
 	Payload interface{} `json:"payload"`
-	// Seq numbers a run's events for acknowledged delivery (see agent_delivery.go).
-	Seq uint64 `json:"seq,omitempty"`
+	// Seq and Exec number a run's events for acknowledged delivery (see agent_delivery.go).
+	Seq  uint64 `json:"seq,omitempty"`
+	Exec string `json:"exec,omitempty"`
 }
 
 type WSEventPayload struct {
@@ -79,6 +81,7 @@ type AgentDispatcher struct {
 	activeRunnersMu  sync.Mutex
 	parseReqSem      chan struct{}
 	delivery         *deliveryLog
+	sendMu           sync.Mutex
 }
 
 // NewAgentDispatcher creates a new dispatcher instance.
@@ -115,19 +118,21 @@ func (d *AgentDispatcher) ActiveRunIDs() []string {
 	return ids
 }
 
-// ResumeRunIDs lists the runs a new connection claims: those still executing, and those whose
+// ResumeRunIDs lists the runs a new connection claims: those still executing, then those whose
 // events are not all acknowledged yet (a run may have finished while its last events, possibly
-// "complete", were lost with the previous connection).
+// "complete", were lost with the previous connection), the most recently active first. The
+// coordinator honours only so many claims; executing runs must not lose their place to finished ones.
 func (d *AgentDispatcher) ResumeRunIDs() []string {
-	seen := make(map[string]bool)
-	var ids []string
-	for _, id := range append(d.ActiveRunIDs(), d.delivery.unackedRuns()...) {
+	ids := d.ActiveRunIDs()
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		seen[id] = true
+	}
+	for _, id := range d.delivery.unackedRuns() {
 		if !seen[id] {
-			seen[id] = true
 			ids = append(ids, id)
 		}
 	}
-	sort.Strings(ids)
 	return ids
 }
 
@@ -138,9 +143,17 @@ func (d *AgentDispatcher) isActive(runID string) bool {
 	return ok
 }
 
+// queueEvent numbers a run event and queues it for sending. sendMu makes the two one step: runs
+// send events from several goroutines, and a higher seq queued before a lower one would be lost.
+func (d *AgentDispatcher) queueEvent(msg WSEventOut) {
+	d.sendMu.Lock()
+	defer d.sendMu.Unlock()
+	d.outChan <- d.delivery.stamp(msg)
+}
+
 // SendWSEvent sends an event payload to the coordinator.
 func (d *AgentDispatcher) SendWSEvent(runID, typ string, payload interface{}) {
-	d.outChan <- d.delivery.stamp(WSEventOut{
+	d.queueEvent(WSEventOut{
 		Type:  "event",
 		RunID: runID,
 		Payload: WSEventPayload{
@@ -152,7 +165,7 @@ func (d *AgentDispatcher) SendWSEvent(runID, typ string, payload interface{}) {
 
 // SendWSError sends an error event to the coordinator.
 func (d *AgentDispatcher) SendWSError(runID, errStr string) {
-	d.outChan <- d.delivery.stamp(WSEventOut{
+	d.queueEvent(WSEventOut{
 		Type:  "error",
 		RunID: runID,
 		Payload: map[string]string{
@@ -175,7 +188,7 @@ func (d *AgentDispatcher) Dispatch(ctx context.Context, wsMsg WSMessageIn) {
 	case "parse_request":
 		d.handleParseRequest(wsMsg)
 	case "ack":
-		d.delivery.ack(wsMsg.RunID, wsMsg.Seq)
+		d.delivery.ack(wsMsg.RunID, wsMsg.Exec, wsMsg.Seq)
 	default:
 		logWarn("Unknown message type received: %s", wsMsg.Type)
 	}

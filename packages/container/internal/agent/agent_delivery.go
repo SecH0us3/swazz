@@ -6,6 +6,9 @@
 package agent
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -14,8 +17,19 @@ import (
 // Acknowledged delivery of run events. A WebSocket write that "succeeds" only proves the bytes
 // reached the local kernel; on a connection that died half-open they are lost. So every event of
 // a run carries a per-run sequence number and stays in the run's log until the coordinator
-// acknowledges it ({"type":"ack","runId":..,"seq":N} covers every seq <= N). After a reconnect the
-// agent replays whatever is still unacknowledged; the coordinator drops the seqs it already has.
+// acknowledges it ({"type":"ack","runId":..,"exec":..,"seq":N} covers every seq <= N). After a
+// reconnect the agent replays whatever is still unacknowledged; the coordinator drops the seqs it
+// already has.
+//
+// Each execution of a run on this agent has its own random exec id, sent with every event, so the
+// coordinator tells a new execution (numbered from 1 again) from a replay of the current one
+// without having to guess when a dispatch actually started one.
+//
+// Numbers are assigned in the order events are queued for sending (AgentDispatcher.queueEvent),
+// so each run's events reach the wire in sequence order.
+//
+// The coordinator acknowledges every so many events and terminal ones; for the rest (the tail of
+// a run, a run it refuses) the agent asks once the connection has gone quiet (ackRequestMsg).
 //
 // Only a coordinator that announces support (deliveryHeader on the WebSocket upgrade response)
 // acknowledges anything; with any other the log keeps nothing and replays nothing.
@@ -30,9 +44,13 @@ const deliveryHeader = "X-Swazz-Delivery"
 const (
 	maxUnackedPerRun = 10000
 	idleRunLogTTL    = 15 * time.Minute
+	// ackRequestDelay is how long the connection must stay quiet before the agent asks for
+	// acknowledgement of what it sent.
+	ackRequestDelay = time.Second
 )
 
 type runLog struct {
+	exec    string
 	nextSeq uint64
 	unacked []WSEventOut
 	touched time.Time
@@ -44,6 +62,24 @@ type deliveryLog struct {
 	runs    map[string]*runLog
 	now     func() time.Time
 	enabled bool
+}
+
+// ackRequestMsg asks the coordinator to acknowledge the run's events up to Seq of execution Exec,
+// all of which were written on the current connection.
+type ackRequestMsg struct {
+	Type  string `json:"type"`
+	RunID string `json:"runId"`
+	Exec  string `json:"exec"`
+	Seq   uint64 `json:"seq"`
+}
+
+func newExecID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand does not fail on supported platforms; a time-based id keeps executions apart.
+		return fmt.Sprintf("t%x", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }
 
 func newDeliveryLog() *deliveryLog {
@@ -63,24 +99,27 @@ func (l *deliveryLog) setEnabled(enabled bool) {
 	}
 }
 
-// reset starts a fresh sequence for a run that is (re)dispatched to this agent.
+// reset starts a new execution of a run (dispatched to this agent): a new exec id, numbered from 1.
 func (l *deliveryLog) reset(runID string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.runs, runID)
 }
 
-// stamp gives msg the run's next sequence number and keeps it until it is acknowledged.
+// stamp gives msg the run's next sequence number and execution id and keeps it until it is
+// acknowledged. Callers queue the result under AgentDispatcher.sendMu, so a run's events are
+// queued in sequence order.
 func (l *deliveryLog) stamp(msg WSEventOut) WSEventOut {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	rl := l.runs[msg.RunID]
 	if rl == nil {
-		rl = &runLog{}
+		rl = &runLog{exec: newExecID()}
 		l.runs[msg.RunID] = rl
 	}
 	rl.nextSeq++
 	msg.Seq = rl.nextSeq
+	msg.Exec = rl.exec
 	rl.touched = l.now()
 	if !l.enabled {
 		return msg
@@ -96,12 +135,13 @@ func (l *deliveryLog) stamp(msg WSEventOut) WSEventOut {
 	return msg
 }
 
-// ack forgets every message of the run up to and including seq.
-func (l *deliveryLog) ack(runID string, seq uint64) {
+// ack forgets every message of the run's execution exec up to and including seq. An ack for an
+// earlier execution of the run is ignored.
+func (l *deliveryLog) ack(runID, exec string, seq uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	rl := l.runs[runID]
-	if rl == nil {
+	if rl == nil || rl.exec != exec {
 		return
 	}
 	i := sort.Search(len(rl.unacked), func(i int) bool { return rl.unacked[i].Seq > seq })
@@ -109,7 +149,20 @@ func (l *deliveryLog) ack(runID string, seq uint64) {
 	rl.touched = l.now()
 }
 
-// unackedRuns lists the runs that still have messages waiting for an acknowledgement.
+// ackRequest returns the request for acknowledgement of the run's execution exec up to seq, or
+// false when nothing up to seq is still unacknowledged.
+func (l *deliveryLog) ackRequest(runID, exec string, seq uint64) (ackRequestMsg, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	rl := l.runs[runID]
+	if rl == nil || rl.exec != exec || len(rl.unacked) == 0 || rl.unacked[0].Seq > seq {
+		return ackRequestMsg{}, false
+	}
+	return ackRequestMsg{Type: "ack_request", RunID: runID, Exec: exec, Seq: seq}, true
+}
+
+// unackedRuns lists the runs that still have messages waiting for an acknowledgement, the most
+// recently active first.
 func (l *deliveryLog) unackedRuns() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -119,7 +172,13 @@ func (l *deliveryLog) unackedRuns() []string {
 			ids = append(ids, id)
 		}
 	}
-	sort.Strings(ids)
+	sort.Slice(ids, func(i, j int) bool {
+		ti, tj := l.runs[ids[i]].touched, l.runs[ids[j]].touched
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return ids[i] < ids[j]
+	})
 	return ids
 }
 

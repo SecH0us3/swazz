@@ -95,8 +95,6 @@ export class DispatchHandler implements RouteHandler {
           userPublicKey: payload.userPublicKey || "",
         },
       });
-      // Before the dispatch goes out (see QueueService): this execution's events start at seq 1.
-      await context.stateManager.delivery.reset(payload.runId);
       context.stateManager.jobs.set(payload.runId, runner);
       const attachment = runner.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
       const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
@@ -196,8 +194,6 @@ export class StartRunHandler implements RouteHandler {
     } catch (err) {
       return new Response('Invalid JSON config', { status: 400 });
     }
-    // Before the start goes out (see QueueService): this execution's events start at seq 1.
-    await context.stateManager.delivery.reset(runId);
     context.stateManager.jobs.set(runId, runnerWs);
     const attachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
     const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];

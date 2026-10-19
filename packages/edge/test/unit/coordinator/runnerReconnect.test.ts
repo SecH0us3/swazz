@@ -25,6 +25,7 @@ vi.mock('../../../../common/logging/logger', () => ({
 }));
 
 const mockGetScanStatus = vi.fn();
+const mockProcessFindings = vi.fn();
 vi.mock('../../../src/repositories/scans', () => ({
   ScansRepository: vi.fn().mockImplementation(function () {
     return {
@@ -32,6 +33,7 @@ vi.mock('../../../src/repositories/scans', () => ({
       updateScanStatus: vi.fn().mockResolvedValue(true),
       getScanStatus: mockGetScanStatus,
       markFailedIfActive: vi.fn().mockResolvedValue(true),
+      processFindingsQueueMessages: mockProcessFindings,
     };
   }),
 }));
@@ -363,96 +365,158 @@ describe('runner reconnect', () => {
   });
 
   describe('acknowledged delivery', () => {
-    const event = (seq: number, type = 'result') => JSON.stringify({ type: 'event', runId: 'run-1', seq, payload: { type } });
+    const EXEC = 'exec-1';
+    const event = (seq: number, type = 'result', exec = EXEC, runId = 'run-1') =>
+      JSON.stringify({ type: 'event', runId, exec, seq, payload: { type } });
     const acks = (ws: any) => ws.send.mock.calls.map((c: any[]) => JSON.parse(c[0])).filter((m: any) => m.type === 'ack');
+    const ack = (seq: number, exec = EXEC, runId = 'run-1') => ({ type: 'ack', runId, exec, seq });
+    // Acknowledgements go out once persistence settles, in waitUntil.
+    const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
-    const activeRunner = () => {
+    const activeRunner = (stateManager: StateManager) => {
       const ws = fakeWs({ activeJobs: ['run-1'] });
       tagsOf.set(ws, ['runner', 'shared']);
+      stateManager.runners.add(ws);
+      stateManager.jobs.set('run-1', ws);
       return ws;
     };
 
     it('drops a replayed event it already processed, and tells the agent how far it is once', async () => {
       const { handler, stateManager } = setup();
-      const ws = activeRunner();
-      stateManager.runners.add(ws);
-      stateManager.jobs.set('run-1', ws);
+      const ws = activeRunner(stateManager);
 
       await handler.handleMessage(ws, event(1));
       await handler.handleMessage(ws, event(2));
       await handler.handleMessage(ws, event(1)); // replayed after a reconnect
       await handler.handleMessage(ws, event(2));
       await handler.handleMessage(ws, event(3));
+      await flush();
 
       expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(3);
-      expect(acks(ws)).toEqual([{ type: 'ack', runId: 'run-1', seq: 2 }]);
+      expect(acks(ws)).toEqual([ack(2)]);
     });
 
-    it('acknowledges every ACK_EVERY events and every terminal event, after persisting the seq', async () => {
+    it('records every processed seq and acknowledges every ACK_EVERY events and every terminal event', async () => {
       const { handler, stateManager, storage } = setup();
-      const ws = activeRunner();
-      stateManager.runners.add(ws);
-      stateManager.jobs.set('run-1', ws);
+      const ws = activeRunner(stateManager);
 
       for (let seq = 1; seq <= ACK_EVERY + 3; seq++) await handler.handleMessage(ws, event(seq));
-      expect(acks(ws)).toEqual([{ type: 'ack', runId: 'run-1', seq: ACK_EVERY }]);
-      expect(storage.data.get(deliveredSeqKey('run-1'))).toBe(ACK_EVERY);
+      await flush();
+      expect(acks(ws)).toEqual([ack(ACK_EVERY)]);
+      expect(storage.data.get(deliveredSeqKey('run-1'))).toEqual({ exec: EXEC, seq: ACK_EVERY + 3 });
 
       await handler.handleMessage(ws, event(ACK_EVERY + 4, 'complete'));
-      expect(acks(ws).at(-1)).toEqual({ type: 'ack', runId: 'run-1', seq: ACK_EVERY + 4 });
-      expect(storage.data.get(deliveredSeqKey('run-1'))).toBe(ACK_EVERY + 4);
+      await flush();
+      expect(acks(ws).at(-1)).toEqual(ack(ACK_EVERY + 4));
     });
 
-    it('remembers what it processed across a Durable Object restart (persisted acks)', async () => {
-      const { handler, stateManager } = setup(fakeStorage({ [deliveredSeqKey('run-1')]: 7 }));
-      const ws = activeRunner();
+    // Hibernation drops the Durable Object's memory whenever it idles, not only on rare restarts.
+    it('remembers what it processed across hibernation', async () => {
+      const storage = fakeStorage();
+      const first = setup(storage);
+      const ws = activeRunner(first.stateManager);
+      for (let seq = 1; seq <= 3; seq++) await first.handler.handleMessage(ws, event(seq));
+
+      const woken = setup(storage);
+      woken.stateManager.runners.add(ws);
+      for (let seq = 1; seq <= 4; seq++) await woken.handler.handleMessage(ws, event(seq));
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(4);
+    });
+
+    // A run dispatched again (to another runner, or after a restart) is a new execution numbered
+    // from 1, which the coordinator recognizes by its exec id instead of resetting at dispatch.
+    it('starts over for a new execution of the run, and dedups within it', async () => {
+      const { handler, stateManager } = setup(fakeStorage({ [deliveredSeqKey('run-1')]: { exec: 'old', seq: 40 } }));
+      const ws = activeRunner(stateManager);
+
+      await handler.handleMessage(ws, event(1));
+      await handler.handleMessage(ws, event(1));
+      await handler.handleMessage(ws, event(2));
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(2);
+    });
+
+    it('leaves the delivery record alone when a run is dispatched', async () => {
+      mockGetScanStatus.mockResolvedValue('queued');
+      const mark = { exec: EXEC, seq: 300 };
+      const { stateManager, queueService, storage } = setup(fakeStorage({ [deliveredSeqKey('run-9')]: mark }));
+      const ws = fakeWs();
+      tagsOf.set(ws, ['runner', 'shared']);
       stateManager.runners.add(ws);
-      stateManager.jobs.set('run-1', ws);
+      const requests = new RequestHandler(env, state, stateManager, queueService);
 
-      await handler.handleMessage(ws, event(7));
-      await handler.handleMessage(ws, event(8));
-      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(1);
+      await requests.handle(new Request('http://do/dispatch', { method: 'POST', body: JSON.stringify({ runId: 'run-9', config: {} }) }));
+      // An agent still executing the run ignores the dispatch and goes on numbering; its replays
+      // must stay duplicates.
+      expect(storage.data.get(deliveredSeqKey('run-9'))).toEqual(mark);
+      expect(await stateManager.delivery.accept('run-9', EXEC, 300)).toBe('duplicate');
     });
 
-    it('rejects a malformed seq', async () => {
+    it('acknowledges only once the events it covers are persisted', async () => {
       const { handler, stateManager } = setup();
-      const ws = activeRunner();
-      stateManager.runners.add(ws);
-      stateManager.jobs.set('run-1', ws);
+      const ws = activeRunner(stateManager);
+      let release!: () => void;
+      env.FINDINGS_QUEUE.send.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+
+      await handler.handleMessage(ws, event(1));
+      await handler.handleMessage(ws, event(2, 'complete'));
+      await flush();
+      expect(acks(ws)).toEqual([]);
+
+      release();
+      await flush();
+      expect(acks(ws)).toEqual([ack(2)]);
+    });
+
+    it('writes any event straight to D1 when the queue fails', async () => {
+      const { handler, stateManager } = setup();
+      const ws = activeRunner(stateManager);
+      env.FINDINGS_QUEUE.send.mockRejectedValueOnce(new Error('queue down'));
+
+      await handler.handleMessage(ws, event(1));
+      await flush();
+      expect(mockProcessFindings).toHaveBeenCalledWith([{ body: { scanId: 'run-1', type: 'event', payload: { type: 'result' } } }]);
+    });
+
+    it('acknowledges what the agent asks for, including events of runs it refused', async () => {
+      const { handler, stateManager } = setup();
+      const ws = activeRunner(stateManager);
+      await handler.handleMessage(ws, event(1, 'runner_log'));
+      await handler.handleMessage(ws, JSON.stringify({ type: 'ack_request', runId: 'run-1', exec: EXEC, seq: 1 }));
+
+      for (let seq = 1; seq <= 3; seq++) await handler.handleMessage(ws, event(seq, 'result', 'other', 'not-mine'));
+      await handler.handleMessage(ws, JSON.stringify({ type: 'ack_request', runId: 'not-mine', exec: 'other', seq: 3 }));
+      await flush();
+
+      expect(acks(ws)).toEqual([ack(1), ack(3, 'other', 'not-mine')]);
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(1);
+      // A replay of refused events is logged once, not once per event.
+      expect(mockLogError.mock.calls.filter(c => String(c[2]).includes('not-mine'))).toHaveLength(1);
+    });
+
+    it('rejects a malformed seq, exec or ack request', async () => {
+      const { handler, stateManager } = setup();
+      const ws = activeRunner(stateManager);
       for (const seq of [0, -1, 1.5, '2', null]) {
-        await handler.handleMessage(ws, JSON.stringify({ type: 'event', runId: 'run-1', seq, payload: { type: 'result' } }));
+        await handler.handleMessage(ws, JSON.stringify({ type: 'event', runId: 'run-1', exec: EXEC, seq, payload: { type: 'result' } }));
       }
+      for (const exec of [undefined, '', 7, 'x'.repeat(65)]) {
+        await handler.handleMessage(ws, JSON.stringify({ type: 'event', runId: 'run-1', exec, seq: 1, payload: { type: 'result' } }));
+      }
+      await handler.handleMessage(ws, JSON.stringify({ type: 'ack_request', runId: 'run-1', exec: EXEC, seq: 0 }));
+      await flush();
       expect(env.FINDINGS_QUEUE.send).not.toHaveBeenCalled();
+      expect(acks(ws)).toEqual([]);
     });
 
     it('handles agents that send no seq exactly as before', async () => {
       const { handler, stateManager } = setup();
-      const ws = activeRunner();
-      stateManager.runners.add(ws);
-      stateManager.jobs.set('run-1', ws);
+      const ws = activeRunner(stateManager);
       const legacy = JSON.stringify({ type: 'event', runId: 'run-1', payload: { type: 'result' } });
       await handler.handleMessage(ws, legacy);
       await handler.handleMessage(ws, legacy);
+      await flush();
       expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(2);
       expect(acks(ws)).toEqual([]);
-    });
-
-    it('starts the numbering over when a run is dispatched again, before the dispatch goes out', async () => {
-      mockGetScanStatus.mockResolvedValue('queued');
-      const { stateManager, queueService, storage } = setup(fakeStorage({ [deliveredSeqKey('run-9')]: 40 }));
-      await stateManager.delivery.accept('run-9', 41);
-      const ws = fakeWs();
-      tagsOf.set(ws, ['runner', 'shared']);
-      stateManager.runners.add(ws);
-      // The runner may answer at once; a reset after its first events would let their replays through.
-      ws.send.mockImplementation(() => {
-        expect(storage.data.has(deliveredSeqKey('run-9'))).toBe(false);
-      });
-      const requests = new RequestHandler(env, state, stateManager, queueService);
-
-      await requests.handle(new Request('http://do/dispatch', { method: 'POST', body: JSON.stringify({ runId: 'run-9', config: {} }) }));
-      expect(storage.data.has(deliveredSeqKey('run-9'))).toBe(false);
-      expect(await stateManager.delivery.accept('run-9', 1)).toBe('new');
     });
 
     it('announces support on the runner WebSocket upgrade', async () => {
@@ -464,8 +528,8 @@ describe('runner reconnect', () => {
 
     it('drops the delivery state of a stopped run and of runs evicted from finished_runs', async () => {
       const { stateManager, queueService, storage } = setup(fakeStorage({
-        [deliveredSeqKey('stopped')]: 3,
-        [deliveredSeqKey('old')]: 9,
+        [deliveredSeqKey('stopped')]: { exec: EXEC, seq: 3 },
+        [deliveredSeqKey('old')]: { exec: EXEC, seq: 9 },
       }));
       const requests = new RequestHandler(env, state, stateManager, queueService);
       await requests.handle(new Request('http://do/command', { method: 'POST', body: JSON.stringify({ runId: 'stopped', command: 'stop' }) }));

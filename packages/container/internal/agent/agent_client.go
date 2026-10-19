@@ -167,13 +167,23 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 
 	// Write loop
 	go func() {
-		// Highest seq of each run written on this connection. Replayed events are still in the
-		// queue too (or carried over); those copies are skipped.
-		sentUpTo := make(map[string]uint64)
+		// Highest seq of each run's current execution written on this connection. Replayed events
+		// are still in the queue too (or carried over); those copies are skipped.
+		type sentMark struct {
+			exec string
+			seq  uint64
+		}
+		sentUpTo := make(map[string]sentMark)
+		// Runs written to since the connection last went quiet; once it has, the agent asks for
+		// acknowledgement of what the coordinator did not acknowledge on its own.
+		pendingAckRequest := make(map[string]bool)
+		ackTimer := time.NewTimer(ackRequestDelay)
+		ackTimer.Stop()
+		defer ackTimer.Stop()
 		send := func(msg interface{}) bool {
 			ev, sequenced := msg.(WSEventOut)
 			sequenced = sequenced && ev.Seq > 0
-			if sequenced && ev.Seq <= sentUpTo[ev.RunID] {
+			if mark, ok := sentUpTo[ev.RunID]; sequenced && ok && mark.exec == ev.Exec && ev.Seq <= mark.seq {
 				return true
 			}
 			b, err := json.Marshal(msg)
@@ -194,16 +204,33 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			}
 			if err := c.Write(connCtx, websocket.MessageText, b); err != nil {
 				logError("Failed to write to WS: %v", err)
-				select {
-				case s.carry <- msg:
-				default:
-					logError("Dropping a message that failed to send: the resend buffer is full")
+				// An ack request speaks only for the connection it was written on.
+				if _, isAckRequest := msg.(ackRequestMsg); !isAckRequest {
+					select {
+					case s.carry <- msg:
+					default:
+						logError("Dropping a message that failed to send: the resend buffer is full")
+					}
 				}
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return false
 			}
 			if sequenced {
-				sentUpTo[ev.RunID] = ev.Seq
+				sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
+				pendingAckRequest[ev.RunID] = true
+				ackTimer.Reset(ackRequestDelay)
+			}
+			return true
+		}
+		requestAcks := func() bool {
+			for runID := range pendingAckRequest {
+				delete(pendingAckRequest, runID)
+				mark := sentUpTo[runID]
+				if req, ok := s.dispatcher.delivery.ackRequest(runID, mark.exec, mark.seq); ok {
+					if !send(req) {
+						return false
+					}
+				}
 			}
 			return true
 		}
@@ -231,6 +258,10 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 				}
 			case msg := <-s.outChan:
 				if !send(msg) {
+					return
+				}
+			case <-ackTimer.C:
+				if !requestAcks() {
 					return
 				}
 			case <-connCtx.Done():
