@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebSocketHandler } from '../../../src/coordinator/WebSocketHandler';
 import { StateManager, RUNNER_HEARTBEAT_TIMEOUT_MS, MAX_ACTIVE_JOBS_PER_RUNNER } from '../../../src/coordinator/StateManager';
 import { resumeRuns, parseResumeParam } from '../../../src/coordinator/resume';
+import { ACK_EVERY, DELIVERY_HEADER, deliveredSeqKey } from '../../../src/coordinator/delivery';
 import { QueueService } from '../../../src/coordinator/QueueService';
 import { RequestHandler } from '../../../src/coordinator/RequestHandler';
 import { runnerIdentity } from '../../../src/coordinator/runnerAccess';
@@ -358,6 +359,121 @@ describe('runner reconnect', () => {
 
       expect(withHeartbeat.deserializeAttachment()).toMatchObject({ heartbeat: true, connectedAt: expect.any(Number) });
       expect(without.deserializeAttachment().heartbeat).toBeUndefined();
+    });
+  });
+
+  describe('acknowledged delivery', () => {
+    const event = (seq: number, type = 'result') => JSON.stringify({ type: 'event', runId: 'run-1', seq, payload: { type } });
+    const acks = (ws: any) => ws.send.mock.calls.map((c: any[]) => JSON.parse(c[0])).filter((m: any) => m.type === 'ack');
+
+    const activeRunner = () => {
+      const ws = fakeWs({ activeJobs: ['run-1'] });
+      tagsOf.set(ws, ['runner', 'shared']);
+      return ws;
+    };
+
+    it('drops a replayed event it already processed, and tells the agent how far it is once', async () => {
+      const { handler, stateManager } = setup();
+      const ws = activeRunner();
+      stateManager.runners.add(ws);
+      stateManager.jobs.set('run-1', ws);
+
+      await handler.handleMessage(ws, event(1));
+      await handler.handleMessage(ws, event(2));
+      await handler.handleMessage(ws, event(1)); // replayed after a reconnect
+      await handler.handleMessage(ws, event(2));
+      await handler.handleMessage(ws, event(3));
+
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(3);
+      expect(acks(ws)).toEqual([{ type: 'ack', runId: 'run-1', seq: 2 }]);
+    });
+
+    it('acknowledges every ACK_EVERY events and every terminal event, after persisting the seq', async () => {
+      const { handler, stateManager, storage } = setup();
+      const ws = activeRunner();
+      stateManager.runners.add(ws);
+      stateManager.jobs.set('run-1', ws);
+
+      for (let seq = 1; seq <= ACK_EVERY + 3; seq++) await handler.handleMessage(ws, event(seq));
+      expect(acks(ws)).toEqual([{ type: 'ack', runId: 'run-1', seq: ACK_EVERY }]);
+      expect(storage.data.get(deliveredSeqKey('run-1'))).toBe(ACK_EVERY);
+
+      await handler.handleMessage(ws, event(ACK_EVERY + 4, 'complete'));
+      expect(acks(ws).at(-1)).toEqual({ type: 'ack', runId: 'run-1', seq: ACK_EVERY + 4 });
+      expect(storage.data.get(deliveredSeqKey('run-1'))).toBe(ACK_EVERY + 4);
+    });
+
+    it('remembers what it processed across a Durable Object restart (persisted acks)', async () => {
+      const { handler, stateManager } = setup(fakeStorage({ [deliveredSeqKey('run-1')]: 7 }));
+      const ws = activeRunner();
+      stateManager.runners.add(ws);
+      stateManager.jobs.set('run-1', ws);
+
+      await handler.handleMessage(ws, event(7));
+      await handler.handleMessage(ws, event(8));
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a malformed seq', async () => {
+      const { handler, stateManager } = setup();
+      const ws = activeRunner();
+      stateManager.runners.add(ws);
+      stateManager.jobs.set('run-1', ws);
+      for (const seq of [0, -1, 1.5, '2', null]) {
+        await handler.handleMessage(ws, JSON.stringify({ type: 'event', runId: 'run-1', seq, payload: { type: 'result' } }));
+      }
+      expect(env.FINDINGS_QUEUE.send).not.toHaveBeenCalled();
+    });
+
+    it('handles agents that send no seq exactly as before', async () => {
+      const { handler, stateManager } = setup();
+      const ws = activeRunner();
+      stateManager.runners.add(ws);
+      stateManager.jobs.set('run-1', ws);
+      const legacy = JSON.stringify({ type: 'event', runId: 'run-1', payload: { type: 'result' } });
+      await handler.handleMessage(ws, legacy);
+      await handler.handleMessage(ws, legacy);
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(2);
+      expect(acks(ws)).toEqual([]);
+    });
+
+    it('starts the numbering over when a run is dispatched again, before the dispatch goes out', async () => {
+      mockGetScanStatus.mockResolvedValue('queued');
+      const { stateManager, queueService, storage } = setup(fakeStorage({ [deliveredSeqKey('run-9')]: 40 }));
+      await stateManager.delivery.accept('run-9', 41);
+      const ws = fakeWs();
+      tagsOf.set(ws, ['runner', 'shared']);
+      stateManager.runners.add(ws);
+      // The runner may answer at once; a reset after its first events would let their replays through.
+      ws.send.mockImplementation(() => {
+        expect(storage.data.has(deliveredSeqKey('run-9'))).toBe(false);
+      });
+      const requests = new RequestHandler(env, state, stateManager, queueService);
+
+      await requests.handle(new Request('http://do/dispatch', { method: 'POST', body: JSON.stringify({ runId: 'run-9', config: {} }) }));
+      expect(storage.data.has(deliveredSeqKey('run-9'))).toBe(false);
+      expect(await stateManager.delivery.accept('run-9', 1)).toBe('new');
+    });
+
+    it('announces support on the runner WebSocket upgrade', async () => {
+      const { stateManager, queueService } = setup();
+      const requests = new RequestHandler(env, state, stateManager, queueService);
+      const res = await requests.handle(new Request('http://do/connect-runner?name=r1&shared=1'));
+      expect(res.headers.get(DELIVERY_HEADER)).toBe('ack');
+    });
+
+    it('drops the delivery state of a stopped run and of runs evicted from finished_runs', async () => {
+      const { stateManager, queueService, storage } = setup(fakeStorage({
+        [deliveredSeqKey('stopped')]: 3,
+        [deliveredSeqKey('old')]: 9,
+      }));
+      const requests = new RequestHandler(env, state, stateManager, queueService);
+      await requests.handle(new Request('http://do/command', { method: 'POST', body: JSON.stringify({ runId: 'stopped', command: 'stop' }) }));
+      expect(storage.data.has(deliveredSeqKey('stopped'))).toBe(false);
+
+      await markScanFinished(storage as any, 'old');
+      for (let i = 0; i < MAX_FINISHED_SCANS; i++) await markScanFinished(storage as any, `r${i}`);
+      expect(storage.data.has(deliveredSeqKey('old'))).toBe(false);
     });
   });
 

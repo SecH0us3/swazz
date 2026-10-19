@@ -73,7 +73,7 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 
 // runConnection services one coordinator connection for this session.
 func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, opts *websocket.DialOptions, useSignatureAuth bool, privKey ed25519.PrivateKey) error {
-	dialURL, runIDs, err := withResumeParam(urlWithParams, s.dispatcher.ActiveRunIDs())
+	dialURL, runIDs, err := withResumeParam(urlWithParams, s.dispatcher.ResumeRunIDs())
 	if err != nil {
 		return err
 	}
@@ -85,6 +85,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		}
 		return fmt.Errorf("failed to connect to coordinator: %w", err)
 	}
+	s.dispatcher.delivery.setEnabled(resp != nil && resp.Header.Get(deliveryHeader) == "ack")
 
 	// Increase read limit to 50MB to support large HAR payloads from the browser extension
 	c.SetReadLimit(50 * 1024 * 1024)
@@ -166,7 +167,15 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 
 	// Write loop
 	go func() {
+		// Highest seq of each run written on this connection. Replayed events are still in the
+		// queue too (or carried over); those copies are skipped.
+		sentUpTo := make(map[string]uint64)
 		send := func(msg interface{}) bool {
+			ev, sequenced := msg.(WSEventOut)
+			sequenced = sequenced && ev.Seq > 0
+			if sequenced && ev.Seq <= sentUpTo[ev.RunID] {
+				return true
+			}
 			b, err := json.Marshal(msg)
 			if err != nil {
 				logError("Failed to marshal WS message: %v", err)
@@ -193,7 +202,17 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return false
 			}
+			if sequenced {
+				sentUpTo[ev.RunID] = ev.Seq
+			}
 			return true
+		}
+		// Everything the coordinator has not acknowledged goes first: whatever was written into
+		// the previous connection may never have arrived. It drops the seqs it already has.
+		for _, msg := range s.dispatcher.delivery.replay() {
+			if !send(msg) {
+				return
+			}
 		}
 		for {
 			// Messages carried over from a failed connection go first, whenever they arrive.
@@ -228,6 +247,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		for {
 			select {
 			case <-ticker.C:
+				dispatcher.delivery.gc(dispatcher.isActive)
 				// A coordinator without heartbeat support never answers; only enforce the
 				// timeout once it has shown it does.
 				if last := lastPong.Load(); last != 0 && time.Since(time.Unix(0, last)) > s.heartbeatTimeout {

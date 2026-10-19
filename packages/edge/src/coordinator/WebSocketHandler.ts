@@ -215,6 +215,20 @@ export class WebSocketHandler {
             }
           }
 
+          // Acknowledged delivery (delivery.ts): a replayed event the coordinator already has is dropped.
+          const sequenced = msg.seq !== undefined;
+          if (sequenced) {
+            const verdict = await this.stateManager.delivery.accept(runId, msg.seq);
+            if (verdict === 'invalid') {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Runner sent an invalid seq for run ${runId}`, { tags, runId });
+              return;
+            }
+            if (verdict === 'duplicate') {
+              await this.stateManager.delivery.duplicate(ws, runId);
+              return;
+            }
+          }
+
           let shouldCleanup = false;
           if (msg.type === 'error') {
             shouldCleanup = true;
@@ -260,6 +274,10 @@ export class WebSocketHandler {
                 }
               })
             );
+          }
+
+          if (sequenced) {
+            await this.stateManager.delivery.processed(ws, runId, msg.seq, shouldCleanup);
           }
 
           const clientSet = this.stateManager.clients.get(runId);

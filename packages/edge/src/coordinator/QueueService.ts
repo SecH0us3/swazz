@@ -276,6 +276,9 @@ export class QueueService {
             // Leave the rest queued until a slot frees up or another runner connects.
             return;
           }
+          // Before the dispatch goes out: the runner numbers this execution's events from 1, and a
+          // reset after its first events arrived would let their replays through as new.
+          await this.stateManager.delivery.reset(runId);
           const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; recentJobs?: string[] } | null || {};
           const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
 

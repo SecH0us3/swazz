@@ -48,6 +48,7 @@ type WSMessageIn struct {
 	Payload json.RawMessage `json:"payload"`
 	RunID   string          `json:"runId,omitempty"`
 	UUID    string          `json:"uuid,omitempty"`
+	Seq     uint64          `json:"seq,omitempty"`
 }
 
 type JobDispatchPayload struct {
@@ -59,6 +60,8 @@ type WSEventOut struct {
 	Type    string      `json:"type"`
 	RunID   string      `json:"runId"`
 	Payload interface{} `json:"payload"`
+	// Seq numbers a run's events for acknowledged delivery (see agent_delivery.go).
+	Seq uint64 `json:"seq,omitempty"`
 }
 
 type WSEventPayload struct {
@@ -75,6 +78,7 @@ type AgentDispatcher struct {
 	activeRunners    map[string]*runner.Runner
 	activeRunnersMu  sync.Mutex
 	parseReqSem      chan struct{}
+	delivery         *deliveryLog
 }
 
 // NewAgentDispatcher creates a new dispatcher instance.
@@ -86,6 +90,7 @@ func NewAgentDispatcher(coordinatorURL, token string, disableTelemetry bool, out
 		outChan:          outChan,
 		activeRunners:    make(map[string]*runner.Runner),
 		parseReqSem:      make(chan struct{}, 10),
+		delivery:         newDeliveryLog(),
 	}
 }
 
@@ -110,27 +115,50 @@ func (d *AgentDispatcher) ActiveRunIDs() []string {
 	return ids
 }
 
+// ResumeRunIDs lists the runs a new connection claims: those still executing, and those whose
+// events are not all acknowledged yet (a run may have finished while its last events, possibly
+// "complete", were lost with the previous connection).
+func (d *AgentDispatcher) ResumeRunIDs() []string {
+	seen := make(map[string]bool)
+	var ids []string
+	for _, id := range append(d.ActiveRunIDs(), d.delivery.unackedRuns()...) {
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (d *AgentDispatcher) isActive(runID string) bool {
+	d.activeRunnersMu.Lock()
+	defer d.activeRunnersMu.Unlock()
+	_, ok := d.activeRunners[runID]
+	return ok
+}
+
 // SendWSEvent sends an event payload to the coordinator.
 func (d *AgentDispatcher) SendWSEvent(runID, typ string, payload interface{}) {
-	d.outChan <- WSEventOut{
+	d.outChan <- d.delivery.stamp(WSEventOut{
 		Type:  "event",
 		RunID: runID,
 		Payload: WSEventPayload{
 			Type: typ,
 			Data: payload,
 		},
-	}
+	})
 }
 
 // SendWSError sends an error event to the coordinator.
 func (d *AgentDispatcher) SendWSError(runID, errStr string) {
-	d.outChan <- WSEventOut{
+	d.outChan <- d.delivery.stamp(WSEventOut{
 		Type:  "error",
 		RunID: runID,
 		Payload: map[string]string{
 			"error": errStr,
 		},
-	}
+	})
 }
 
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.
@@ -146,6 +174,8 @@ func (d *AgentDispatcher) Dispatch(ctx context.Context, wsMsg WSMessageIn) {
 		d.handleJobCommand(wsMsg)
 	case "parse_request":
 		d.handleParseRequest(wsMsg)
+	case "ack":
+		d.delivery.ack(wsMsg.RunID, wsMsg.Seq)
 	default:
 		logWarn("Unknown message type received: %s", wsMsg.Type)
 	}
@@ -236,6 +266,8 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		logWarn("Ignoring job dispatch for run %s: it is already running on this agent", dispatch.RunID)
 		return
 	}
+	// A new execution of the run: its events are numbered from 1 again, as the coordinator expects.
+	d.delivery.reset(dispatch.RunID)
 
 	if dispatch.Config.LicenseKey != "" {
 		jobLic, licErr := license.LoadAndVerify(dispatch.Config.LicenseKey)
