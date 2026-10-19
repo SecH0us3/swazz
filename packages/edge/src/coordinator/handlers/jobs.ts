@@ -6,7 +6,7 @@
 import { RouteHandler, HandlerContext } from './types';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
 import { ScansRepository } from '../../repositories/scans';
-import { clearScanState, recordJobRunner } from '../utils';
+import { clearScanState, recordJobRunner, forgetJobRunner } from '../utils';
 import { isRunnerOwnedBy, configForRunner, runnerIdentity } from '../runnerAccess';
 
 export class DispatchHandler implements RouteHandler {
@@ -147,6 +147,8 @@ export class CommandHandler implements RouteHandler {
           if (marked) {
             const ref = await context.state.storage.get<string>(`config_ref:${payload.runId}`);
             await clearScanState(context.state.storage, payload.runId);
+            // Its runner may be a dead socket that was pruned: it must not take the stopped run back.
+            await forgetJobRunner(context.state.storage, payload.runId);
             if (ref) {
               await deleteScanConfig(context.env, ref);
             }

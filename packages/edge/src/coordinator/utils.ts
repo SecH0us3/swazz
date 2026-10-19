@@ -78,7 +78,9 @@ export async function clearScanState(storage: DurableObjectStorage, runId: strin
 }
 
 // Which runner identity (see runnerIdentity) a dispatched run belongs to, so a runner that
-// reconnects mid-scan can take its runs back over. Kept until the run reports completion.
+// reconnects mid-scan can take its runs back over (and, once a run completed, still deliver its
+// late log lines). Removed when a run is stopped, and evicted together with the run from the
+// bounded finished_runs list, so the keys stay bounded.
 export function jobRunnerKey(runId: string): string {
   return `job_runner:${runId}`;
 }
@@ -93,10 +95,14 @@ export async function markScanFinished(storage: DurableObjectStorage, runId: str
   const existing = (map instanceof Map ? map.get(FINISHED_SCANS_KEY) : undefined) ?? [];
   const list = Array.isArray(existing) ? existing.filter(id => id !== runId) : [];
   list.push(runId);
+  const evicted: string[] = [];
   while (list.length > MAX_FINISHED_SCANS) {
-    list.shift();
+    evicted.push(list.shift()!);
   }
   await storage.put(FINISHED_SCANS_KEY, list);
+  if (evicted.length > 0 && storage.delete) {
+    await storage.delete(evicted.map(jobRunnerKey));
+  }
 }
 
 export async function getFinishedScans(storage: DurableObjectStorage): Promise<Set<string>> {

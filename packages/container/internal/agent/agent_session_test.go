@@ -190,3 +190,50 @@ func TestAgentSession_HeartbeatNotEnforcedWithoutPongSupport(t *testing.T) {
 	assert.NotContains(t, err.Error(), "heartbeat timeout")
 	assert.GreaterOrEqual(t, <-pings, 5)
 }
+
+// A message whose write failed on a dead connection is resent by the live one, even when the
+// failure is only detected after the new connection is already up.
+func TestAgentSession_CarriedMessagesAreResent(t *testing.T) {
+	type frame struct {
+		Type  string `json:"type"`
+		RunID string `json:"runId"`
+	}
+	frames := make(chan frame, 10)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close(websocket.StatusNormalClosure, "done")
+		for {
+			var f frame
+			if err := wsjson.Read(r.Context(), c, &f); err != nil {
+				return
+			}
+			frames <- f
+		}
+	}))
+	defer ts.Close()
+
+	session := newAgentSession(ts.URL, "tok", true)
+	session.carry <- WSEventOut{Type: "event", RunID: "carried-before"}
+	session.dispatcher.SendWSEvent("queued", "result", nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = session.runConnection(ctx, "ws"+strings.TrimPrefix(ts.URL, "http"), nil, false, nil)
+	}()
+
+	assert.Equal(t, "carried-before", (<-frames).RunID, "carried messages go ahead of the queue")
+	assert.Equal(t, "queued", (<-frames).RunID)
+
+	// A late failure from the previous connection's writer lands in carry while this one is live.
+	session.carry <- WSEventOut{Type: "event", RunID: "carried-late"}
+	select {
+	case f := <-frames:
+		assert.Equal(t, "carried-late", f.RunID)
+	case <-time.After(2 * time.Second):
+		t.Fatal("a message carried over while connected was never sent")
+	}
+}

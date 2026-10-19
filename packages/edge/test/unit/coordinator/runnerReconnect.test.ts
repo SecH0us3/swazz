@@ -14,7 +14,7 @@ import { resumeRuns, parseResumeParam } from '../../../src/coordinator/resume';
 import { QueueService } from '../../../src/coordinator/QueueService';
 import { RequestHandler } from '../../../src/coordinator/RequestHandler';
 import { runnerIdentity } from '../../../src/coordinator/runnerAccess';
-import { jobRunnerKey, FINISHED_SCANS_KEY } from '../../../src/coordinator/utils';
+import { jobRunnerKey, FINISHED_SCANS_KEY, MAX_FINISHED_SCANS, markScanFinished } from '../../../src/coordinator/utils';
 
 const mockLogError = vi.fn();
 const mockLogWarn = vi.fn();
@@ -88,6 +88,7 @@ describe('runner reconnect', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetScanStatus.mockResolvedValue('dispatched');
     tagsOf = new Map();
     pongAt = new Map();
     state = {
@@ -175,14 +176,11 @@ describe('runner reconnect', () => {
       expect(stateManager.jobs.has('run-1')).toBe(false);
     });
 
-    it('refuses finished runs, malformed ids and runners without an identity', async () => {
-      const { stateManager } = setup(fakeStorage({
-        [jobRunnerKey('done')]: 'shared',
-        [FINISHED_SCANS_KEY]: ['done'],
-      }));
+    it('refuses malformed ids and runners without an identity', async () => {
+      const { stateManager } = setup(fakeStorage({ [jobRunnerKey('done')]: 'shared' }));
       const ws = fakeWs();
       tagsOf.set(ws, ['runner', 'shared']);
-      expect(await resumeRuns({ env, state, stateManager }, ws, ['done', '../x', 42, null])).toEqual([]);
+      expect(await resumeRuns({ env, state, stateManager }, ws, ['../x', 42, null])).toEqual([]);
 
       const anonymous = fakeWs();
       tagsOf.set(anonymous, ['runner']);
@@ -231,7 +229,63 @@ describe('runner reconnect', () => {
       expect(dispatch).toHaveBeenCalledWith(ws);
     });
 
-    it('forgets a run\'s runner once the run completes', async () => {
+    it('does not bring back a run that was stopped or failed meanwhile', async () => {
+      const { stateManager, storage } = setup(fakeStorage({ [jobRunnerKey('stopped')]: 'shared' }));
+      mockGetScanStatus.mockResolvedValue('failed');
+      const ws = fakeWs();
+      tagsOf.set(ws, ['runner', 'shared']);
+
+      expect(await resumeRuns({ env, state, stateManager }, ws, ['stopped'])).toEqual([]);
+      expect(stateManager.jobs.has('stopped')).toBe(false);
+      expect(storage.data.has(jobRunnerKey('stopped'))).toBe(false); // and the stale record is gone
+    });
+
+    it('fails closed when D1 cannot confirm the run is still active', async () => {
+      const { stateManager, storage } = setup(fakeStorage({ [jobRunnerKey('run-1')]: 'shared' }));
+      mockGetScanStatus.mockRejectedValue(new Error('D1 unavailable'));
+      const ws = fakeWs();
+      tagsOf.set(ws, ['runner', 'shared']);
+
+      expect(await resumeRuns({ env, state, stateManager }, ws, ['run-1'])).toEqual([]);
+      expect(storage.data.has(jobRunnerKey('run-1'))).toBe(true); // may succeed on the next attempt
+    });
+
+    it('a stop while the runner is gone keeps the agent from taking the run back', async () => {
+      const { stateManager, queueService, storage } = setup(fakeStorage({ [jobRunnerKey('run-1')]: 'shared' }));
+      const requests = new RequestHandler(env, state, stateManager, queueService);
+      // The runner was pruned: no socket holds the run, so the stop takes the no-runner path.
+      await requests.handle(new Request('http://do/command', {
+        method: 'POST',
+        body: JSON.stringify({ runId: 'run-1', command: 'stop' }),
+      }));
+      expect(storage.data.has(jobRunnerKey('run-1'))).toBe(false);
+
+      const ws = fakeWs();
+      tagsOf.set(ws, ['runner', 'shared']);
+      expect(await resumeRuns({ env, state, stateManager }, ws, ['run-1'])).toEqual([]);
+    });
+
+    it('accepts only the late log lines of a run that already completed', async () => {
+      const { handler, stateManager } = setup(fakeStorage({
+        [jobRunnerKey('done')]: 'shared',
+        [FINISHED_SCANS_KEY]: ['done'],
+      }));
+      const ws = fakeWs();
+      tagsOf.set(ws, ['runner', 'shared']);
+      stateManager.runners.add(ws);
+
+      expect(await resumeRuns({ env, state, stateManager }, ws, ['done'])).toEqual([]);
+      expect(stateManager.jobs.has('done')).toBe(false);
+      expect(ws.deserializeAttachment().recentJobs).toEqual(['done']);
+
+      const log = { type: 'event', runId: 'done', payload: { type: 'runner_log', data: { message: 'WAF rules' } } };
+      await handler.handleMessage(ws, JSON.stringify(log));
+      await handler.handleMessage(ws, JSON.stringify({ type: 'event', runId: 'done', payload: { type: 'result' } }));
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(1);
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledWith({ scanId: 'done', type: 'event', payload: log.payload });
+    });
+
+    it('keeps a completed run\'s record until it leaves finished_runs', async () => {
       const { handler, stateManager, storage } = setup(fakeStorage({ [jobRunnerKey('run-1')]: 'shared' }));
       const ws = fakeWs({ activeJobs: ['run-1'] });
       tagsOf.set(ws, ['runner', 'shared']);
@@ -239,6 +293,11 @@ describe('runner reconnect', () => {
       stateManager.jobs.set('run-1', ws);
 
       await handler.handleMessage(ws, JSON.stringify({ type: 'event', runId: 'run-1', payload: { type: 'complete' } }));
+      expect(storage.data.has(jobRunnerKey('run-1'))).toBe(true);
+
+      // Finishing MAX_FINISHED_SCANS more runs evicts run-1, and its record with it.
+      for (let i = 0; i < MAX_FINISHED_SCANS; i++) await markScanFinished(storage as any, `r${i}`);
+      expect((storage.data.get(FINISHED_SCANS_KEY) as string[]).includes('run-1')).toBe(false);
       expect(storage.data.has(jobRunnerKey('run-1'))).toBe(false);
     });
   });

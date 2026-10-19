@@ -33,6 +33,10 @@ var (
 // with heartbeatPong without waking up (a Durable Object WebSocket auto-response) and uses the time
 // of the last ping to drop connections that died without a close frame. Once a pong has been seen,
 // the agent likewise treats heartbeatTimeout without one as a dead connection and reconnects.
+// carryCapacity bounds the messages handed from a failed connection to the next one: one per
+// write goroutine that dies mid-write, so a handful is plenty.
+const carryCapacity = 64
+
 const (
 	heartbeatPing     = `{"type":"ping"}`
 	heartbeatInterval = 30 * time.Second
@@ -47,8 +51,8 @@ const (
 type agentSession struct {
 	outChan    chan interface{}
 	dispatcher *AgentDispatcher
-	// carry holds a message whose write failed when a connection dropped, so the next
-	// connection sends it before anything else in the queue.
+	// carry holds messages whose write failed when a connection dropped (possibly only after the
+	// next connection is up); the live connection sends them ahead of the queue.
 	carry chan interface{}
 
 	heartbeatInterval time.Duration
@@ -60,18 +64,11 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 	return &agentSession{
 		outChan:    outChan,
 		dispatcher: NewAgentDispatcher(coordinatorURL, token, disableTelemetry, outChan),
-		carry:      make(chan interface{}, 1),
+		carry:      make(chan interface{}, carryCapacity),
 
 		heartbeatInterval: heartbeatInterval,
 		heartbeatTimeout:  heartbeatTimeout,
 	}
-}
-
-// runAgentConnection establishes a single coordinator connection with a fresh session and
-// services it until the connection drops (returning the cause) or the agent is told to shut
-// down (returning errAgentShutdown).
-func runAgentConnection(ctx context.Context, urlWithParams string, opts *websocket.DialOptions, coordinatorURL, token, name string, useSignatureAuth bool, privKey ed25519.PrivateKey, pubKeyHex string, disableTelemetry bool) error {
-	return newAgentSession(coordinatorURL, token, disableTelemetry).runConnection(ctx, urlWithParams, opts, useSignatureAuth, privKey)
 }
 
 // runConnection services one coordinator connection for this session.
@@ -163,7 +160,8 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 	logInfo("Successfully connected to coordinator. Awaiting jobs...")
 
 	if len(runIDs) > 0 {
-		logInfo("Resumed %d active run(s) on the new connection", len(runIDs))
+		// The coordinator decides which claims it honours; events of a refused run are dropped there.
+		logInfo("Claimed %d active run(s) for resume on the new connection", len(runIDs))
 	}
 
 	// Write loop
@@ -190,21 +188,28 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 				select {
 				case s.carry <- msg:
 				default:
+					logError("Dropping a message that failed to send: the resend buffer is full")
 				}
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return false
 			}
 			return true
 		}
-		select {
-		case msg := <-s.carry:
-			if !send(msg) {
-				return
-			}
-		default:
-		}
 		for {
+			// Messages carried over from a failed connection go first, whenever they arrive.
 			select {
+			case msg := <-s.carry:
+				if !send(msg) {
+					return
+				}
+				continue
+			default:
+			}
+			select {
+			case msg := <-s.carry:
+				if !send(msg) {
+					return
+				}
 			case msg := <-s.outChan:
 				if !send(msg) {
 					return

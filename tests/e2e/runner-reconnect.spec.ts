@@ -111,7 +111,7 @@ test.describe('Runner reconnect mid-scan', () => {
     // The scan ran on this runner, its connection was reset, and it resumed the run on reconnect.
     await expect.poll(() => agentLog, { timeout: TIMEOUTS.LOAD }).toContain('Received job dispatch');
     await expect.poll(() => proxy!.breaks(), { timeout: TIMEOUTS.LOAD }).toBe(1);
-    await expect.poll(() => agentLog, { timeout: TIMEOUTS.LOAD }).toMatch(/Resumed \d+ active run/);
+    await expect.poll(() => agentLog, { timeout: TIMEOUTS.LOAD }).toMatch(/Claimed \d+ active run\(s\) for resume/);
 
     // The completion event arrived over the new connection: the scan finishes in the dashboard,
     // with its request log populated.

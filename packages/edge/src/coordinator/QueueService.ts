@@ -24,6 +24,12 @@ export class QueueService {
   ) {}
 
   checkAndDispatchQueuedScans(ws: WebSocket): Promise<void> {
+    // Once per call rather than per dispatch pass; a runner that turns out dead gets nothing.
+    const wasRunner = this.stateManager.runners.has(ws);
+    this.stateManager.pruneDeadRunners();
+    if (wasRunner && !this.stateManager.runners.has(ws)) {
+      return Promise.resolve();
+    }
     const existing = this.inFlightByRunner.get(ws);
     if (existing) {
       this.pendingRerun.add(ws);
@@ -97,11 +103,6 @@ export class QueueService {
 
   private async dispatchPass(ws: WebSocket): Promise<void> {
     try {
-      const wasRunner = this.stateManager.runners.has(ws);
-      this.stateManager.pruneDeadRunners();
-      if (wasRunner && !this.stateManager.runners.has(ws)) {
-        return;
-      }
       if (!this.stateManager.hasCapacity(ws)) {
         return;
       }
