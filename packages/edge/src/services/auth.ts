@@ -85,13 +85,32 @@ export interface IAuthService {
   deletePasskey(userId: string, id: string): Promise<any>;
   updateAdminUserPlan(adminSecret: string, providedSecret: string | undefined, body: any): Promise<any>;
   handleGithubLogin(userId: string | null, redirectUri: string, browserNonce: string): Promise<string>;
-  handleGithubCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>, browserNonce?: string): Promise<{ redirectUrl: string }>;
+  handleGithubCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>, browserNonce?: string): Promise<OAuthCallbackResult>;
   handleGitlabLogin(userId: string | null, redirectUri: string, browserNonce: string): Promise<string>;
-  handleGitlabCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>, browserNonce?: string): Promise<{ redirectUrl: string }>;
-  exchangeOauthToken(body: any, c: Context<AppEnv>): Promise<any>;
+  handleGitlabCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>, browserNonce?: string): Promise<OAuthCallbackResult>;
+  exchangeOauthToken(body: any, c: Context<AppEnv>, browserBinding?: string): Promise<any>;
 }
 
 const MAX_STORED_USER_AGENT = 512;
+
+export const OAUTH_EXCHANGE_COOKIE = 'swazz_oauth_exchange';
+export const OAUTH_EXCHANGE_TTL_SECONDS = 60;
+
+export interface OAuthCallbackResult {
+  redirectUrl: string;
+  /** Set only when a session was issued: the route must put `secret` in the browser's cookie. */
+  exchangeBinding?: { code: string; secret: string };
+}
+
+function randomHex(bytes: number): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function constantTimeEquals(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [da, db] = await Promise.all([crypto.subtle.digest('SHA-256', enc.encode(a)), crypto.subtle.digest('SHA-256', enc.encode(b))]);
+  return crypto.subtle.timingSafeEqual(da, db);
+}
 
 export const OAUTH_NONCE_COOKIE = 'swazz_oauth_nonce';
 export const OAUTH_STATE_TTL_SECONDS = 600;
@@ -801,7 +820,7 @@ export class AuthService implements IAuthService {
     return githubAuthUrl.toString();
   }
 
-  async handleGithubCallback(code: string, state: string, frontendUrl: string, c: any, browserNonce?: string): Promise<{ redirectUrl: string }> {
+  async handleGithubCallback(code: string, state: string, frontendUrl: string, c: any, browserNonce?: string): Promise<OAuthCallbackResult> {
     const decodedState = await verifyOAuthState(this.env.JWT_SECRET, state, browserNonce);
     if (!decodedState) {
       return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}` };
@@ -879,15 +898,7 @@ export class AuthService implements IAuthService {
         
         const payload = { sub: userId, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 };
         const jwtToken = await sign(payload, this.env.JWT_SECRET);
-        const exchangeCode = crypto.randomUUID();
-        
-        if (this.env.SESSION_CACHE) {
-          await this.env.SESSION_CACHE.put(`oauth_code:${exchangeCode}`, jwtToken, { expirationTtl: 60 });
-        } else {
-          throw new Error('Internal server error: SESSION_CACHE is not configured|500');
-        }
-        
-        return { redirectUrl: `${frontendUrl}/?exchange_code=${exchangeCode}` };
+        return this.issueExchangeCode(jwtToken, frontendUrl);
       }
     } catch (err) {
       return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Authentication failed. Please try again later.')}` };
@@ -907,7 +918,7 @@ export class AuthService implements IAuthService {
     return gitlabAuthUrl.toString();
   }
 
-  async handleGitlabCallback(code: string, state: string, frontendUrl: string, c: any, browserNonce?: string): Promise<{ redirectUrl: string }> {
+  async handleGitlabCallback(code: string, state: string, frontendUrl: string, c: any, browserNonce?: string): Promise<OAuthCallbackResult> {
     const decodedState = await verifyOAuthState(this.env.JWT_SECRET, state, browserNonce);
     if (!decodedState) {
       return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}` };
@@ -980,34 +991,51 @@ export class AuthService implements IAuthService {
         
         const payload = { sub: userId, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 };
         const jwtToken = await sign(payload, this.env.JWT_SECRET);
-        const exchangeCode = crypto.randomUUID();
-        
-        if (this.env.SESSION_CACHE) {
-          await this.env.SESSION_CACHE.put(`oauth_code:${exchangeCode}`, jwtToken, { expirationTtl: 60 });
-        } else {
-          throw new Error('Internal server error: SESSION_CACHE is not configured|500');
-        }
-        
-        return { redirectUrl: `${frontendUrl}/?exchange_code=${exchangeCode}` };
+        return this.issueExchangeCode(jwtToken, frontendUrl);
       }
     } catch (err) {
       return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Authentication failed. Please try again later.')}` };
     }
   }
 
-  async exchangeOauthToken(body: any, c: any): Promise<any> {
+  /**
+   * Stores the session behind a one-time exchange code, bound to the browser that completed the
+   * OAuth callback. The code travels in the redirect URL, so on its own it is not a credential:
+   * a code lifted from someone's own flow and sent to a victim must not log the victim in.
+   */
+  private async issueExchangeCode(jwtToken: string, frontendUrl: string): Promise<OAuthCallbackResult> {
+    const cache = this.env.SESSION_CACHE;
+    if (!cache) throw new Error('Internal server error: SESSION_CACHE is not configured|500');
+    const exchangeCode = crypto.randomUUID();
+    const binding = randomHex(32);
+    await cache.put(`oauth_code:${exchangeCode}`, JSON.stringify({ token: jwtToken, binding }), { expirationTtl: OAUTH_EXCHANGE_TTL_SECONDS });
+    return {
+      redirectUrl: `${frontendUrl}/?exchange_code=${exchangeCode}`,
+      exchangeBinding: { code: exchangeCode, secret: binding },
+    };
+  }
+
+  async exchangeOauthToken(body: any, c: any, browserBinding?: string): Promise<any> {
     const code = body.code;
     const key = `oauth_code:${code}`;
-    let token: string | null = null;
     const cache = this.env.SESSION_CACHE;
-    if (cache) {
-      token = await cache.get(key);
-      if (token) await cache.delete(key);
-    } else {
-      throw new Error('Internal server error: SESSION_CACHE is not configured|500');
+    if (!cache) throw new Error('Internal server error: SESSION_CACHE is not configured|500');
+    const stored = await cache.get(key);
+    if (!stored) throw new Error('Invalid or expired exchange code|400');
+    // Single use: the code is spent on the first attempt, whether or not the binding matches.
+    await cache.delete(key);
+
+    let entry: { token?: unknown; binding?: unknown } | null = null;
+    try {
+      entry = JSON.parse(stored);
+    } catch {
+      entry = null; // an entry from before codes were browser-bound: refuse it
     }
-    if (!token) throw new Error('Invalid or expired exchange code|400');
-    return { status: 'ok', token };
+    if (!entry || typeof entry.token !== 'string' || typeof entry.binding !== 'string'
+        || !browserBinding || !(await constantTimeEquals(browserBinding, entry.binding))) {
+      throw new Error('Invalid or expired exchange code|400');
+    }
+    return { status: 'ok', token: entry.token };
   }
 
   async createEmailVerificationToken(userId: string, email: string): Promise<string> {

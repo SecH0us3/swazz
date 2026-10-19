@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { UserMenu } from './UserMenu.js';
 import { useToast } from '../hooks/useToast.js';
 import { sanitizeTargetUrl } from '../utils/url.js';
+import { orderInvitations, PENDING_INVITE_KEY } from '../utils/invitations.js';
 import { Logo } from './Common/Logo.js';
 
 interface Props {
@@ -101,7 +102,8 @@ export function Header({
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setInvitations(data.invitations || []);
+                    // Offer the invitation the user arrived for (via /accept-invite) first.
+                    setInvitations(orderInvitations(data.invitations || [], sessionStorage.getItem(PENDING_INVITE_KEY)));
                 }
             } catch (err) {
                 console.error(err);
@@ -126,6 +128,7 @@ export function Header({
             if (res.ok) {
                 const data = await res.json();
                 setInvitations(invs => invs.filter(i => i.token !== inviteToken));
+                if (sessionStorage.getItem(PENDING_INVITE_KEY) === inviteToken) sessionStorage.removeItem(PENDING_INVITE_KEY);
                 window.dispatchEvent(new CustomEvent('swazz:invite-accepted', { detail: { projectId: data.project_id } }));
             } else {
                 const data = await res.json();
@@ -148,6 +151,7 @@ export function Header({
             });
             if (res.ok) {
                 setInvitations(invs => invs.filter(i => i.token !== inviteToken));
+                if (sessionStorage.getItem(PENDING_INVITE_KEY) === inviteToken) sessionStorage.removeItem(PENDING_INVITE_KEY);
                 showToast('Invitation declined', 'success');
             } else {
                 const data = await res.json();

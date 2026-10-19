@@ -23,6 +23,9 @@ export function useAuth() {
         if (exchangeCode) {
             fetch(`${PROXY_URL}/api/auth/oauth/exchange`, {
                 method: 'POST',
+                // The code is bound to this browser by an HttpOnly cookie set in the OAuth callback;
+                // without it the exchange is refused, so a code sent to someone else is useless.
+                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json'
                 },
@@ -48,13 +51,10 @@ export function useAuth() {
             window.history.replaceState({}, '', newUrl);
         }
 
-        const authToken = urlParams.get('auth_token');
-        if (authToken) {
-            localStorage.setItem('swazz_token', authToken);
-            setToken(authToken);
-            setIsGuest(false);
-            sessionStorage.removeItem('swazz_guest');
-            
+        // A session token in the URL is never trusted: anyone can craft such a link and log the
+        // visitor into an account they control (login CSRF). Nothing issues it any more; drop it
+        // from the address bar and history without using it.
+        if (urlParams.has('auth_token')) {
             const newUrl = new URL(window.location.href);
             newUrl.searchParams.delete('auth_token');
             window.history.replaceState({}, '', newUrl);

@@ -9,7 +9,7 @@ import { decode as decodeJwt } from 'hono/jwt';
 import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { errorStatus } from '../utils/http';
-import { IAuthService, AuthService, OAUTH_NONCE_COOKIE, OAUTH_STATE_TTL_SECONDS } from '../services/auth';
+import { IAuthService, AuthService, OAUTH_NONCE_COOKIE, OAUTH_STATE_TTL_SECONDS, OAUTH_EXCHANGE_COOKIE, OAUTH_EXCHANGE_TTL_SECONDS, OAuthCallbackResult } from '../services/auth';
 import { AuthRepository } from '../repositories/auth';
 import { LicenseService } from '../services/license';
 import { ValidationError, isValidId, isValidCredentialId, LIMITS, readJsonBody, reqString, optString } from '../utils/validation';
@@ -57,6 +57,30 @@ function finishOAuthFlow(c: Context<AppEnv>, state: string): string | undefined 
   const nonce = getCookie(c, name);
   deleteCookie(c, name, { path: OAUTH_CALLBACK_PATH, secure: isHttps(c) });
   return nonce;
+}
+
+const OAUTH_EXCHANGE_PATH = '/api/auth/oauth/exchange';
+// One cookie per exchange code, so two flows finishing in the same browser do not collide.
+const oauthExchangeCookieName = (code: string) => `${OAUTH_EXCHANGE_COOKIE}_${code.replace(/[^0-9a-f]/gi, '').slice(0, 16)}`;
+
+/** Hands the browser that completed the callback the secret its exchange code is bound to. */
+function bindExchangeToBrowser(c: Context<AppEnv>, result: OAuthCallbackResult): void {
+  if (!result.exchangeBinding) return;
+  setCookie(c, oauthExchangeCookieName(result.exchangeBinding.code), result.exchangeBinding.secret, {
+    path: OAUTH_EXCHANGE_PATH,
+    httpOnly: true,
+    secure: isHttps(c),
+    sameSite: 'Lax',
+    maxAge: OAUTH_EXCHANGE_TTL_SECONDS,
+  });
+}
+
+/** Reads and clears the binding cookie for this exchange code. */
+function takeExchangeBinding(c: Context<AppEnv>, code: string): string | undefined {
+  const name = oauthExchangeCookieName(code);
+  const binding = getCookie(c, name);
+  deleteCookie(c, name, { path: OAUTH_EXCHANGE_PATH, secure: isHttps(c) });
+  return binding;
 }
 
 export function registerAuthRoutes(
@@ -668,6 +692,7 @@ export function registerAuthRoutes(
 
       const services = authServicesFactory(c.env);
       const result = await services.handleGithubCallback(code, state, frontendUrl, c, finishOAuthFlow(c, state));
+      bindExchangeToBrowser(c, result);
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);
@@ -721,6 +746,7 @@ export function registerAuthRoutes(
 
       const services = authServicesFactory(c.env);
       const result = await services.handleGitlabCallback(code, state, frontendUrl, c, finishOAuthFlow(c, state));
+      bindExchangeToBrowser(c, result);
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);
@@ -734,7 +760,7 @@ export function registerAuthRoutes(
       reqString(body.code, 'code', LIMITS.SHORT_TEXT);
 
       const services = authServicesFactory(c.env);
-      const result = await services.exchangeOauthToken(body, c);
+      const result = await services.exchangeOauthToken(body, c, takeExchangeBinding(c, body.code));
       return c.json(result);
     } catch (err: any) {
       if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);

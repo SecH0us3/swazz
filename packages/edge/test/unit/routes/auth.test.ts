@@ -605,6 +605,34 @@ describe('Auth Routes Unit Tests', () => {
       expect(res.status).toBe(302);
     });
 
+    it('callback binds the issued exchange code to this browser with an HttpOnly cookie', async () => {
+      const code = '0123456789abcdef-aaaa';
+      mockAuthService.handleGithubCallback.mockResolvedValue({ redirectUrl: `http://localhost:5173/?exchange_code=${code}`, exchangeBinding: { code, secret: 's'.repeat(64) } });
+      const res = await app.request('/api/auth/callback/github?code=1&state=s');
+      const cookie = res.headers.getSetCookie().find(c => c.startsWith('swazz_oauth_exchange_')) || '';
+      expect(cookie).toContain(`swazz_oauth_exchange_0123456789abcdef=${'s'.repeat(64)}`);
+      expect(cookie).toContain('HttpOnly');
+      expect(cookie).toContain('Path=/api/auth/oauth/exchange');
+    });
+
+    it('exchange passes this browser\'s binding for the code to the service and clears it', async () => {
+      mockAuthService.exchangeOauthToken.mockResolvedValue({ status: 'ok', token: 't' });
+      const code = '0123456789abcdef-aaaa';
+      const res = await app.request('/api/auth/oauth/exchange', {
+        method: 'POST',
+        headers: { Cookie: `swazz_oauth_exchange_0123456789abcdef=${'s'.repeat(64)}` },
+        body: JSON.stringify({ code }),
+      });
+      expect(mockAuthService.exchangeOauthToken.mock.calls[0][2]).toBe('s'.repeat(64));
+      expect(res.headers.get('Set-Cookie')).toMatch(/swazz_oauth_exchange_0123456789abcdef=;.*Max-Age=0/);
+    });
+
+    it('exchange without the binding cookie passes no binding', async () => {
+      mockAuthService.exchangeOauthToken.mockResolvedValue({ status: 'ok', token: 't' });
+      await app.request('/api/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ code: 'abc' }) });
+      expect(mockAuthService.exchangeOauthToken.mock.calls[0][2]).toBeUndefined();
+    });
+
     it('POST /api/auth/oauth/exchange success', async () => {
       mockAuthService.exchangeOauthToken.mockResolvedValue({ status: 'ok' });
       const res = await app.request('/api/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ code: 't' }) });
