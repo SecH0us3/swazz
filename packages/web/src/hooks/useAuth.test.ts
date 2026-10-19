@@ -235,19 +235,38 @@ describe('useAuth hook', () => {
 
         expect(localStorage.getItem('swazz_token')).toBe('oauth-token-result');
         expect(window.location.search).not.toContain('exchange_code');
+        // The browser binding cookie must travel with the exchange request.
+        const exchangeCall = vi.mocked(globalThis.fetch).mock.calls.find(c => String(c[0]).includes('/api/auth/oauth/exchange'));
+        expect((exchangeCall?.[1] as RequestInit).credentials).toBe('include');
     });
 
-    it('should handle auth_token from URL parameters', async () => {
-        window.history.pushState({}, '', '/?auth_token=direct-auth-token-888');
+    it('never takes a session token from the URL (login CSRF) and strips it', async () => {
+        localStorage.setItem('swazz_token', 'victim-own-session');
+        window.history.pushState({}, '', '/?auth_token=attacker-jwt-888');
 
+        vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+
+        let hookResult: any;
+        await act(async () => {
+            const { result } = renderHook(() => useAuth());
+            hookResult = result;
+        });
+
+        expect(localStorage.getItem('swazz_token')).toBe('victim-own-session');
+        expect(hookResult.current.token).toBe('victim-own-session');
+        expect(window.location.search).not.toContain('auth_token');
+    });
+
+    it('does not create a session from ?auth_token= when signed out', async () => {
+        localStorage.removeItem('swazz_token');
+        window.history.pushState({}, '', '/?auth_token=attacker-jwt-999');
         vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
 
         await act(async () => {
             renderHook(() => useAuth());
         });
 
-        expect(localStorage.getItem('swazz_token')).toBe('direct-auth-token-888');
-        expect(window.location.search).not.toContain('auth_token');
+        expect(localStorage.getItem('swazz_token')).toBeNull();
     });
 
     it('should handle 2fa_required response from login', async () => {

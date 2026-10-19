@@ -25,6 +25,7 @@ import { useAppStore } from './store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
 import { useAuth } from './hooks/useAuth.js';
+import { capturePendingInvite } from './utils/invitations.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
 import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
 import { AuthModal } from './components/Auth/AuthModal.js';
@@ -134,57 +135,12 @@ export default function App() {
         }
     }, [token]);
 
-    const inviteProcessingRef = useRef(false);
-
+    // An invitation link never accepts anything by itself (see utils/invitations.ts): remember the
+    // token so the header offers that invitation first, and take it out of the address bar.
     useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const inviteToken = urlParams.get('token');
-        if (inviteToken && token && !inviteProcessingRef.current) {
-            inviteProcessingRef.current = true;
-            fetch(`${PROXY_URL}/api/auth/invitations/accept`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: inviteToken })
-            })
-            .then(async res => {
-                if (res.ok) {
-                    const data = await res.json();
-                    showToast('Invitation accepted successfully', 'success');
-                    // Remove token from url
-                    const newUrl = new URL(window.location.href);
-                    newUrl.searchParams.delete('token');
-                    window.history.replaceState({}, '', newUrl);
-
-                    try {
-                        const projs = await fetchProjects();
-                        useAppStore.setState({ projects: projs });
-                        const acceptedProj = projs.find(p => p.id === data.project_id);
-                        if (acceptedProj) {
-                            useAppStore.setState({
-                                activeProject: acceptedProj,
-                                loadedRunId: null,
-                                liveRunId: null,
-                                historyStats: null,
-                                stats: null,
-                                liveCount: 0,
-                                selectedResult: null,
-                                heatmapFilter: null,
-                            });
-                        }
-                    } catch (err) {
-                        console.error('Failed to refresh projects after accept', err);
-                    }
-                } else {
-                    res.json().then(data => {
-                        showToast(`Failed to accept invitation: ${data.error}`, 'error');
-                    });
-                }
-            })
-            .catch(err => {
-                showToast(`Failed to accept invitation`, 'error');
-            });
-        }
-    }, [token]);
+        const cleanUrl = capturePendingInvite(window.location.href, sessionStorage);
+        if (cleanUrl) window.history.replaceState({}, '', cleanUrl);
+    }, []);
 
     useEffect(() => {
         const handleInviteAccepted = (e: Event) => {
