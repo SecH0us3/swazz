@@ -77,6 +77,12 @@ export async function clearScanState(storage: DurableObjectStorage, runId: strin
   await storage.delete(scanStateKeys(runId));
 }
 
+// Which runner identity (see runnerIdentity) a dispatched run belongs to, so a runner that
+// reconnects mid-scan can take its runs back over. Kept until the run reports completion.
+export function jobRunnerKey(runId: string): string {
+  return `job_runner:${runId}`;
+}
+
 export const DO_STORAGE_BATCH_LIMIT = 128;
 export const FINISHED_SCANS_KEY = 'finished_runs';
 export const MAX_FINISHED_SCANS = 200;
@@ -122,3 +128,23 @@ export async function batchStorageGet<T = any>(
 }
 
 
+
+/**
+ * Records the identity a run was dispatched to. Never throws: the scan is already on its way to
+ * the runner, and a missing record only means that run cannot be resumed after a reconnect.
+ */
+export async function recordJobRunner(storage: DurableObjectStorage, runId: string, identity: string | null): Promise<boolean> {
+  if (!identity || !storage?.put) return false;
+  try {
+    await storage.put(jobRunnerKey(runId), identity);
+    return true;
+  } catch (err) {
+    console.error(`[Coordinator] Failed to record the runner of scan ${runId}`, err);
+    return false;
+  }
+}
+
+export async function forgetJobRunner(storage: DurableObjectStorage, runId: string): Promise<void> {
+  if (!storage?.delete) return;
+  await storage.delete(jobRunnerKey(runId));
+}

@@ -8,10 +8,12 @@ import { isVersionOutdated, getPublicKeyFromTags } from '../utils';
 import { getRunnerOwnerId, isRunnerOwnedBy, isSharedRunnerTags, SHARED_RUNNER_TAG } from '../runnerAccess';
 import { logWarn } from '../../../../common/logging/logger';
 import { ulid } from 'ulidx';
+import { parseResumeParam, resumeRuns } from '../resume';
 
 export class RunnersHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
     const runnerList = [];
+    context.stateManager.pruneDeadRunners();
     const allWebSockets = new Set([...context.stateManager.runners, ...context.stateManager.pendingChallenges.keys()]);
     for (const ws of allWebSockets) {
       const tags = context.state.getTags(ws);
@@ -111,6 +113,11 @@ export class ConnectRunnerHandler implements RouteHandler {
     const nameTag = `name:${name}`;
     const versionTag = `version:${version}`;
     const userIdTag = userId ? `user_id:${userId}` : '';
+    // Agents that send heartbeats are dropped once they go silent (see pruneDeadRunners).
+    const heartbeat = url.searchParams.get('heartbeat') === '1' ? { heartbeat: true, connectedAt: Date.now() } : {};
+    context.stateManager.pruneDeadRunners();
+    // Runs this agent is still executing from a connection that dropped (see resume.ts).
+    const resume = parseResumeParam(url.searchParams.get('resume'));
     
     if (publicKey) {
       const tags = ["runner-pending", publicKey, nameTag, versionTag];
@@ -123,7 +130,8 @@ export class ConnectRunnerHandler implements RouteHandler {
         
       context.stateManager.pendingChallenges.set(server, nonce);
       const connectionId = ulid();
-      server.serializeAttachment({ authenticated: false, nonce, connectionId });
+      // A keyed runner's claims wait until it has proven its key (WebSocketHandler).
+      server.serializeAttachment({ authenticated: false, nonce, connectionId, ...heartbeat, ...(resume.length ? { resume } : {}) });
       
       try {
         server.send(JSON.stringify({ type: 'challenge', nonce }));
@@ -142,8 +150,10 @@ export class ConnectRunnerHandler implements RouteHandler {
       if (userIdTag) tags.push(userIdTag);
       context.state.acceptWebSocket(server, tags);
       const connectionId = ulid();
-      server.serializeAttachment({ authenticated: true, connectionId });
+      server.serializeAttachment({ authenticated: true, connectionId, ...heartbeat });
       context.stateManager.runners.add(server);
+      // Before dispatching: a resumed run must not be handed out again as an orphan.
+      await resumeRuns(context, server, resume);
 
       const coordinatorVersion = context.env.VERSION || '1.0.0';
       if (isVersionOutdated(version, coordinatorVersion)) {

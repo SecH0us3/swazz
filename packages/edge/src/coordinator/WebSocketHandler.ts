@@ -9,7 +9,8 @@ import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
 import { ScansRepository } from '../repositories/scans';
 import { ulid } from 'ulidx';
-import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, markScanFinished } from './utils';
+import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, markScanFinished, forgetJobRunner } from './utils';
+import { resumeRuns } from './resume';
 import { logError, logWarn } from '../../../common/logging/logger';
 
 export class WebSocketHandler {
@@ -70,8 +71,10 @@ export class WebSocketHandler {
           if (isValid) {
             this.stateManager.pendingChallenges.delete(ws);
             this.stateManager.runners.add(ws);
-            const attachment = ws.deserializeAttachment() as { connectionId?: string } | null || {};
+            const { resume, ...attachment } = ws.deserializeAttachment() as { connectionId?: string; resume?: unknown } | null || {};
             ws.serializeAttachment({ ...attachment, authenticated: true });
+            // Runs claimed in the connection URL are handed over only now that the key is proven.
+            await resumeRuns({ env: this.env, state: this.state, stateManager: this.stateManager }, ws, resume);
             ws.send(JSON.stringify({ type: 'auth_ok' }));
             
             const versionTag = tags.find(t => t.startsWith('version:'));
@@ -290,6 +293,7 @@ export class WebSocketHandler {
             }
             ws.serializeAttachment({ ...attachment, activeJobs, recentJobs });
             await markScanFinished(this.state.storage, runId);
+            await forgetJobRunner(this.state.storage, runId);
             const dispatchPromise = this.queueService.checkAndDispatchQueuedScans(ws);
             if (typeof this.state.waitUntil === 'function') {
               this.state.waitUntil(dispatchPromise);

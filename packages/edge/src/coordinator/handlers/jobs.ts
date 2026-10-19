@@ -6,8 +6,8 @@
 import { RouteHandler, HandlerContext } from './types';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
 import { ScansRepository } from '../../repositories/scans';
-import { clearScanState } from '../utils';
-import { isRunnerOwnedBy, configForRunner } from '../runnerAccess';
+import { clearScanState, recordJobRunner } from '../utils';
+import { isRunnerOwnedBy, configForRunner, runnerIdentity } from '../runnerAccess';
 
 export class DispatchHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -60,6 +60,7 @@ export class DispatchHandler implements RouteHandler {
       return new Response('Already dispatched', { status: 200 });
     }
 
+    context.stateManager.pruneDeadRunners();
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) {
       return new Response('No runners available', { status: 503 });
@@ -103,6 +104,7 @@ export class DispatchHandler implements RouteHandler {
       }
       try {
         runner.send(dispatchMsg);
+        await recordJobRunner(context.state.storage, payload.runId, runnerIdentity(context.state.getTags(runner)));
         await clearScanState(context.state.storage, payload.runId);
         if (configKey) {
           await deleteScanConfig(context.env, configKey);
@@ -173,6 +175,7 @@ export class StartRunHandler implements RouteHandler {
       return new Response('Missing runId', { status: 400 });
     }
     const configText = await request.text();
+    context.stateManager.pruneDeadRunners();
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
     
@@ -210,6 +213,7 @@ export class StartRunHandler implements RouteHandler {
       }
       return new Response("Failed to send start command to runner", { status: 500 });
     }
+    await recordJobRunner(context.state.storage, runId, runnerIdentity(context.state.getTags(runnerWs)));
     return new Response("ok");
   }
 }

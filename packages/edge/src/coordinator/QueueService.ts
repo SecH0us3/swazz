@@ -4,9 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Env } from '../env';
-import { isRunnerOwnedBy, isSharedRunnerTags, configForRunner, getRunnerOwnerId } from './runnerAccess';
+import { isRunnerOwnedBy, isSharedRunnerTags, configForRunner, getRunnerOwnerId, runnerIdentity } from './runnerAccess';
 import { StateManager, MAX_ACTIVE_JOBS_PER_RUNNER } from './StateManager';
-import { scanStateKeys, clearScanState, batchStorageGet, FINISHED_SCANS_KEY, getFinishedScans, getPublicKeyFromTags } from './utils';
+import { scanStateKeys, clearScanState, batchStorageGet, FINISHED_SCANS_KEY, getFinishedScans, getPublicKeyFromTags, recordJobRunner } from './utils';
 import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
@@ -97,6 +97,11 @@ export class QueueService {
 
   private async dispatchPass(ws: WebSocket): Promise<void> {
     try {
+      const wasRunner = this.stateManager.runners.has(ws);
+      this.stateManager.pruneDeadRunners();
+      if (wasRunner && !this.stateManager.runners.has(ws)) {
+        return;
+      }
       if (!this.stateManager.hasCapacity(ws)) {
         return;
       }
@@ -291,6 +296,8 @@ export class QueueService {
             logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Failed to dispatch queued scan ${runId}`, { error: sendErr });
             return;
           }
+
+          await recordJobRunner(this.state.storage, runId, runnerIdentity(tags));
 
           try {
             await scansRepo.updateScanStatus(runId, 'dispatched');
