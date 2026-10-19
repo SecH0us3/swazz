@@ -815,7 +815,7 @@ describe("D1 Database Migrations & API", () => {
 
 describe("Anonymous Limits", () => {
   let userToken: string;
-  const testEnv = { ...env, /* as unknown as Env */ AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined };
+  const testEnv = { ...env, /* as unknown as Env */ AUTH_ENABLED: 'false', PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined };
 
   beforeAll(async () => {
     // Register and login to get a valid token
@@ -1431,7 +1431,7 @@ describe("KV Session Cache", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "kvtestuser", password: "TestPass123!" }),
     });
-    const regRes = await appFetchWrapper(regReq as any, { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env);
+    const regRes = await appFetchWrapper(regReq as any, { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env);
     const regBody = await regRes.json() as any;
     userToken.set(regBody.token);
     testUserId = regBody.id;
@@ -1440,7 +1440,7 @@ describe("KV Session Cache", () => {
 
   it("authenticates via API key and populates KV cache on first request", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Use /api/projects which relies on getUserIdFromRequest middleware
     const req = new Request("http://localhost/api/projects", {
@@ -1459,7 +1459,7 @@ describe("KV Session Cache", () => {
 
   it("serves from KV cache on subsequent requests without querying D1 for api_key", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Pre-populate the KV cache
     const hashedKey = await hashApiKey(testApiKey);
@@ -1490,7 +1490,7 @@ describe("KV Session Cache", () => {
 
   it("negatively caches invalid API keys to prevent cache-miss storms", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     const fakeKey = "swazz_live_invalidkey123456789";
     const req = new Request("http://localhost/api/projects", {
@@ -1508,7 +1508,7 @@ describe("KV Session Cache", () => {
   });
 
   it("gracefully falls back to D1 when SESSION_CACHE is not bound", async () => {
-    const noKvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
+    const noKvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
     const req = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${testApiKey}` },
     });
@@ -1518,7 +1518,7 @@ describe("KV Session Cache", () => {
 
   it("invalidates old KV cache entry when API key is regenerated", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     const hashedOldKey = await hashApiKey(testApiKey);
     // Pre-populate KV with the current API key
@@ -1549,7 +1549,7 @@ describe("KV Session Cache", () => {
 
   it("cleanupScheduledDeletions invalidates deleted users' API keys from KV", async () => {
     const mockKV = createMockKV();
-    const cleanupEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const cleanupEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Register a throwaway user for deletion
     const regReq = new Request("http://localhost/api/auth/register", {

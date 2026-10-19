@@ -22,6 +22,8 @@ describe('Trial License Integration', () => {
     (env as any).SWAZZ_LICENSE_PRIVKEY = testKeyPair.privKeyHex;
     (env as any).JWT_SECRET = 'test-secret';
     (env as any).AUTH_ENABLED = 'true';
+    // These tests register users by password; enable it explicitly rather than inherit .dev.vars.
+    (env as any).PASSWORD_AUTH_ENABLED = 'true';
 
     // Apply migrations
     const migrationFiles = (import.meta as any).glob('../../migrations/*.sql', {
