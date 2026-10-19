@@ -12,8 +12,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -26,11 +29,58 @@ var (
 	errAgentAuthFatal = errors.New("authentication failed")
 )
 
-// runAgentConnection establishes a single coordinator connection and services
-// it until the connection drops (returning the cause) or the agent is told to
-// shut down (returning errAgentShutdown).
+// Heartbeat: the agent sends heartbeatPing every heartbeatInterval. The coordinator answers it
+// with heartbeatPong without waking up (a Durable Object WebSocket auto-response) and uses the time
+// of the last ping to drop connections that died without a close frame. Once a pong has been seen,
+// the agent likewise treats heartbeatTimeout without one as a dead connection and reconnects.
+const (
+	heartbeatPing     = `{"type":"ping"}`
+	heartbeatInterval = 30 * time.Second
+	heartbeatTimeout  = 90 * time.Second
+)
+
+// agentSession is the part of the agent that outlives a single coordinator connection: the
+// dispatcher with its running scans and the queue of messages they emit. Scans keep running
+// across a reconnect; their events wait in the queue and go out over the next connection, which
+// names the runs it still holds in its URL (?resume=) so the coordinator hands them over before
+// it dispatches anything else.
+type agentSession struct {
+	outChan    chan interface{}
+	dispatcher *AgentDispatcher
+	// carry holds a message whose write failed when a connection dropped, so the next
+	// connection sends it before anything else in the queue.
+	carry chan interface{}
+
+	heartbeatInterval time.Duration
+	heartbeatTimeout  time.Duration
+}
+
+func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agentSession {
+	outChan := make(chan interface{}, 50000)
+	return &agentSession{
+		outChan:    outChan,
+		dispatcher: NewAgentDispatcher(coordinatorURL, token, disableTelemetry, outChan),
+		carry:      make(chan interface{}, 1),
+
+		heartbeatInterval: heartbeatInterval,
+		heartbeatTimeout:  heartbeatTimeout,
+	}
+}
+
+// runAgentConnection establishes a single coordinator connection with a fresh session and
+// services it until the connection drops (returning the cause) or the agent is told to shut
+// down (returning errAgentShutdown).
 func runAgentConnection(ctx context.Context, urlWithParams string, opts *websocket.DialOptions, coordinatorURL, token, name string, useSignatureAuth bool, privKey ed25519.PrivateKey, pubKeyHex string, disableTelemetry bool) error {
-	c, resp, err := websocket.Dial(ctx, urlWithParams, opts)
+	return newAgentSession(coordinatorURL, token, disableTelemetry).runConnection(ctx, urlWithParams, opts, useSignatureAuth, privKey)
+}
+
+// runConnection services one coordinator connection for this session.
+func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, opts *websocket.DialOptions, useSignatureAuth bool, privKey ed25519.PrivateKey) error {
+	dialURL, runIDs, err := withResumeParam(urlWithParams, s.dispatcher.ActiveRunIDs())
+	if err != nil {
+		return err
+	}
+	c, resp, err := websocket.Dial(ctx, dialURL, opts)
 	if err != nil {
 		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			logError("Critical Authentication Error: Unauthorized/Forbidden (Status Code: %d). Revoked or invalid credentials. Terminating agent process.", resp.StatusCode)
@@ -45,9 +95,7 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 	connCtx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 
-	// Write loop
-	outChan := make(chan interface{}, 50000)
-	dispatcher := NewAgentDispatcher(coordinatorURL, token, disableTelemetry, outChan)
+	dispatcher := s.dispatcher
 
 	// Add graceful shutdown handler to prevent abrupt WebSocket closures
 	sigCh := make(chan os.Signal, 1)
@@ -114,32 +162,75 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 
 	logInfo("Successfully connected to coordinator. Awaiting jobs...")
 
+	if len(runIDs) > 0 {
+		logInfo("Resumed %d active run(s) on the new connection", len(runIDs))
+	}
+
+	// Write loop
 	go func() {
+		send := func(msg interface{}) bool {
+			b, err := json.Marshal(msg)
+			if err != nil {
+				logError("Failed to marshal WS message: %v", err)
+				return true
+			}
+			if len(b) > 1*1024*1024 {
+				payloadType := "unknown"
+				if eventOut, ok := msg.(WSEventOut); ok {
+					payloadType = fmt.Sprintf("%T", eventOut.Payload)
+					if eventPayload, ok := eventOut.Payload.(WSEventPayload); ok {
+						payloadType = fmt.Sprintf("WSEventPayload with Data: %T", eventPayload.Data)
+					}
+				}
+				logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
+				return true
+			}
+			if err := c.Write(connCtx, websocket.MessageText, b); err != nil {
+				logError("Failed to write to WS: %v", err)
+				select {
+				case s.carry <- msg:
+				default:
+				}
+				_ = c.Close(websocket.StatusInternalError, "write error")
+				return false
+			}
+			return true
+		}
+		select {
+		case msg := <-s.carry:
+			if !send(msg) {
+				return
+			}
+		default:
+		}
 		for {
 			select {
-			case msg, ok := <-outChan:
-				if !ok {
+			case msg := <-s.outChan:
+				if !send(msg) {
 					return
 				}
-				b, err := json.Marshal(msg)
-				if err != nil {
-					logError("Failed to marshal WS message: %v", err)
-					continue
+			case <-connCtx.Done():
+				return
+			}
+		}
+	}()
+
+	// Heartbeat loop
+	var lastPong atomic.Int64 // unix nanos of the last pong; 0 until the coordinator answers one
+	go func() {
+		ticker := time.NewTicker(s.heartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// A coordinator without heartbeat support never answers; only enforce the
+				// timeout once it has shown it does.
+				if last := lastPong.Load(); last != 0 && time.Since(time.Unix(0, last)) > s.heartbeatTimeout {
+					logError("No heartbeat reply from coordinator for %v; reconnecting", s.heartbeatTimeout)
+					_ = c.Close(websocket.StatusGoingAway, "heartbeat timeout")
+					return
 				}
-				if len(b) > 1*1024*1024 {
-					payloadType := "unknown"
-					if eventOut, ok := msg.(WSEventOut); ok {
-						payloadType = fmt.Sprintf("%T", eventOut.Payload)
-						if eventPayload, ok := eventOut.Payload.(WSEventPayload); ok {
-							payloadType = fmt.Sprintf("WSEventPayload with Data: %T", eventPayload.Data)
-						}
-					}
-					logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
-					continue
-				}
-				if err := c.Write(connCtx, websocket.MessageText, b); err != nil {
-					logError("Failed to write to WS: %v", err)
-					_ = c.Close(websocket.StatusInternalError, "write error")
+				if err := c.Write(connCtx, websocket.MessageText, []byte(heartbeatPing)); err != nil {
 					return
 				}
 			case <-connCtx.Done():
@@ -155,7 +246,28 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 			logError("Connection read error: %v", err)
 			return err
 		}
+		if wsMsg.Type == "pong" {
+			lastPong.Store(time.Now().UnixNano())
+			continue
+		}
 
 		dispatcher.Dispatch(ctx, wsMsg)
 	}
+}
+
+// withResumeParam adds the runs this agent is still executing to the connection URL. The
+// coordinator hands each one back to this connection only if it was dispatched to the same
+// runner identity, so the list is a claim, not a credential.
+func withResumeParam(rawURL string, runIDs []string) (string, []string, error) {
+	if len(runIDs) == 0 {
+		return rawURL, nil, nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid coordinator URL: %w", err)
+	}
+	q := u.Query()
+	q.Set("resume", strings.Join(runIDs, ","))
+	u.RawQuery = q.Encode()
+	return u.String(), runIDs, nil
 }

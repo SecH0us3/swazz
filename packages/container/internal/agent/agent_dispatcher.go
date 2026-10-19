@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"swazz-engine/internal/config"
 	"sync"
@@ -95,6 +96,18 @@ func (d *AgentDispatcher) StopAllRunners() {
 	for _, r := range d.activeRunners {
 		r.Stop()
 	}
+}
+
+// ActiveRunIDs lists the runs this agent is executing right now.
+func (d *AgentDispatcher) ActiveRunIDs() []string {
+	d.activeRunnersMu.Lock()
+	defer d.activeRunnersMu.Unlock()
+	ids := make([]string, 0, len(d.activeRunners))
+	for id := range d.activeRunners {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // SendWSEvent sends an event payload to the coordinator.
@@ -213,6 +226,16 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	}
 
 	logInfo("Received job dispatch for runID: %s", dispatch.RunID)
+
+	// After a reconnect the coordinator may hand back a run this agent is still executing;
+	// starting it again would run the scan twice and orphan the first runner.
+	d.activeRunnersMu.Lock()
+	_, running := d.activeRunners[dispatch.RunID]
+	d.activeRunnersMu.Unlock()
+	if running {
+		logWarn("Ignoring job dispatch for run %s: it is already running on this agent", dispatch.RunID)
+		return
+	}
 
 	if dispatch.Config.LicenseKey != "" {
 		jobLic, licErr := license.LoadAndVerify(dispatch.Config.LicenseKey)
