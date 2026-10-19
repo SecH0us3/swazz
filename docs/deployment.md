@@ -97,6 +97,9 @@ The entire stack is deployed on a single virtual machine (VM) using **Docker Com
    ```
    Ensure the service is monitored (e.g., via `systemd` or as a Kubernetes Deployment with a restart policy).
 
+   A key-authenticated runner serves only the account that registered its public key. A key can be registered to one account only.
+3. To operate a **shared runner** that takes every user's scans, set the `SHARED_RUNNER_TOKEN` secret on the coordinator (`wrangler secret put SHARED_RUNNER_TOKEN`, at least 32 characters). Then start the agent with `--token <that value>`. A shared runner receives other users' target credentials, so run it only on infrastructure you control. Leave `SHARED_RUNNERS_ALLOW_PRIVATE_IPS` unset so tenants cannot aim it at your private network.
+
 ---
 
 ## 3. Option B: Self-Hosted Docker Compose Walkthrough
@@ -136,7 +139,7 @@ When deploying Swazz to production, ensure all of the following controls are str
 
 | Check | Control | Risk Addressed | Implementation Detail |
 | :--- | :--- | :--- | :--- |
-| 🛡️ | **Disable Private IP Fuzzing** | Server-Side Request Forgery (SSRF) | Blocked by default. Keep `security.allow_private_ips` unset/false in scan configs, and never start the runner agent with `--dangerous-no-container` or `SWAZZ_DEV=1`, both of which lift the restriction. |
+| 🛡️ | **Disable Private IP Fuzzing** | Server-Side Request Forgery (SSRF) | Blocked by default. Keep `security.allow_private_ips` unset/false in scan configs, and never start the runner agent with `--allow-private-networks` or `SWAZZ_DEV=1`, both of which lift the restriction for every job (`--dangerous-no-container` only skips the container check). |
 | 🔑 | **Pin Docker Image Tags** | Supply Chain Compromise | In Dockerfiles and Compose configurations, use specific SHA-256 hashes instead of `latest` or mutable version tags. |
 | 🌐 | **Restrict CORS Headers** | Cross-Origin Data Leakage | Set `ALLOWED_ORIGIN` (compose) or `ALLOWED_ORIGINS` (Workers) to the exact URL of your frontend dashboard. Never use `*`. |
 | 🤖 | **Enable Turnstile CAPTCHA** | Brute-force & Bot registrations | Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET` variables to enable Captcha verification during registration/login. Verification is skipped whenever `TURNSTILE_SECRET` is unset, so confirm the exact name. |

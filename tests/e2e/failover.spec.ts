@@ -7,6 +7,13 @@ import { test, expect } from '@playwright/test';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { TIMEOUTS, disableBoundaryProfile } from './helpers';
+import { execFileSync } from 'child_process';
+
+// The coordinator only accepts shared runners with the operator token run-e2e.sh started it with.
+function sharedRunnerToken(): string {
+  return process.env.SWAZZ_RUNNER_TOKEN
+    || execFileSync('bash', [path.join(process.cwd(), 'scripts/runner-token.sh')]).toString().trim();
+}
 
 test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
   let secondAgent: ChildProcess | null = null;
@@ -50,8 +57,9 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     secondAgent = spawn(agentBinary, [
       'run-agent',
       '--coordinator', 'ws://127.0.0.1:8787/api/runners/connect',
-      '--token', 'swazz_live_citoken1234567890',
+      '--token', sharedRunnerToken(),
       '--dangerous-no-container',
+      '--allow-private-networks',
       '--name', agentName
     ]);
 

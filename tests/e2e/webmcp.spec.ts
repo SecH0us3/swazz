@@ -7,6 +7,8 @@ import { test, expect } from '@playwright/test';
 import { registerAndLogin } from './helpers';
 
 test.describe('Client-Side WebMCP Dashboard Tools', () => {
+  test.skip(process.env.SWAZZ_E2E_WEBMCP === '0', 'WebMCP is disabled for this run (SWAZZ_E2E_WEBMCP=0)');
+
   test('should expose Swazz WebMCP tools and allow driving UI state via page.webmcp', async ({ page }) => {
     await registerAndLogin(page, 'wmcp');
 

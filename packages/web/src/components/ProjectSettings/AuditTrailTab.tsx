@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../../store/appStore.js';
+import { toCsv } from '../../utils/csv.js';
 
 
 
@@ -62,9 +63,9 @@ function exportToCsv(logs: AuditLog[], projectId: string) {
         SOURCE_LABELS[l.source] ?? l.source,
         l.details ?? '—',
         l.ip_address ?? '—',
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    ]);
 
-    const csv = [headers.join(','), ...rows].join('\r\n');
+    const csv = toCsv([headers, ...rows]);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

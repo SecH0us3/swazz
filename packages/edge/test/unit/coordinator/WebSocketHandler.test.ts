@@ -159,6 +159,22 @@ describe('WebSocketHandler', () => {
     expect(mockWs.close).toHaveBeenCalledWith(1008, 'Authentication failed');
   });
 
+  it('ignores a parse_result from a runner the request was not sent to', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, new QueueService(mockEnv, mockState, stateManager));
+    const mockResolve = vi.fn();
+    stateManager.pendingParses.set('req-x', mockResolve);
+    stateManager.pendingParseUrls.set('req-x', 'user:victim|http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-x', { other: true } as any);
+
+    await handler.handleMessage(mockWs, JSON.stringify({ type: 'parse_result', reqId: 'req-x', payload: { basePath: 'https://attacker.example', endpoints: [] } }));
+
+    expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockUpsertSwaggerCache).not.toHaveBeenCalled();
+    expect(stateManager.pendingParses.has('req-x')).toBe(true);
+  });
+
   it('should process parse_result message, cache details, and resolve the pending parse', async () => {
     mockState.getTags.mockReturnValue(['runner']);
     const stateManager = new StateManager(mockState);
@@ -168,6 +184,7 @@ describe('WebSocketHandler', () => {
     const mockResolve = vi.fn();
     stateManager.pendingParses.set('req-123', mockResolve);
     stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-123', mockWs);
 
     mockGetCachedSwaggerDetails.mockResolvedValue(null);
 
@@ -317,7 +334,7 @@ describe('WebSocketHandler', () => {
       };
     });
 
-    mockState.getTags.mockReturnValue(['runner']);
+    mockState.getTags.mockReturnValue(['runner', 'shared']);
     let currentAttachment: any = { activeJobs: ['run-1'], recentJobs: [] };
     mockWs.deserializeAttachment.mockImplementation(() => currentAttachment);
     mockWs.serializeAttachment.mockImplementation((val: any) => { currentAttachment = val; });
@@ -485,6 +502,7 @@ describe('WebSocketHandler', () => {
     const mockResolve = vi.fn();
     stateManager.pendingParses.set('req-123', mockResolve);
     stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-123', mockWs);
 
     mockGetCachedSwaggerDetails.mockRejectedValue(new Error('R2 write error'));
 
@@ -515,6 +533,7 @@ describe('WebSocketHandler', () => {
     const mockResolve = vi.fn();
     stateManager.pendingParses.set('req-123', mockResolve);
     stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-123', mockWs);
 
     const msg = {
       type: 'parse_result',
@@ -657,6 +676,7 @@ describe('WebSocketHandler', () => {
     const mockResolve = vi.fn();
     stateManager.pendingParses.set('req-123', mockResolve);
     stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-123', mockWs);
 
     mockGetCachedSwaggerDetails.mockResolvedValue({
       endpoints_hash: 'different-old-hash',

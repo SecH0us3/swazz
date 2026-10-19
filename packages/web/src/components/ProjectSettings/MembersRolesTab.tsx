@@ -8,6 +8,7 @@ import { useAppStore } from '../../store/appStore.js';
 import { useToast } from '../../hooks/useToast.js';
 import { fetchMemberLoginHistory } from '../../services/projectService.js';
 import type { LoginHistoryEntry } from '../../types.js';
+import { toCsv } from '../../utils/csv.js';
 
 interface Role {
     id: string;
@@ -191,10 +192,10 @@ export function MembersRolesTab() {
                     entry.timezone || '',
                     entry.cf_ray || '',
                     entry.user_agent || ''
-                ].map(val => `"${String(val).replace(/"/g, '""')}"`);
+                ];
             });
 
-            const csvContent = [headers.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\n');
+            const csvContent = toCsv([headers, ...rows], '\n');
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');

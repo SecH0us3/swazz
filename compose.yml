@@ -7,6 +7,12 @@ services:
       - "${BACKEND_PORT:-8081}:8080"
     volumes:
       - ./packages/edge/.wrangler:/app/packages/edge/.wrangler
+    environment:
+      # Operator credential for the shared runner below. Generate one with: openssl rand -hex 32
+      SWAZZ_RUNNER_TOKEN: ${SWAZZ_RUNNER_TOKEN:?Set SWAZZ_RUNNER_TOKEN in .env (openssl rand -hex 32)}
+      # Off by default: with it on, anyone who can sign in can aim the shared runner at this
+      # host's private network. Set to true only when you are the coordinator's only user.
+      SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS: ${SWAZZ_SHARED_RUNNERS_ALLOW_PRIVATE_IPS:-false}
     restart: unless-stopped
 
   frontend:
@@ -25,5 +31,5 @@ services:
       dockerfile: Dockerfile.cli
     depends_on:
       - backend
-    command: ["run-agent", "--coordinator", "ws://backend:8080/api/runners/connect", "--token", "swazz_live_citoken1234567890", "--dangerous-no-container"]
+    command: ["run-agent", "--coordinator", "ws://backend:8080/api/runners/connect", "--token", "${SWAZZ_RUNNER_TOKEN:?Set SWAZZ_RUNNER_TOKEN in .env}", "--dangerous-no-container"]
     restart: unless-stopped

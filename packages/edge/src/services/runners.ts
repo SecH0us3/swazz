@@ -33,6 +33,35 @@ export interface IRunnersService {
   restartRunner(connectionId: string, userId: string | null): Promise<{ status: string }>;
 }
 
+const MIN_SHARED_RUNNER_TOKEN_LENGTH = 32;
+
+/** Constant-time check of a runner token against the operator's SHARED_RUNNER_TOKEN. */
+export async function isSharedRunnerToken(token: string, expected: string | undefined): Promise<boolean> {
+  if (!expected || expected.length < MIN_SHARED_RUNNER_TOKEN_LENGTH) return false;
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(token)),
+    crypto.subtle.digest('SHA-256', enc.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(a, b);
+}
+
+/**
+ * The runner list a caller may see: their own runners in full, shared runners without anything
+ * that identifies or targets them, and nothing at all about other tenants' runners.
+ */
+export function filterRunnersForUser(runners: any[], userId: string): any[] {
+  const visible: any[] = [];
+  for (const { ownerId, ...r } of runners) {
+    if (ownerId && ownerId === userId) {
+      visible.push({ ...r, isMine: true });
+    } else if (r.isShared) {
+      visible.push({ name: r.name, status: r.status, isShared: true, version: r.version, isMine: false });
+    }
+  }
+  return visible;
+}
+
 export class RunnersService implements IRunnersService {
   constructor(
     private env: Env, 
@@ -67,9 +96,13 @@ export class RunnersService implements IRunnersService {
     }
 
     let userId = "";
+    let isShared = false;
     if (String(this.env.AUTH_ENABLED) === 'false') {
       userId = "anon-dev-user";
+    } else if (!publicKey && token && await isSharedRunnerToken(token, this.env.SHARED_RUNNER_TOKEN)) {
+      isShared = true;
     } else if (publicKey) {
+      publicKey = publicKey.toLowerCase();
       const user = await this.runnersRepo.getUserByPublicKey(publicKey);
       if (!user) {
         return new Response('Unauthorized: Invalid public key', { status: 401 });
@@ -96,9 +129,11 @@ export class RunnersService implements IRunnersService {
       return new Response('Unauthorized: Missing token or X-Runner-Public-Key header', { status: 401 });
     }
 
-    const deleteRequestedAt = await this.runnersRepo.getDeleteRequestedAt(userId);
-    if (deleteRequestedAt !== null) {
-      return new Response('Forbidden: Account is scheduled for deletion', { status: 403 });
+    if (!isShared) {
+      const deleteRequestedAt = await this.runnersRepo.getDeleteRequestedAt(userId);
+      if (deleteRequestedAt !== null) {
+        return new Response('Forbidden: Account is scheduled for deletion', { status: 403 });
+      }
     }
 
     const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
@@ -106,10 +141,16 @@ export class RunnersService implements IRunnersService {
     const req = new Request(originalUrl, rawRequest);
     const url = new URL(req.url);
     url.pathname = '/connect-runner';
+    // The coordinator trusts these parameters, so whatever the client put in the query is replaced.
+    url.searchParams.delete('public_key');
+    url.searchParams.delete('user_id');
+    url.searchParams.delete('shared');
     if (publicKey) {
       url.searchParams.set('public_key', publicKey);
     }
-    if (userId) {
+    if (isShared) {
+      url.searchParams.set('shared', '1');
+    } else if (userId) {
       url.searchParams.set('user_id', userId);
     }
     return stub.fetch(new Request(url.toString(), req));
@@ -120,8 +161,6 @@ export class RunnersService implements IRunnersService {
       throw new Error('Unauthorized|401');
     }
 
-    let userPublicKey = await this.runnersRepo.getUserPublicKey(userId);
-
     const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
     const stub = this.env.COORDINATOR_DO.get(id);
     const res = await stub.fetch(new Request('http://do/runners'));
@@ -130,12 +169,11 @@ export class RunnersService implements IRunnersService {
     }
 
     const data = await res.json() as { runners: any[] };
-    const mappedRunners = data.runners.map(r => ({
-      ...r,
-      isMine: userPublicKey && r.publicKey === userPublicKey,
-    }));
-
-    return { runners: mappedRunners };
+    if (String(this.env.AUTH_ENABLED) === 'false') {
+      // Auth-disabled (local) mode has no tenants: every runner is the operator's own.
+      return { runners: data.runners.map(({ ownerId, ...r }) => ({ ...r, isMine: true })) };
+    }
+    return { runners: filterRunnersForUser(data.runners, userId) };
   }
 
   async connectClient(
@@ -218,6 +256,9 @@ export class RunnersService implements IRunnersService {
     const runId = body.runId || crypto.randomUUID();
     if (!isValidRunId(runId)) {
       throw new Error('Invalid runId|400');
+    }
+    if (body.config !== undefined && body.config !== null && (typeof body.config !== 'object' || Array.isArray(body.config))) {
+      throw new Error('config must be an object|400');
     }
 
     const { body: configBody } = serializeScanConfig(body.config || {});
@@ -334,25 +375,10 @@ export class RunnersService implements IRunnersService {
       throw new Error('Unauthorized|401');
     }
 
-    let userPublicKey = "";
-    try {
-      const key = await this.runnersRepo.getUserPublicKey(userId);
-      if (key) {
-        userPublicKey = key;
-      }
-    } catch (dbErr) {
-      console.error("Failed to query user public key in /api/runners/.../restart:", dbErr);
-      throw new Error('Internal Server Error|500');
-    }
-
-    if (!userPublicKey) {
-      throw new Error('Forbidden: You do not own any runners|403');
-    }
-
     const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
     const stub = this.env.COORDINATOR_DO.get(id);
     const doRes = await stub.fetch(
-      new Request(`http://do/runners/restart?connectionId=${encodeURIComponent(connectionId)}&userPublicKey=${encodeURIComponent(userPublicKey)}`, {
+      new Request(`http://do/runners/restart?connectionId=${encodeURIComponent(connectionId)}&userId=${encodeURIComponent(userId)}`, {
         method: 'POST'
       })
     );

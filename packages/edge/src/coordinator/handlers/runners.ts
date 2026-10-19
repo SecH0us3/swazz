@@ -5,6 +5,7 @@
 
 import { RouteHandler, HandlerContext } from './types';
 import { isVersionOutdated, getPublicKeyFromTags } from '../utils';
+import { getRunnerOwnerId, isRunnerOwnedBy, isSharedRunnerTags, SHARED_RUNNER_TAG } from '../runnerAccess';
 import { logWarn } from '../../../../common/logging/logger';
 import { ulid } from 'ulidx';
 
@@ -38,9 +39,10 @@ export class RunnersHandler implements RouteHandler {
       runnerList.push({
         connectionId,
         name,
+        ownerId: getRunnerOwnerId(tags),
         publicKey: pubKey,
         status: isPending ? 'authenticating' : 'connected',
-        isShared: !pubKey,
+        isShared: isSharedRunnerTags(tags),
         version,
         activeJobs,
       });
@@ -55,7 +57,7 @@ export class RunnersHandler implements RouteHandler {
 export class RestartRunnerHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
     const connectionId = url.searchParams.get('connectionId');
-    const userPublicKey = url.searchParams.get('userPublicKey');
+    const userId = url.searchParams.get('userId');
     if (!connectionId) {
       return new Response('Missing connectionId', { status: 400 });
     }
@@ -76,13 +78,13 @@ export class RestartRunnerHandler implements RouteHandler {
     }
 
     const tags = context.state.getTags(runnerWs);
-    const pubKey = getPublicKeyFromTags(tags) || null;
 
-    if (!pubKey) {
+    if (isSharedRunnerTags(tags)) {
       return new Response('Forbidden: Shared runners cannot be restarted', { status: 403 });
     }
 
-    if (pubKey !== userPublicKey) {
+    // Auth-disabled (local) mode has no tenants, so every runner is the operator's own.
+    if (String(context.env.AUTH_ENABLED) !== 'false' && !isRunnerOwnedBy(tags, userId)) {
       return new Response('Forbidden: You do not own this runner', { status: 403 });
     }
 
@@ -101,7 +103,9 @@ export class ConnectRunnerHandler implements RouteHandler {
     const [client, server] = Object.values(webSocketPair);
     
     const publicKey = url.searchParams.get('public_key');
-    const userId = url.searchParams.get('user_id') || '';
+    // Set by the Worker after it authenticated the connection; never taken from the client.
+    const isShared = url.searchParams.get('shared') === '1';
+    const userId = isShared ? '' : (url.searchParams.get('user_id') || '');
     const name = url.searchParams.get('name') || 'Unnamed Runner';
     const version = url.searchParams.get('version') || 'v1.0.0';
     const nameTag = `name:${name}`;
@@ -134,6 +138,7 @@ export class ConnectRunnerHandler implements RouteHandler {
       }, 5000);
     } else {
       const tags = ["runner", nameTag, versionTag];
+      if (isShared) tags.push(SHARED_RUNNER_TAG);
       if (userIdTag) tags.push(userIdTag);
       context.state.acceptWebSocket(server, tags);
       const connectionId = ulid();
@@ -142,7 +147,7 @@ export class ConnectRunnerHandler implements RouteHandler {
 
       const coordinatorVersion = context.env.VERSION || '1.0.0';
       if (isVersionOutdated(version, coordinatorVersion)) {
-        logWarn({ env: context.env, executionCtx: context.state }, "Coordinator", `[Runner Connection] Outdated runner agent connected: '${name}' (Shared) is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
+        logWarn({ env: context.env, executionCtx: context.state }, "Coordinator", `[Runner Connection] Outdated runner agent connected: '${name}' (${isShared ? 'Shared' : 'Token'}) is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
       }
 
       await context.queueService.checkAndDispatchQueuedScans(server);

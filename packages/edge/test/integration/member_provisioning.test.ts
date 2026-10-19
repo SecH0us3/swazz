@@ -17,6 +17,15 @@ import { ulid } from 'ulidx';
 
 const env = rawEnv as unknown as Env;
 
+async function seedOwner(projectId: string): Promise<string> {
+  const ownerId = ulid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)').bind(ownerId, `o_${ownerId.slice(-10).toLowerCase()}`, 'x'),
+    env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, ownerId, 'owner'),
+  ]);
+  return ownerId;
+}
+
 describe('Member Provisioning Integration', () => {
   let projectService: ProjectService;
   let authService: AuthService;
@@ -54,11 +63,12 @@ describe('Member Provisioning Integration', () => {
     const username = `u_${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 100)}`;
     
     // Create the project member
+    const ownerId = await seedOwner(projectId);
     const res = await projectService.createProjectMemberAccount(projectId, {
       username,
       roles: ['editor'],
       is_interactive: true
-    });
+    }, ownerId);
 
     expect(res.status).toBe('ok');
     expect(res.password).toBeDefined();
@@ -80,11 +90,12 @@ describe('Member Provisioning Integration', () => {
     const projectId = ulid();
     const username = `s_${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 100)}`;
 
+    const ownerId = await seedOwner(projectId);
     const res = await projectService.createProjectMemberAccount(projectId, {
       username,
       roles: ['viewer'],
       is_interactive: false
-    });
+    }, ownerId);
 
     expect(res.status).toBe('ok');
     expect(res.api_key).toBeDefined();

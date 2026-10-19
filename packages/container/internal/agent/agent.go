@@ -28,7 +28,7 @@ import (
 // startAgent parses the arguments and connects to the coordinator
 func StartAgent(args []string) {
 	var coordinatorURL, token, tokenFile, name, keyPathOrHex, logLevelStr, logFilterStr string
-	var dangerousNoContainer bool
+	var dangerousNoContainer, allowPrivateNetworks bool
 	var hasQuiet, hasLogLevel bool
 	var disableTelemetry bool
 
@@ -37,6 +37,8 @@ func StartAgent(args []string) {
 		switch args[i] {
 		case "--dangerous-no-container":
 			dangerousNoContainer = true
+		case "--allow-private-networks":
+			allowPrivateNetworks = true
 		case "--disable-telemetry":
 			disableTelemetry = true
 		case "--log-level", "-log-level":
@@ -119,6 +121,9 @@ func StartAgent(args []string) {
 	}
 
 	safenet.AssertRunningInContainer(dangerousNoContainer)
+	if allowPrivateNetworks {
+		safenet.EnableLocalNetwork()
+	}
 
 	coordinatorURL = resolveCoordinatorURL(coordinatorURL)
 	var err error

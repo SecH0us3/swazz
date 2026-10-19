@@ -117,6 +117,15 @@ jobs:
               - '.github/dependabot.yml'
               - '.github/workflows/ci.yml'
 
+  builtin-credentials:
+    name: No built-in credentials
+    runs-on: ubuntu-latest
+    steps:
+      # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Reject API-key literals and seeded accounts in entry points and scripts
+        run: bash scripts/check-builtin-credentials.sh
+
   lockfile-sync:
     name: Check npm lockfile
     needs: changes

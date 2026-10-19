@@ -125,11 +125,12 @@ describe('ScansRepository Unit Tests', () => {
       mockAll.mockResolvedValue(scan); // first for run execution, then getScan query
 
       const repo = new ScansRepository(mockEnv);
-      const res = await repo.updateScan('s-1', { status: 'completed', report_url: 'https://r2.com/1.json' });
+      const res = await repo.updateScan('s-1', { status: 'completed', report_url: 'specs/raw/victim.json' });
 
       expect(res).toBe(scan);
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE scans SET status = ?, report_url = ? WHERE id = ?'));
-      expect(mockBind).toHaveBeenCalledWith('completed', 'https://r2.com/1.json', 's-1');
+      // report_url is ignored: clients cannot choose which R2 object account cleanup deletes.
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE scans SET status = ? WHERE id = ?'));
+      expect(mockBind).toHaveBeenCalledWith('completed', 's-1');
     });
   });
 

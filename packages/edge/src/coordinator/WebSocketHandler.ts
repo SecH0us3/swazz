@@ -3,6 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
+import { UNCACHED_PARSE } from './handlers/parse';
 import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
@@ -100,14 +101,20 @@ export class WebSocketHandler {
         const msg = JSON.parse(messageStr);
         
         if (msg.type === 'parse_result') {
+          // Only the runner the request was sent to may answer it; anything else is ignored.
+          if (this.stateManager.pendingParseRunners.get(msg.reqId) !== ws) {
+            return;
+          }
+          this.stateManager.pendingParseRunners.delete(msg.reqId);
           const resolve = this.stateManager.pendingParses.get(msg.reqId);
+          // Per-user cache key (see swaggerCacheKey), so this runner can only fill its requester's cache.
           const urlStr = this.stateManager.pendingParseUrls.get(msg.reqId);
           this.stateManager.pendingParseUrls.delete(msg.reqId);
           
           if (resolve) {
             this.stateManager.pendingParses.delete(msg.reqId);
             
-            if (msg.payload && !msg.payload.error && urlStr && urlStr !== 'rawSpec') {
+            if (msg.payload && !msg.payload.error && urlStr && urlStr !== UNCACHED_PARSE) {
               const scansRepo = new ScansRepository(this.env);
               const storage = this.env.STORAGE;
               

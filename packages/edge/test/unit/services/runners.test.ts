@@ -4,7 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { RunnersService } from '../../../src/services/runners';
+import { RunnersService, filterRunnersForUser, isSharedRunnerToken } from '../../../src/services/runners';
+import { configForRunner } from '../../../src/coordinator/runnerAccess';
 import { IRunnersRepository } from '../../../src/repositories/runners';
 import { IRbacRepository } from '../../../src/repositories/rbac';
 import { Env } from '../../../src/env';
@@ -49,7 +50,7 @@ describe('RunnersService Unit Tests', () => {
         store.delete(key);
       }),
     };
-    mockCoordinatorFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ runners: [{ publicKey: 'test-key' }], status: 'ok' })));
+    mockCoordinatorFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ runners: [{ publicKey: 'test-key', ownerId: 'user-1' }], status: 'ok' })));
     mockEnv = {
       AUTH_ENABLED: 'true',
       STORAGE: mockStorage,
@@ -126,8 +127,49 @@ describe('RunnersService Unit Tests', () => {
     expect(res.runners[0].isMine).toBe(true);
   });
 
+  test('getRunners lists every runner as the caller\'s own when auth is disabled', async () => {
+    mockEnv.AUTH_ENABLED = 'false';
+    mockCoordinatorFetch.mockResolvedValueOnce(new Response(JSON.stringify({ runners: [{ name: 'local', ownerId: 'anon-dev-user', isShared: false }] })));
+    const res = await runnersService.getRunners('real-user-id');
+    expect(res.runners).toEqual([{ name: 'local', isShared: false, isMine: true }]);
+  });
+
   test('getRunners should throw if unauthorized', async () => {
     await expect(runnersService.getRunners(null)).rejects.toThrow('Unauthorized|401');
+  });
+
+  describe('connect: who a token runner works for', () => {
+    const OPERATOR_TOKEN = 'op_' + 'x'.repeat(40);
+    const forwardedUrl = () => new URL(mockCoordinatorFetch.mock.calls.at(-1)![0].url);
+
+    test('a user API token connects a runner bound to that user, never a shared one', async () => {
+      mockEnv.SHARED_RUNNER_TOKEN = OPERATOR_TOKEN;
+      await runnersService.connect('websocket', 'swazz_live_user', undefined, 'http://localhost/connect', {});
+      expect(forwardedUrl().searchParams.get('user_id')).toBe('user-1');
+      expect(forwardedUrl().searchParams.has('shared')).toBe(false);
+    });
+
+    test('the operator token connects a shared runner with no owner', async () => {
+      mockEnv.SHARED_RUNNER_TOKEN = OPERATOR_TOKEN;
+      await runnersService.connect('websocket', OPERATOR_TOKEN, undefined, 'http://localhost/connect', {});
+      expect(forwardedUrl().searchParams.get('shared')).toBe('1');
+      expect(forwardedUrl().searchParams.has('user_id')).toBe(false);
+      expect(mockRunnersRepo.getUserByApiKey).not.toHaveBeenCalled();
+    });
+
+    test('a client cannot make itself shared or pick an owner through the query string', async () => {
+      mockEnv.SHARED_RUNNER_TOKEN = OPERATOR_TOKEN;
+      await runnersService.connect('websocket', 'swazz_live_user', undefined, 'http://localhost/connect?shared=1&user_id=victim', {});
+      expect(forwardedUrl().searchParams.has('shared')).toBe(false);
+      expect(forwardedUrl().searchParams.getAll('user_id')).toEqual(['user-1']);
+    });
+
+    test('a short or missing operator token never grants shared status', async () => {
+      expect(await isSharedRunnerToken('short', 'short')).toBe(false);
+      expect(await isSharedRunnerToken('anything', undefined)).toBe(false);
+      expect(await isSharedRunnerToken(OPERATOR_TOKEN, OPERATOR_TOKEN)).toBe(true);
+      expect(await isSharedRunnerToken(OPERATOR_TOKEN + 'y', OPERATOR_TOKEN)).toBe(false);
+    });
   });
 
   test('connectClient should upgrade websocket for clients', async () => {
@@ -139,6 +181,14 @@ describe('RunnersService Unit Tests', () => {
       {}
     );
     expect(res.status).toBe(200);
+  });
+
+  test('queueRun rejects a config that is not an object before storing anything', async () => {
+    for (const config of ['x', 5, true, [1]]) {
+      await expect(runnersService.queueRun({ config }, 'user-1', false, false)).rejects.toThrow('config must be an object|400');
+    }
+    expect(mockRunnersRepo.createScanRecord).not.toHaveBeenCalled();
+    expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
   });
 
   test('queueRun should update scan status and return run info', async () => {
@@ -322,18 +372,85 @@ describe('RunnersService Unit Tests', () => {
     expect(res.status).toBe('restarted');
   });
 
-  test('restartRunner should throw 500 on db error', async () => {
-    mockRunnersRepo.getUserPublicKey.mockRejectedValueOnce(new Error('db error'));
-    await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('Internal Server Error|500');
-  });
-
-  test('restartRunner should throw 403 if no public key', async () => {
-    mockRunnersRepo.getUserPublicKey.mockResolvedValueOnce(null);
-    await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('Forbidden: You do not own any runners|403');
+  test('restartRunner asks the coordinator to check ownership by user id, not by public key', async () => {
+    await runnersService.restartRunner('conn-1', 'user-1');
+    const url = new URL(mockCoordinatorFetch.mock.calls.at(-1)![0].url);
+    expect(url.searchParams.get('userId')).toBe('user-1');
+    expect(url.searchParams.has('userPublicKey')).toBe(false);
+    expect(mockRunnersRepo.getUserPublicKey).not.toHaveBeenCalled();
   });
 
   test('restartRunner should throw error if DO returns !ok', async () => {
     mockCoordinatorFetch.mockResolvedValueOnce({ ok: false, text: async () => 'DO Error', status: 400 });
     await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('DO Error|400');
+  });
+});
+
+describe('filterRunnersForUser', () => {
+  const runners = [
+    { connectionId: 'c-mine', name: 'mine', ownerId: 'user-1', publicKey: 'k1', isShared: false, status: 'connected', version: 'v1', activeJobs: ['r1'] },
+    { connectionId: 'c-other', name: 'theirs', ownerId: 'user-2', publicKey: 'k2', isShared: false, status: 'connected', version: 'v1', activeJobs: ['r2'] },
+    { connectionId: 'c-shared', name: 'pool', ownerId: null, publicKey: null, isShared: true, status: 'connected', version: 'v1', activeJobs: ['r3'] },
+  ];
+
+  test('shows the caller their own runners in full', () => {
+    const mine = filterRunnersForUser(runners, 'user-1').find(r => r.name === 'mine');
+    expect(mine).toMatchObject({ connectionId: 'c-mine', publicKey: 'k1', activeJobs: ['r1'], isMine: true });
+    expect(mine).not.toHaveProperty('ownerId');
+  });
+
+  test('hides other tenants\' runners entirely', () => {
+    const visible = filterRunnersForUser(runners, 'user-1');
+    expect(visible.map(r => r.name)).not.toContain('theirs');
+    expect(JSON.stringify(visible)).not.toContain('k2');
+    expect(JSON.stringify(visible)).not.toContain('r2');
+  });
+
+  test('shows shared runners without connection ids, keys or job ids', () => {
+    const shared = filterRunnersForUser(runners, 'user-1').find(r => r.name === 'pool');
+    expect(shared).toEqual({ name: 'pool', status: 'connected', isShared: true, version: 'v1', isMine: false });
+  });
+});
+
+describe('configForRunner', () => {
+  const config = { base_url: 'http://10.0.0.5', security: { allow_private_ips: true, timeout: 5 } };
+
+  test('forces allow_private_ips off for shared runners', () => {
+    expect(configForRunner(config, ['runner', 'shared'], {}).security).toEqual({ allow_private_ips: false, timeout: 5 });
+    expect(config.security.allow_private_ips).toBe(true); // input not mutated
+  });
+
+  test('leaves configs for a user\'s own runner untouched', () => {
+    expect(configForRunner(config, ['runner', 'user_id:u1'], {})).toBe(config);
+    expect(configForRunner(config, ['runner', 'k', 'user_id:u1'], {})).toBe(config);
+  });
+
+  test('honours the operator opt-in for shared runners', () => {
+    expect(configForRunner(config, ['runner', 'shared'], { SHARED_RUNNERS_ALLOW_PRIVATE_IPS: 'true' })).toBe(config);
+  });
+
+  // The Go agent decodes with encoding/json, which matches keys case-insensitively (with Unicode
+  // folding) and keeps the last match. Each of these turned private IPs back on before the fix,
+  // verified against the real Go decoder.
+  test.each([
+    { security: { allow_private_ips: true, ALLOW_PRIVATE_IPS: true } },
+    { security: {}, Security: { allow_private_ips: true } },
+    { '\u017fecurity': { 'allow_private_ip\u017f': true } },
+    { security: { Allow_Private_IPs: true } },
+  ])('leaves no key the agent could read as allow_private_ips: %j', (attack) => {
+    const out = configForRunner(attack, ['runner', 'shared'], {});
+    const keys = (o: object) => Object.keys(o).map(k => k.toUpperCase().toLowerCase());
+    expect(keys(out).filter(k => k === 'security')).toEqual(['security']);
+    expect(keys(out.security).filter(k => k === 'allow_private_ips')).toEqual(['allow_private_ips']);
+    expect(out.security.allow_private_ips).toBe(false);
+  });
+
+  test('keeps the other security settings from every security-like key', () => {
+    const out = configForRunner({ security: { timeout: 5 }, Security: { retries: 2 }, base_url: 'x' }, ['runner', 'shared'], {});
+    expect(out).toEqual({ base_url: 'x', security: { timeout: 5, retries: 2, allow_private_ips: false } });
+  });
+
+  test('adds the guard when the config has no security block', () => {
+    expect(configForRunner({ base_url: 'x' }, ['runner', 'shared'], {})).toEqual({ base_url: 'x', security: { allow_private_ips: false } });
   });
 });

@@ -7,6 +7,7 @@ import { RouteHandler, HandlerContext } from './types';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig } from '../../services/scanConfigStore';
 import { ScansRepository } from '../../repositories/scans';
 import { clearScanState } from '../utils';
+import { isRunnerOwnedBy, configForRunner } from '../runnerAccess';
 
 export class DispatchHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -64,37 +65,35 @@ export class DispatchHandler implements RouteHandler {
       return new Response('No runners available', { status: 503 });
     }
     
-    const dispatchMsg = JSON.stringify({
-      type: 'job_dispatch',
-      payload: {
-        runId: payload.runId,
-        config,
-        userPublicKey: payload.userPublicKey || "",
-      },
-    });
-
     let runner = null;
     if (String(context.env.AUTH_ENABLED) === 'false') {
       runner = activeRunners.find(r => context.stateManager.hasCapacity(r)) || null;
     } else {
       let hasMatchingPrivateRunner = false;
-      if (payload.userPublicKey) {
-        const matchingPrivate = activeRunners.filter(r => {
-          const tags = context.state.getTags(r);
-          return tags.includes(payload.userPublicKey);
-        });
+      if (payload.userId) {
+        const matchingPrivate = activeRunners.filter(r =>
+          !context.stateManager.isSharedRunner(r) && isRunnerOwnedBy(context.state.getTags(r), payload.userId)
+        );
         hasMatchingPrivateRunner = matchingPrivate.length > 0;
         runner = matchingPrivate.find(r => context.stateManager.hasCapacity(r)) || null;
       }
-      // Only fall back to a shared runner if the user has no connected private runner
-      // and shared runners are not disabled. If a private runner is connected but full,
-      // keep the scan queued for that private runner.
-      if (!runner && !hasMatchingPrivateRunner && !config?.settings?.disable_shared_runners) {
-        runner = activeRunners.find(r => !context.stateManager.isPrivateRunner(r) && context.stateManager.hasCapacity(r)) || null;
+      // Only fall back to a shared runner if the user has no connected runner of their own,
+      // has not registered a private runner key, and has not disabled shared runners. If their
+      // runner is connected but full, or offline, keep the scan queued for it.
+      if (!runner && !hasMatchingPrivateRunner && !payload.userPublicKey && !config?.settings?.disable_shared_runners) {
+        runner = activeRunners.find(r => context.stateManager.isSharedRunner(r) && context.stateManager.hasCapacity(r)) || null;
       }
     }
 
     if (runner) {
+      const dispatchMsg = JSON.stringify({
+        type: 'job_dispatch',
+        payload: {
+          runId: payload.runId,
+          config: configForRunner(config, context.state.getTags(runner), context.env),
+          userPublicKey: payload.userPublicKey || "",
+        },
+      });
       context.stateManager.jobs.set(payload.runId, runner);
       const attachment = runner.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
       const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
@@ -177,9 +176,18 @@ export class StartRunHandler implements RouteHandler {
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
     
-    const runnerWs = activeRunners.find(r => !context.stateManager.isPrivateRunner(r) && context.stateManager.hasCapacity(r));
+    // Auth-disabled (local) mode has no tenants, so any runner will do, as in dispatch.
+    const authDisabled = String(context.env.AUTH_ENABLED) === 'false';
+    const runnerWs = activeRunners.find(r => (authDisabled || context.stateManager.isSharedRunner(r)) && context.stateManager.hasCapacity(r));
     if (!runnerWs) {
       return new Response("No shared runners available", { status: 503 });
+    }
+    // Parse before reserving a slot: a rejected body must not leave a phantom job on the runner.
+    let parsedConfig: any;
+    try {
+      parsedConfig = JSON.parse(configText).config;
+    } catch (err) {
+      return new Response('Invalid JSON config', { status: 400 });
     }
     context.stateManager.jobs.set(runId, runnerWs);
     const attachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
@@ -188,14 +196,8 @@ export class StartRunHandler implements RouteHandler {
       activeJobs.push(runId);
       runnerWs.serializeAttachment({ ...attachment, activeJobs });
     }
-    let parsedConfig: any;
     try {
-      parsedConfig = JSON.parse(configText).config;
-    } catch (err) {
-      return new Response('Invalid JSON config', { status: 400 });
-    }
-    try {
-      runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
+      runnerWs.send(JSON.stringify({ type: 'start', runId, config: configForRunner(parsedConfig, context.state.getTags(runnerWs), context.env) }));
     } catch (err) {
       context.stateManager.runners.delete(runnerWs);
       context.stateManager.jobs.delete(runId);

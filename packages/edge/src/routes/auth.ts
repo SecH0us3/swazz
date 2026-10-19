@@ -3,14 +3,61 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import { decode as decodeJwt } from 'hono/jwt';
 import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { errorStatus } from '../utils/http';
-import { IAuthService, AuthService } from '../services/auth';
+import { IAuthService, AuthService, OAUTH_NONCE_COOKIE, OAUTH_STATE_TTL_SECONDS } from '../services/auth';
 import { AuthRepository } from '../repositories/auth';
 import { LicenseService } from '../services/license';
 import { ValidationError, isValidId, isValidCredentialId, LIMITS, readJsonBody, reqString, optString } from '../utils/validation';
+
+// The dashboard hides the password forms when this is off; the API must refuse them too,
+// or the switch only changes what the UI shows.
+const passwordAuthDisabled = (c: { env: Env }) => c.env.PASSWORD_AUTH_ENABLED === 'false';
+const PASSWORD_AUTH_DISABLED_ERROR = 'Password authentication is disabled';
+
+const OAUTH_CALLBACK_PATH = '/api/auth/callback';
+
+// Each flow gets its own cookie, named after the start of its nonce, so two flows started in the
+// same browser (link GitHub in one tab, sign in with GitLab in another) do not overwrite each other.
+const oauthNonceCookieName = (nonce: string) => `${OAUTH_NONCE_COOKIE}_${nonce.slice(0, 16)}`;
+// Secure only over HTTPS: some browsers refuse Secure cookies on http://localhost in local dev.
+const isHttps = (c: Context<AppEnv>) => new URL(c.req.url).protocol === 'https:';
+
+/** Ties a new OAuth flow to this browser; returns the nonce to embed in the state. */
+function startOAuthFlow(c: Context<AppEnv>): string {
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
+  setCookie(c, oauthNonceCookieName(nonce), nonce, {
+    path: OAUTH_CALLBACK_PATH,
+    httpOnly: true,
+    secure: isHttps(c),
+    sameSite: 'Lax', // sent on the provider's top-level redirect back to the callback
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  });
+  return nonce;
+}
+
+/**
+ * Reads and clears the nonce cookie of the flow this state belongs to; each is good for one
+ * callback. The state is only decoded here to find the cookie; the service still verifies its
+ * signature and that the nonce matches.
+ */
+function finishOAuthFlow(c: Context<AppEnv>, state: string): string | undefined {
+  let claimed: unknown;
+  try {
+    claimed = decodeJwt(state).payload?.nonce;
+  } catch {
+    return undefined;
+  }
+  if (typeof claimed !== 'string' || !/^[0-9a-f]{64}$/.test(claimed)) return undefined;
+  const name = oauthNonceCookieName(claimed);
+  const nonce = getCookie(c, name);
+  deleteCookie(c, name, { path: OAUTH_CALLBACK_PATH, secure: isHttps(c) });
+  return nonce;
+}
 
 export function registerAuthRoutes(
   app: Hono<AppEnv>,
@@ -18,6 +65,7 @@ export function registerAuthRoutes(
   licenseServiceFactory: (env: Env) => { verifyToken(token: string): Promise<any> } = (env) => new LicenseService(env, new AuthRepository(env))
 ) {
   app.post('/api/auth/register', async (c) => {
+    if (passwordAuthDisabled(c)) return c.json({ error: PASSWORD_AUTH_DISABLED_ERROR }, 403);
     try {
       const body = await readJsonBody(c);
       if (typeof body.username !== 'string' || typeof body.password !== 'string') {
@@ -224,6 +272,7 @@ export function registerAuthRoutes(
   });
 
   app.post('/api/auth/login/step1', async (c) => {
+    if (passwordAuthDisabled(c)) return c.json({ error: PASSWORD_AUTH_DISABLED_ERROR }, 403);
     try {
       const body = await readJsonBody(c);
       if (!body.username) return c.json({ error: 'Missing username' }, 400);
@@ -250,6 +299,7 @@ export function registerAuthRoutes(
   });
 
   app.post('/api/auth/login', async (c) => {
+    if (passwordAuthDisabled(c)) return c.json({ error: PASSWORD_AUTH_DISABLED_ERROR }, 403);
     try {
       const body = await readJsonBody(c);
       const isTestEnv = c.env.JWT_SECRET === 'test-secret';
@@ -582,7 +632,7 @@ export function registerAuthRoutes(
       const redirectUri = c.env.GITHUB_REDIRECT_URI || `${requestUrl.origin}/api/auth/callback/github`;
 
       const services = authServicesFactory(c.env);
-      const url = await services.handleGithubLogin(userId, redirectUri);
+      const url = await services.handleGithubLogin(userId, redirectUri, startOAuthFlow(c));
       return c.redirect(url);
     } catch (err: any) {
       if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
@@ -617,7 +667,7 @@ export function registerAuthRoutes(
       }
 
       const services = authServicesFactory(c.env);
-      const result = await services.handleGithubCallback(code, state, frontendUrl, c);
+      const result = await services.handleGithubCallback(code, state, frontendUrl, c, finishOAuthFlow(c, state));
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);
@@ -635,7 +685,7 @@ export function registerAuthRoutes(
       const redirectUri = c.env.GITLAB_REDIRECT_URI || `${requestUrl.origin}/api/auth/callback/gitlab`;
 
       const services = authServicesFactory(c.env);
-      const url = await services.handleGitlabLogin(userId, redirectUri);
+      const url = await services.handleGitlabLogin(userId, redirectUri, startOAuthFlow(c));
       return c.redirect(url);
     } catch (err: any) {
       if (err instanceof ValidationError) return c.json({ error: err.message }, err.status);
@@ -670,7 +720,7 @@ export function registerAuthRoutes(
       }
 
       const services = authServicesFactory(c.env);
-      const result = await services.handleGitlabCallback(code, state, frontendUrl, c);
+      const result = await services.handleGitlabCallback(code, state, frontendUrl, c, finishOAuthFlow(c, state));
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);

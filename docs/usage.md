@@ -260,7 +260,8 @@ Swazz enforces SSRF protection by verifying resolved host IP addresses before ma
 - **Runner Agent Mode (`swazz-engine run-agent`)**:
   - By default, requests targeting private IP ranges (RFC 1918, loopback, link-local) are **blocked**.
   - Set `security.allow_private_ips` in the scan configuration to allow them for that scan. The web dashboard exposes this as a per-project toggle under **Project Settings → Anomalies**.
-  - Running the agent outside a container with `--dangerous-no-container` (or with `SWAZZ_DEV=1`) lifts the restriction for every scan, since that mode is meant for local development only.
+  - `--dangerous-no-container` only lets the agent run outside a container; it does not lift the restriction. `--allow-private-networks` (or the `SWAZZ_DEV=1` development mode) lifts it for every job regardless of the scan, so use it only on a runner whose operator is its only user.
+  - On a **shared runner**, one connected with the coordinator's `SHARED_RUNNER_TOKEN`, the coordinator forces `allow_private_ips` off before dispatch unless `SHARED_RUNNERS_ALLOW_PRIVATE_IPS="true"`. To fuzz a private target, run your own runner: connect it with your API key or a registered Ed25519 key, and it only ever receives your scans.
 - **CLI Mode (`swazz-engine start`)**:
   - By default, CLI mode also **blocks** private IP/localhost connections.
   - To scan local developer APIs, opt in explicitly with the command-line flag or the config setting:

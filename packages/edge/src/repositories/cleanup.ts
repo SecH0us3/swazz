@@ -19,21 +19,25 @@ export interface ICleanupRepository {
   deleteUsersData(userIds: string[], projectIds: string[], usernames: string[]): Promise<void>;
 }
 
+export const reportKeyForScan = (scanId: string) => `reports/${scanId}.enc`;
+
 export class CleanupRepository extends BaseService<Env | { DB: D1Database }> implements ICleanupRepository {
   constructor(env: Env | { DB: D1Database }) {
     super(env);
   }
 
   async cleanupSecurityTables(): Promise<{ challenges: number; rateLimits: number; loginHistory: number; auditLogs: number }> {
-    const [challengesRes, rateLimitsRes, historyRes, auditRes] = await Promise.all([
+    const [challengesRes, usedPasskeyRes, rateLimitsRes, historyRes, auditRes] = await Promise.all([
       this.db.prepare("DELETE FROM login_challenges WHERE expires_at < datetime('now')").run(),
+      // Login challenges expire after 5 minutes, so a day-old spent marker can never matter again.
+      this.db.prepare("DELETE FROM used_passkey_challenges WHERE used_at < datetime('now', '-1 day')").run(),
       this.db.prepare("DELETE FROM rate_limits WHERE reset_at < datetime('now')").run(),
       this.db.prepare("DELETE FROM user_login_history WHERE created_at < datetime('now', '-90 days')").run(),
       this.db.prepare("DELETE FROM audit_logs WHERE timestamp < datetime('now', '-45 days')").run(),
     ]);
 
     return {
-      challenges: challengesRes.meta?.changes || 0,
+      challenges: (challengesRes.meta?.changes || 0) + (usedPasskeyRes.meta?.changes || 0),
       rateLimits: rateLimitsRes.meta?.changes || 0,
       loginHistory: historyRes.meta?.changes || 0,
       auditLogs: auditRes.meta?.changes || 0,
@@ -96,7 +100,7 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
   async getScanReportUrls(userIds: string[], projectIds: string[]): Promise<string[]> {
     if (userIds.length === 0) return [];
     const userPlaceholders = userIds.map(() => '?').join(',');
-    let scansQuery = `SELECT report_url FROM scans WHERE user_id IN (${userPlaceholders})`;
+    let scansQuery = `SELECT id, report_url FROM scans WHERE user_id IN (${userPlaceholders})`;
     const scansParams: any[] = [...userIds];
 
     if (projectIds.length > 0) {
@@ -105,10 +109,12 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
       scansParams.push(...projectIds);
     }
 
-    const res = await this.db.prepare(scansQuery).bind(...scansParams).all<{ report_url: string | null }>();
-    return res.results
-      ? res.results.map(s => s.report_url).filter((url): url is string => !!url)
-      : [];
+    const res = await this.db.prepare(scansQuery).bind(...scansParams).all<{ id: string; report_url: string | null }>();
+    // The R2 key is rebuilt from the trusted scan id; a stored value that is not exactly that
+    // scan's own report key is never handed to STORAGE.delete().
+    return (res.results || [])
+      .filter(s => !!s.report_url && s.report_url === reportKeyForScan(s.id))
+      .map(s => reportKeyForScan(s.id));
   }
 
   async getUserApiKeys(userIds: string[]): Promise<string[]> {

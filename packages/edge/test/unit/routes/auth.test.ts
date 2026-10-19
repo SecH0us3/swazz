@@ -100,6 +100,36 @@ describe('Auth Routes Unit Tests', () => {
     });
   });
 
+  describe('PASSWORD_AUTH_ENABLED=false', () => {
+    let disabledApp: Hono<AppEnv>;
+
+    beforeEach(() => {
+      disabledApp = new Hono<AppEnv>();
+      disabledApp.use('*', async (c, next) => {
+        c.env = { JWT_SECRET: 'test-secret', PASSWORD_AUTH_ENABLED: 'false' } as unknown as Env;
+        await next();
+      });
+      registerAuthRoutes(disabledApp, () => mockAuthService, () => mockLicenseService);
+    });
+
+    it.each(['/api/auth/register', '/api/auth/login/step1', '/api/auth/login'])('refuses %s on the server', async (path) => {
+      const res = await disabledApp.request(path, {
+        method: 'POST',
+        body: JSON.stringify({ username: 'user', password: 'securepassword123', token: 't', nonce: 1 }),
+      });
+      expect(res.status).toBe(403);
+      expect(mockAuthService.register).not.toHaveBeenCalled();
+      expect(mockAuthService.loginStep1).not.toHaveBeenCalled();
+      expect(mockAuthService.login).not.toHaveBeenCalled();
+    });
+
+    it('still serves guest sign-in', async () => {
+      mockAuthService.registerGuestStep1.mockResolvedValue({ status: 'ok' });
+      const res = await disabledApp.request('/api/auth/guest/step1', { method: 'POST' });
+      expect(res.status).toBe(200);
+    });
+  });
+
   // POST /api/auth/guest/step1
   describe('POST /api/auth/guest/step1', () => {
     it('handles valid request', async () => {
@@ -523,6 +553,48 @@ describe('Auth Routes Unit Tests', () => {
       const res = await liveApp.request('http://example.com/api/auth/callback/github?code=123&state=state123');
       expect(res.status).toBe(302);
     });
+    it('login binds the flow to this browser with its own HttpOnly, Lax nonce cookie', async () => {
+      mockAuthService.handleGithubLogin.mockResolvedValue('https://github.com/login');
+      const res = await app.request('/api/auth/login/github');
+      const cookie = res.headers.get('Set-Cookie') || '';
+      const match = /swazz_oauth_nonce_([0-9a-f]{16})=([0-9a-f]{64})/.exec(cookie);
+      expect(match).not.toBeNull();
+      expect(match![2].startsWith(match![1])).toBe(true);
+      expect(cookie).toContain('HttpOnly');
+      expect(cookie).toContain('SameSite=Lax');
+      expect(cookie).toContain('Path=/api/auth/callback');
+      expect(cookie).not.toContain('Secure'); // plain http in this test
+      expect(mockAuthService.handleGithubLogin.mock.calls[0][2]).toBe(match![2]);
+    });
+
+    it('marks the nonce cookie Secure over https', async () => {
+      mockAuthService.handleGithubLogin.mockResolvedValue('https://github.com/login');
+      const res = await app.request('https://swazz.example/api/auth/login/github');
+      expect(res.headers.get('Set-Cookie')).toContain('Secure');
+    });
+
+    it('two flows in one browser keep separate nonces; each callback reads and clears its own', async () => {
+      const nonceA = 'a'.repeat(64);
+      const nonceB = 'b'.repeat(64);
+      const stateFor = (nonce: string) => `e30.${btoa(JSON.stringify({ nonce })).replace(/=+$/, '')}.sig`;
+      mockAuthService.handleGithubCallback.mockResolvedValue({ redirectUrl: 'http://localhost:5173' });
+
+      const res = await app.request(`/api/auth/callback/github?code=1&state=${stateFor(nonceA)}`, {
+        headers: { Cookie: `swazz_oauth_nonce_${nonceA.slice(0, 16)}=${nonceA}; swazz_oauth_nonce_${nonceB.slice(0, 16)}=${nonceB}` }
+      });
+
+      expect(mockAuthService.handleGithubCallback.mock.calls[0][4]).toBe(nonceA);
+      const setCookie = res.headers.get('Set-Cookie') || '';
+      expect(setCookie).toMatch(new RegExp(`swazz_oauth_nonce_${nonceA.slice(0, 16)}=;.*Max-Age=0`));
+      expect(setCookie).not.toContain(nonceB.slice(0, 16));
+    });
+
+    it('callback without the nonce cookie passes no nonce', async () => {
+      mockAuthService.handleGithubCallback.mockResolvedValue({ redirectUrl: 'http://localhost:5173' });
+      await app.request('/api/auth/callback/github?code=1&state=s');
+      expect(mockAuthService.handleGithubCallback.mock.calls[0][4]).toBeUndefined();
+    });
+
     it('GET /api/auth/callback/github missing code', async () => {
       const res = await app.request('/api/auth/callback/github');
       expect(res.status).toBe(302); // Redirects to /?error=...

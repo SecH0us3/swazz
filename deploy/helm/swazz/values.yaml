@@ -52,8 +52,12 @@ runner:
     # sha-<short-commit> tags are published by .github/workflows/release.yml.
     tag: ""
   env:
-    # RUNNER_TOKEN must be replaced with a Service Account token generated from the Swazz Dashboard in production
-    RUNNER_TOKEN: "swazz_live_default_token"
+    # RUNNER_TOKEN decides whose scans this runner takes:
+    # - a user or Service Account API key from the dashboard: only that account's scans;
+    # - the coordinator's SHARED_RUNNER_TOKEN (set SWAZZ_RUNNER_TOKEN in edge.env to the same
+    #   value, at least 32 chars): every user's scans, target credentials included.
+    # Required: there is no usable default.
+    RUNNER_TOKEN: ""
   resources: {}
   nodeSelector: {}
   tolerations: []

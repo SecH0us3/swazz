@@ -532,7 +532,8 @@ export default {
               runId: msg.body.runId,
               configKey: msg.body.configKey,
               config: msg.body.config,
-              userPublicKey: msg.body.userPublicKey || ""
+              userPublicKey: msg.body.userPublicKey || "",
+              userId: msg.body.userId || ""
             }),
           });
           const doRes = await stub.fetch(doReq);
@@ -553,15 +554,25 @@ export default {
         }
       }
     } else if (batch.queue === 'swazz-findings-queue') {
+      const scansRepo = new ScansRepository(env);
       try {
-        const scansRepo = new ScansRepository(env);
         await scansRepo.processFindingsQueueMessages(batch.messages, ctx);
         for (const msg of batch.messages) {
           msg.ack();
         }
       } catch (err) {
-        logError({ env, executionCtx: ctx }, "Queue", "Failed to bulk insert findings and events", { error: err });
-        throw err;
+        // The batch mixes every tenant's events, so one bad message must not cost the others:
+        // fall back to one message at a time and retry only the ones that still fail.
+        logError({ env, executionCtx: ctx }, "Queue", "Failed to bulk insert findings and events; retrying per message", { error: err });
+        for (const msg of batch.messages) {
+          try {
+            await scansRepo.processFindingsQueueMessages([msg], ctx);
+            msg.ack();
+          } catch (msgErr) {
+            logError({ env, executionCtx: ctx }, "Queue", `Failed to persist findings event for scan ${msg.body?.scanId}`, { error: msgErr });
+            msg.retry();
+          }
+        }
       }
     }
   }

@@ -53,6 +53,14 @@ describe('RbacRepository Unit Tests', () => {
     expect(mockBind).toHaveBeenCalledWith('proj-123');
   });
 
+  it('ignores permission sets cached under the previous (unversioned) key format', async () => {
+    // Entries written before v2 were computed with the legacy role source; they must not be read.
+    mockKV.get.mockImplementation(async (key: string) => key === 'rbac:proj-123:u1' ? { permissions: ['delete:/api/projects/:id'] } : null);
+    mockAll.mockResolvedValueOnce({ results: [] });
+    const repo = new RbacRepository(mockEnv);
+    expect(await repo.checkPermission('u1', 'proj-123', 'delete:/api/projects/:id')).toBe(false);
+  });
+
   it('invalidateProjectRBAC deletes cache keys for all project members', async () => {
     mockAll.mockResolvedValue({
       results: [{ user_id: 'u1' }, { user_id: 'u2' }]
@@ -62,14 +70,14 @@ describe('RbacRepository Unit Tests', () => {
     await repo.invalidateProjectRBAC('proj-123');
 
     expect(mockKV.delete).toHaveBeenCalledTimes(2);
-    expect(mockKV.delete).toHaveBeenCalledWith('rbac:proj-123:u1');
-    expect(mockKV.delete).toHaveBeenCalledWith('rbac:proj-123:u2');
+    expect(mockKV.delete).toHaveBeenCalledWith('rbac:v2:proj-123:u1');
+    expect(mockKV.delete).toHaveBeenCalledWith('rbac:v2:proj-123:u2');
   });
 
   it('invalidateUserRBAC deletes single user cache key', async () => {
     const repo = new RbacRepository(mockEnv);
     await repo.invalidateUserRBAC('proj-123', 'u1');
-    expect(mockKV.delete).toHaveBeenCalledWith('rbac:proj-123:u1');
+    expect(mockKV.delete).toHaveBeenCalledWith('rbac:v2:proj-123:u1');
   });
 
   describe('checkPermission', () => {
@@ -80,7 +88,7 @@ describe('RbacRepository Unit Tests', () => {
       const hasPerm = await repo.checkPermission('u1', 'proj-123', 'write:project');
 
       expect(hasPerm).toBe(true);
-      expect(mockKV.get).toHaveBeenCalledWith('rbac:proj-123:u1', 'json');
+      expect(mockKV.get).toHaveBeenCalledWith('rbac:v2:proj-123:u1', 'json');
       expect(mockPrepare).not.toHaveBeenCalled();
     });
 
@@ -93,7 +101,7 @@ describe('RbacRepository Unit Tests', () => {
 
       expect(hasPerm).toBe(false);
       expect(mockKV.put).toHaveBeenCalledWith(
-        'rbac:proj-123:u1',
+        'rbac:v2:proj-123:u1',
         JSON.stringify({ permissions: [] }),
         { expirationTtl: 300 }
       );
@@ -112,7 +120,7 @@ describe('RbacRepository Unit Tests', () => {
       expect(hasPerm).toBe(true);
       // Verify resolved permissions are cached for 24h (86400)
       expect(mockKV.put).toHaveBeenCalledWith(
-        'rbac:proj-123:u1',
+        'rbac:v2:proj-123:u1',
         expect.stringContaining('post:/api/projects/:id/invitations'),
         { expirationTtl: 86400 }
       );
@@ -133,8 +141,9 @@ describe('RbacRepository Unit Tests', () => {
       const hasPerm = await repo.checkPermission('u1', 'proj-123', 'custom:access');
 
       expect(hasPerm).toBe(true);
-      expect(mockPrepare).toHaveBeenNthCalledWith(2, 'SELECT permission_key FROM custom_role_permissions WHERE role_id IN (?)');
-      expect(mockBind).toHaveBeenNthCalledWith(2, 'custom-role');
+      expect(mockPrepare.mock.calls[1][0]).toContain('JOIN project_custom_roles pcr ON pcr.id = crp.role_id');
+      expect(mockPrepare.mock.calls[1][0]).toContain('WHERE pcr.project_id = ? AND crp.role_id IN (?)');
+      expect(mockBind).toHaveBeenNthCalledWith(2, 'proj-123', 'custom-role');
     });
   });
 
@@ -241,7 +250,8 @@ describe('RbacRepository Unit Tests', () => {
     const repo = new RbacRepository(mockEnv);
     await repo.updateMemberRoles('proj-123', 'u1', ['role1', 'role2']);
 
-    expect(mockPrepare).toHaveBeenCalledTimes(3); // 1 delete + 2 inserts
+    expect(mockPrepare).toHaveBeenCalledTimes(4); // 1 delete + 2 inserts + legacy role sync
+    expect(mockPrepare).toHaveBeenCalledWith('UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?');
     expect(mockBatch).toHaveBeenCalled();
   });
 
@@ -259,20 +269,39 @@ describe('RbacRepository Unit Tests', () => {
     expect(mockBatch).toHaveBeenCalled();
   });
 
-  it('updateCustomRole updates role detail and resets perms/inheritance in batch transaction', async () => {
+  it('updateCustomRole scopes every statement of the batch to the role\'s project', async () => {
+    mockBatch.mockResolvedValueOnce([{ meta: { changes: 1 } }]);
     const repo = new RbacRepository(mockEnv);
-    await repo.updateCustomRole('r1', 'NewName', ['p1'], ['child1']);
+    expect(await repo.updateCustomRole('proj-1', 'r1', 'NewName', ['p1'], ['child1'])).toBe(true);
 
-    expect(mockPrepare).toHaveBeenCalledTimes(5); // update + delete_perms + delete_inh + insert_perm + insert_inh
-    expect(mockBatch).toHaveBeenCalled();
+    // update + delete_perms + delete_inh + insert_perm + insert_inh, no separate ownership read
+    expect(mockPrepare).toHaveBeenCalledTimes(5);
+    expect(mockPrepare).toHaveBeenCalledWith('UPDATE project_custom_roles SET name = ? WHERE id = ? AND project_id = ?');
+    for (const [sql] of mockPrepare.mock.calls.slice(1)) {
+      expect(sql).toContain('EXISTS (SELECT 1 FROM project_custom_roles WHERE id = ? AND project_id = ?)');
+    }
   });
 
-  it('deleteCustomRole removes role and cascading permissions/inheritance in batch transaction', async () => {
+  it('updateCustomRole reports false when no role of that project was updated', async () => {
+    mockBatch.mockResolvedValueOnce([{ meta: { changes: 0 } }]);
     const repo = new RbacRepository(mockEnv);
-    await repo.deleteCustomRole('r1');
+    expect(await repo.updateCustomRole('proj-1', 'r-foreign', 'NewName', ['p1'], [])).toBe(false);
+  });
+
+  it('deleteCustomRole deletes dependants first, guarded by ownership, and the role row last', async () => {
+    mockBatch.mockResolvedValueOnce([{}, {}, {}, { meta: { changes: 1 } }]);
+    const repo = new RbacRepository(mockEnv);
+    expect(await repo.deleteCustomRole('proj-1', 'r1')).toBe(true);
 
     expect(mockPrepare).toHaveBeenCalledTimes(4);
-    expect(mockBatch).toHaveBeenCalled();
+    expect(mockPrepare).toHaveBeenCalledWith('DELETE FROM project_member_roles WHERE role_id = ? AND project_id = ?');
+    expect(mockPrepare.mock.calls[3][0]).toBe('DELETE FROM project_custom_roles WHERE id = ? AND project_id = ?');
+  });
+
+  it('deleteCustomRole reports false when no role of that project was deleted', async () => {
+    mockBatch.mockResolvedValueOnce([{}, {}, {}, { meta: { changes: 0 } }]);
+    const repo = new RbacRepository(mockEnv);
+    expect(await repo.deleteCustomRole('proj-1', 'r-foreign')).toBe(false);
   });
 
   it('getUserDetails returns profile username and email', async () => {
@@ -288,7 +317,8 @@ describe('RbacRepository Unit Tests', () => {
     mockAll.mockResolvedValue({ results: invites });
 
     const repo = new RbacRepository(mockEnv);
-    expect(await repo.getUserInvitations('a@b.com', 'alex')).toBe(invites);
+    expect(await repo.getUserInvitations('a@b.com', 'alex', true)).toBe(invites);
+    expect(mockBind).toHaveBeenCalledWith('a@b.com', 'alex', 1);
   });
 
   it('getInvitationByToken returns invitation email and username', async () => {
@@ -320,7 +350,7 @@ describe('RbacRepository Unit Tests', () => {
       mockAll.mockResolvedValue(null);
 
       const repo = new RbacRepository(mockEnv);
-      const res = await repo.acceptInvitation('token-1', 'alex', 'a@b.com', 'u1');
+      const res = await repo.acceptInvitation('token-1', 'alex', 'a@b.com', true, 'u1');
 
       expect(res).toBeNull();
     });
@@ -334,7 +364,7 @@ describe('RbacRepository Unit Tests', () => {
       mockAll.mockResolvedValueOnce(invitation); // update invitation RETURNING *
 
       const repo = new RbacRepository(mockEnv);
-      const res = await repo.acceptInvitation('token-1', 'alex', 'a@b.com', 'u1');
+      const res = await repo.acceptInvitation('token-1', 'alex', 'a@b.com', true, 'u1');
 
       expect(res).toBe(invitation);
       expect(mockPrepare).toHaveBeenCalledTimes(4); // 1 update + 2 role inserts + 1 member insert
@@ -345,9 +375,9 @@ describe('RbacRepository Unit Tests', () => {
   it('declineInvitation updates status and returns true if changed', async () => {
     mockAll.mockResolvedValue({ meta: { changes: 1 } });
     const repo = new RbacRepository(mockEnv);
-    expect(await repo.declineInvitation('token-1', 'alex', 'a@b.com')).toBe(true);
+    expect(await repo.declineInvitation('token-1', 'alex', 'a@b.com', true)).toBe(true);
 
     mockAll.mockResolvedValue({ meta: { changes: 0 } });
-    expect(await repo.declineInvitation('token-1', 'alex', 'a@b.com')).toBe(false);
+    expect(await repo.declineInvitation('token-1', 'alex', 'a@b.com', true)).toBe(false);
   });
 });

@@ -49,6 +49,7 @@ export function getPublicKeyFromTags(tags: string[]): string | undefined {
   return tags.find(t =>
     t !== 'runner-pending' &&
     t !== 'runner' &&
+    t !== 'shared' &&
     !t.startsWith('name:') &&
     !t.startsWith('version:') &&
     !t.startsWith('user_id:')
@@ -60,6 +61,7 @@ export function getRunIdFromTags(tags: string[]): string | undefined {
     t !== 'client' &&
     t !== 'runner' &&
     t !== 'runner-pending' &&
+    t !== 'shared' &&
     !t.startsWith('name:') &&
     !t.startsWith('version:') &&
     !t.startsWith('user_id:')

@@ -21,15 +21,19 @@ describe('StateManager', () => {
     expect(manager.jobs.get('run-1')).toBe(mockWs);
   });
 
-  it('should correctly identify private runner tags', () => {
+  it('treats only runners tagged shared as shared runners', () => {
     const mockWs = {} as any;
-    const mockState = {
-      getWebSockets: vi.fn().mockReturnValue([]),
-      getTags: vi.fn().mockReturnValue(['runner', 'private-company-tag'])
-    } as any;
-
+    const tags = vi.fn();
+    const mockState = { getWebSockets: vi.fn().mockReturnValue([]), getTags: tags } as any;
     const manager = new StateManager(mockState);
-    expect(manager.isPrivateRunner(mockWs)).toBe(true);
+
+    tags.mockReturnValue(['runner', 'shared']);
+    expect(manager.isSharedRunner(mockWs)).toBe(true);
+    // A keyed runner and a runner connected with a user API token both serve one user only.
+    tags.mockReturnValue(['runner', 'private-company-tag', 'user_id:u1']);
+    expect(manager.isSharedRunner(mockWs)).toBe(false);
+    tags.mockReturnValue(['runner', 'user_id:u1']);
+    expect(manager.isSharedRunner(mockWs)).toBe(false);
   });
 
   it('should reconstruct runner challenges from active WebSockets', () => {

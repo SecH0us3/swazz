@@ -238,6 +238,7 @@ func printHelp() {
 	fmt.Println("  --key <file-or-hex>          Private key file path or hex string (default: ./swazz_runner.key)")
 	fmt.Println("  --name <name>                (Optional) Name to identify this runner")
 	fmt.Println("  --dangerous-no-container     Allow running directly on the host machine without Docker")
+	fmt.Println("  --allow-private-networks     Let every job reach private/loopback addresses (only if you are the runner's only user)")
 	fmt.Println("  --log-level <level>          Log level: debug, info, warn, error (default: info)")
 	fmt.Println("  --log-filter <substring>     Only output log lines containing the substring (case-insensitive)")
 	fmt.Println("  --disable-telemetry          Disable reporting anonymous global scan count telemetry")
