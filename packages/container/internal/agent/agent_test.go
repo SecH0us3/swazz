@@ -8,7 +8,6 @@ package agent
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -257,9 +256,8 @@ func TestSendTriageBatchToEdge(t *testing.T) {
 }
 
 func TestRunAgentConnection_HandshakeAndParseRequest(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(nil)
+	_, priv, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
-	pubHex := hex.EncodeToString(pub)
 
 	doneCh := make(chan struct{})
 
@@ -349,17 +347,12 @@ func TestRunAgentConnection_HandshakeAndParseRequest(t *testing.T) {
 	agentDone := make(chan struct{})
 	go func() {
 		defer close(agentDone)
-		_ = runAgentConnection(
+		_ = newAgentSession(ts.URL, "", true).runConnection(
 			ctx,
 			wsURL,
 			&websocket.DialOptions{Subprotocols: []string{"swazz-agent"}},
-			ts.URL,
-			"",
-			"test-runner",
 			true,
 			priv,
-			pubHex,
-			true,
 		)
 	}()
 
@@ -382,22 +375,17 @@ func TestRunAgentConnection_AuthFailures(t *testing.T) {
 	defer ts401.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(ts401.URL, "http")
-	err := runAgentConnection(
+	err := newAgentSession(ts401.URL, "invalid-token", true).runConnection(
 		context.Background(),
 		wsURL,
 		nil,
-		ts401.URL,
-		"invalid-token",
-		"runner",
 		false,
 		nil,
-		"",
-		true,
 	)
 	assert.ErrorIs(t, err, errAgentAuthFatal)
 
 	// 2. Handshake returns auth_failed
-	pub, priv, _ := ed25519.GenerateKey(nil)
+	_, priv, _ := ed25519.GenerateKey(nil)
 	tsFailed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)
 		if err != nil {
@@ -412,17 +400,12 @@ func TestRunAgentConnection_AuthFailures(t *testing.T) {
 	defer tsFailed.Close()
 
 	wsURLFailed := "ws" + strings.TrimPrefix(tsFailed.URL, "http")
-	err = runAgentConnection(
+	err = newAgentSession(tsFailed.URL, "", true).runConnection(
 		context.Background(),
 		wsURLFailed,
 		nil,
-		tsFailed.URL,
-		"",
-		"runner",
 		true,
 		priv,
-		hex.EncodeToString(pub),
-		true,
 	)
 	assert.ErrorIs(t, err, errAgentAuthFatal)
 }
@@ -440,9 +423,8 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 	}))
 	defer targetServer.Close()
 
-	pub, priv, err := ed25519.GenerateKey(nil)
+	_, priv, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
-	pubHex := hex.EncodeToString(pub)
 
 	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
 	jobDoneCh := make(chan struct{})
@@ -527,17 +509,12 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 	agentDone := make(chan struct{})
 	go func() {
 		defer close(agentDone)
-		_ = runAgentConnection(
+		_ = newAgentSession(ts.URL, "", true).runConnection(
 			ctx,
 			wsURL,
 			&websocket.DialOptions{Subprotocols: []string{"swazz-agent"}},
-			ts.URL,
-			"",
-			"test-runner",
 			true,
 			priv,
-			pubHex,
-			true,
 		)
 	}()
 

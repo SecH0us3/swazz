@@ -192,6 +192,9 @@ func StartAgent(args []string) {
 		agentVer = "v1.0.0"
 	}
 	q.Set("version", agentVer)
+	// Tells the coordinator this agent sends heartbeats, so a connection that stops sending them
+	// can be treated as dead.
+	q.Set("heartbeat", "1")
 	u.RawQuery = q.Encode()
 	urlWithParams := u.String()
 
@@ -216,10 +219,12 @@ func StartAgent(args []string) {
 	// (miniflare "Network connection lost"), which drops this WebSocket. Instead
 	// of terminating the agent, retry the connection with exponential backoff so
 	// the runner survives coordinator restarts.
+	// One session for the life of the process, so scans survive a reconnect.
+	session := newAgentSession(coordinatorURL, token, disableTelemetry)
 	backoff := 2 * time.Second
 	const maxBackoff = 30 * time.Second
 	for {
-		runErr := runAgentConnection(ctx, urlWithParams, opts, coordinatorURL, token, name, useSignatureAuth, privKey, pubKeyHex, disableTelemetry)
+		runErr := session.runConnection(ctx, urlWithParams, opts, useSignatureAuth, privKey)
 		if runErr == nil {
 			return
 		}

@@ -77,6 +77,14 @@ export async function clearScanState(storage: DurableObjectStorage, runId: strin
   await storage.delete(scanStateKeys(runId));
 }
 
+// Which runner identity (see runnerIdentity) a dispatched run belongs to, so a runner that
+// reconnects mid-scan can take its runs back over (and, once a run completed, still deliver its
+// late log lines). Removed when a run is stopped, and evicted together with the run from the
+// bounded finished_runs list, so the keys stay bounded.
+export function jobRunnerKey(runId: string): string {
+  return `job_runner:${runId}`;
+}
+
 export const DO_STORAGE_BATCH_LIMIT = 128;
 export const FINISHED_SCANS_KEY = 'finished_runs';
 export const MAX_FINISHED_SCANS = 200;
@@ -87,10 +95,14 @@ export async function markScanFinished(storage: DurableObjectStorage, runId: str
   const existing = (map instanceof Map ? map.get(FINISHED_SCANS_KEY) : undefined) ?? [];
   const list = Array.isArray(existing) ? existing.filter(id => id !== runId) : [];
   list.push(runId);
+  const evicted: string[] = [];
   while (list.length > MAX_FINISHED_SCANS) {
-    list.shift();
+    evicted.push(list.shift()!);
   }
   await storage.put(FINISHED_SCANS_KEY, list);
+  if (evicted.length > 0 && storage.delete) {
+    await storage.delete(evicted.map(jobRunnerKey));
+  }
 }
 
 export async function getFinishedScans(storage: DurableObjectStorage): Promise<Set<string>> {
@@ -122,3 +134,23 @@ export async function batchStorageGet<T = any>(
 }
 
 
+
+/**
+ * Records the identity a run was dispatched to. Never throws: the scan is already on its way to
+ * the runner, and a missing record only means that run cannot be resumed after a reconnect.
+ */
+export async function recordJobRunner(storage: DurableObjectStorage, runId: string, identity: string | null): Promise<boolean> {
+  if (!identity || !storage?.put) return false;
+  try {
+    await storage.put(jobRunnerKey(runId), identity);
+    return true;
+  } catch (err) {
+    console.error(`[Coordinator] Failed to record the runner of scan ${runId}`, err);
+    return false;
+  }
+}
+
+export async function forgetJobRunner(storage: DurableObjectStorage, runId: string): Promise<void> {
+  if (!storage?.delete) return;
+  await storage.delete(jobRunnerKey(runId));
+}

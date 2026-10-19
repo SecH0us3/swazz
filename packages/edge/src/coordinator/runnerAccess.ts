@@ -28,6 +28,17 @@ export function isSharedRunnerTags(tags: string[]): boolean {
 }
 
 /**
+ * Who a run was handed to, as far as taking it back over is concerned: the operator's shared
+ * pool, or one owner's runners. A runner that reconnects may resume a run only under the same
+ * identity it was dispatched to; null means the connection can resume nothing.
+ */
+export function runnerIdentity(tags: string[]): string | null {
+  if (isSharedRunnerTags(tags)) return 'shared';
+  const owner = getRunnerOwnerId(tags);
+  return owner ? `user:${owner}` : null;
+}
+
+/**
  * The scan config as a given runner may receive it. A shared runner sits on the operator's
  * network, so a tenant must not be able to switch off its SSRF guard: allow_private_ips is
  * forced off there unless the operator opted in with SHARED_RUNNERS_ALLOW_PRIVATE_IPS.
