@@ -31,6 +31,7 @@ func StartAgent(args []string) {
 	var dangerousNoContainer, allowPrivateNetworks bool
 	var hasQuiet, hasLogLevel bool
 	var disableTelemetry bool
+	var recycleWhenIdle bool
 
 	// Simple arg parsing
 	for i := 0; i < len(args); i++ {
@@ -41,6 +42,8 @@ func StartAgent(args []string) {
 			allowPrivateNetworks = true
 		case "--disable-telemetry":
 			disableTelemetry = true
+		case "--recycle-when-idle":
+			recycleWhenIdle = true
 		case "--log-level", "-log-level":
 			if i+1 < len(args) {
 				logLevelStr = args[i+1]
@@ -88,6 +91,9 @@ func StartAgent(args []string) {
 
 	if os.Getenv("SWAZZ_DISABLE_TELEMETRY") == "true" {
 		disableTelemetry = true
+	}
+	if os.Getenv("SWAZZ_RECYCLE_WHEN_IDLE") == "true" {
+		recycleWhenIdle = true
 	}
 
 	var finalLevel string
@@ -221,6 +227,10 @@ func StartAgent(args []string) {
 	// the runner survives coordinator restarts.
 	// One session for the life of the process, so scans survive a reconnect.
 	session := newAgentSession(coordinatorURL, token, disableTelemetry)
+	if recycleWhenIdle {
+		session.dispatcher.EnableRecycleWhenIdle()
+		logInfo("Recycling when idle: the agent exits after its scans finish, for its supervisor to restart it clean")
+	}
 	backoff := 2 * time.Second
 	const maxBackoff = 30 * time.Second
 	for {
