@@ -242,6 +242,8 @@ func printHelp() {
 	fmt.Println("  --log-level <level>          Log level: debug, info, warn, error (default: info)")
 	fmt.Println("  --log-filter <substring>     Only output log lines containing the substring (case-insensitive)")
 	fmt.Println("  --disable-telemetry          Disable reporting anonymous global scan count telemetry")
+	fmt.Println("  --recycle-when-idle          Exit once no scan runs and all results were delivered, for a restart policy")
+	fmt.Println("                               (e.g. docker --restart unless-stopped) to start a clean process (or env SWAZZ_RECYCLE_WHEN_IDLE=true)")
 	fmt.Println()
 	fmt.Println("Options for 'start':")
 	fmt.Println("  --config <path>              Path to config file (default: swazz.config.json)")

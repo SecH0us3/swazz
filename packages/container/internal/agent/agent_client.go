@@ -61,7 +61,7 @@ type agentSession struct {
 
 func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agentSession {
 	outChan := make(chan interface{}, 50000)
-	return &agentSession{
+	s := &agentSession{
 		outChan:    outChan,
 		dispatcher: NewAgentDispatcher(coordinatorURL, token, disableTelemetry, outChan),
 		carry:      make(chan interface{}, carryCapacity),
@@ -69,6 +69,12 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 		heartbeatInterval: heartbeatInterval,
 		heartbeatTimeout:  heartbeatTimeout,
 	}
+	// Still to reach the coordinator: queued, carried over from a failed write, or sent but not
+	// acknowledged (with a coordinator that acknowledges).
+	s.dispatcher.pendingOutput = func() bool {
+		return len(s.outChan) > 0 || len(s.carry) > 0 || len(s.dispatcher.delivery.unackedRuns()) > 0
+	}
+	return s
 }
 
 // runConnection services one coordinator connection for this session.

@@ -84,6 +84,14 @@ type AgentDispatcher struct {
 	parseReqSem      chan struct{}
 	delivery         *deliveryLog
 	sendMu           sync.Mutex
+
+	// Recycling (--recycle-when-idle): once no scan runs and everything sent was delivered, the
+	// agent exits, for its supervisor (Docker's restart policy) to start a clean process.
+	recycleWhenIdle bool
+	recycling       atomic.Bool
+	// Whether anything is still waiting to reach the coordinator; set by the session.
+	pendingOutput func() bool
+	exit          func(code int)
 }
 
 // NewAgentDispatcher creates a new dispatcher instance.
@@ -96,6 +104,7 @@ func NewAgentDispatcher(coordinatorURL, token string, disableTelemetry bool, out
 		activeRunners:    make(map[string]*runner.Runner),
 		parseReqSem:      make(chan struct{}, 10),
 		delivery:         newDeliveryLog(),
+		exit:             os.Exit,
 	}
 }
 
@@ -223,6 +232,46 @@ func (d *AgentDispatcher) finishExecution(runID string, panicked bool, terminal 
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 	sendError(runner.RunPanicMessage)
+}
+
+// recycleDrainTimeout bounds how long an idle agent waits for its last events to be delivered
+// before it recycles; recyclePollInterval is how often it checks.
+var (
+	recycleDrainTimeout = 2 * time.Minute
+	recyclePollInterval = 200 * time.Millisecond
+)
+
+// EnableRecycleWhenIdle makes the agent exit (code 0) once no scan runs and everything it sent
+// was delivered, so a supervisor restarts it as a clean process: no state of past scans (global
+// stores, caches, memory, temporary files) carries over to the next. It needs a restart policy
+// (Docker's --restart unless-stopped, a Kubernetes Deployment), or the runner stays down.
+func (d *AgentDispatcher) EnableRecycleWhenIdle() {
+	d.recycleWhenIdle = true
+}
+
+// maybeRecycle starts recycling if the agent is idle. A scan dispatched while it waits for
+// delivery cancels it. Non-goal: a dispatch that arrives in the instant before the exit is
+// lost with the process; the coordinator sees the connection close and hands it to a runner.
+func (d *AgentDispatcher) maybeRecycle() {
+	if !d.recycleWhenIdle || len(d.ActiveRunIDs()) > 0 || !d.recycling.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer d.recycling.Store(false)
+		deadline := time.Now().Add(recycleDrainTimeout)
+		for d.pendingOutput != nil && d.pendingOutput() && time.Now().Before(deadline) {
+			if len(d.ActiveRunIDs()) > 0 {
+				return
+			}
+			time.Sleep(recyclePollInterval)
+		}
+		if len(d.ActiveRunIDs()) > 0 {
+			logInfo("A new scan arrived; not recycling")
+			return
+		}
+		logInfo("No scan is running: exiting so the runner restarts as a clean process (--recycle-when-idle)")
+		d.exit(0)
+	}()
 }
 
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.
@@ -509,6 +558,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 			delete(d.activeRunners, runID)
 			d.activeRunnersMu.Unlock()
 			d.finishExecution(runID, panicked != nil, terminal.Load, subDone, func() interface{} { return r.GetStats() }, sendEvent, sendError)
+			d.maybeRecycle()
 		}()
 		sendRunnerLog := func(level, msg string) {
 			sendEvent("runner_log", map[string]interface{}{
