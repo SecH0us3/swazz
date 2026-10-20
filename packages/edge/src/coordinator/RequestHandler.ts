@@ -14,6 +14,7 @@ import { ParseHandler } from './handlers/parse';
 import { RunnersHandler, RestartRunnerHandler, ConnectRunnerHandler } from './handlers/runners';
 import { ConnectClientHandler } from './handlers/connectClient';
 import { OobHandler } from './handlers/oob';
+import { WatchdogHandler } from './watchdog';
 
 export class RequestHandler {
   private routes: Map<string, RouteHandler>;
@@ -38,6 +39,7 @@ export class RequestHandler {
       ['/connect-runner', new ConnectRunnerHandler()],
       ['/connect-client', new ConnectClientHandler()],
       ['/oob', new OobHandler()],
+      ['/watchdog', new WatchdogHandler()],
     ]);
   }
 

@@ -47,11 +47,12 @@ export function Header({
     onResume,
     onToggleConfig,
 }: Props) {
-    const { isRunning, isPaused, isLoadingSpecs, isQueued, activeTab, betaModeEnabled, loadedRunId, isConfigOpen, isConfigHiddenDesktop } = useAppStore(useShallow(state => ({
+    const { isRunning, isPaused, isLoadingSpecs, isQueued, runStalled, activeTab, betaModeEnabled, loadedRunId, isConfigOpen, isConfigHiddenDesktop } = useAppStore(useShallow(state => ({
         isRunning: state.isRunning,
         isPaused: state.isPaused,
         isLoadingSpecs: state.isLoadingSpecs,
         isQueued: state.isQueued,
+        runStalled: state.runStalled,
         activeTab: state.activeTab,
         betaModeEnabled: state.betaModeEnabled,
         loadedRunId: state.loadedRunId,
@@ -187,7 +188,10 @@ export function Header({
                 {(isRunning || isPaused || isQueued) && (
                     <>
                         <div className="header-divider" />
-                        <div className={`header-status${isPaused ? ' paused' : isQueued ? ' queued' : ''}`}>
+                        <div
+                            className={`header-status${isPaused ? ' paused' : isQueued ? ' queued' : runStalled ? ' stalled' : ''}`}
+                            title={!isPaused && !isQueued && runStalled ? 'Nothing has been received from the runner for a while. The scan’s status is being checked; it ends here as soon as it is known.' : undefined}
+                        >
                             {isPaused ? (
                                 <>
                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
@@ -199,6 +203,11 @@ export function Header({
                                 <>
                                     <span className="queued-dot" />
                                     Queued
+                                </>
+                            ) : runStalled ? (
+                                <>
+                                    <span className="stalled-dot" />
+                                    No activity
                                 </>
                             ) : (
                                 <>

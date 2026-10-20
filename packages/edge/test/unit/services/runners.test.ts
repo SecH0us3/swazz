@@ -12,11 +12,13 @@ import { Env } from '../../../src/env';
 
 const mockUpdateScanStatus = vi.fn();
 
+const mockChangeActiveStatus = vi.fn().mockResolvedValue(true);
 vi.mock('../../../src/repositories/scans', () => {
   return {
     ScansRepository: vi.fn().mockImplementation(function () {
       return {
         updateScanStatus: mockUpdateScanStatus,
+        changeActiveStatus: mockChangeActiveStatus,
       };
     })
   };
@@ -229,7 +231,7 @@ describe('RunnersService Unit Tests', () => {
     expect(thrownError.message).toBe('Failed to queue scan|500');
     expect(thrownError.message).not.toContain('R2 write error');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
-    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-r2-fail', 'failed');
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-r2-fail', 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
     expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
   });
 
@@ -245,7 +247,7 @@ describe('RunnersService Unit Tests', () => {
     expect(thrownError.message).toBe('Failed to queue scan|500');
     expect(thrownError.message).not.toContain('Queue unavailable');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
-    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-q-fail', 'failed');
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-q-fail', 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
   });
 
   test('queueRun should cover getUserPublicKey error log', async () => {
@@ -348,6 +350,17 @@ describe('RunnersService Unit Tests', () => {
     });
     const res = await runnersService.pauseRun('scan-1', 'user-1');
     expect(res.status).toBe('paused');
+    expect(mockChangeActiveStatus).toHaveBeenCalledWith('scan-1', ['queued', 'dispatched'], 'paused');
+  });
+
+  // A scan that ended (failed by the stalled scan watchdog, say) must not become active again.
+  test('pauseRun and resumeRun refuse a scan that already ended', async () => {
+    mockEnv.COORDINATOR_DO.get = vi.fn().mockReturnValue({ fetch: vi.fn().mockResolvedValue({ ok: false, status: 404 }) });
+    mockUpdateScanStatus.mockClear();
+    mockChangeActiveStatus.mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+    await expect(runnersService.pauseRun('scan-1', 'user-1')).rejects.toThrow('The scan has already ended|409');
+    await expect(runnersService.resumeRun('scan-1', 'user-1')).rejects.toThrow('The scan has already ended|409');
+    expect(mockUpdateScanStatus).not.toHaveBeenCalled();
   });
 
   test('pauseRun should throw 401 if unauthorized', async () => {
@@ -360,6 +373,7 @@ describe('RunnersService Unit Tests', () => {
     });
     const res = await runnersService.resumeRun('scan-1', 'user-1');
     expect(res.status).toBe('resumed');
+    expect(mockChangeActiveStatus).toHaveBeenCalledWith('scan-1', ['paused'], 'dispatched');
   });
 
   test('resumeRun should throw 401 if unauthorized', async () => {

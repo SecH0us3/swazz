@@ -42,6 +42,7 @@ describe('ScansService Unit Tests', () => {
       updateScanStatus: vi.fn(),
       updateScanReportUrl: vi.fn(),
       getRunnerLogs: vi.fn(),
+      getFailureReasons: vi.fn().mockResolvedValue(new Map()),
       getFindings: vi.fn(),
       getFindingDetails: vi.fn(),
       updateFinding: vi.fn(),
@@ -219,7 +220,7 @@ describe('ScansService Unit Tests', () => {
       expect(thrownError.message).toBe('Failed to queue scan|500');
       expect(thrownError.message).not.toContain('R2 write error');
       expect(mockScansRepo.createScan).toHaveBeenCalled();
-      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
+      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
       expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
     });
 
@@ -240,7 +241,7 @@ describe('ScansService Unit Tests', () => {
       expect(thrownError.message).toBe('Failed to queue scan|500');
       expect(thrownError.message).not.toContain('Queue send failed');
       expect(mockScansRepo.createScan).toHaveBeenCalled();
-      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
+      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
     });
   });
 
@@ -258,6 +259,21 @@ describe('ScansService Unit Tests', () => {
       mockScansRepo.getScans.mockResolvedValueOnce([{ id: 's1' }]);
       const res = await scansService.getScans('p1', 'u1');
       expect(res.scans).toEqual([{ id: 's1' }]);
+    });
+
+    it('takes the failure reason from the scan row when it has one', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce([{ id: 'kept', status: 'failed', failure_reason: 'Runner lost\nsecond line' }]);
+      const res = await scansService.getScans('p1', 'u1');
+      expect(res.scans[0].failure_reason).toBe('Runner lost second line');
+      expect(mockScansRepo.getFailureReasons).not.toHaveBeenCalled();
+    });
+
+    it('gives failed scans, and only those, their failure reason', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce([{ id: 'ok', status: 'completed' }, { id: 'bad', status: 'failed' }]);
+      mockScansRepo.getFailureReasons.mockResolvedValueOnce(new Map([['bad', 'Runner lost']]));
+      const res = await scansService.getScans('p1', 'u1');
+      expect(mockScansRepo.getFailureReasons).toHaveBeenCalledWith(['bad']);
+      expect(res.scans).toEqual([{ id: 'ok', status: 'completed' }, { id: 'bad', status: 'failed', failure_reason: 'Runner lost' }]);
     });
   });
 
@@ -277,6 +293,27 @@ describe('ScansService Unit Tests', () => {
       mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1' });
       const res = await scansService.getScan('s1', 'u1');
       expect(res.scan.id).toBe('s1');
+    });
+
+    it('says why a failed scan failed', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', status: 'failed' });
+      mockScansRepo.getFailureReasons.mockResolvedValueOnce(new Map([['s1', 'MCP server returned 401']]));
+      const res = await scansService.getScan('s1', 'u1');
+      expect(res.scan.failure_reason).toBe('MCP server returned 401');
+
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's2', project_id: 'p1', status: 'failed' });
+      mockScansRepo.getFailureReasons.mockResolvedValueOnce(new Map());
+      expect((await scansService.getScan('s2', 'u1')).scan.failure_reason).toBeNull();
+    });
+
+    // The dashboard polls the status of a scan outside any project; its creator may read it.
+    it('lets the creator read a scan outside any project, and nobody else', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: '', user_id: 'u1', status: 'dispatched' });
+      expect((await scansService.getScan('s1', 'u1')).scan.id).toBe('s1');
+
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: '', user_id: 'u1' });
+      await expect(scansService.getScan('s1', 'u2')).rejects.toThrow('Forbidden|403');
+      expect(mockRbacRepo.checkPermission).not.toHaveBeenCalledWith('u2', '', expect.anything());
     });
 
     it('parses waf_patch_report JSON string if present', async () => {
@@ -401,6 +438,24 @@ describe('ScansService Unit Tests', () => {
       mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', user_id: 'u1' });
       await scansService.getRunnerLogs('s1', 'u1', true);
       expect(mockScansRepo.getRunnerLogs).toHaveBeenCalled();
+    });
+
+    // Errors were filtered out of the runner log, so a failed scan's log just stopped.
+    it('shows errors in the runner log as one clean line', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', user_id: 'u1' });
+      mockScansRepo.getRunnerLogs.mockResolvedValueOnce([
+        { type: 'event', payload: '{"type":"runner_log","data":{"level":"info","message":"Starting"}}', created_at: 't1' },
+        { type: 'error', payload: '{"error":"MCP 401\\ngoroutine 1 [running]:"}', created_at: 't2' },
+        { type: 'event', payload: '{"type":"error","data":{"message":"boom"}}', created_at: 't3' },
+        { type: 'error', payload: '{}', created_at: 't4' },
+      ]);
+      const { logs } = await scansService.getRunnerLogs('s1', 'u1', true);
+      expect(logs[0].payload).toContain('Starting');
+      expect(logs.slice(1).map((l: any) => JSON.parse(l.payload))).toEqual([
+        { level: 'ERROR', message: 'MCP 401', timestamp: 't2' },
+        { level: 'ERROR', message: 'boom', timestamp: 't3' },
+        { level: 'ERROR', message: 'The scan failed without an error message.', timestamp: 't4' },
+      ]);
     });
 
     it('checks rbac if project_id exists', async () => {

@@ -1,0 +1,90 @@
+/* Copyright (c) 2026 Swazz Authors
+ * This file is part of Swazz
+ * Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
+ * See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
+ */
+
+.scan-issue-banner {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin: 12px 16px 0;
+    padding: 12px 14px;
+    border: 1px solid var(--border-default);
+    border-left-width: 3px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-primary);
+}
+
+.scan-issue-error {
+    border-left-color: var(--color-error);
+    background: var(--color-error-bg);
+}
+
+.scan-issue-warning {
+    border-left-color: var(--color-warning);
+    background: var(--color-warning-bg);
+}
+
+.scan-issue-icon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--bg-app);
+}
+
+.scan-issue-error .scan-issue-icon { background: var(--color-error); }
+.scan-issue-warning .scan-issue-icon { background: var(--color-warning); }
+
+.scan-issue-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.scan-issue-title {
+    font-weight: 600;
+}
+
+.scan-issue-details {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.scan-issue-hint {
+    margin-top: 6px;
+    color: var(--text-primary);
+}
+
+.scan-issue-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.scan-issue-dismiss {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.scan-issue-dismiss:hover {
+    color: var(--text-primary);
+}

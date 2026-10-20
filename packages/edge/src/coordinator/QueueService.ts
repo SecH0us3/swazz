@@ -11,6 +11,9 @@ import { ScansRepository } from '../repositories/scans';
 import { logError } from '../../../common/logging/logger';
 import { isValidScanConfigKey, isScanConfigKeyForRun, getScanConfig, deleteScanConfig, ScanConfigNotFoundError } from '../services/scanConfigStore';
 
+/** Why a scan whose config cannot be read failed, as the user is told. */
+const SCAN_CONFIG_UNREADABLE = 'The scan\'s configuration could not be read, so it never started. Start the scan again.';
+
 export { MAX_ACTIVE_JOBS_PER_RUNNER };
 
 export class QueueService {
@@ -54,12 +57,12 @@ export class QueueService {
   }
 
   /**
-   * Marks a scan that can never be dispatched as failed and drops its coordinator state. Pass
+   * Marks a scan that can never be dispatched (its config cannot be read) as failed and drops its coordinator state. Pass
    * ownConfigRef only when the stored config object belongs to this scan and should be deleted.
    */
   private async failScan(scansRepo: ScansRepository, scanId: string, ownConfigRef?: string): Promise<void> {
     try {
-      if (await scansRepo.markFailedIfActive(scanId)) {
+      if (await scansRepo.markFailedIfActive(scanId, SCAN_CONFIG_UNREADABLE)) {
         await clearScanState(this.state.storage, scanId);
         if (ownConfigRef) await deleteScanConfig(this.env, ownConfigRef);
       }

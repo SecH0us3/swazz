@@ -95,7 +95,8 @@ func (r *Runner) fuzzEndpoint(
 		}
 		wg.Add(1)
 
-		go func(it int, p any, qp map[string]any, gh map[string]string, pp map[string]string) {
+		it, p, qp, gh, pp := i, built.body, built.queryParams, built.headers, built.pathParams
+		r.goWorker(func() {
 			defer r.limiter.Release()
 			defer wg.Done()
 
@@ -135,7 +136,7 @@ func (r *Runner) fuzzEndpoint(
 				r.allResults = append(r.allResults, result)
 				r.resultsMu.Unlock()
 			}
-		}(i, built.body, built.queryParams, built.headers, built.pathParams)
+		})
 
 		if delay > 0 {
 			time.Sleep(delay)

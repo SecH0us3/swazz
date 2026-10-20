@@ -455,6 +455,11 @@ export function ApiSpecsTab() {
             <div className="specs-urls-section specs-mcp-section">
                 <h3 className="specs-section-title">Model Context Protocol (MCP) Fuzzing</h3>
                 <p className="specs-section-desc">Expose and fuzz an MCP server's tools dynamically during the scan run.</p>
+                {mcpServer && (
+                    <p className="specs-section-desc">
+                        While enabled, every scan of this project connects to this MCP server. If it cannot (wrong URL, missing token in Global Headers), the MCP part is skipped with a warning and the rest of the API is still scanned; a scan with nothing else to scan fails.
+                    </p>
+                )}
 
                 <div className="specs-mcp-controls">
                     <label className="premium-checkbox-label specs-mcp-checkbox-label">

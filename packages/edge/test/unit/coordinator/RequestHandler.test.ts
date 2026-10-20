@@ -755,7 +755,7 @@ describe('RequestHandler', () => {
       }));
 
       expect(res.status).toBe(404);
-      expect(mockMarkFailedIfActive).toHaveBeenCalledWith('run-stopped');
+      expect(mockMarkFailedIfActive).toHaveBeenCalledWith('run-stopped', expect.any(String));
       expect(deletedKeys(mockState)).toContain('config_ref:run-stopped');
       expect(deletedKeys(mockState)).toContain('config_meta:run-stopped');
       expect(deletedKeys(mockState)).toContain('config:run-stopped');
@@ -780,7 +780,7 @@ describe('RequestHandler', () => {
       }));
 
       expect(res.status).toBe(404);
-      expect(mockMarkFailedIfActive).toHaveBeenCalledWith('run-stopped');
+      expect(mockMarkFailedIfActive).toHaveBeenCalledWith('run-stopped', expect.any(String));
       expect(mockState.storage.delete).not.toHaveBeenCalled();
       expect(mockEnv.STORAGE.delete).not.toHaveBeenCalled();
     });
@@ -802,7 +802,7 @@ describe('RequestHandler', () => {
       }));
 
       expect(res.status).toBe(404);
-      expect(mockMarkFailedIfActive).toHaveBeenCalledWith('run-stopped');
+      expect(mockMarkFailedIfActive).toHaveBeenCalledWith('run-stopped', expect.any(String));
       expect(mockState.storage.delete).not.toHaveBeenCalled();
       expect(mockEnv.STORAGE.delete).not.toHaveBeenCalled();
     });

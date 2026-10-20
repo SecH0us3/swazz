@@ -10,6 +10,7 @@ import { sendScanCompletedDigestEmail } from '../services/email';
 import { WorkersAIService } from '../services/ai';
 import { logError } from '../../../common/logging/logger';
 import { eventIdFor, isValidExec } from '../coordinator/delivery';
+import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
 
 export interface IScansRepository {
   createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null, triggerType?: string): Promise<void>;
@@ -35,6 +36,10 @@ export interface IScansRepository {
   updateScanReportUrl(scanId: string, reportUrl: string): Promise<void>;
   
   getRunnerLogs(scanId: string): Promise<any[]>;
+  getFailureReasons(scanIds: string[]): Promise<Map<string, string>>;
+  hasActiveScans(): Promise<boolean>;
+  changeActiveStatus(scanId: string, from: string[], to: 'paused' | 'dispatched'): Promise<boolean>;
+  getStalledActiveScans(idleMinutes: number, limit: number, owned?: string[], ownedIdleMinutes?: number): Promise<StalledScan[]>;
   getFindings(scanId: string): Promise<any[]>;
   getFindingDetails(findingId: string): Promise<any | null>;
   updateFinding(findingId: string, fields: Record<string, any>, ctx?: any): Promise<any>;
@@ -46,13 +51,13 @@ export interface IScansRepository {
   getCachedSwagger(url: string): Promise<{ base_path: string; endpoints_r2_key: string; fetched_at: string } | null>;
   getCachedSwaggerDetails(url: string): Promise<{ endpoints_hash: string; endpoints_r2_key: string; raw_spec_r2_key: string } | null>;
   upsertSwaggerCache(url: string, basePath: string, endpointsHash: string, endpointsR2Key: string | undefined, rawSpecR2Key: string | undefined): Promise<void>;
-  updateScanStatus(scanId: string, status: string, summaryStats?: string): Promise<void>;
-  markFailedIfActive(scanId: string): Promise<boolean>;
+  updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any, failureReason?: string): Promise<void>;
+  markFailedIfActive(scanId: string, reason?: string): Promise<boolean>;
   getScanStatus(scanId: string): Promise<string | null>;
   getQueuedScans(): Promise<any[]>;
   getActiveScans(): Promise<any[]>;
   getScanConfigByProject(projectId: string, profileName: string): Promise<string | null>;
-  processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<void>;
+  processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<ProcessedEvents>;
   batchUpdateFindingsAI(
     scanId: string,
     updates: Array<{
@@ -100,6 +105,24 @@ export function sanitizeRunnerFinding(raw: unknown): { id: string; ruleId: strin
     evidence,
   };
 }
+
+// The statuses of a scan that has not ended.
+const ACTIVE_STATUS_SQL = "status IN ('queued','dispatched','paused')";
+
+export interface StalledScan {
+  id: string;
+  status: 'dispatched' | 'paused';
+  idle_minutes: number;
+}
+
+/** What processing a batch of runner events changed. */
+export interface ProcessedEvents {
+  /** Scans this batch ended (completed or failed); a scan that had already ended is not listed. */
+  ended: string[];
+}
+
+// A stored runner error: the runner's error message, or an event of type "error".
+const ERROR_EVENT_SQL = "(type = 'error' OR (type = 'event' AND json_extract(payload, '$.type') = 'error'))";
 
 // D1 allows at most 100 bound parameters per statement.
 const EVENT_ID_LOOKUP_CHUNK = 90;
@@ -212,11 +235,96 @@ export class ScansRepository extends BaseService implements IScansRepository {
       .run();
   }
 
+  /** The scan's runner log: runner_log events and errors, oldest first. */
   async getRunnerLogs(scanId: string): Promise<any[]> {
     const { results } = await this.db.prepare(
-      "SELECT * FROM scan_events WHERE scan_id = ? AND type = 'event' AND json_extract(payload, '$.type') = 'runner_log' ORDER BY created_at ASC"
+      `SELECT * FROM scan_events WHERE scan_id = ? AND (${ERROR_EVENT_SQL} OR (type = 'event' AND json_extract(payload, '$.type') = 'runner_log')) ORDER BY created_at ASC`
     ).bind(scanId).all();
     return results || [];
+  }
+
+  /**
+   * Each failed scan's reason, as user-facing text. Read from the scan row; scans that failed
+   * before failure_reason existed fall back to their most recent stored error.
+   */
+  async getFailureReasons(scanIds: string[]): Promise<Map<string, string>> {
+    const reasons = new Map<string, string>();
+    const ids = Array.from(new Set(scanIds));
+    const missing: string[] = [];
+    for (let i = 0; i < ids.length; i += EVENT_ID_LOOKUP_CHUNK) {
+      const chunk = ids.slice(i, i + EVENT_ID_LOOKUP_CHUNK);
+      const { results } = await this.db.prepare(
+        `SELECT id, failure_reason FROM scans WHERE id IN (${chunk.map(() => '?').join(',')})`
+      ).bind(...chunk).all<{ id: string; failure_reason: string | null }>();
+      for (const row of results ?? []) {
+        const text = sanitizeRunnerText(row.failure_reason);
+        if (text) reasons.set(row.id, text);
+        else missing.push(row.id);
+      }
+    }
+    for (let i = 0; i < missing.length; i += EVENT_ID_LOOKUP_CHUNK) {
+      const chunk = missing.slice(i, i + EVENT_ID_LOOKUP_CHUNK);
+      const { results } = await this.db.prepare(
+        `SELECT scan_id, payload FROM scan_events WHERE scan_id IN (${chunk.map(() => '?').join(',')}) AND ${ERROR_EVENT_SQL} ORDER BY created_at DESC`
+      ).bind(...chunk).all<{ scan_id: string; payload: string }>();
+      for (const row of results ?? []) {
+        if (reasons.has(row.scan_id)) continue;
+        const text = runnerErrorText(row.payload);
+        if (text) reasons.set(row.scan_id, text);
+      }
+      // Kept on the scan, so the events are searched once per scan, not on every listing.
+      await this.db.batch(chunk.map(id =>
+        this.db.prepare('UPDATE scans SET failure_reason = ? WHERE id = ? AND failure_reason IS NULL')
+          .bind(reasons.get(id) ?? UNKNOWN_FAILURE, id)
+      ));
+    }
+    return reasons;
+  }
+
+  /**
+   * Pauses or resumes an active scan: moves it from one of the `from` statuses to `to`. False
+   * if it is in none of them (it ended meanwhile, failed by the stalled scan watchdog say), so
+   * an ended scan is never made active again.
+   */
+  async changeActiveStatus(scanId: string, from: string[], to: 'paused' | 'dispatched'): Promise<boolean> {
+    const res = await this.db.prepare(
+      `UPDATE scans SET status = ?, status_changed_at = datetime('now') WHERE id = ? AND status IN (SELECT value FROM json_each(?))`
+    ).bind(to, scanId, JSON.stringify(from)).run();
+    return ((res?.meta as any)?.changes ?? 0) > 0;
+  }
+
+  /** Whether any scan is dispatched or paused (the stalled scan watchdog has work at all). */
+  async hasActiveScans(): Promise<boolean> {
+    const row = await this.db.prepare("SELECT 1 AS one FROM scans WHERE status IN ('dispatched', 'paused') LIMIT 1").first();
+    return !!row;
+  }
+
+  /**
+   * Candidates for the stalled scan watchdog: active scans with no activity (event, status change
+   * or creation, whichever is latest) for idleMinutes, with how long they have been idle.
+   *  - unowned: dispatched or paused scans none of the owned runIds;
+   *  - owned: dispatched (not paused) scans among the owned runIds, idle for ownedIdleMinutes.
+   * Owned scans never fill the unowned batch (owned paused scans would otherwise crowd out the
+   * orphaned ones, every pass).
+   */
+  async getStalledActiveScans(idleMinutes: number, limit: number, owned: string[] = [], ownedIdleMinutes = idleMinutes): Promise<StalledScan[]> {
+    const ownedJson = JSON.stringify(owned);
+    const select = (ownership: string, statuses: string, minutes: number) => this.db.prepare(
+      `SELECT id, status, CAST((julianday('now') - julianday(last_activity)) * 1440 AS INTEGER) AS idle_minutes FROM (
+         SELECT s.id, s.status, MAX(
+           COALESCE((SELECT MAX(e.created_at) FROM scan_events e WHERE e.scan_id = s.id), ''),
+           COALESCE(s.status_changed_at, ''),
+           s.created_at
+         ) AS last_activity
+         FROM scans s
+         WHERE s.status IN (${statuses}) AND s.id ${ownership} (SELECT value FROM json_each(?))
+       ) WHERE last_activity < datetime('now', ?) ORDER BY last_activity ASC LIMIT ?`
+    ).bind(ownedJson, `-${Math.max(1, Math.floor(minutes))} minutes`, limit).all<StalledScan>();
+    const [unowned, ownedSilent] = await Promise.all([
+      select('NOT IN', "'dispatched', 'paused'", idleMinutes),
+      owned.length > 0 ? select('IN', "'dispatched'", ownedIdleMinutes) : Promise.resolve({ results: [] as StalledScan[] }),
+    ]);
+    return [...(unowned.results ?? []), ...(ownedSilent.results ?? [])];
   }
 
   private mapFindingRow(row: any): any {
@@ -383,15 +491,20 @@ export class ScansRepository extends BaseService implements IScansRepository {
       .run();
   }
 
-  async updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any): Promise<void> {
+  /**
+   * Sets a scan's status, recording when it changed (the stalled scan watchdog counts idle time
+   * from it as well as from the scan's events). A failed scan gets failureReason, as the user is
+   * told why it failed.
+   */
+  async updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any, failureReason?: string): Promise<void> {
     if (status === 'completed' && summaryStats) {
-      await this.db.prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?").bind(summaryStats, scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ?, status_changed_at = datetime('now') WHERE id = ?").bind(summaryStats, scanId).run();
     } else if (status === 'failed') {
-      await this.db.prepare("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ?").bind(scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'failed', completed_at = datetime('now'), failure_reason = COALESCE(?, failure_reason), status_changed_at = datetime('now') WHERE id = ?").bind(failureReason ?? null, scanId).run();
     } else if (status === 'dispatched') {
-      await this.db.prepare("UPDATE scans SET status = 'dispatched' WHERE id = ?").bind(scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'dispatched', status_changed_at = datetime('now') WHERE id = ?").bind(scanId).run();
     } else {
-      await this.db.prepare('UPDATE scans SET status = ? WHERE id = ?').bind(status, scanId).run();
+      await this.db.prepare("UPDATE scans SET status = ?, status_changed_at = datetime('now') WHERE id = ?").bind(status, scanId).run();
     }
 
     try {
@@ -495,10 +608,11 @@ export class ScansRepository extends BaseService implements IScansRepository {
     }
   }
 
-  async markFailedIfActive(scanId: string): Promise<boolean> {
+  /** Fails an active scan, with the reason shown to the user; false if it had already ended. */
+  async markFailedIfActive(scanId: string, reason?: string): Promise<boolean> {
     const res = await this.db.prepare(
-      "UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ? AND status IN ('queued','dispatched','paused')"
-    ).bind(scanId).run();
+      `UPDATE scans SET status = 'failed', completed_at = datetime('now'), failure_reason = ? WHERE id = ? AND ${ACTIVE_STATUS_SQL}`
+    ).bind(reason ?? null, scanId).run();
     return ((res?.meta as any)?.changes ?? 0) > 0;
   }
 
@@ -536,9 +650,12 @@ export class ScansRepository extends BaseService implements IScansRepository {
     return row ? row.config_json : null;
   }
 
-  async processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<void> {
+  async processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<ProcessedEvents> {
     const statements: any[] = [];
-    const webhooksToDispatch: Array<{ projectId: string; eventType: string; payload: any }> = [];
+    // The status updates that end a scan, each with the webhook it fires if it does. They only
+    // apply to a scan that has not ended: its first terminal event wins, so a scan that was
+    // failed (by the stalled scan watchdog, say) does not flip to completed, nor fire twice.
+    const terminalUpdates: Array<{ statement: number; scanId: string; webhook: { projectId: string; eventType: string; payload: any } | null }> = [];
 
     const scanIds = Array.from(new Set(messages.map(m => m.body.scanId).filter(Boolean)));
     const scanToProject: Record<string, { projectId: string; targetUrl: string; profile: string }> = {};
@@ -596,13 +713,10 @@ export class ScansRepository extends BaseService implements IScansRepository {
 
       if (payload && payload.type === 'complete') {
         const stats = JSON.stringify(payload.data || {});
-        statements.push(
-          this.db.prepare(
-            `UPDATE scans SET status = ?, completed_at = datetime('now'), summary_stats = ? WHERE id = ?`
-          ).bind('completed', stats, scanId)
-        );
-        if (projectId) {
-          webhooksToDispatch.push({
+        terminalUpdates.push({
+          statement: statements.length,
+          scanId,
+          webhook: projectId ? {
             projectId,
             eventType: 'scan.completed',
             payload: {
@@ -612,8 +726,13 @@ export class ScansRepository extends BaseService implements IScansRepository {
               profile: projInfo.profile,
               summary_stats: payload.data || {}
             }
-          });
-        }
+          } : null,
+        });
+        statements.push(
+          this.db.prepare(
+            `UPDATE scans SET status = ?, completed_at = datetime('now'), summary_stats = ? WHERE id = ? AND ${ACTIVE_STATUS_SQL}`
+          ).bind('completed', stats, scanId)
+        );
       } else if (payload && payload.type === 'checkpoint') {
         const checkpointData = JSON.stringify(payload.data);
         statements.push(
@@ -622,13 +741,11 @@ export class ScansRepository extends BaseService implements IScansRepository {
           ).bind(checkpointData, scanId)
         );
       } else if (type === 'error' || (payload && payload.type === 'error')) {
-        statements.push(
-          this.db.prepare(
-            `UPDATE scans SET status = ?, completed_at = datetime('now') WHERE id = ?`
-          ).bind('failed', scanId)
-        );
-        if (projectId) {
-          webhooksToDispatch.push({
+        const reason = runnerErrorText(payload) || UNKNOWN_FAILURE;
+        terminalUpdates.push({
+          statement: statements.length,
+          scanId,
+          webhook: projectId ? {
             projectId,
             eventType: 'scan.failed',
             payload: {
@@ -637,8 +754,13 @@ export class ScansRepository extends BaseService implements IScansRepository {
               target_url: projInfo.targetUrl,
               profile: projInfo.profile
             }
-          });
-        }
+          } : null,
+        });
+        statements.push(
+          this.db.prepare(
+            `UPDATE scans SET status = ?, completed_at = datetime('now'), failure_reason = ? WHERE id = ? AND ${ACTIVE_STATUS_SQL}`
+          ).bind('failed', reason, scanId)
+        );
       }
 
       if (payload && payload.type === 'result' && payload.data && Array.isArray(payload.data.analyzerFindings)) {
@@ -657,8 +779,16 @@ export class ScansRepository extends BaseService implements IScansRepository {
       }
     }
 
-    if (statements.length > 0) {
-      await this.db.batch(statements);
+    const results: any[] = statements.length > 0 ? ((await this.db.batch(statements)) ?? []) : [];
+
+    const ended: string[] = [];
+    const webhooksToDispatch: Array<{ projectId: string; eventType: string; payload: any }> = [];
+    for (const update of terminalUpdates) {
+      // Unknown (a driver that reports no change count) counts as changed, as before.
+      const changes = results[update.statement]?.meta?.changes;
+      if (typeof changes === 'number' && changes === 0) continue;
+      ended.push(update.scanId);
+      if (update.webhook) webhooksToDispatch.push(update.webhook);
     }
 
     if (webhooksToDispatch.length > 0) {
@@ -670,6 +800,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
         )
       );
     }
+    return { ended };
   }
 
   async saveWAFPatchReport(scanId: string, report: unknown): Promise<void> {

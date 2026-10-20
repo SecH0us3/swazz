@@ -107,6 +107,18 @@ describe('HistoryPage', () => {
         expect(screen.getByText('No scans found in this category')).toBeInTheDocument();
     });
 
+    // A scan that failed without a single 5xx (it never got to send requests) is still failed,
+    // and says why.
+    it('classifies a run that failed under the Failed tab, with its reason', () => {
+        const failed = run('mcp', { failureReason: 'could not connect to the MCP server: status 401' });
+        const p = { ...mountProps(), runs: [failed] };
+        render(<HistoryPage {...p} />);
+        expect(within(screen.getByRole('button', { name: /^Failed/ })).getByText('1')).toBeInTheDocument();
+        expect(screen.getByText('Failed: could not connect to the MCP server: status 401')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Completed/ }));
+        expect(screen.getByText('No scans found in this category')).toBeInTheDocument();
+    });
+
     it('routes each export format to the matching callback', () => {
         const p = { ...mountProps(), runs: [run('r1')] };
         render(<HistoryPage {...p} />);

@@ -9,6 +9,17 @@ import { DEFAULT_SETTINGS } from '../types.js';
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
 import type { ParsingErrorDetails } from '../services/swaggerService.js';
 import type { LicenseStatus } from '../utils/license.js';
+import type { RunnerHint } from '../utils/runnerErrorHints.js';
+
+/** Why the last scan failed, or what it warned about: shown until dismissed or a new scan starts. */
+export interface ScanIssue {
+    level: 'error' | 'warning';
+    title: string;
+    details: string[];
+    hint: RunnerHint | null;
+    /** The scan it is about, when dismissing it should be remembered (scheduled scans). */
+    scanId?: string;
+}
 
 export interface UISlice {
     activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'waf' | 'settings' | 'project_settings' | 'history' | 'compare' | 'about' | 'analytics' | 'runner_logs';
@@ -62,6 +73,11 @@ export interface StatsSlice {
     isQueued: boolean;
     isLoadingSpecs: boolean;
     specCacheDates: Record<string, string>;
+    scanIssue: ScanIssue | null;
+    /** Warnings and errors the runner logged during the current scan (the latest few kept). */
+    runWarnings: { count: number; recent: string[] };
+    /** The running scan has sent nothing for a while; its status is being checked. */
+    runStalled: boolean;
 }
 
 const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
@@ -72,6 +88,9 @@ const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
     isQueued: false,
     isLoadingSpecs: false,
     specCacheDates: {},
+    scanIssue: null,
+    runWarnings: { count: 0, recent: [] },
+    runStalled: false,
 });
 
 export interface UserSlice {

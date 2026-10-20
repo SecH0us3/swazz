@@ -260,7 +260,7 @@ describe('ScansRepository Unit Tests', () => {
       const repo = new ScansRepository(mockEnv);
       await repo.updateScanStatus('s-1', 'completed', '{}');
 
-      expect(mockPrepare).toHaveBeenNthCalledWith(1, expect.stringContaining("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?"));
+      expect(mockPrepare).toHaveBeenNthCalledWith(1, expect.stringContaining("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ?, status_changed_at = datetime('now') WHERE id = ?"));
       expect(dispatchWebhook).toHaveBeenCalledWith(mockEnv, 'p-1', 'scan.completed', expect.any(Object));
     });
 
@@ -387,12 +387,12 @@ describe('ScansRepository Unit Tests', () => {
     it('returns true when an active scan was transitioned to failed', async () => {
       const repo = new ScansRepository(mockEnv);
       mockAll.mockResolvedValueOnce({ meta: { changes: 1 } });
-      const result = await repo.markFailedIfActive('scan-123');
+      const result = await repo.markFailedIfActive('scan-123', 'The scan was stopped.');
 
       expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ? AND status IN ('queued','dispatched','paused')")
+        expect.stringContaining("UPDATE scans SET status = 'failed', completed_at = datetime('now'), failure_reason = ? WHERE id = ? AND status IN ('queued','dispatched','paused')")
       );
-      expect(mockBind).toHaveBeenCalledWith('scan-123');
+      expect(mockBind).toHaveBeenCalledWith('The scan was stopped.', 'scan-123');
       expect(result).toBe(true);
     });
 

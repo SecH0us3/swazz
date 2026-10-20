@@ -31,6 +31,8 @@ export interface ScanRun {
     stats: RunStats;
     projectId?: string;
     triggerType?: 'manual' | 'scheduled';
+    /** Why the scan failed, as shown to the user; set only for failed scans. */
+    failureReason?: string;
 }
 
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';

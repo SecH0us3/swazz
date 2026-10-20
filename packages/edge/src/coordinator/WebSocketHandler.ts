@@ -12,6 +12,7 @@ import { ulid } from 'ulidx';
 import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, markScanFinished } from './utils';
 import { resumeRuns } from './resume';
 import { logError, logWarn } from '../../../common/logging/logger';
+import { runnerErrorText, redactRunnerLogText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
 
 export class WebSocketHandler {
   constructor(
@@ -247,6 +248,15 @@ export class WebSocketHandler {
             shouldCleanup = true;
           }
 
+          // A runner log line reaches users (the dashboard, the stored runner log, a scan's
+          // warnings): its URLs are kept to scheme and host, as they may carry credentials.
+          if (msg.type === 'event' && msg.payload?.type === 'runner_log' && msg.payload.data && typeof msg.payload.data.message === 'string') {
+            msg.payload = { ...msg.payload, data: { ...msg.payload.data, message: redactRunnerLogText(msg.payload.data.message) } };
+          } else if (msg.type === 'event' && msg.payload?.type === 'error') {
+            // An error from the runner's event bus: shown and stored like any runner error.
+            msg.payload = { type: 'error', data: { message: runnerErrorText(msg.payload) || UNKNOWN_FAILURE } };
+          }
+
           // exec and seq make the stored event idempotent (eventIdFor), whichever path stores it.
           const body = sequenced
             ? { scanId: runId, type: msg.type, payload: msg.payload, exec: msg.exec, seq: msg.seq }
@@ -291,7 +301,11 @@ export class WebSocketHandler {
 
           const clientSet = this.stateManager.clients.get(runId);
           if (clientSet) {
-            const outMsg = JSON.stringify(msg.payload);
+            // A runner error ({"error": ...}) has no type of its own; the dashboard needs one to
+            // end the scan and show why (see utils/runnerMessages.ts).
+            const outMsg = msg.type === 'error'
+              ? JSON.stringify({ type: 'error', data: { message: runnerErrorText(msg.payload) || UNKNOWN_FAILURE } })
+              : JSON.stringify(msg.payload);
             for (const client of clientSet) {
               try {
                 client.send(outMsg);

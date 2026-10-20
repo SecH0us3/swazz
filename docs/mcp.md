@@ -193,6 +193,8 @@ Swazz is not only an MCP server for AI clients — it is also a comprehensive se
 - **`sse`**: Connects to an HTTP Server-Sent Events MCP endpoint (e.g. `http://localhost:8788/mcp/sse`).
 - **`http`**: Connects to streamable HTTP JSON-RPC MCP endpoints (e.g. `http://localhost:8000/mcp`), with full support for per-request identity header overrides.
 
+**If the MCP server cannot be used** (wrong URL, missing token, server down), the runner logs a warning saying why and skips only the MCP part of the scan: the rest of the API is scanned as usual, and the dashboard shows *The scan completed with N warnings*. A scan with nothing to scan but the MCP server fails, with the reason shown on the dashboard. The runner sends the project's **Global Headers** and cookies to the MCP server, so that is where its token goes.
+
 ---
 
 ### Step 1: Tool Introspection & Safety Contracts (`-mcp-list-tools`)

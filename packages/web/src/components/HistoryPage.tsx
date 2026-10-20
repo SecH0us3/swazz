@@ -57,7 +57,7 @@ export function HistoryPage({
                 .filter(([s]) => s.startsWith('5'))
                 .reduce((acc: number, [, c]) => acc + (c as number), 0)
             : 0;
-        return r.completedAt > 0 && errors5xx === 0;
+        return r.completedAt > 0 && errors5xx === 0 && !r.failureReason;
     });
     const failedRuns = runs.filter(r => {
         const errors5xx = r.stats?.statusCounts
@@ -65,7 +65,7 @@ export function HistoryPage({
                 .filter(([s]) => s.startsWith('5'))
                 .reduce((acc: number, [, c]) => acc + (c as number), 0)
             : 0;
-        return (r.completedAt > 0 && errors5xx > 0) || (r.completedAt === 0 && r.id !== liveRunId);
+        return !!r.failureReason || (r.completedAt > 0 && errors5xx > 0) || (r.completedAt === 0 && r.id !== liveRunId);
     });
 
     const displayRuns = currentTab === 'all' ? runs
@@ -270,6 +270,11 @@ export function HistoryPage({
                                                         <span className="badge badge-scheduled">
                                                             Scheduled
                                                         </span>
+                                                    )}
+                                                    {r.failureReason && (
+                                                        <div className="history-failure-reason" title={r.failureReason}>
+                                                            Failed: {r.failureReason}
+                                                        </div>
                                                     )}
                                                 </td>
                                                 <td style={{ padding: '16px', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

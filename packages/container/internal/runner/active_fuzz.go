@@ -310,7 +310,8 @@ func (r *Runner) runActiveParameterFuzzing(
 			}
 			wg.Add(1)
 
-			go func(it int, p any, qp map[string]any, gh map[string]string, pp map[string]string) {
+			it, p, qp, gh, pp := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams
+			r.goWorker(func() {
 				defer r.limiter.Release()
 				defer wg.Done()
 
@@ -342,7 +343,7 @@ func (r *Runner) runActiveParameterFuzzing(
 					r.allResults = append(r.allResults, result)
 					r.resultsMu.Unlock()
 				}
-			}(globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams)
+			})
 
 			globalIterIdx++
 			if delay > 0 {
