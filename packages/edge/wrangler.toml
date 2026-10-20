@@ -81,7 +81,6 @@ max_batch_timeout = 2
 name = "SEND_EMAIL"
 allowed_sender_addresses = ["notifications@secmy.app", "swazz@secmy.app"]
 
-[ai]
-binding = "AI"
+
 
 

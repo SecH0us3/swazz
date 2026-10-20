@@ -36,6 +36,17 @@ func waitDeliveryEnabled(t *testing.T, s *agentSession) {
 	t.Fatal("delivery never enabled")
 }
 
+func noneActive(string) bool { return false }
+
+func stamped(t *testing.T, l *deliveryLog, msg WSEventOut) WSEventOut {
+	t.Helper()
+	out, ok := l.stamp(msg)
+	if !ok {
+		t.Fatalf("stamp refused %+v", msg)
+	}
+	return out
+}
+
 func seqs(msgs []WSEventOut) []uint64 {
 	out := make([]uint64, 0, len(msgs))
 	for _, m := range msgs {
@@ -46,24 +57,25 @@ func seqs(msgs []WSEventOut) []uint64 {
 
 func TestDeliveryLog_NumbersPerRunAndKeepsUntilAcked(t *testing.T) {
 	l := newDeliveryLog()
+	l.now = func() time.Time { return time.Unix(1_000_000, 0) } // replay order then falls back to run id
 	l.setEnabled(true)
-	a1 := l.stamp(WSEventOut{RunID: "a"})
+	a1 := stamped(t, l, WSEventOut{RunID: "a"})
 	assert.Equal(t, uint64(1), a1.Seq)
-	assert.Equal(t, uint64(2), l.stamp(WSEventOut{RunID: "a"}).Seq)
-	b1 := l.stamp(WSEventOut{RunID: "b"})
+	assert.Equal(t, uint64(2), stamped(t, l, WSEventOut{RunID: "a"}).Seq)
+	b1 := stamped(t, l, WSEventOut{RunID: "b"})
 	assert.Equal(t, uint64(1), b1.Seq)
-	assert.Equal(t, []uint64{1, 2, 1}, seqs(l.replay()))
+	assert.Equal(t, []uint64{1, 2, 1}, seqs(l.replay(noneActive)))
 
 	l.ack("a", a1.Exec, 1)
-	assert.Equal(t, []uint64{2, 1}, seqs(l.replay()))
+	assert.Equal(t, []uint64{2, 1}, seqs(l.replay(noneActive)))
 	l.ack("a", a1.Exec, 2)
 	l.ack("b", b1.Exec, 5)
-	assert.Empty(t, l.replay())
+	assert.Empty(t, l.replay(noneActive))
 	assert.Empty(t, l.unackedRuns())
 	// Numbering continues after an ack; only a new dispatch starts a new execution.
-	assert.Equal(t, uint64(3), l.stamp(WSEventOut{RunID: "a"}).Seq)
+	assert.Equal(t, uint64(3), stamped(t, l, WSEventOut{RunID: "a"}).Seq)
 	l.reset("a")
-	next := l.stamp(WSEventOut{RunID: "a"})
+	next := stamped(t, l, WSEventOut{RunID: "a"})
 	assert.Equal(t, uint64(1), next.Seq)
 	assert.NotEmpty(t, next.Exec)
 	assert.NotEqual(t, a1.Exec, next.Exec, "a new execution gets a new exec id")
@@ -73,18 +85,19 @@ func TestDeliveryLog_NumbersPerRunAndKeepsUntilAcked(t *testing.T) {
 func TestDeliveryLog_IgnoresAcksOfAnotherExecution(t *testing.T) {
 	l := newDeliveryLog()
 	l.setEnabled(true)
-	old := l.stamp(WSEventOut{RunID: "a"})
+	old := stamped(t, l, WSEventOut{RunID: "a"})
 	l.reset("a")
-	l.stamp(WSEventOut{RunID: "a"})
+	stamped(t, l, WSEventOut{RunID: "a"})
 	l.ack("a", old.Exec, 1)
-	assert.Equal(t, []uint64{1}, seqs(l.replay()))
+	assert.Equal(t, []uint64{1}, seqs(l.replay(noneActive)))
+
 }
 
 func TestDeliveryLog_AckRequestOnlyForUnacknowledgedEvents(t *testing.T) {
 	l := newDeliveryLog()
 	l.setEnabled(true)
-	e1 := l.stamp(WSEventOut{RunID: "a"})
-	l.stamp(WSEventOut{RunID: "a"})
+	e1 := stamped(t, l, WSEventOut{RunID: "a"})
+	stamped(t, l, WSEventOut{RunID: "a"})
 
 	req, ok := l.ackRequest("a", e1.Exec, 2)
 	assert.True(t, ok)
@@ -101,25 +114,65 @@ func TestDeliveryLog_AckRequestOnlyForUnacknowledgedEvents(t *testing.T) {
 // replay duplicates, so nothing is kept.
 func TestDeliveryLog_KeepsNothingWithoutCoordinatorSupport(t *testing.T) {
 	l := newDeliveryLog()
-	assert.Equal(t, uint64(1), l.stamp(WSEventOut{RunID: "a"}).Seq)
-	assert.Empty(t, l.replay())
+	assert.Equal(t, uint64(1), stamped(t, l, WSEventOut{RunID: "a"}).Seq)
+	assert.Empty(t, l.replay(noneActive))
 
 	l.setEnabled(true)
-	l.stamp(WSEventOut{RunID: "a"})
-	assert.Len(t, l.replay(), 1)
+	stamped(t, l, WSEventOut{RunID: "a"})
+	assert.Len(t, l.replay(noneActive), 1)
 	l.setEnabled(false)
-	assert.Empty(t, l.replay())
+	assert.Empty(t, l.replay(noneActive))
 }
 
 func TestDeliveryLog_BoundedPerRun(t *testing.T) {
 	l := newDeliveryLog()
 	l.setEnabled(true)
 	for i := 0; i < maxUnackedPerRun+5; i++ {
-		l.stamp(WSEventOut{RunID: "a"})
+		stamped(t, l, WSEventOut{RunID: "a"})
 	}
-	kept := l.replay()
-	assert.Len(t, kept, maxUnackedPerRun)
-	assert.Equal(t, uint64(6), kept[0].Seq, "the oldest are dropped")
+	kept := l.replay(noneActive)
+	// Beyond the bound the oldest half goes at once (one copy, not one per event).
+	assert.Len(t, kept, maxUnackedPerRun/2+4)
+	assert.Equal(t, uint64(maxUnackedPerRun/2+2), kept[0].Seq, "the oldest are dropped")
+	assert.Equal(t, uint64(maxUnackedPerRun+5), kept[len(kept)-1].Seq)
+	assert.LessOrEqual(t, cap(l.runs["a"].unacked), maxUnackedPerRun, "dropped events are not kept reachable")
+}
+
+// Late events of an earlier execution, still draining after the run was dispatched here again,
+// must not be numbered as the new execution's: their seqs would collide with its own events.
+func TestDeliveryLog_RefusesLateEventsOfAnEarlierExecution(t *testing.T) {
+	l := newDeliveryLog()
+	l.setEnabled(true)
+	first := l.reset("a")
+	stamped(t, l, WSEventOut{RunID: "a", Exec: first})
+	second := l.reset("a")
+	assert.NotEqual(t, first, second)
+
+	_, ok := l.stamp(WSEventOut{RunID: "a", Exec: first})
+	assert.False(t, ok)
+	ev := stamped(t, l, WSEventOut{RunID: "a", Exec: second})
+	assert.Equal(t, uint64(1), ev.Seq)
+	// Events that name no execution belong to the current one.
+	assert.Equal(t, second, stamped(t, l, WSEventOut{RunID: "a"}).Exec)
+}
+
+// After a reconnect, executing runs' events go out before those of finished or refused runs.
+func TestDeliveryLog_ReplaysExecutingRunsFirst(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	l := newDeliveryLog()
+	l.now = func() time.Time { return now }
+	l.setEnabled(true)
+	stamped(t, l, WSEventOut{RunID: "finished-old"})
+	now = now.Add(time.Second)
+	stamped(t, l, WSEventOut{RunID: "running"})
+	now = now.Add(time.Second)
+	stamped(t, l, WSEventOut{RunID: "finished-new"})
+
+	var order []string
+	for _, m := range l.replay(func(id string) bool { return id == "running" }) {
+		order = append(order, m.RunID)
+	}
+	assert.Equal(t, []string{"running", "finished-new", "finished-old"}, order)
 }
 
 func TestDeliveryLog_GCDropsIdleLogsOfFinishedRunsOnly(t *testing.T) {
@@ -127,12 +180,12 @@ func TestDeliveryLog_GCDropsIdleLogsOfFinishedRunsOnly(t *testing.T) {
 	l := newDeliveryLog()
 	l.now = func() time.Time { return now }
 	l.setEnabled(true)
-	l.stamp(WSEventOut{RunID: "finished"})
-	l.stamp(WSEventOut{RunID: "running"})
+	stamped(t, l, WSEventOut{RunID: "finished"})
+	stamped(t, l, WSEventOut{RunID: "running"})
 
 	now = now.Add(idleRunLogTTL - time.Minute)
 	l.gc(func(string) bool { return false })
-	assert.Len(t, l.replay(), 2, "not idle long enough")
+	assert.Len(t, l.replay(noneActive), 2, "not idle long enough")
 
 	now = now.Add(2 * time.Minute)
 	l.gc(func(id string) bool { return id == "running" })
@@ -346,6 +399,62 @@ func TestAgentSession_AsksForAcknowledgementOfTheTailWhenQuiet(t *testing.T) {
 	case <-time.After(ackRequestDelay + 2*time.Second):
 		t.Fatal("no ack request after the connection went quiet")
 	}
-	assert.Eventually(t, func() bool { return len(session.dispatcher.delivery.replay()) == 0 }, 2*time.Second, 10*time.Millisecond)
+	assert.Eventually(t, func() bool { return len(session.dispatcher.delivery.replay(noneActive)) == 0 }, 2*time.Second, 10*time.Millisecond)
 	assert.Empty(t, session.dispatcher.ResumeRunIDs())
+}
+
+// A run that keeps streaming must not hold back the acknowledgement of another run's tail.
+func TestAgentSession_AsksPerRunWhileAnotherRunStreams(t *testing.T) {
+	type frame struct {
+		Type  string `json:"type"`
+		RunID string `json:"runId"`
+	}
+	requested := make(chan string, 10)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(deliveryHeader, "ack")
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close(websocket.StatusNormalClosure, "done")
+		for {
+			var f frame
+			if err := wsjson.Read(r.Context(), c, &f); err != nil {
+				return
+			}
+			if f.Type == "ack_request" {
+				requested <- f.RunID
+			}
+		}
+	}))
+	defer ts.Close()
+
+	session := newAgentSession(ts.URL, "tok", true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = session.runConnection(ctx, "ws"+strings.TrimPrefix(ts.URL, "http"), nil, false, nil) }()
+	waitDeliveryEnabled(t, session)
+
+	session.dispatcher.SendWSEvent("quiet", "runner_log", nil)
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		tick := time.NewTicker(ackRequestDelay / 10)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+				session.dispatcher.SendWSEvent("streaming", "result", nil)
+			}
+		}
+	}()
+
+	select {
+	case runID := <-requested:
+		assert.Equal(t, "quiet", runID)
+	case <-time.After(ackRequestDelay + 2*time.Second):
+		t.Fatal("the quiet run's tail was never offered for acknowledgement")
+	}
 }

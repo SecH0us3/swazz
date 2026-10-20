@@ -148,30 +148,50 @@ func (d *AgentDispatcher) isActive(runID string) bool {
 func (d *AgentDispatcher) queueEvent(msg WSEventOut) {
 	d.sendMu.Lock()
 	defer d.sendMu.Unlock()
-	d.outChan <- d.delivery.stamp(msg)
+	stamped, ok := d.delivery.stamp(msg)
+	if !ok {
+		logWarn("Dropping a late %s event of an earlier execution of run %s", msg.Type, msg.RunID)
+		return
+	}
+	d.outChan <- stamped
 }
 
-// SendWSEvent sends an event payload to the coordinator.
+func eventOut(runID, exec, typ string, payload interface{}) WSEventOut {
+	return WSEventOut{
+		Type:    "event",
+		RunID:   runID,
+		Payload: WSEventPayload{Type: typ, Data: payload},
+		Exec:    exec,
+	}
+}
+
+func errorOut(runID, exec, errStr string) WSEventOut {
+	return WSEventOut{
+		Type:    "error",
+		RunID:   runID,
+		Payload: map[string]string{"error": errStr},
+		Exec:    exec,
+	}
+}
+
+// SendWSEvent sends an event payload to the coordinator, as part of the run's current execution.
 func (d *AgentDispatcher) SendWSEvent(runID, typ string, payload interface{}) {
-	d.queueEvent(WSEventOut{
-		Type:  "event",
-		RunID: runID,
-		Payload: WSEventPayload{
-			Type: typ,
-			Data: payload,
-		},
-	})
+	d.queueEvent(eventOut(runID, "", typ, payload))
 }
 
-// SendWSError sends an error event to the coordinator.
+// SendWSError sends an error event to the coordinator, as part of the run's current execution.
 func (d *AgentDispatcher) SendWSError(runID, errStr string) {
-	d.queueEvent(WSEventOut{
-		Type:  "error",
-		RunID: runID,
-		Payload: map[string]string{
-			"error": errStr,
-		},
-	})
+	d.queueEvent(errorOut(runID, "", errStr))
+}
+
+// sendEventOf sends an event of one execution of the run; dropped once a newer execution started.
+func (d *AgentDispatcher) sendEventOf(runID, exec, typ string, payload interface{}) {
+	d.queueEvent(eventOut(runID, exec, typ, payload))
+}
+
+// sendErrorOf sends an error of one execution of the run; dropped once a newer execution started.
+func (d *AgentDispatcher) sendErrorOf(runID, exec, errStr string) {
+	d.queueEvent(errorOut(runID, exec, errStr))
 }
 
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.
@@ -279,8 +299,9 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		logWarn("Ignoring job dispatch for run %s: it is already running on this agent", dispatch.RunID)
 		return
 	}
-	// A new execution of the run: its events are numbered from 1 again, as the coordinator expects.
-	d.delivery.reset(dispatch.RunID)
+	// A new execution of the run, numbered from 1 under its own exec id. Its events carry that id
+	// from here on, so late events of an earlier execution still draining cannot pass as this one's.
+	exec := d.delivery.reset(dispatch.RunID)
 
 	if dispatch.Config.LicenseKey != "" {
 		jobLic, licErr := license.LoadAndVerify(dispatch.Config.LicenseKey)
@@ -298,12 +319,12 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	if err != nil {
 		logError("Failed to build runner config: %v", err)
 		errMsg := fmt.Sprintf("[Runner] Cannot start scan: %v. Please import an OpenAPI/Swagger schema, capture endpoints, or set a target URL with spec.", err)
-		d.SendWSEvent(dispatch.RunID, "runner_log", map[string]interface{}{
+		d.sendEventOf(dispatch.RunID, exec, "runner_log", map[string]interface{}{
 			"level":     "ERROR",
 			"message":   errMsg,
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
-		d.SendWSError(dispatch.RunID, err.Error())
+		d.sendErrorOf(dispatch.RunID, exec, err.Error())
 		return
 	}
 	runCfg.RunID = dispatch.RunID
@@ -388,7 +409,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					msg = string(statsJSON)
 					logInfo("[Fuzz Progress] Run %s: %s", runID, msg)
 				}
-				d.SendWSEvent(runID, "runner_log", map[string]interface{}{
+				d.sendEventOf(runID, exec, "runner_log", map[string]interface{}{
 					"level":     "info",
 					"message":   msg,
 					"timestamp": time.Now().Format(time.RFC3339),
@@ -405,26 +426,26 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					msg = string(statsJSON)
 					logInfo("[Fuzz Complete] Run %s: %s", runID, msg)
 				}
-				d.SendWSEvent(runID, "runner_log", map[string]interface{}{
+				d.sendEventOf(runID, exec, "runner_log", map[string]interface{}{
 					"level":     "warning",
 					"message":   msg,
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
 			} else if ev.Type == "error" {
 				logError("[Fuzz Error] Run %s: %v", runID, ev.Data)
-				d.SendWSEvent(runID, "runner_log", map[string]interface{}{
+				d.sendEventOf(runID, exec, "runner_log", map[string]interface{}{
 					"level":     "error",
 					"message":   fmt.Sprintf("%v", ev.Data),
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
 			}
-			d.SendWSEvent(runID, ev.Type, ev.Data)
+			d.sendEventOf(runID, exec, ev.Type, ev.Data)
 		}
 	}(dispatch.RunID)
 
 	go func(runID string) {
 		sendRunnerLog := func(level, msg string) {
-			d.SendWSEvent(runID, "runner_log", map[string]interface{}{
+			d.sendEventOf(runID, exec, "runner_log", map[string]interface{}{
 				"level":     level,
 				"message":   msg,
 				"timestamp": time.Now().Format(time.RFC3339),
@@ -446,7 +467,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		IncrementGlobalScanTelemetry(tURL, d.disableTelemetry)
 		if err := r.Start(ctx); err != nil {
 			logError("Runner failed: %v", err)
-			d.SendWSError(runID, err.Error())
+			d.sendErrorOf(runID, exec, err.Error())
 		}
 
 		// Post-scan Smart Triage (LLM False Positive Classifier)

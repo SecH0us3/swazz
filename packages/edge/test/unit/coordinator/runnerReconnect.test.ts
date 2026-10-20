@@ -416,6 +416,7 @@ describe('runner reconnect', () => {
       const first = setup(storage);
       const ws = activeRunner(first.stateManager);
       for (let seq = 1; seq <= 3; seq++) await first.handler.handleMessage(ws, event(seq));
+      await flush(); // hibernation never interrupts pending work
 
       const woken = setup(storage);
       woken.stateManager.runners.add(ws);
@@ -474,21 +475,45 @@ describe('runner reconnect', () => {
 
       await handler.handleMessage(ws, event(1));
       await flush();
-      expect(mockProcessFindings).toHaveBeenCalledWith([{ body: { scanId: 'run-1', type: 'event', payload: { type: 'result' } } }]);
+      // With exec and seq, so the event is stored once even if the queue did take it.
+      expect(mockProcessFindings).toHaveBeenCalledWith([{ body: { scanId: 'run-1', type: 'event', payload: { type: 'result' }, exec: EXEC, seq: 1 } }]);
     });
 
-    it('acknowledges what the agent asks for, including events of runs it refused', async () => {
+    // Recorded as delivered only once persisted: a restart in between must not turn the replay
+    // of an event that was never stored into a "duplicate".
+    it('records an event as delivered only once it is persisted', async () => {
+      const storage = fakeStorage();
+      const { handler, stateManager } = setup(storage);
+      const ws = activeRunner(stateManager);
+      env.FINDINGS_QUEUE.send.mockImplementationOnce(() => new Promise<void>(() => {})); // the restart cuts it off
+
+      await handler.handleMessage(ws, event(1));
+      await flush();
+      expect(storage.data.has(deliveredSeqKey('run-1'))).toBe(false);
+
+      const restarted = setup(storage);
+      restarted.stateManager.runners.add(ws);
+      await restarted.handler.handleMessage(ws, event(1));
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(2);
+      await flush();
+      expect(storage.data.get(deliveredSeqKey('run-1'))).toEqual({ exec: EXEC, seq: 1 });
+    });
+
+    it('acknowledges what the agent asks for, up to what it processed, only for runs the connection owns', async () => {
       const { handler, stateManager } = setup();
       const ws = activeRunner(stateManager);
       await handler.handleMessage(ws, event(1, 'runner_log'));
-      await handler.handleMessage(ws, JSON.stringify({ type: 'ack_request', runId: 'run-1', exec: EXEC, seq: 1 }));
+      await handler.handleMessage(ws, event(2, 'runner_log'));
+      await handler.handleMessage(ws, JSON.stringify({ type: 'ack_request', runId: 'run-1', exec: EXEC, seq: 5 }));
+      await handler.handleMessage(ws, JSON.stringify({ type: 'ack_request', runId: 'run-1', exec: 'another', seq: 2 }));
 
+      // A refusal may be temporary (a failed resume) while the agent still executes the run.
       for (let seq = 1; seq <= 3; seq++) await handler.handleMessage(ws, event(seq, 'result', 'other', 'not-mine'));
       await handler.handleMessage(ws, JSON.stringify({ type: 'ack_request', runId: 'not-mine', exec: 'other', seq: 3 }));
       await flush();
 
-      expect(acks(ws)).toEqual([ack(1), ack(3, 'other', 'not-mine')]);
-      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(1);
+      expect(acks(ws)).toEqual([ack(2)]);
+      expect(env.FINDINGS_QUEUE.send).toHaveBeenCalledTimes(2);
       // A replay of refused events is logged once, not once per event.
       expect(mockLogError.mock.calls.filter(c => String(c[2]).includes('not-mine'))).toHaveLength(1);
     });
@@ -499,7 +524,7 @@ describe('runner reconnect', () => {
       for (const seq of [0, -1, 1.5, '2', null]) {
         await handler.handleMessage(ws, JSON.stringify({ type: 'event', runId: 'run-1', exec: EXEC, seq, payload: { type: 'result' } }));
       }
-      for (const exec of [undefined, '', 7, 'x'.repeat(65)]) {
+      for (const exec of [undefined, '', 7, 'x'.repeat(65), 'a:b']) {
         await handler.handleMessage(ws, JSON.stringify({ type: 'event', runId: 'run-1', exec, seq: 1, payload: { type: 'result' } }));
       }
       await handler.handleMessage(ws, JSON.stringify({ type: 'ack_request', runId: 'run-1', exec: EXEC, seq: 0 }));

@@ -180,9 +180,11 @@ export class WebSocketHandler {
           }
         }
         if (msg.type === 'ack_request') {
-          // Acknowledged delivery (delivery.ts): the tail of a run, or events this coordinator refused.
-          const ack = this.stateManager.delivery.requested(ws, msg.runId, msg.exec, msg.seq);
-          if (ack) this.state.waitUntil(ack);
+          // Acknowledged delivery (delivery.ts): the tail of a run this connection owns.
+          const attachment = (ws.deserializeAttachment?.() || {}) as { activeJobs?: string[]; recentJobs?: string[] };
+          const owned = typeof msg.runId === 'string' && msg.runId !== '' &&
+            ((attachment.activeJobs ?? []).includes(msg.runId) || (attachment.recentJobs ?? []).includes(msg.runId));
+          if (owned) this.state.waitUntil(this.stateManager.delivery.requested(ws, msg.runId, msg.exec, msg.seq));
           return;
         }
         if (msg.type === 'event' || msg.type === 'error') {
@@ -245,11 +247,13 @@ export class WebSocketHandler {
             shouldCleanup = true;
           }
 
+          // exec and seq make the stored event idempotent (eventIdFor), whichever path stores it.
+          const body = sequenced
+            ? { scanId: runId, type: msg.type, payload: msg.payload, exec: msg.exec, seq: msg.seq }
+            : { scanId: runId, type: msg.type, payload: msg.payload };
           const writeToD1 = async () => {
             const scansRepo = new ScansRepository(this.env);
-            await scansRepo.processFindingsQueueMessages([{
-              body: { scanId: runId, type: msg.type, payload: msg.payload }
-            }]);
+            await scansRepo.processFindingsQueueMessages([{ body }]);
           };
           const persist = (async () => {
             if (this.env.JWT_SECRET === 'test-secret') {
@@ -265,11 +269,7 @@ export class WebSocketHandler {
               return;
             }
             try {
-              await this.env.FINDINGS_QUEUE.send({
-                scanId: runId,
-                type: msg.type,
-                payload: msg.payload
-              });
+              await this.env.FINDINGS_QUEUE.send(body);
             } catch (qErr) {
               logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
               // Straight to D1 instead: an acknowledged event must not be lost, and a terminal one
@@ -284,7 +284,7 @@ export class WebSocketHandler {
           this.state.waitUntil(persist);
 
           if (sequenced) {
-            this.stateManager.delivery.persisted(runId, persist);
+            this.state.waitUntil(this.stateManager.delivery.persisted(runId, persist));
             const ack = this.stateManager.delivery.processed(ws, runId, msg.exec, msg.seq, shouldCleanup);
             if (ack) this.state.waitUntil(ack);
           }

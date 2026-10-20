@@ -34,8 +34,8 @@ import (
 // Only a coordinator that announces support (deliveryHeader on the WebSocket upgrade response)
 // acknowledges anything; with any other the log keeps nothing and replays nothing.
 //
-// Bounds: at most maxUnackedPerRun messages are kept per run (the oldest are dropped beyond that,
-// which the coordinator sees as a gap), and the log of a run that is no longer executing is
+// Bounds: at most maxUnackedPerRun messages are kept per run (beyond that the oldest half is
+// dropped, which the coordinator sees as a gap), and the log of a run that is no longer executing is
 // discarded once it has been idle for idleRunLogTTL.
 
 // deliveryHeader is set to "ack" by coordinators that acknowledge run events.
@@ -99,30 +99,41 @@ func (l *deliveryLog) setEnabled(enabled bool) {
 	}
 }
 
-// reset starts a new execution of a run (dispatched to this agent): a new exec id, numbered from 1.
-func (l *deliveryLog) reset(runID string) {
+// reset starts a new execution of a run (dispatched to this agent): a new exec id, numbered from
+// 1. Events of earlier executions are no longer kept, and late ones are refused (see stamp).
+func (l *deliveryLog) reset(runID string) string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	delete(l.runs, runID)
+	rl := &runLog{exec: newExecID(), touched: l.now()}
+	l.runs[runID] = rl
+	return rl.exec
 }
 
 // stamp gives msg the run's next sequence number and execution id and keeps it until it is
 // acknowledged. Callers queue the result under AgentDispatcher.sendMu, so a run's events are
-// queued in sequence order.
-func (l *deliveryLog) stamp(msg WSEventOut) WSEventOut {
+// queued in sequence order. A msg that names an execution (Exec) other than the run's current
+// one is a late event of an earlier execution: it is refused (false), since numbering it in the
+// current one would collide with that execution's own events.
+func (l *deliveryLog) stamp(msg WSEventOut) (WSEventOut, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	rl := l.runs[msg.RunID]
 	if rl == nil {
-		rl = &runLog{exec: newExecID()}
+		exec := msg.Exec
+		if exec == "" {
+			exec = newExecID()
+		}
+		rl = &runLog{exec: exec}
 		l.runs[msg.RunID] = rl
+	} else if msg.Exec != "" && msg.Exec != rl.exec {
+		return msg, false
 	}
 	rl.nextSeq++
 	msg.Seq = rl.nextSeq
 	msg.Exec = rl.exec
 	rl.touched = l.now()
 	if !l.enabled {
-		return msg
+		return msg, true
 	}
 	rl.unacked = append(rl.unacked, msg)
 	if len(rl.unacked) > maxUnackedPerRun {
@@ -130,9 +141,10 @@ func (l *deliveryLog) stamp(msg WSEventOut) WSEventOut {
 			logError("Run %s: more than %d events are unacknowledged; dropping the oldest", msg.RunID, maxUnackedPerRun)
 			rl.dropped = true
 		}
-		rl.unacked = rl.unacked[len(rl.unacked)-maxUnackedPerRun:]
+		// Copied, so the dropped events do not stay reachable through the backing array.
+		rl.unacked = append([]WSEventOut(nil), rl.unacked[len(rl.unacked)-maxUnackedPerRun/2:]...)
 	}
-	return msg
+	return msg, true
 }
 
 // ack forgets every message of the run's execution exec up to and including seq. An ack for an
@@ -145,7 +157,16 @@ func (l *deliveryLog) ack(runID, exec string, seq uint64) {
 		return
 	}
 	i := sort.Search(len(rl.unacked), func(i int) bool { return rl.unacked[i].Seq > seq })
-	rl.unacked = append([]WSEventOut(nil), rl.unacked[i:]...)
+	switch {
+	case i == len(rl.unacked):
+		rl.unacked = nil
+	case i > len(rl.unacked)/2:
+		// Copied once most of it is acknowledged, so acknowledged events are released without
+		// copying the whole log on every ack.
+		rl.unacked = append([]WSEventOut(nil), rl.unacked[i:]...)
+	default:
+		rl.unacked = rl.unacked[i:]
+	}
 	rl.touched = l.now()
 }
 
@@ -182,15 +203,31 @@ func (l *deliveryLog) unackedRuns() []string {
 	return ids
 }
 
-// replay returns the unacknowledged messages of every run, each run's in sequence order.
-func (l *deliveryLog) replay() []WSEventOut {
+// replay returns the unacknowledged messages of every run, each run's in sequence order: first
+// the runs isActive reports as executing, then the rest, most recently active first.
+func (l *deliveryLog) replay(isActive func(runID string) bool) []WSEventOut {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ids := make([]string, 0, len(l.runs))
-	for id := range l.runs {
-		ids = append(ids, id)
+	for id, rl := range l.runs {
+		if len(rl.unacked) > 0 {
+			ids = append(ids, id)
+		}
 	}
-	sort.Strings(ids)
+	active := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		active[id] = isActive(id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		if active[ids[i]] != active[ids[j]] {
+			return active[ids[i]]
+		}
+		ti, tj := l.runs[ids[i]].touched, l.runs[ids[j]].touched
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return ids[i] < ids[j]
+	})
 	var out []WSEventOut
 	for _, id := range ids {
 		out = append(out, l.runs[id].unacked...)

@@ -174,11 +174,13 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			seq  uint64
 		}
 		sentUpTo := make(map[string]sentMark)
-		// Runs written to since the connection last went quiet; once it has, the agent asks for
-		// acknowledgement of what the coordinator did not acknowledge on its own.
-		pendingAckRequest := make(map[string]bool)
+		// When each run was last written to. Once a run has been quiet for ackRequestDelay, the
+		// agent asks for acknowledgement of what the coordinator did not acknowledge on its own;
+		// per run, so a run that keeps streaming does not hold back another one's tail.
+		lastWrite := make(map[string]time.Time)
 		ackTimer := time.NewTimer(ackRequestDelay)
 		ackTimer.Stop()
+		ackTimerArmed := false
 		defer ackTimer.Stop()
 		send := func(msg interface{}) bool {
 			ev, sequenced := msg.(WSEventOut)
@@ -217,14 +219,26 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			}
 			if sequenced {
 				sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
-				pendingAckRequest[ev.RunID] = true
-				ackTimer.Reset(ackRequestDelay)
+				lastWrite[ev.RunID] = time.Now()
+				if !ackTimerArmed {
+					ackTimer.Reset(ackRequestDelay)
+					ackTimerArmed = true
+				}
 			}
 			return true
 		}
 		requestAcks := func() bool {
-			for runID := range pendingAckRequest {
-				delete(pendingAckRequest, runID)
+			ackTimerArmed = false
+			now := time.Now()
+			var nextDue time.Duration
+			for runID, at := range lastWrite {
+				if quiet := now.Sub(at); quiet < ackRequestDelay {
+					if wait := ackRequestDelay - quiet; nextDue == 0 || wait < nextDue {
+						nextDue = wait
+					}
+					continue
+				}
+				delete(lastWrite, runID)
 				mark := sentUpTo[runID]
 				if req, ok := s.dispatcher.delivery.ackRequest(runID, mark.exec, mark.seq); ok {
 					if !send(req) {
@@ -232,11 +246,15 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 					}
 				}
 			}
+			if nextDue > 0 && !ackTimerArmed {
+				ackTimer.Reset(nextDue)
+				ackTimerArmed = true
+			}
 			return true
 		}
 		// Everything the coordinator has not acknowledged goes first: whatever was written into
 		// the previous connection may never have arrived. It drops the seqs it already has.
-		for _, msg := range s.dispatcher.delivery.replay() {
+		for _, msg := range s.dispatcher.delivery.replay(s.dispatcher.isActive) {
 			if !send(msg) {
 				return
 			}
