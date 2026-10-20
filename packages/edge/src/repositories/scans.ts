@@ -9,6 +9,7 @@ import { dispatchWebhook } from '../utils/webhooks';
 import { sendScanCompletedDigestEmail } from '../services/email';
 import { WorkersAIService } from '../services/ai';
 import { logError } from '../../../common/logging/logger';
+import { eventIdFor, isValidExec } from '../coordinator/delivery';
 
 export interface IScansRepository {
   createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null, triggerType?: string): Promise<void>;
@@ -98,6 +99,17 @@ export function sanitizeRunnerFinding(raw: unknown): { id: string; ruleId: strin
     message: text(f.message, FINDING_TEXT_LIMIT),
     evidence,
   };
+}
+
+// D1 allows at most 100 bound parameters per statement.
+const EVENT_ID_LOOKUP_CHUNK = 90;
+
+/** The stable scan_events id of a sequenced runner event, or undefined for any other. */
+function storedEventId(body: any): string | undefined {
+  const { scanId, exec, seq } = body ?? {};
+  if (typeof scanId !== 'string' || scanId === '' || !isValidExec(exec)) return undefined;
+  if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return undefined;
+  return eventIdFor(scanId, exec, seq);
 }
 
 export class ScansRepository extends BaseService implements IScansRepository {
@@ -546,8 +558,28 @@ export class ScansRepository extends BaseService implements IScansRepository {
       }
     }
 
-    for (const msg of messages) {
-      const id = crypto.randomUUID();
+    // Sequenced runner events carry a stable id (acknowledged delivery): one already stored was
+    // processed before (a replay after a coordinator restart, a queue redelivery, or the queue and
+    // its D1 fallback both succeeding), and none of its effects may repeat.
+    const eventIds = messages.map(m => storedEventId(m.body));
+    const alreadyStored = new Set<string>();
+    const stableIds = Array.from(new Set(eventIds.filter((id): id is string => id !== undefined)));
+    for (let i = 0; i < stableIds.length; i += EVENT_ID_LOOKUP_CHUNK) {
+      const chunk = stableIds.slice(i, i + EVENT_ID_LOOKUP_CHUNK);
+      const { results } = await this.db.prepare(
+        `SELECT id FROM scan_events WHERE id IN (${chunk.map(() => '?').join(',')})`
+      ).bind(...chunk).all<{ id: string }>();
+      for (const r of results ?? []) alreadyStored.add(r.id);
+    }
+    const seenInBatch = new Set<string>();
+
+    for (const [index, msg] of messages.entries()) {
+      const stableId = eventIds[index];
+      if (stableId !== undefined) {
+        if (alreadyStored.has(stableId) || seenInBatch.has(stableId)) continue;
+        seenInBatch.add(stableId);
+      }
+      const id = stableId ?? crypto.randomUUID();
       const { scanId, type, payload } = msg.body;
       // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
       const payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
@@ -555,7 +587,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
       
       statements.push(
         this.db.prepare(
-          `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
+          `INSERT OR IGNORE INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
         ).bind(id, scanId, eventType, payloadStr)
       );
 

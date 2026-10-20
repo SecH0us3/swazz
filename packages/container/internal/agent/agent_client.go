@@ -73,7 +73,7 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 
 // runConnection services one coordinator connection for this session.
 func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, opts *websocket.DialOptions, useSignatureAuth bool, privKey ed25519.PrivateKey) error {
-	dialURL, runIDs, err := withResumeParam(urlWithParams, s.dispatcher.ActiveRunIDs())
+	dialURL, runIDs, err := withResumeParam(urlWithParams, s.dispatcher.ResumeRunIDs())
 	if err != nil {
 		return err
 	}
@@ -85,6 +85,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		}
 		return fmt.Errorf("failed to connect to coordinator: %w", err)
 	}
+	s.dispatcher.delivery.setEnabled(resp != nil && resp.Header.Get(deliveryHeader) == "ack")
 
 	// Increase read limit to 50MB to support large HAR payloads from the browser extension
 	c.SetReadLimit(50 * 1024 * 1024)
@@ -166,7 +167,27 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 
 	// Write loop
 	go func() {
+		// Highest seq of each run's current execution written on this connection. Replayed events
+		// are still in the queue too (or carried over); those copies are skipped.
+		type sentMark struct {
+			exec string
+			seq  uint64
+		}
+		sentUpTo := make(map[string]sentMark)
+		// When each run was last written to. Once a run has been quiet for ackRequestDelay, the
+		// agent asks for acknowledgement of what the coordinator did not acknowledge on its own;
+		// per run, so a run that keeps streaming does not hold back another one's tail.
+		lastWrite := make(map[string]time.Time)
+		ackTimer := time.NewTimer(ackRequestDelay)
+		ackTimer.Stop()
+		ackTimerArmed := false
+		defer ackTimer.Stop()
 		send := func(msg interface{}) bool {
+			ev, sequenced := msg.(WSEventOut)
+			sequenced = sequenced && ev.Seq > 0
+			if mark, ok := sentUpTo[ev.RunID]; sequenced && ok && mark.exec == ev.Exec && ev.Seq <= mark.seq {
+				return true
+			}
 			b, err := json.Marshal(msg)
 			if err != nil {
 				logError("Failed to marshal WS message: %v", err)
@@ -185,15 +206,58 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			}
 			if err := c.Write(connCtx, websocket.MessageText, b); err != nil {
 				logError("Failed to write to WS: %v", err)
-				select {
-				case s.carry <- msg:
-				default:
-					logError("Dropping a message that failed to send: the resend buffer is full")
+				// An ack request speaks only for the connection it was written on.
+				if _, isAckRequest := msg.(ackRequestMsg); !isAckRequest {
+					select {
+					case s.carry <- msg:
+					default:
+						logError("Dropping a message that failed to send: the resend buffer is full")
+					}
 				}
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return false
 			}
+			if sequenced {
+				sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
+				lastWrite[ev.RunID] = time.Now()
+				if !ackTimerArmed {
+					ackTimer.Reset(ackRequestDelay)
+					ackTimerArmed = true
+				}
+			}
 			return true
+		}
+		requestAcks := func() bool {
+			ackTimerArmed = false
+			now := time.Now()
+			var nextDue time.Duration
+			for runID, at := range lastWrite {
+				if quiet := now.Sub(at); quiet < ackRequestDelay {
+					if wait := ackRequestDelay - quiet; nextDue == 0 || wait < nextDue {
+						nextDue = wait
+					}
+					continue
+				}
+				delete(lastWrite, runID)
+				mark := sentUpTo[runID]
+				if req, ok := s.dispatcher.delivery.ackRequest(runID, mark.exec, mark.seq); ok {
+					if !send(req) {
+						return false
+					}
+				}
+			}
+			if nextDue > 0 && !ackTimerArmed {
+				ackTimer.Reset(nextDue)
+				ackTimerArmed = true
+			}
+			return true
+		}
+		// Everything the coordinator has not acknowledged goes first: whatever was written into
+		// the previous connection may never have arrived. It drops the seqs it already has.
+		for _, msg := range s.dispatcher.delivery.replay(s.dispatcher.isActive) {
+			if !send(msg) {
+				return
+			}
 		}
 		for {
 			// Messages carried over from a failed connection go first, whenever they arrive.
@@ -214,6 +278,10 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 				if !send(msg) {
 					return
 				}
+			case <-ackTimer.C:
+				if !requestAcks() {
+					return
+				}
 			case <-connCtx.Done():
 				return
 			}
@@ -228,6 +296,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		for {
 			select {
 			case <-ticker.C:
+				dispatcher.delivery.gc(dispatcher.isActive)
 				// A coordinator without heartbeat support never answers; only enforce the
 				// timeout once it has shown it does.
 				if last := lastPong.Load(); last != 0 && time.Since(time.Unix(0, last)) > s.heartbeatTimeout {

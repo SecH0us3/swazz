@@ -3,6 +3,8 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
+import { deliveredSeqKey } from './delivery';
+
 export function isVersionOutdated(runnerVer: string, coordVer: string): boolean {
   if (typeof runnerVer !== 'string') {
     throw new TypeError('runnerVer must be a string');
@@ -101,7 +103,7 @@ export async function markScanFinished(storage: DurableObjectStorage, runId: str
   }
   await storage.put(FINISHED_SCANS_KEY, list);
   if (evicted.length > 0 && storage.delete) {
-    await storage.delete(evicted.map(jobRunnerKey));
+    await storage.delete(evicted.flatMap(id => [jobRunnerKey(id), deliveredSeqKey(id)]));
   }
 }
 
@@ -152,5 +154,5 @@ export async function recordJobRunner(storage: DurableObjectStorage, runId: stri
 
 export async function forgetJobRunner(storage: DurableObjectStorage, runId: string): Promise<void> {
   if (!storage?.delete) return;
-  await storage.delete(jobRunnerKey(runId));
+  await storage.delete([jobRunnerKey(runId), deliveredSeqKey(runId)]);
 }

@@ -9,6 +9,7 @@ import { getRunnerOwnerId, isRunnerOwnedBy, isSharedRunnerTags, SHARED_RUNNER_TA
 import { logWarn } from '../../../../common/logging/logger';
 import { ulid } from 'ulidx';
 import { parseResumeParam, resumeRuns } from '../resume';
+import { DELIVERY_HEADER } from '../delivery';
 
 export class RunnersHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -166,6 +167,8 @@ export class ConnectRunnerHandler implements RouteHandler {
     return new Response(null, {
       status: 101,
       webSocket: client,
+      // This coordinator acknowledges run events, so the agent may keep and replay them.
+      headers: { [DELIVERY_HEADER]: 'ack' },
     });
   }
 }

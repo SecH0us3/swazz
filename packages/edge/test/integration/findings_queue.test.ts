@@ -29,11 +29,11 @@ async function findingsOf(scanId: string): Promise<any[]> {
 
 const event = (scanId: string, payload: any, type: any = 'event') => ({ body: { scanId, type, payload } });
 
-describe('findings queue isolation', () => {
-  beforeAll(async () => {
-    await applyMigrations(env);
-  });
+beforeAll(async () => {
+  await applyMigrations(env);
+});
 
+describe('findings queue isolation', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('drops malformed findings and still saves the rest of a mixed-tenant batch', async () => {
@@ -112,5 +112,51 @@ describe('sanitizeRunnerFinding', () => {
     expect(f.level).toBe('3');
     expect(typeof f.message).toBe('string');
     expect(f.evidence!.length).toBe(64 * 1024);
+  });
+});
+
+// Acknowledged delivery: an event the coordinator processes twice (a replay after a restart, a
+// queue redelivery, or the queue and its D1 fallback both succeeding) must be stored once.
+describe('sequenced runner events', () => {
+  const sequenced = (scanId: string, seq: number, exec = 'abc123') =>
+    ({ body: { scanId, type: 'event', payload: { type: 'result', data: { id: `r${seq}` } }, exec, seq } });
+
+  async function eventCount(scanId: string): Promise<number> {
+    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM scan_events WHERE scan_id = ?').bind(scanId).first<{ n: number }>();
+    return row?.n ?? 0;
+  }
+
+  it('stores each event once, within a batch and across batches', async () => {
+    const scanId = await seedScan();
+    const repo = new ScansRepository(env);
+    await repo.processFindingsQueueMessages([sequenced(scanId, 1), sequenced(scanId, 1), sequenced(scanId, 2)]);
+    await repo.processFindingsQueueMessages([sequenced(scanId, 2), sequenced(scanId, 3)]);
+    expect(await eventCount(scanId)).toBe(3);
+
+    // Another execution of the run numbers from 1 again: different events.
+    await repo.processFindingsQueueMessages([sequenced(scanId, 1, 'def456')]);
+    expect(await eventCount(scanId)).toBe(4);
+  });
+
+  it('does not repeat the effects of a terminal event stored before', async () => {
+    const scanId = await seedScan();
+    const repo = new ScansRepository(env);
+    const complete = { body: { scanId, type: 'event', payload: { type: 'complete', data: { total: 1 } }, exec: 'abc123', seq: 9 } };
+    await repo.processFindingsQueueMessages([complete]);
+    await env.DB.prepare("UPDATE scans SET status = 'dispatched' WHERE id = ?").bind(scanId).run();
+    await repo.processFindingsQueueMessages([complete]);
+    const status = await env.DB.prepare('SELECT status FROM scans WHERE id = ?').bind(scanId).first<{ status: string }>();
+    expect(status?.status).toBe('dispatched');
+  });
+
+  it('gives events without a valid exec and seq ids of their own', async () => {
+    const scanId = await seedScan();
+    await new ScansRepository(env).processFindingsQueueMessages([
+      sequenced(scanId, 1, 'x:y'),
+      sequenced(scanId, 1, 'x:y'),
+      { body: { scanId, type: 'event', payload: { type: 'result' } } },
+      { body: { scanId, type: 'event', payload: { type: 'result' } } },
+    ]);
+    expect(await eventCount(scanId)).toBe(4);
   });
 });

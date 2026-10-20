@@ -5,6 +5,7 @@
 
 import { getRunIdFromTags } from './utils';
 import { isSharedRunnerTags } from './runnerAccess';
+import { DeliveryTracker } from './delivery';
 
 // Upper bound on scans one runner holds concurrently. Keeps the socket attachment
 // (activeJobs + recentJobs) well under the 2 KB Durable Object limit and bounds the
@@ -31,8 +32,10 @@ export class StateManager {
   // The runner each parse request went to; only that runner may answer it.
   pendingParseRunners = new Map<string, WebSocket>();
   sseStreams = new Map<string, ReadableStreamDefaultController>();
+  delivery: DeliveryTracker;
 
   constructor(private state: DurableObjectState) {
+    this.delivery = new DeliveryTracker(state);
     this.reconstructState();
   }
 

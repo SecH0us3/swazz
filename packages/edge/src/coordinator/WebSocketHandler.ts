@@ -179,6 +179,14 @@ export class WebSocketHandler {
             resolve(new Response(JSON.stringify(clientPayload), { status: 200, headers: { 'Content-Type': 'application/json' } }));
           }
         }
+        if (msg.type === 'ack_request') {
+          // Acknowledged delivery (delivery.ts): the tail of a run this connection owns.
+          const attachment = (ws.deserializeAttachment?.() || {}) as { activeJobs?: string[]; recentJobs?: string[] };
+          const owned = typeof msg.runId === 'string' && msg.runId !== '' &&
+            ((attachment.activeJobs ?? []).includes(msg.runId) || (attachment.recentJobs ?? []).includes(msg.runId));
+          if (owned) this.state.waitUntil(this.stateManager.delivery.requested(ws, msg.runId, msg.exec, msg.seq));
+          return;
+        }
         if (msg.type === 'event' || msg.type === 'error') {
           const runId = msg.runId;
 
@@ -205,12 +213,29 @@ export class WebSocketHandler {
                 return;
               }
             } else {
-              logError(
-                { env: this.env, executionCtx: this.state },
-                "Coordinator",
-                `Runner sent unauthorized or invalid runId: ${runId}`,
-                { tags, runId }
-              );
+              // A replay may repeat many refused events; log the first of each run per connection.
+              if (msg.seq === undefined || this.stateManager.delivery.firstRefusal(ws, runId)) {
+                logError(
+                  { env: this.env, executionCtx: this.state },
+                  "Coordinator",
+                  `Runner sent unauthorized or invalid runId: ${runId}`,
+                  { tags, runId }
+                );
+              }
+              return;
+            }
+          }
+
+          // Acknowledged delivery (delivery.ts): a replayed event the coordinator already has is dropped.
+          const sequenced = msg.seq !== undefined;
+          if (sequenced) {
+            const verdict = await this.stateManager.delivery.accept(runId, msg.exec, msg.seq);
+            if (verdict === 'invalid') {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Runner sent an invalid seq for run ${runId}`, { tags, runId });
+              return;
+            }
+            if (verdict === 'duplicate') {
+              await this.stateManager.delivery.duplicate(ws, runId);
               return;
             }
           }
@@ -222,44 +247,46 @@ export class WebSocketHandler {
             shouldCleanup = true;
           }
 
-          if (this.env.JWT_SECRET === 'test-secret') {
-            // Local dev: write findings/events straight to D1, bypassing the
-            // queue emulation. Miniflare's queue broker is unstable under the
-            // high event volume of a fuzz run ("Unknown Internal Error (15000)")
-            // and can take down `wrangler dev` mid-session.
-            this.state.waitUntil(
-              (async () => {
-                try {
-                  const scansRepo = new ScansRepository(this.env);
-                  await scansRepo.processFindingsQueueMessages([{
-                    body: { scanId: runId, type: msg.type, payload: msg.payload }
-                  }]);
-                } catch (qErr) {
-                  logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist event to D1", { error: qErr });
-                }
-              })()
-            );
-          } else {
-            this.state.waitUntil(
-              this.env.FINDINGS_QUEUE.send({
-                scanId: runId,
-                type: msg.type,
-                payload: msg.payload
-              }).catch(async qErr => {
-                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
-                // Fallback for terminal events so the scan never stays stuck as 'dispatched' in D1
-                if (shouldCleanup) {
-                  try {
-                    const scansRepo = new ScansRepository(this.env);
-                    await scansRepo.processFindingsQueueMessages([{
-                      body: { scanId: runId, type: msg.type, payload: msg.payload }
-                    }]);
-                  } catch (fallbackErr) {
-                    logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist terminal event to D1 after queue failure", { error: fallbackErr });
-                  }
-                }
-              })
-            );
+          // exec and seq make the stored event idempotent (eventIdFor), whichever path stores it.
+          const body = sequenced
+            ? { scanId: runId, type: msg.type, payload: msg.payload, exec: msg.exec, seq: msg.seq }
+            : { scanId: runId, type: msg.type, payload: msg.payload };
+          const writeToD1 = async () => {
+            const scansRepo = new ScansRepository(this.env);
+            await scansRepo.processFindingsQueueMessages([{ body }]);
+          };
+          const persist = (async () => {
+            if (this.env.JWT_SECRET === 'test-secret') {
+              // Local dev: write findings/events straight to D1, bypassing the
+              // queue emulation. Miniflare's queue broker is unstable under the
+              // high event volume of a fuzz run ("Unknown Internal Error (15000)")
+              // and can take down `wrangler dev` mid-session.
+              try {
+                await writeToD1();
+              } catch (qErr) {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist event to D1", { error: qErr });
+              }
+              return;
+            }
+            try {
+              await this.env.FINDINGS_QUEUE.send(body);
+            } catch (qErr) {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
+              // Straight to D1 instead: an acknowledged event must not be lost, and a terminal one
+              // must not leave the scan stuck as 'dispatched'.
+              try {
+                await writeToD1();
+              } catch (fallbackErr) {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist event to D1 after queue failure", { error: fallbackErr });
+              }
+            }
+          })();
+          this.state.waitUntil(persist);
+
+          if (sequenced) {
+            this.state.waitUntil(this.stateManager.delivery.persisted(runId, persist));
+            const ack = this.stateManager.delivery.processed(ws, runId, msg.exec, msg.seq, shouldCleanup);
+            if (ack) this.state.waitUntil(ack);
           }
 
           const clientSet = this.stateManager.clients.get(runId);
