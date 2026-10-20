@@ -11,8 +11,10 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	swazzGrpc "swazz-engine/internal/grpc"
 	"swazz-engine/internal/logger"
@@ -79,6 +81,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	oob.GlobalStore.Clear()
 	sstistore.GlobalStore.Clear()
 	r.userLogRepeats.reset()
+	r.workerPanicked.Store(false)
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	r.lifecycle.cancel = cancel
@@ -116,6 +119,50 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	return ctx, nil
 }
 
+// workerStopTimeout bounds how long a run that ended abnormally waits for its workers.
+const workerStopTimeout = 30 * time.Second
+
+// goWorker runs fn as one of the run's workers. A panic in it (an analyzer, a generator, an
+// executor) must not take the agent and every other run on it down: it is logged locally,
+// stack included, and stops this run, which then ends with an error (see Start).
+func (r *Runner) goWorker(fn func()) {
+	r.workers.Add(1)
+	go func() {
+		defer r.workers.Done()
+		defer func() {
+			if p := recover(); p != nil {
+				logger.Error("[Runner] A worker panicked: %v\n%s", p, debug.Stack())
+				r.workerPanicked.Store(true)
+				r.cancelRun()
+			}
+		}()
+		fn()
+	}()
+}
+
+func (r *Runner) cancelRun() {
+	r.lifecycle.mu.Lock()
+	if r.lifecycle.cancel != nil {
+		r.lifecycle.cancel()
+	}
+	r.lifecycle.mu.Unlock()
+}
+
+// waitWorkers waits for the run's workers to return, at most timeout; false if they did not.
+func (r *Runner) waitWorkers(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		r.workers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 // RunPanicMessage is what the user is told when the run panicked: no internals.
 const RunPanicMessage = "The runner hit an internal error and stopped the scan. Start it again; if this keeps happening, update the runner or report the issue."
 
@@ -131,15 +178,18 @@ func (r *Runner) finaliseRunAfterPanic() {
 }
 
 func (r *Runner) finalise(panicked bool) {
-	r.lifecycle.mu.Lock()
-	if r.lifecycle.cancel != nil {
-		r.lifecycle.cancel()
-	}
-	r.lifecycle.mu.Unlock()
+	r.cancelRun()
 
-	// Signal stats aggregator to flush and exit.
-	close(r.statsChan)
-	<-r.statsDone
+	// Workers send to statsChan: closing it under one still running would panic it ("send on
+	// closed channel"). On a normal end they have all returned; after a panic they stop on the
+	// cancelled context, within a bound (a request in flight has its own timeout).
+	if r.waitWorkers(workerStopTimeout) {
+		// Signal stats aggregator to flush and exit.
+		close(r.statsChan)
+		<-r.statsDone
+	} else {
+		logger.Error("[Runner] Workers still running %v after the run ended; leaving their stats channel open", workerStopTimeout)
+	}
 
 	r.lifecycle.isRunning.Store(false)
 
@@ -173,9 +223,11 @@ func (r *Runner) prepareMCP(ctx context.Context) error {
 		return fmt.Errorf("could not connect to the MCP server: %w", err)
 	}
 
+	// Any MCP tool the user configured, the server's or a browser WebMCP one, makes the config
+	// an allowlist: the server's other tools are then not added.
 	hasAnyMcpInConfig := false
 	for _, ep := range r.config.Endpoints {
-		if isMCPEndpoint(ep) {
+		if isMCPEndpoint(ep) || swagger.IsWebMCPEndpoint(ep.Path) {
 			hasAnyMcpInConfig = true
 			break
 		}

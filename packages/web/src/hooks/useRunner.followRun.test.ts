@@ -113,6 +113,16 @@ describe('followRun', () => {
         expect(useAppStore.getState().scanIssue?.title).toMatch(/connection to this scan was lost/);
     });
 
+    // It completed before a single progress event arrived: the scan's own stats, not null.
+    it('takes a scan\'s final stats from the API when the stream had none', async () => {
+        vi.stubGlobal('fetch', status({ scan: { status: 'completed', summary_stats: JSON.stringify({ totalRequests: 42 }) } }));
+        followRun('r1', '', handlers, wsRef);
+        socket().drop();
+        await vi.runOnlyPendingTimersAsync();
+        expect(handlers.onComplete).toHaveBeenCalledWith({ totalRequests: 42 });
+        expect(useAppStore.getState().stats).toEqual({ totalRequests: 42 });
+    });
+
     it('reconnects while the scan is still running, a bounded number of times', async () => {
         followRun('r1', '', handlers, wsRef);
         for (let i = 0; i < RUN_MAX_RECONNECTS; i++) {

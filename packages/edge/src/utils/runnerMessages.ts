@@ -51,6 +51,21 @@ export function sanitizeRunnerText(raw: unknown, max: number = MAX_RUNNER_MESSAG
   return text;
 }
 
+/** Longest runner log line kept (the runner already bounds its own). */
+export const MAX_RUNNER_LOG_LENGTH = 4000;
+
+/**
+ * A runner log line as shown to users and stored: every URL kept to scheme and host, and the
+ * length bounded. Unlike sanitizeRunnerText it keeps line breaks (a log line may span several),
+ * since the log viewer renders it as preformatted text.
+ */
+export function redactRunnerLogText(raw: unknown, max: number = MAX_RUNNER_LOG_LENGTH): string {
+  let text = typeof raw === 'string' ? raw : '';
+  text = text.replace(URL_IN_TEXT, redactUrl).replace(ANSI_ESCAPES, '');
+  if (text.length > max) text = `${text.slice(0, max - 1)}…`;
+  return text;
+}
+
 /**
  * A URL down to scheme and host; userinfo, path, query and fragment become "…" (hosted MCP
  * servers often put the key in the path).

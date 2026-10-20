@@ -26,6 +26,7 @@ const repo = {
   getFailureReasons: vi.fn(),
   getStalledActiveScans: vi.fn(),
   getScanStatus: vi.fn(),
+  markFailedIfActive: vi.fn(),
   processFindingsQueueMessages: vi.fn(),
   getActiveScans: vi.fn(),
 };
@@ -113,6 +114,59 @@ describe('scan failures reach the dashboard', () => {
     expect(sent(dashboard2)).toEqual([{ type: 'error', data: { message: UNKNOWN_FAILURE } }]);
     // The scan is over on the coordinator too.
     expect(stateManager.jobs.has('run-1')).toBe(false);
+  });
+
+  // Runner log lines reach users too (live, stored, as a scan's warnings); Go's errors quote
+  // full URLs, so a target or login URL with a key in it would leak.
+  it('keeps URLs in runner log lines to scheme and host, live and stored', async () => {
+    const { handler, stateManager } = setup();
+    const runner = fakeWs({ activeJobs: ['run-1'] });
+    tagsOf.set(runner, ['runner', 'shared']);
+    stateManager.runners.add(runner);
+    stateManager.jobs.set('run-1', runner);
+    const dashboard = fakeWs();
+    stateManager.clients.set('run-1', new Set([dashboard]));
+
+    await handler.handleMessage(runner, JSON.stringify({
+      type: 'event', runId: 'run-1',
+      payload: { type: 'runner_log', data: { level: 'warn', message: 'WAF check failed: Get "https://api.example/x?api_key=SECRET": 400\nsecond line' } },
+    }));
+    const expected = 'WAF check failed: Get "https://api.example/…?…": 400\nsecond line';
+    expect(sent(dashboard)[0].data.message).toBe(expected);
+    expect(env.FINDINGS_QUEUE.send.mock.calls[0][0].payload.data.message).toBe(expected);
+  });
+
+  it('shows and stores an error from the runner event bus like any runner error', async () => {
+    const { handler, stateManager } = setup();
+    const runner = fakeWs({ activeJobs: ['run-1'] });
+    tagsOf.set(runner, ['runner', 'shared']);
+    stateManager.runners.add(runner);
+    stateManager.jobs.set('run-1', runner);
+    const dashboard = fakeWs();
+    stateManager.clients.set('run-1', new Set([dashboard]));
+
+    await handler.handleMessage(runner, JSON.stringify({
+      type: 'event', runId: 'run-1', payload: { type: 'error', data: 'login to https://u:p@t.example/a failed\ngoroutine 3 [running]:' },
+    }));
+    const expected = { type: 'error', data: { message: 'login to https://…@t.example/… failed' } };
+    expect(sent(dashboard)).toEqual([expected]);
+    expect(env.FINDINGS_QUEUE.send.mock.calls[0][0].payload).toEqual(expected);
+  });
+
+  // A scan that ran for a while and then lost its runner did start: saying it never did is wrong.
+  it('gives a stopped scan without a runner a reason that matches how far it got', async () => {
+    const { stateManager, queueService } = setup();
+    const requests = new RequestHandler(env, state, stateManager, queueService);
+    repo.markFailedIfActive.mockResolvedValue(true);
+    for (const [status, reason] of [
+      ['queued', 'The scan was stopped before a runner started it.'],
+      ['dispatched', 'The scan was stopped.'],
+      ['paused', 'The scan was stopped.'],
+    ]) {
+      repo.getScanStatus.mockResolvedValueOnce(status);
+      await requests.handle(new Request('http://do/command', { method: 'POST', body: JSON.stringify({ runId: `r-${status}`, command: 'stop' }) }));
+      expect(repo.markFailedIfActive).toHaveBeenLastCalledWith(`r-${status}`, reason);
+    }
   });
 
   it('tells a dashboard that connects after the scan failed why it failed', async () => {

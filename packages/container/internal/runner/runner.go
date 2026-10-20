@@ -115,6 +115,11 @@ type Runner struct {
 
 	lifecycle runnerLifecycle
 	progress  runnerProgress
+	// The run's workers (goWorker), so a run that ends abnormally can wait for them.
+	workers        sync.WaitGroup
+	workerPanicked atomic.Bool
+	// Runs in Start once the run is initialised; tests only.
+	afterInitHook func(context.Context)
 	// Repeats of the same warning or error in one run's user-facing log (see logging.go).
 	userLogRepeats logRepeats
 	pause          runnerPause
@@ -257,9 +262,6 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 	return r
 }
 
-// afterRunInitHook runs in Start once the run is initialised; tests only (nil otherwise).
-var afterRunInitHook func(*Runner)
-
 // Start begins the fuzzing run. It blocks until the run completes or is stopped.
 // Returns an error only when a run is already in progress.
 func (r *Runner) Start(ctx context.Context) error {
@@ -268,17 +270,22 @@ func (r *Runner) Start(ctx context.Context) error {
 		return err
 	}
 
-	// A panic must not be reported as a completed scan: finaliseRun would broadcast "complete"
-	// while the panic unwinds. It reports an error instead, then the panic goes on.
+	// A panic, in Start or in one of its workers (goWorker), must not be reported as a completed
+	// scan: finaliseRun would broadcast "complete". The run ends with an error instead, and a
+	// panic in Start goes on.
 	defer func() {
-		if p := recover(); p != nil {
-			r.finaliseRunAfterPanic()
+		p := recover()
+		if p == nil && !r.workerPanicked.Load() {
+			r.finaliseRun()
+			return
+		}
+		r.finaliseRunAfterPanic()
+		if p != nil {
 			panic(p)
 		}
-		r.finaliseRun()
 	}()
-	if afterRunInitHook != nil {
-		afterRunInitHook(r)
+	if r.afterInitHook != nil {
+		r.afterInitHook(runCtx)
 	}
 
 	if r.config.Settings.MaxScanDurationMin > 0 {
@@ -467,7 +474,8 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 		}
 		wg.Add(1)
 
-		go func(ep swagger.EndpointConfig) {
+		ep := endpoint
+		r.goWorker(func() {
 			defer r.limiter.Release()
 			defer wg.Done()
 
@@ -512,7 +520,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 
 			r.progress.completedEndpoints.Add(1)
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-		}(endpoint)
+		})
 	}
 
 	wg.Wait()

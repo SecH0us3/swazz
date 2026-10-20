@@ -73,9 +73,20 @@ export function interpretRunMessage(msg: unknown): RunStreamEvent {
     }
 }
 
+function parseStats(raw: unknown): RunStats | null {
+    if (raw && typeof raw === 'object') return raw as RunStats;
+    if (typeof raw !== 'string') return null;
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? (parsed as RunStats) : null;
+    } catch {
+        return null;
+    }
+}
+
 export type ScanStatus =
     | { state: 'active' }
-    | { state: 'completed' }
+    | { state: 'completed'; stats: RunStats | null }
     | { state: 'failed'; reason: string }
     | { state: 'unknown' };
 
@@ -93,7 +104,7 @@ export async function fetchScanStatus(runId: string, baseUrl = ''): Promise<Scan
         const scan = (await res.json())?.scan;
         switch (scan?.status) {
             case 'completed':
-                return { state: 'completed' };
+                return { state: 'completed', stats: parseStats(scan.summary_stats) };
             case 'failed':
                 return { state: 'failed', reason: text(scan.failure_reason) || UNKNOWN_FAILURE };
             case 'queued':

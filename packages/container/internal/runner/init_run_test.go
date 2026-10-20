@@ -331,35 +331,110 @@ func TestRedactURLs(t *testing.T) {
 	assert.Equal(t, "(URL)", redactURLs("http://%zz"))
 }
 
-// A panic during the run unwinds through Start's deferred finalisation, which used to broadcast
-// "complete": the scan was stored as completed, with partial results, and the user never learned
-// it broke. It must end with an error, and the panic must still propagate.
-func TestStart_PanicEndsTheRunWithAnErrorNotComplete(t *testing.T) {
-	afterRunInitHook = func(*Runner) { panic("boom in the profile loop") }
-	defer func() { afterRunInitHook = nil }()
-
-	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
-	defer r.Close()
-	sub := r.Subscribe()
-
-	assert.PanicsWithValue(t, "boom in the profile loop", func() { _ = r.Start(context.Background()) })
-	assert.False(t, r.IsRunning())
-
-	var types []string
-	var errData any
+// runEvents collects the types of the events broadcast until the stream is quiet, and the data
+// of the last error.
+func runEvents(t *testing.T, sub chan Event) (types []string, errData any) {
+	t.Helper()
 	for {
 		select {
-		case ev := <-sub:
+		case ev, ok := <-sub:
+			if !ok {
+				return
+			}
 			types = append(types, ev.Type)
 			if ev.Type == EventError {
 				errData = ev.Data
 			}
-			continue
 		case <-time.After(300 * time.Millisecond):
+			return
 		}
-		break
 	}
+}
+
+// A panic during the run unwinds through Start's deferred finalisation, which used to broadcast
+// "complete": the scan was stored as completed, with partial results, and the user never learned
+// it broke. It must end with an error, and the panic must still propagate.
+func TestStart_PanicEndsTheRunWithAnErrorNotComplete(t *testing.T) {
+	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
+	defer r.Close()
+	r.afterInitHook = func(context.Context) { panic("boom in the profile loop") }
+	sub := r.Subscribe()
+
+	assert.PanicsWithValue(t, "boom in the profile loop", func() { _ = r.Start(context.Background()) })
+	assert.False(t, r.IsRunning())
+	types, errData := runEvents(t, sub)
 	assert.Contains(t, types, EventError)
 	assert.NotContains(t, types, EventComplete)
 	assert.Equal(t, RunPanicMessage, errData)
+}
+
+// A worker still sending its stats when Start panics must not be hit by the channel closing
+// under it: that panic, in its own goroutine, used to take the whole agent down.
+func TestStart_PanicWaitsForWorkersBeforeClosingTheirStatsChannel(t *testing.T) {
+	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
+	defer r.Close()
+	sending := make(chan struct{})
+	r.afterInitHook = func(ctx context.Context) {
+		r.goWorker(func() {
+			close(sending)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case r.statsChan <- statsMsg{result: &swagger.FuzzResult{Status: 200}}:
+				}
+			}
+		})
+		<-sending
+		panic("boom while a worker sends")
+	}
+
+	assert.Panics(t, func() { _ = r.Start(context.Background()) })
+	assert.False(t, r.workerPanicked.Load(), "the worker stopped on the cancelled run, not on a closed channel")
+}
+
+// A panic in a worker (an analyzer, a generator) used to crash the agent with every run on it,
+// and the scan only ended when the watchdog gave up on it. Now it stops this run, with an error.
+func TestStart_WorkerPanicEndsTheRunWithAnError(t *testing.T) {
+	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
+	defer r.Close()
+	r.afterInitHook = func(context.Context) {
+		r.goWorker(func() { panic("nil dereference in an analyzer") })
+		require.True(t, r.waitWorkers(time.Second))
+	}
+	sub := r.Subscribe()
+
+	assert.NotPanics(t, func() { _ = r.Start(context.Background()) })
+	types, errData := runEvents(t, sub)
+	assert.Contains(t, types, EventError)
+	assert.NotContains(t, types, EventComplete)
+	assert.Equal(t, RunPanicMessage, errData)
+
+	// The next run starts clean.
+	r.afterInitHook = nil
+	_, err := r.initRun(context.Background())
+	require.NoError(t, err)
+	assert.False(t, r.workerPanicked.Load())
+	r.finaliseRun()
+}
+
+// A config that names only browser WebMCP tools is still an explicit MCP allowlist: the MCP
+// server's own tools must not be added to the scan behind the user's back.
+func TestMCPDiscovery_WebMCPToolsKeepTheConfigAnAllowlist(t *testing.T) {
+	mock := &mockDiscoveryMCPClient{tools: []mcp.Tool{{Name: "server_only_tool"}}}
+	cfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{Type: "stdio"},
+		Endpoints: []swagger.EndpointConfig{{Method: "CALL", Path: "webmcp://tool/search"}},
+		Settings:  swagger.Settings{EnableMCPMethodFuzzing: boolPtr(false)},
+	}
+	r := New(cfg, nil)
+	defer r.Close()
+	r.mcpClient = mock
+
+	_, err := r.initRun(context.Background())
+	require.NoError(t, err)
+	defer r.finaliseRun()
+	for _, ep := range r.config.Endpoints {
+		assert.NotEqual(t, "mcp://tool/server_only_tool", ep.Path)
+	}
 }

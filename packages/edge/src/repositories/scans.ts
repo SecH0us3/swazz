@@ -38,6 +38,7 @@ export interface IScansRepository {
   getRunnerLogs(scanId: string): Promise<any[]>;
   getFailureReasons(scanIds: string[]): Promise<Map<string, string>>;
   hasActiveScans(): Promise<boolean>;
+  changeActiveStatus(scanId: string, from: string[], to: 'paused' | 'dispatched'): Promise<boolean>;
   getStalledActiveScans(idleMinutes: number, limit: number, owned?: string[], ownedIdleMinutes?: number): Promise<StalledScan[]>;
   getFindings(scanId: string): Promise<any[]>;
   getFindingDetails(findingId: string): Promise<any | null>;
@@ -278,6 +279,18 @@ export class ScansRepository extends BaseService implements IScansRepository {
       ));
     }
     return reasons;
+  }
+
+  /**
+   * Pauses or resumes an active scan: moves it from one of the `from` statuses to `to`. False
+   * if it is in none of them (it ended meanwhile, failed by the stalled scan watchdog say), so
+   * an ended scan is never made active again.
+   */
+  async changeActiveStatus(scanId: string, from: string[], to: 'paused' | 'dispatched'): Promise<boolean> {
+    const res = await this.db.prepare(
+      `UPDATE scans SET status = ?, status_changed_at = datetime('now') WHERE id = ? AND status IN (SELECT value FROM json_each(?))`
+    ).bind(to, scanId, JSON.stringify(from)).run();
+    return ((res?.meta as any)?.changes ?? 0) > 0;
   }
 
   /** Whether any scan is dispatched or paused (the stalled scan watchdog has work at all). */

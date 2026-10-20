@@ -233,7 +233,8 @@ export function followRun(runId: string, proxyUrl: string, handlers: RunHandlers
             return true;
         }
         if (status.state === 'completed') {
-            complete(lastStats ?? (useAppStore.getState().stats as RunStats), {
+            // The scan's own final stats from the API; what the stream showed only if it has none.
+            complete(status.stats ?? lastStats ?? (useAppStore.getState().stats as RunStats), {
                 level: 'warning',
                 title: 'The live connection to this scan was lost before it finished',
                 details: ['The scan completed, but the dashboard may not have received all results. Open it from History to see them all.'],

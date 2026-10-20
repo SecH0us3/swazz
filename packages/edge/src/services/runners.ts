@@ -341,7 +341,9 @@ export class RunnersService implements IRunnersService {
     await stub.fetch(doReq);
 
     const scansRepo = new ScansRepository(this.env);
-    await scansRepo.updateScanStatus(runId, 'paused');
+    if (!(await scansRepo.changeActiveStatus(runId, ['queued', 'dispatched'], 'paused'))) {
+      throw new Error('The scan has already ended|409');
+    }
 
     return { status: 'paused' };
   }
@@ -363,7 +365,9 @@ export class RunnersService implements IRunnersService {
     await stub.fetch(doReq);
 
     const scansRepo = new ScansRepository(this.env);
-    await scansRepo.updateScanStatus(runId, 'dispatched');
+    if (!(await scansRepo.changeActiveStatus(runId, ['paused'], 'dispatched'))) {
+      throw new Error('The scan has already ended|409');
+    }
 
     return { status: 'resumed' };
   }

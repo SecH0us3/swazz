@@ -59,7 +59,11 @@ describe('fetchScanStatus', () => {
         respond(200, { scan: { status: 'paused' } });
         expect(await fetchScanStatus('r1')).toEqual({ state: 'active' });
         respond(200, { scan: { status: 'completed' } });
-        expect(await fetchScanStatus('r1')).toEqual({ state: 'completed' });
+        expect(await fetchScanStatus('r1')).toEqual({ state: 'completed', stats: null });
+        respond(200, { scan: { status: 'completed', summary_stats: '{"totalRequests":12}' } });
+        expect(await fetchScanStatus('r1')).toEqual({ state: 'completed', stats: { totalRequests: 12 } });
+        respond(200, { scan: { status: 'completed', summary_stats: 'not json' } });
+        expect(await fetchScanStatus('r1')).toEqual({ state: 'completed', stats: null });
         respond(200, { scan: { status: 'failed', failure_reason: 'Runner lost' } });
         expect(await fetchScanStatus('r1')).toEqual({ state: 'failed', reason: 'Runner lost' });
         respond(200, { scan: { status: 'failed', failure_reason: null } });

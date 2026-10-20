@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect } from 'vitest';
-import { sanitizeRunnerText, runnerErrorText, MAX_RUNNER_MESSAGE_LENGTH } from '../../../src/utils/runnerMessages';
+import { sanitizeRunnerText, runnerErrorText, redactRunnerLogText, MAX_RUNNER_MESSAGE_LENGTH, MAX_RUNNER_LOG_LENGTH } from '../../../src/utils/runnerMessages';
 
 describe('runner messages shown to users', () => {
   it('keeps an ordinary message as it is', () => {
@@ -36,6 +36,14 @@ describe('runner messages shown to users', () => {
     expect(runnerErrorText({ error: 'post https://h/p?api_key=abc failed' })).toBe('post https://h/…?… failed');
     // Hosted MCP servers often put the key in the path.
     expect(sanitizeRunnerText('Post "https://mcp.example.com/api/mcp/s/sk_live_SECRET/sse": 401')).toBe('Post "https://mcp.example.com/…": 401');
+  });
+
+  it('keeps a runner log line\'s lines, but not its URLs\' credentials', () => {
+    expect(redactRunnerLogText('re-auth failed: Post "https://login.example/oauth?client_secret=S": 401\nretrying'))
+      .toBe('re-auth failed: Post "https://login.example/…?…": 401\nretrying');
+    expect(redactRunnerLogText('\u001b[33mcolored\u001b[0m')).toBe('colored');
+    expect(redactRunnerLogText('x'.repeat(10_000)).length).toBe(MAX_RUNNER_LOG_LENGTH);
+    expect(redactRunnerLogText(42)).toBe('');
   });
 
   it('bounds the length', () => {

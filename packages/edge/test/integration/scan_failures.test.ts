@@ -165,6 +165,17 @@ describe('scan failure queries', () => {
     expect(owned).not.toContain(firstOrphaned.id);
   });
 
+  it('pauses and resumes only an active scan', async () => {
+    const repo = new ScansRepository(env);
+    const id = await seedScan('dispatched', '-1 hour');
+    expect(await repo.changeActiveStatus(id, ['queued', 'dispatched'], 'paused')).toBe(true);
+    expect(await repo.changeActiveStatus(id, ['paused'], 'dispatched')).toBe(true);
+    await repo.processFindingsQueueMessages([{ body: { scanId: id, type: 'error', payload: { error: 'Runner lost' } } }]);
+    expect(await repo.changeActiveStatus(id, ['paused'], 'dispatched')).toBe(false);
+    expect(await repo.changeActiveStatus(id, ['queued', 'dispatched'], 'paused')).toBe(false);
+    expect((await env.DB.prepare('SELECT status FROM scans WHERE id = ?').bind(id).first<any>()).status).toBe('failed');
+  });
+
   it('gives scans that could not be queued a reason', async () => {
     const repo = new ScansRepository(env);
     const id = await seedScan('queued', '-1 minutes');
