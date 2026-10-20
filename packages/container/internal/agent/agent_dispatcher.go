@@ -273,7 +273,6 @@ func (d *AgentDispatcher) maybeRecycle() {
 		d.exit(0)
 	}()
 }
-
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.
 func (d *AgentDispatcher) Dispatch(ctx context.Context, wsMsg WSMessageIn) {
 	switch wsMsg.Type {
