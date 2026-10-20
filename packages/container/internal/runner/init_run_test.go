@@ -318,13 +318,48 @@ func TestInitRun_MCPErrorsNeverShowTheURLsCredentials(t *testing.T) {
 	for _, text := range append(logsAt(userLogs(t, sub), "error"), err.Error()) {
 		assert.NotContains(t, text, "SECRET")
 		assert.NotContains(t, text, "pw")
-		assert.Contains(t, text, "https://…@mcp.example.com/sse?…#…")
+		assert.Contains(t, text, "https://…@mcp.example.com/…?…#…")
 	}
 }
 
 func TestRedactURLs(t *testing.T) {
-	assert.Equal(t, `open https://h.example/p?… and wss://…@x.io:8443/ws now`, redactURLs(`open https://h.example/p?a=1&b=2 and wss://u:p@x.io:8443/ws now`))
+	assert.Equal(t, `open https://h.example/…?… and wss://…@x.io:8443/… now`, redactURLs(`open https://h.example/p?a=1&b=2 and wss://u:p@x.io:8443/ws now`))
+	// Hosted MCP servers often put the key in the path.
+	assert.Equal(t, `Post "https://mcp.example.com/…": 401`, redactURLs(`Post "https://mcp.example.com/api/mcp/s/sk_live_SECRET/sse": 401`))
 	assert.Equal(t, "no urls here", redactURLs("no urls here"))
-	assert.Equal(t, "http://h/", redactURLs("http://h/"))
+	assert.Equal(t, "http://h", redactURLs("http://h/"))
 	assert.Equal(t, "(URL)", redactURLs("http://%zz"))
+}
+
+// A panic during the run unwinds through Start's deferred finalisation, which used to broadcast
+// "complete": the scan was stored as completed, with partial results, and the user never learned
+// it broke. It must end with an error, and the panic must still propagate.
+func TestStart_PanicEndsTheRunWithAnErrorNotComplete(t *testing.T) {
+	afterRunInitHook = func(*Runner) { panic("boom in the profile loop") }
+	defer func() { afterRunInitHook = nil }()
+
+	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
+	defer r.Close()
+	sub := r.Subscribe()
+
+	assert.PanicsWithValue(t, "boom in the profile loop", func() { _ = r.Start(context.Background()) })
+	assert.False(t, r.IsRunning())
+
+	var types []string
+	var errData any
+	for {
+		select {
+		case ev := <-sub:
+			types = append(types, ev.Type)
+			if ev.Type == EventError {
+				errData = ev.Data
+			}
+			continue
+		case <-time.After(300 * time.Millisecond):
+		}
+		break
+	}
+	assert.Contains(t, types, EventError)
+	assert.NotContains(t, types, EventComplete)
+	assert.Equal(t, RunPanicMessage, errData)
 }

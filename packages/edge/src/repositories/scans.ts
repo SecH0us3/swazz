@@ -37,7 +37,8 @@ export interface IScansRepository {
   
   getRunnerLogs(scanId: string): Promise<any[]>;
   getFailureReasons(scanIds: string[]): Promise<Map<string, string>>;
-  getStalledActiveScans(idleMinutes: number, limit: number): Promise<StalledScan[]>;
+  hasActiveScans(): Promise<boolean>;
+  getStalledActiveScans(idleMinutes: number, limit: number, owned?: string[], ownedIdleMinutes?: number): Promise<StalledScan[]>;
   getFindings(scanId: string): Promise<any[]>;
   getFindingDetails(findingId: string): Promise<any | null>;
   updateFinding(findingId: string, fields: Record<string, any>, ctx?: any): Promise<any>;
@@ -49,7 +50,7 @@ export interface IScansRepository {
   getCachedSwagger(url: string): Promise<{ base_path: string; endpoints_r2_key: string; fetched_at: string } | null>;
   getCachedSwaggerDetails(url: string): Promise<{ endpoints_hash: string; endpoints_r2_key: string; raw_spec_r2_key: string } | null>;
   upsertSwaggerCache(url: string, basePath: string, endpointsHash: string, endpointsR2Key: string | undefined, rawSpecR2Key: string | undefined): Promise<void>;
-  updateScanStatus(scanId: string, status: string, summaryStats?: string): Promise<void>;
+  updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any, failureReason?: string): Promise<void>;
   markFailedIfActive(scanId: string, reason?: string): Promise<boolean>;
   getScanStatus(scanId: string): Promise<string | null>;
   getQueuedScans(): Promise<any[]>;
@@ -270,23 +271,47 @@ export class ScansRepository extends BaseService implements IScansRepository {
         const text = runnerErrorText(row.payload);
         if (text) reasons.set(row.scan_id, text);
       }
+      // Kept on the scan, so the events are searched once per scan, not on every listing.
+      await this.db.batch(chunk.map(id =>
+        this.db.prepare('UPDATE scans SET failure_reason = ? WHERE id = ? AND failure_reason IS NULL')
+          .bind(reasons.get(id) ?? UNKNOWN_FAILURE, id)
+      ));
     }
     return reasons;
   }
 
+  /** Whether any scan is dispatched or paused (the stalled scan watchdog has work at all). */
+  async hasActiveScans(): Promise<boolean> {
+    const row = await this.db.prepare("SELECT 1 AS one FROM scans WHERE status IN ('dispatched', 'paused') LIMIT 1").first();
+    return !!row;
+  }
+
   /**
-   * Dispatched or paused scans with no event for idleMinutes (counted from creation when they
-   * have none), with how long they have been idle: candidates for the stalled scan watchdog,
-   * which decides by whether a connected runner owns them.
+   * Candidates for the stalled scan watchdog: active scans with no activity (event, status change
+   * or creation, whichever is latest) for idleMinutes, with how long they have been idle.
+   *  - unowned: dispatched or paused scans none of the owned runIds;
+   *  - owned: dispatched (not paused) scans among the owned runIds, idle for ownedIdleMinutes.
+   * Owned scans never fill the unowned batch (owned paused scans would otherwise crowd out the
+   * orphaned ones, every pass).
    */
-  async getStalledActiveScans(idleMinutes: number, limit: number): Promise<StalledScan[]> {
-    const { results } = await this.db.prepare(
+  async getStalledActiveScans(idleMinutes: number, limit: number, owned: string[] = [], ownedIdleMinutes = idleMinutes): Promise<StalledScan[]> {
+    const ownedJson = JSON.stringify(owned);
+    const select = (ownership: string, statuses: string, minutes: number) => this.db.prepare(
       `SELECT id, status, CAST((julianday('now') - julianday(last_activity)) * 1440 AS INTEGER) AS idle_minutes FROM (
-         SELECT s.id, s.status, COALESCE((SELECT MAX(e.created_at) FROM scan_events e WHERE e.scan_id = s.id), s.created_at) AS last_activity
-         FROM scans s WHERE s.status IN ('dispatched', 'paused')
+         SELECT s.id, s.status, MAX(
+           COALESCE((SELECT MAX(e.created_at) FROM scan_events e WHERE e.scan_id = s.id), ''),
+           COALESCE(s.status_changed_at, ''),
+           s.created_at
+         ) AS last_activity
+         FROM scans s
+         WHERE s.status IN (${statuses}) AND s.id ${ownership} (SELECT value FROM json_each(?))
        ) WHERE last_activity < datetime('now', ?) ORDER BY last_activity ASC LIMIT ?`
-    ).bind(`-${Math.max(1, Math.floor(idleMinutes))} minutes`, limit).all<StalledScan>();
-    return results ?? [];
+    ).bind(ownedJson, `-${Math.max(1, Math.floor(minutes))} minutes`, limit).all<StalledScan>();
+    const [unowned, ownedSilent] = await Promise.all([
+      select('NOT IN', "'dispatched', 'paused'", idleMinutes),
+      owned.length > 0 ? select('IN', "'dispatched'", ownedIdleMinutes) : Promise.resolve({ results: [] as StalledScan[] }),
+    ]);
+    return [...(unowned.results ?? []), ...(ownedSilent.results ?? [])];
   }
 
   private mapFindingRow(row: any): any {
@@ -453,15 +478,20 @@ export class ScansRepository extends BaseService implements IScansRepository {
       .run();
   }
 
-  async updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any): Promise<void> {
+  /**
+   * Sets a scan's status, recording when it changed (the stalled scan watchdog counts idle time
+   * from it as well as from the scan's events). A failed scan gets failureReason, as the user is
+   * told why it failed.
+   */
+  async updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any, failureReason?: string): Promise<void> {
     if (status === 'completed' && summaryStats) {
-      await this.db.prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?").bind(summaryStats, scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ?, status_changed_at = datetime('now') WHERE id = ?").bind(summaryStats, scanId).run();
     } else if (status === 'failed') {
-      await this.db.prepare("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ?").bind(scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'failed', completed_at = datetime('now'), failure_reason = COALESCE(?, failure_reason), status_changed_at = datetime('now') WHERE id = ?").bind(failureReason ?? null, scanId).run();
     } else if (status === 'dispatched') {
-      await this.db.prepare("UPDATE scans SET status = 'dispatched' WHERE id = ?").bind(scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'dispatched', status_changed_at = datetime('now') WHERE id = ?").bind(scanId).run();
     } else {
-      await this.db.prepare('UPDATE scans SET status = ? WHERE id = ?').bind(status, scanId).run();
+      await this.db.prepare("UPDATE scans SET status = ?, status_changed_at = datetime('now') WHERE id = ?").bind(status, scanId).run();
     }
 
     try {

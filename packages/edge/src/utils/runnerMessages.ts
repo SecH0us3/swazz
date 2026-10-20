@@ -6,9 +6,9 @@
 // Runner errors shown to users: on the dashboard's live stream, in the runner log and as a failed
 // scan's reason. They come from a runner (the user's own, or a shared one the operator runs), so
 // they are untrusted text: reduced to one bounded line, with stack traces (internal paths and
-// code locations, no help to the user) cut off, and URLs kept to scheme, host and path (Go's HTTP
-// errors quote the full URL, whose userinfo or query may carry a token, and everyone with access
-// to the project sees a failed scan's reason). React renders them as text, never as HTML.
+// code locations, no help to the user) cut off, and URLs kept to scheme and host (Go's HTTP
+// errors quote the full URL, whose userinfo, path or query may carry a token, and everyone with
+// access to the project sees a failed scan's reason). React renders them as text, never as HTML.
 //
 // Non-goal: redacting what a runner chose to put in its own message (a target hostname, a status
 // code); those describe the user's own scan. Coordinator-originated failures use fixed texts.
@@ -16,6 +16,9 @@
 export const MAX_RUNNER_MESSAGE_LENGTH = 500;
 
 export const UNKNOWN_FAILURE = 'The scan failed without an error message.';
+
+/** Why a scan that could not be handed to the scan queue failed, as the user is told. */
+export const SCAN_NOT_QUEUED = 'The scan could not be queued, so it never started. Start it again; if this keeps happening, try again later.';
 
 // The start of a stack trace: a Go goroutine dump, a JS/TS frame, or a source location line.
 const STACK_TRACE_START = /(?:^|\n)\s*(?:goroutine \d+ \[|panic:|at [\w$.<>]+ \(|[\w./\\-]+\.(?:go|ts|js|mjs):\d+)/;
@@ -48,7 +51,10 @@ export function sanitizeRunnerText(raw: unknown, max: number = MAX_RUNNER_MESSAG
   return text;
 }
 
-/** A URL down to scheme, host and path; userinfo, query and fragment become "…". */
+/**
+ * A URL down to scheme and host; userinfo, path, query and fragment become "…" (hosted MCP
+ * servers often put the key in the path).
+ */
 function redactUrl(raw: string): string {
   let u: URL;
   try {
@@ -60,7 +66,8 @@ function redactUrl(raw: string): string {
   const userinfo = u.username || u.password ? '…@' : '';
   const query = u.search || raw.includes('?') ? '?…' : '';
   const fragment = u.hash ? '#…' : '';
-  return `${u.protocol}//${userinfo}${u.host}${u.pathname}${query}${fragment}`;
+  const path = u.pathname && u.pathname !== '/' ? '/…' : '';
+  return `${u.protocol}//${userinfo}${u.host}${path}${query}${fragment}`;
 }
 
 /**

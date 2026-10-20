@@ -147,7 +147,7 @@ describe('scan failures reach the dashboard', () => {
       expect(repo.processFindingsQueueMessages).not.toHaveBeenCalled();
 
       expect(await failStalledScans(context, T0 + UNOWNED_GRACE_MS)).toEqual(['lost']);
-      expect(repo.getStalledActiveScans).toHaveBeenCalledWith(STALLED_IDLE_MINUTES, expect.any(Number));
+      expect(repo.getStalledActiveScans).toHaveBeenCalledWith(STALLED_IDLE_MINUTES, expect.any(Number), [], SILENT_OWNED_MINUTES);
       expect(repo.processFindingsQueueMessages).toHaveBeenCalledWith([{ body: { scanId: 'lost', type: 'error', payload: { error: STALLED_SCAN_MESSAGE } } }]);
       expect(sent(dashboard)).toEqual([{ type: 'error', data: { message: STALLED_SCAN_MESSAGE } }]);
       expect(state.storage.data.has(jobRunnerKey('lost'))).toBe(false);
@@ -201,6 +201,8 @@ describe('scan failures reach the dashboard', () => {
 
       repo.getStalledActiveScans.mockResolvedValue([stalled('hung', SILENT_OWNED_MINUTES)]);
       expect(await failStalledScans(context, T0 + 60_000)).toEqual(['hung']);
+      // The lookup is told which scans a runner owns, and how long those may stay quiet.
+      expect(repo.getStalledActiveScans).toHaveBeenLastCalledWith(STALLED_IDLE_MINUTES, expect.any(Number), ['hung'], SILENT_OWNED_MINUTES);
       expect(repo.processFindingsQueueMessages).toHaveBeenCalledWith([{ body: { scanId: 'hung', type: 'error', payload: { error: SILENT_SCAN_MESSAGE } } }]);
       expect(sent(runner)).toEqual([{ type: 'job_command', payload: { runId: 'hung', command: 'stop' } }]);
       expect(stateManager.jobs.has('hung')).toBe(false);

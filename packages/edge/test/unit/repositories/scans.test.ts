@@ -260,7 +260,7 @@ describe('ScansRepository Unit Tests', () => {
       const repo = new ScansRepository(mockEnv);
       await repo.updateScanStatus('s-1', 'completed', '{}');
 
-      expect(mockPrepare).toHaveBeenNthCalledWith(1, expect.stringContaining("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?"));
+      expect(mockPrepare).toHaveBeenNthCalledWith(1, expect.stringContaining("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ?, status_changed_at = datetime('now') WHERE id = ?"));
       expect(dispatchWebhook).toHaveBeenCalledWith(mockEnv, 'p-1', 'scan.completed', expect.any(Object));
     });
 

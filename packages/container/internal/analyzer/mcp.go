@@ -26,11 +26,9 @@ var (
 type MCPStatusAnalyzer struct{}
 
 func (a *MCPStatusAnalyzer) isMCPEndpoint(input *AnalysisInput) bool {
-	return input.Method == "CALL" ||
-		input.Method == "READ" ||
-		input.Method == "PROMPT" ||
-		strings.HasPrefix(input.Endpoint, "mcp://") ||
-		strings.HasPrefix(input.Endpoint, "webmcp://") ||
+	// Responses from the MCP server, browser WebMCP tools, or an MCP endpoint served over HTTP.
+	return swagger.IsMCPServerEndpoint(input.Method, input.Endpoint) ||
+		swagger.IsWebMCPEndpoint(input.Endpoint) ||
 		strings.Contains(input.Endpoint, "/mcp/")
 }
 

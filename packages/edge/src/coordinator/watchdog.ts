@@ -41,7 +41,9 @@ export async function failStalledScans(context: HandlerContext, now: number = Da
   const { env, state, stateManager } = context;
   stateManager.pruneDeadRunners(now);
   const repo = new ScansRepository(env);
-  const candidates = await repo.getStalledActiveScans(STALLED_IDLE_MINUTES, WATCHDOG_BATCH);
+  // Scans a connected runner owns are only candidates once silent for SILENT_OWNED_MINUTES, and
+  // never take the place of orphaned ones.
+  const candidates = await repo.getStalledActiveScans(STALLED_IDLE_MINUTES, WATCHDOG_BATCH, [...stateManager.jobs.keys()], SILENT_OWNED_MINUTES);
 
   const stored = (await state.storage.get<Record<string, number>>(UNOWNED_SINCE_KEY)) ?? {};
   // Only current candidates are kept, so the record stays bounded by the batch size.

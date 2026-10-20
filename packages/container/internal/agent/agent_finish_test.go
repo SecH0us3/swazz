@@ -6,6 +6,7 @@
 package agent
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,25 +71,25 @@ func TestFinishExecution_PanicIsReportedWithoutInternals(t *testing.T) {
 	}
 }
 
-// Events still being forwarded may include the run's own "complete"; it waits for them, but not
-// forever.
-func TestFinishExecution_WaitsForForwardingBoundedly(t *testing.T) {
+// Events still being forwarded may include the run's own "complete": it waits for them, however
+// long (a "complete" of its own could not get out sooner), and sends nothing more if it came.
+func TestFinishExecution_WaitsForForwardingToFinish(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
-	old := executionDrainTimeout
-	executionDrainTimeout = 50 * time.Millisecond
-	defer func() { executionDrainTimeout = old }()
-
 	var sent sentByExecution
-	start := time.Now()
-	d.finishExecution("run-1", false, func() bool { return false }, make(chan struct{}), noStats, sent.sendEvent, sent.sendError)
-	assert.Less(t, time.Since(start), time.Second)
-	assert.Equal(t, []string{"complete"}, sent.events)
-
-	// The terminal event forwarded while it waited counts.
-	sent = sentByExecution{}
 	done := make(chan struct{})
-	completed := false
-	go func() { time.Sleep(10 * time.Millisecond); completed = true; close(done) }()
-	d.finishExecution("run-1", false, func() bool { return completed }, done, noStats, sent.sendEvent, sent.sendError)
+	var completed atomic.Bool
+	finished := make(chan struct{})
+	go func() {
+		d.finishExecution("run-1", false, completed.Load, done, noStats, sent.sendEvent, sent.sendError)
+		close(finished)
+	}()
+	select {
+	case <-finished:
+		t.Fatal("it must not report the end while events are still being forwarded")
+	case <-time.After(100 * time.Millisecond):
+	}
+	completed.Store(true)
+	close(done)
+	<-finished
 	assert.Empty(t, sent.events)
 }

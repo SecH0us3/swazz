@@ -39,8 +39,8 @@ describe('scan failure queries', () => {
     expect(ended).toEqual([id]);
     const row = await env.DB.prepare('SELECT status, failure_reason FROM scans WHERE id = ?').bind(id).first<any>();
     expect(row.status).toBe('failed');
-    expect(row.failure_reason).toBe('could not connect to https://…@mcp.example/sse?…');
-    expect((await repo.getFailureReasons([id])).get(id)).toBe('could not connect to https://…@mcp.example/sse?…');
+    expect(row.failure_reason).toBe('could not connect to https://…@mcp.example/…?…');
+    expect((await repo.getFailureReasons([id])).get(id)).toBe('could not connect to https://…@mcp.example/…?…');
 
     expect(await repo.markFailedIfActive(id, 'too late')).toBe(false);
     const stopped = await seedScan('queued', '-1 minutes');
@@ -86,6 +86,12 @@ describe('scan failure queries', () => {
     expect(reasons.get(a)).toBe('newest');
     expect(reasons.get(b)).toBe('from the runner event bus');
     expect(reasons.has(quiet)).toBe(false);
+
+    // Kept on the scan, so its events are searched once, not on every listing.
+    const stored = await env.DB.prepare('SELECT id, failure_reason FROM scans WHERE id IN (?, ?, ?)').bind(a, b, quiet).all<any>();
+    expect(Object.fromEntries(stored.results.map((r: any) => [r.id, r.failure_reason]))).toEqual({
+      [a]: 'newest', [b]: 'from the runner event bus', [quiet]: 'The scan failed without an error message.',
+    });
   });
 
   it('includes errors in the runner log, in order', async () => {
@@ -110,7 +116,7 @@ describe('scan failure queries', () => {
     const finished = await seedScan('completed', '-2 hours');
     const queued = await seedScan('queued', '-2 hours');
 
-    const found = await repo.getStalledActiveScans(10, 500);
+    const found = await repo.getStalledActiveScans(10, 500, [], 60);
     const ids = found.map(s => s.id);
     expect(ids).toEqual(expect.arrayContaining([idleDispatched, idlePaused, oldButReported]));
     for (const id of [recentlyActive, justCreated, finished, queued]) expect(ids).not.toContain(id);
@@ -121,5 +127,49 @@ describe('scan failure queries', () => {
     expect(byId.get(oldButReported)!.idle_minutes).toBeGreaterThanOrEqual(29);
     expect(byId.get(oldButReported)!.idle_minutes).toBeLessThan(35);
     expect((await repo.getStalledActiveScans(10, 1)).length).toBe(1);
+  });
+
+  // A scan that waited an hour in the queue, or was paused for hours, has just been dispatched or
+  // resumed: it is not stalled, though its last event is old.
+  it('counts idle time from the latest status change too', async () => {
+    const repo = new ScansRepository(env);
+    const waited = await seedScan('queued', '-2 hours');
+    await repo.updateScanStatus(waited, 'dispatched');
+    const resumed = await seedScan('dispatched', '-3 hours');
+    await seedEvent(resumed, 'event', { type: 'progress' }, '-2 hours');
+    await repo.updateScanStatus(resumed, 'paused');
+    await repo.updateScanStatus(resumed, 'dispatched');
+    const ids = (await repo.getStalledActiveScans(10, 500, [], 60)).map(s => s.id);
+    expect(ids).not.toContain(waited);
+    expect(ids).not.toContain(resumed);
+  });
+
+  // Owned paused scans (paused on purpose, with a runner) used to fill the batch on every pass
+  // and keep the orphaned scans from ever being looked at.
+  it('keeps scans a runner owns out of the orphaned batch, and lists owned ones only once silent long enough', async () => {
+    const repo = new ScansRepository(env);
+    const ownedPaused = await seedScan('paused', '-5 hours');
+    const ownedSilent = await seedScan('dispatched', '-2 hours');
+    const ownedRecent = await seedScan('dispatched', '-30 minutes');
+    const orphan = await seedScan('dispatched', '-20 minutes');
+    const owned = [ownedPaused, ownedSilent, ownedRecent];
+
+    const found = await repo.getStalledActiveScans(10, 500, owned, 60);
+    const ids = found.map(s => s.id);
+    expect(ids).toContain(orphan);
+    expect(ids).toContain(ownedSilent);
+    expect(ids).not.toContain(ownedPaused);
+    expect(ids).not.toContain(ownedRecent);
+    // However small the batch, no owned scan takes an orphaned scan's place in it.
+    const [firstOrphaned] = await repo.getStalledActiveScans(10, 1, owned, 60);
+    expect(owned).not.toContain(firstOrphaned.id);
+  });
+
+  it('gives scans that could not be queued a reason', async () => {
+    const repo = new ScansRepository(env);
+    const id = await seedScan('queued', '-1 minutes');
+    await repo.updateScanStatus(id, 'failed', undefined, undefined, 'The scan could not be queued, so it never started.');
+    expect((await repo.getFailureReasons([id])).get(id)).toBe('The scan could not be queued, so it never started.');
+    expect(await repo.hasActiveScans()).toBe(true);
   });
 });

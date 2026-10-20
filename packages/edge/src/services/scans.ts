@@ -12,7 +12,7 @@ import { ulid } from 'ulidx';
 import { isValidRunId, serializeScanConfig, writeScanConfig } from './scanConfigStore';
 
 import { WorkersAIService, type FindingAnalysisResult } from './ai';
-import { runnerErrorText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
+import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE, SCAN_NOT_QUEUED } from '../utils/runnerMessages';
 
 export interface TriageUpdatePayload {
   finding_id: string;
@@ -62,9 +62,17 @@ export class ScansService implements IScansService {
   /** Gives each failed scan its failure_reason: the last error it reported, for the user. */
   private async attachFailureReasons(scans: any[]): Promise<void> {
     const failed = scans.filter(s => s && s.status === 'failed');
-    if (failed.length === 0) return;
-    const reasons = await this.scansRepo.getFailureReasons(failed.map(s => s.id));
+    // The scan row carries it (cleaned up once more, as runner text); only scans that failed
+    // before it was kept need looking up.
+    const lacking: any[] = [];
     for (const scan of failed) {
+      const stored = sanitizeRunnerText(scan.failure_reason);
+      if (stored) scan.failure_reason = stored;
+      else lacking.push(scan);
+    }
+    if (lacking.length === 0) return;
+    const reasons = await this.scansRepo.getFailureReasons(lacking.map(s => s.id));
+    for (const scan of lacking) {
       scan.failure_reason = reasons.get(scan.id) ?? null;
     }
   }
@@ -167,7 +175,7 @@ export class ScansService implements IScansService {
     } catch (err: any) {
       console.error("Failed to process scan config or queue scan in /api/scans:", err);
       try {
-        await this.scansRepo.updateScanStatus(id, 'failed');
+        await this.scansRepo.updateScanStatus(id, 'failed', undefined, undefined, SCAN_NOT_QUEUED);
       } catch (statusErr) {
         console.error("Failed to mark scan as failed after R2/queue error in /api/scans:", statusErr);
       }

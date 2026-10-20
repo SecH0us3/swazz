@@ -9,6 +9,7 @@ import { IRbacRepository } from '../repositories/rbac';
 import { hashApiKey } from '../utils/auth';
 import { ScansRepository } from '../repositories/scans';
 import { isValidRunId, serializeScanConfig, writeScanConfig } from './scanConfigStore';
+import { SCAN_NOT_QUEUED } from '../utils/runnerMessages';
 
 export interface IRunnersService {
   connect(
@@ -295,7 +296,7 @@ export class RunnersService implements IRunnersService {
       console.error("Failed to process scan config or queue run in /api/runs:", err);
       try {
         const scansRepo = new ScansRepository(this.env);
-        await scansRepo.updateScanStatus(runId, 'failed');
+        await scansRepo.updateScanStatus(runId, 'failed', undefined, undefined, SCAN_NOT_QUEUED);
       } catch (statusErr) {
         console.error("Failed to mark scan as failed after R2/queue error in /api/runs:", statusErr);
       }

@@ -308,6 +308,8 @@ Swazz is an advanced, high-performance Smart API Fuzzer designed to identify cra
 /** Ends scans whose runner went away for good (coordinator/watchdog.ts). */
 async function runStalledScanWatchdog(env: Env, ctx: any): Promise<void> {
   try {
+    // Without active scans there is nothing to watch: leave the coordinator asleep.
+    if (!(await new ScansRepository(env).hasActiveScans())) return;
     const stub = env.COORDINATOR_DO.get(env.COORDINATOR_DO.idFromName('global-coordinator'));
     const res = await stub.fetch(new Request('http://do/watchdog', { method: 'POST' }));
     if (!res.ok) logError({ env, executionCtx: ctx }, 'Watchdog', `Stalled scan watchdog failed with status ${res.status}`);

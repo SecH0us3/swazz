@@ -116,9 +116,21 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	return ctx, nil
 }
 
+// RunPanicMessage is what the user is told when the run panicked: no internals.
+const RunPanicMessage = "The runner hit an internal error and stopped the scan. Start it again; if this keeps happening, update the runner or report the issue."
+
 // finaliseRun is deferred in Start() to cancel the run context, drain stats,
 // update the lifecycle flag, and broadcast the completion event.
 func (r *Runner) finaliseRun() {
+	r.finalise(false)
+}
+
+// finaliseRunAfterPanic finalises a run that panicked: it ends with an error, not "complete".
+func (r *Runner) finaliseRunAfterPanic() {
+	r.finalise(true)
+}
+
+func (r *Runner) finalise(panicked bool) {
 	r.lifecycle.mu.Lock()
 	if r.lifecycle.cancel != nil {
 		r.lifecycle.cancel()
@@ -137,8 +149,12 @@ func (r *Runner) finaliseRun() {
 	final.Progress.CurrentProfile = ""
 	r.latestStats.Store(&final)
 	r.logSuppressedSummary()
-	r.Broadcast(Event{Type: EventComplete, Data: final})
-	r.logCompletionSummary(final)
+	if panicked {
+		r.Broadcast(Event{Type: EventError, Data: RunPanicMessage})
+	} else {
+		r.Broadcast(Event{Type: EventComplete, Data: final})
+		r.logCompletionSummary(final)
+	}
 
 	if r.mcpClient != nil {
 		_ = r.mcpClient.Close()
@@ -328,13 +344,9 @@ func (r *Runner) prepareMCP(ctx context.Context) error {
 	return nil
 }
 
-// isMCPEndpoint reports whether the endpoint is served by the MCP server.
+// isMCPEndpoint reports whether the endpoint is served by the MCP server (not WebMCP).
 func isMCPEndpoint(ep swagger.EndpointConfig) bool {
-	switch ep.Method {
-	case "CALL", "MCP", "READ", "PROMPT":
-		return true
-	}
-	return strings.HasPrefix(ep.Path, "mcp://")
+	return swagger.IsMCPServerEndpoint(ep.Method, ep.Path)
 }
 
 // withoutMCPEndpoints returns the endpoints not served by the MCP server, and how many were.
@@ -369,8 +381,8 @@ func (r *Runner) logScanTargets() {
 // urlInText finds URLs inside free text (error messages).
 var urlInText = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
 
-// redactURLs keeps each URL in text down to scheme, host and path: userinfo, query and fragment
-// may carry credentials and are replaced by "…".
+// redactURLs keeps each URL in text down to scheme and host: userinfo, path, query and fragment
+// may carry credentials (hosted MCP servers often put the key in the path) and become "…".
 func redactURLs(text string) string {
 	return urlInText.ReplaceAllStringFunc(text, func(raw string) string {
 		u, err := url.Parse(raw)
@@ -381,7 +393,10 @@ func redactURLs(text string) string {
 		if u.User != nil {
 			out += "…@"
 		}
-		out += u.Host + u.EscapedPath()
+		out += u.Host
+		if p := u.EscapedPath(); p != "" && p != "/" {
+			out += "/…"
+		}
 		if u.RawQuery != "" || u.ForceQuery {
 			out += "?…"
 		}

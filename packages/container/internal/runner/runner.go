@@ -257,6 +257,9 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 	return r
 }
 
+// afterRunInitHook runs in Start once the run is initialised; tests only (nil otherwise).
+var afterRunInitHook func(*Runner)
+
 // Start begins the fuzzing run. It blocks until the run completes or is stopped.
 // Returns an error only when a run is already in progress.
 func (r *Runner) Start(ctx context.Context) error {
@@ -265,7 +268,18 @@ func (r *Runner) Start(ctx context.Context) error {
 		return err
 	}
 
-	defer r.finaliseRun()
+	// A panic must not be reported as a completed scan: finaliseRun would broadcast "complete"
+	// while the panic unwinds. It reports an error instead, then the panic goes on.
+	defer func() {
+		if p := recover(); p != nil {
+			r.finaliseRunAfterPanic()
+			panic(p)
+		}
+		r.finaliseRun()
+	}()
+	if afterRunInitHook != nil {
+		afterRunInitHook(r)
+	}
 
 	if r.config.Settings.MaxScanDurationMin > 0 {
 		timerCtx, cancelTimer := context.WithCancel(runCtx)

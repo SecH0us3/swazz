@@ -229,7 +229,7 @@ describe('RunnersService Unit Tests', () => {
     expect(thrownError.message).toBe('Failed to queue scan|500');
     expect(thrownError.message).not.toContain('R2 write error');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
-    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-r2-fail', 'failed');
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-r2-fail', 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
     expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
   });
 
@@ -245,7 +245,7 @@ describe('RunnersService Unit Tests', () => {
     expect(thrownError.message).toBe('Failed to queue scan|500');
     expect(thrownError.message).not.toContain('Queue unavailable');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
-    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-q-fail', 'failed');
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('run-q-fail', 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
   });
 
   test('queueRun should cover getUserPublicKey error log', async () => {

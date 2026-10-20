@@ -35,7 +35,7 @@ export class ConnectClientHandler implements RouteHandler {
             server.send(JSON.stringify({ type: 'complete', data: stats }));
           } else {
             // The dashboard connected after the scan failed: tell it why, as the live stream would.
-            const reasons = typeof scansRepo.getFailureReasons === 'function' ? await scansRepo.getFailureReasons([runId]) : new Map();
+            const reasons = await scansRepo.getFailureReasons([runId]);
             server.send(JSON.stringify({ type: 'error', data: { ...stats, message: reasons.get(runId) || UNKNOWN_FAILURE } }));
           }
         } catch (e) {

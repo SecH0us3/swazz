@@ -28,12 +28,14 @@ describe('runner messages shown to users', () => {
 
   // Go's HTTP errors quote the full URL; its userinfo or query may carry a token, and everyone with
   // access to the project sees a failed scan's reason.
-  it('keeps URLs to scheme, host and path', () => {
+  it('keeps URLs to scheme and host', () => {
     expect(sanitizeRunnerText('Get "https://user:pw@mcp.example.com:8443/sse?token=SECRET#x": dial tcp: refused'))
-      .toBe('Get "https://…@mcp.example.com:8443/sse?…#…": dial tcp: refused');
-    expect(sanitizeRunnerText('see http://h.example/a/b and wss://x.io/ws?k=v')).toBe('see http://h.example/a/b and wss://x.io/ws?…');
+      .toBe('Get "https://…@mcp.example.com:8443/…?…#…": dial tcp: refused');
+    expect(sanitizeRunnerText('see http://h.example/a/b and wss://x.io/?k=v')).toBe('see http://h.example/… and wss://x.io?…');
     expect(sanitizeRunnerText('bad http://[::1')).toBe('bad (URL)');
-    expect(runnerErrorText({ error: 'post https://h/p?api_key=abc failed' })).toBe('post https://h/p?… failed');
+    expect(runnerErrorText({ error: 'post https://h/p?api_key=abc failed' })).toBe('post https://h/…?… failed');
+    // Hosted MCP servers often put the key in the path.
+    expect(sanitizeRunnerText('Post "https://mcp.example.com/api/mcp/s/sk_live_SECRET/sse": 401')).toBe('Post "https://mcp.example.com/…": 401');
   });
 
   it('bounds the length', () => {

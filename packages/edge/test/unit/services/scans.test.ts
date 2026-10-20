@@ -220,7 +220,7 @@ describe('ScansService Unit Tests', () => {
       expect(thrownError.message).toBe('Failed to queue scan|500');
       expect(thrownError.message).not.toContain('R2 write error');
       expect(mockScansRepo.createScan).toHaveBeenCalled();
-      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
+      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
       expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
     });
 
@@ -241,7 +241,7 @@ describe('ScansService Unit Tests', () => {
       expect(thrownError.message).toBe('Failed to queue scan|500');
       expect(thrownError.message).not.toContain('Queue send failed');
       expect(mockScansRepo.createScan).toHaveBeenCalled();
-      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
+      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
     });
   });
 
@@ -259,6 +259,13 @@ describe('ScansService Unit Tests', () => {
       mockScansRepo.getScans.mockResolvedValueOnce([{ id: 's1' }]);
       const res = await scansService.getScans('p1', 'u1');
       expect(res.scans).toEqual([{ id: 's1' }]);
+    });
+
+    it('takes the failure reason from the scan row when it has one', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce([{ id: 'kept', status: 'failed', failure_reason: 'Runner lost\nsecond line' }]);
+      const res = await scansService.getScans('p1', 'u1');
+      expect(res.scans[0].failure_reason).toBe('Runner lost second line');
+      expect(mockScansRepo.getFailureReasons).not.toHaveBeenCalled();
     });
 
     it('gives failed scans, and only those, their failure reason', async () => {
