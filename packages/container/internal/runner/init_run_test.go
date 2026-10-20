@@ -7,7 +7,9 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/swagger"
@@ -165,3 +167,138 @@ func TestMCPDiscovery_SelectiveDisabling(t *testing.T) {
 	assert.False(t, foundResource, "resource fuzzing is disabled, should not register config.json")
 	assert.True(t, foundPrompt, "prompt fuzzing is enabled, should register review")
 }
+
+// failingMCPClient fails to connect, or (listErr) connects and fails to list its tools.
+type failingMCPClient struct {
+	mockDiscoveryMCPClient
+	connectErr error
+	listErr    error
+	closed     bool
+}
+
+func (m *failingMCPClient) Connect(ctx context.Context) error { return m.connectErr }
+func (m *failingMCPClient) Close() error                      { m.closed = true; return nil }
+func (m *failingMCPClient) ListTools(ctx context.Context) ([]mcp.Tool, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	return m.tools, nil
+}
+
+// userLogs collects the runner_log events broadcast until the stream is quiet.
+func userLogs(t *testing.T, sub chan Event) []map[string]interface{} {
+	t.Helper()
+	var out []map[string]interface{}
+	for {
+		select {
+		case ev, ok := <-sub:
+			if !ok {
+				return out
+			}
+			if ev.Type == "runner_log" {
+				out = append(out, ev.Data.(map[string]interface{}))
+			}
+		case <-time.After(300 * time.Millisecond):
+			return out
+		}
+	}
+}
+
+func logsAt(logs []map[string]interface{}, level string) []string {
+	var out []string
+	for _, l := range logs {
+		if l["level"] == level {
+			out = append(out, l["message"].(string))
+		}
+	}
+	return out
+}
+
+// An MCP server left in the project settings that rejects the runner must not stop the rest of
+// the scan; the user is told why the MCP part was skipped and what to change.
+func TestInitRun_UnreachableMCPServerSkipsOnlyTheMCPPart(t *testing.T) {
+	for name, client := range map[string]*failingMCPClient{
+		"connect fails":    {connectErr: errors.New("SSE connection failed with status 401")},
+		"list tools fails": {listErr: errors.New("SSE connection failed with status 401")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := &swagger.Config{
+				MCPServer: &swagger.MCPServerConfig{Type: "sse", URL: "https://mcp.example.com/sse?token=secret"},
+				Endpoints: []swagger.EndpointConfig{
+					{Method: "GET", Path: "/users"},
+					{Method: "CALL", Path: "mcp://tool/configured"},
+				},
+			}
+			r := New(cfg, nil)
+			defer r.Close()
+			r.mcpClient = client
+			sub := r.Subscribe()
+
+			_, err := r.initRun(context.Background())
+			require.NoError(t, err)
+			defer r.finaliseRun()
+
+			assert.Nil(t, r.mcpClient)
+			assert.True(t, client.closed)
+			assert.Equal(t, []swagger.EndpointConfig{{Method: "GET", Path: "/users"}}, r.config.Endpoints)
+
+			logs := userLogs(t, sub)
+			warns := logsAt(logs, "warn")
+			require.Len(t, warns, 1)
+			assert.Contains(t, warns[0], "status 401")
+			assert.Contains(t, warns[0], "everything else is scanned as usual")
+			assert.Contains(t, warns[0], "Global Headers")
+			assert.Contains(t, logsAt(logs, "info"), "Scan targets: 1 API endpoint(s)")
+			for _, l := range logs {
+				assert.NotContains(t, l["message"], "secret", "the MCP URL may carry a token")
+			}
+		})
+	}
+}
+
+// With nothing but the MCP server to scan, the scan fails, and says why in the user's log.
+func TestInitRun_UnreachableMCPServerFailsAnMCPOnlyScan(t *testing.T) {
+	cfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{Type: "sse", URL: "https://mcp.example.com/sse"},
+	}
+	r := New(cfg, nil)
+	defer r.Close()
+	r.mcpClient = &failingMCPClient{connectErr: errors.New("SSE connection failed with status 401")}
+	sub := r.Subscribe()
+
+	_, err := r.initRun(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not connect to the MCP server")
+	assert.False(t, r.lifecycle.isRunning.Load())
+
+	errs := logsAt(userLogs(t, sub), "error")
+	require.Len(t, errs, 1)
+	assert.Contains(t, errs[0], "only target of this scan")
+}
+
+func TestInitRun_LogsWhatTheScanCovers(t *testing.T) {
+	mock := &mockDiscoveryMCPClient{tools: []mcp.Tool{{Name: "calc"}}}
+	cfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{Type: "http", URL: "https://user:pw@mcp.example.com/rpc"},
+		Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}, {Method: "POST", Path: "/b"}},
+		Settings:  swagger.Settings{EnableMCPMethodFuzzing: boolPtr(false)},
+	}
+	r := New(cfg, nil)
+	defer r.Close()
+	r.mcpClient = mock
+	sub := r.Subscribe()
+
+	_, err := r.initRun(context.Background())
+	require.NoError(t, err)
+	defer r.finaliseRun()
+	assert.Contains(t, logsAt(userLogs(t, sub), "info"), "Scan targets: 2 API endpoint(s), MCP server mcp.example.com with 1 endpoint(s)")
+}
+
+func TestMCPServerLabel_NeverShowsCredentialsOrCommands(t *testing.T) {
+	assert.Equal(t, "mcp.example.com:8443", mcpServerLabel(&swagger.MCPServerConfig{URL: "https://u:p@mcp.example.com:8443/x?key=1"}))
+	assert.Equal(t, "(local command)", mcpServerLabel(&swagger.MCPServerConfig{Type: "stdio", Command: "run", Args: []string{"--token=abc"}}))
+	assert.Equal(t, "(invalid URL)", mcpServerLabel(&swagger.MCPServerConfig{URL: "::not a url"}))
+	assert.Equal(t, "", mcpServerLabel(nil))
+}
+
+func boolPtr(b bool) *bool { return &b }

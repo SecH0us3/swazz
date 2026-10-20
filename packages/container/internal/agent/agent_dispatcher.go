@@ -14,10 +14,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"swazz-engine/internal/config"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"swazz-engine/internal/ai"
@@ -194,6 +196,35 @@ func (d *AgentDispatcher) sendErrorOf(runID, exec, errStr string) {
 	d.queueEvent(errorOut(runID, exec, errStr))
 }
 
+// executionDrainTimeout bounds how long finishExecution waits for a run's last events to be
+// forwarded before deciding whether the run reported its end.
+var executionDrainTimeout = 5 * time.Second
+
+// finishExecution makes sure the coordinator and the dashboard learn that an execution ended. A
+// run that neither completed nor reported an error (a panic, or a path that returned without a
+// word) would otherwise look like it was still running, forever. Messages are for the user: no
+// stack traces or internal detail, which stay in the agent's own log.
+func (d *AgentDispatcher) finishExecution(runID string, panicked bool, terminal func() bool, subDone <-chan struct{}, sendEvent func(string, interface{}), sendError func(string)) {
+	select {
+	case <-subDone:
+	case <-time.After(executionDrainTimeout):
+		logWarn("Run %s: its last events were not forwarded within %v", runID, executionDrainTimeout)
+	}
+	if terminal() {
+		return
+	}
+	msg := "The scan ended without reporting completion. Start it again; if this keeps happening, update the runner."
+	if panicked {
+		msg = "The runner hit an internal error and stopped the scan. Start it again; if this keeps happening, update the runner or report the issue."
+	}
+	sendEvent("runner_log", map[string]interface{}{
+		"level":     "error",
+		"message":   "[Runner] ❌ " + msg,
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+	sendError(msg)
+}
+
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.
 func (d *AgentDispatcher) Dispatch(ctx context.Context, wsMsg WSMessageIn) {
 	switch wsMsg.Type {
@@ -302,6 +333,19 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	// A new execution of the run, numbered from 1 under its own exec id. Its events carry that id
 	// from here on, so late events of an earlier execution still draining cannot pass as this one's.
 	exec := d.delivery.reset(dispatch.RunID)
+	// Every execution ends in a terminal event (complete or error) that the coordinator and the
+	// dashboard can see, however it ends; see finishExecution.
+	var terminal atomic.Bool
+	sendEvent := func(typ string, payload interface{}) {
+		if typ == "complete" || typ == "error" {
+			terminal.Store(true)
+		}
+		d.sendEventOf(dispatch.RunID, exec, typ, payload)
+	}
+	sendError := func(errStr string) {
+		terminal.Store(true)
+		d.sendErrorOf(dispatch.RunID, exec, errStr)
+	}
 
 	if dispatch.Config.LicenseKey != "" {
 		jobLic, licErr := license.LoadAndVerify(dispatch.Config.LicenseKey)
@@ -319,12 +363,12 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	if err != nil {
 		logError("Failed to build runner config: %v", err)
 		errMsg := fmt.Sprintf("[Runner] Cannot start scan: %v. Please import an OpenAPI/Swagger schema, capture endpoints, or set a target URL with spec.", err)
-		d.sendEventOf(dispatch.RunID, exec, "runner_log", map[string]interface{}{
+		sendEvent("runner_log", map[string]interface{}{
 			"level":     "ERROR",
 			"message":   errMsg,
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
-		d.sendErrorOf(dispatch.RunID, exec, err.Error())
+		sendError(err.Error())
 		return
 	}
 	runCfg.RunID = dispatch.RunID
@@ -369,8 +413,17 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 
 	// Sub to events
 	sub := r.Subscribe()
+	subDone := make(chan struct{})
 	go func(runID string) {
+		defer close(subDone)
 		defer r.Unsubscribe(sub)
+		defer func() {
+			// A broken event must not take the agent (and every other run on it) down; the run
+			// still ends with a terminal event (finishExecution).
+			if p := recover(); p != nil {
+				logError("Event forwarding for run %s panicked: %v\n%s", runID, p, debug.Stack())
+			}
+		}()
 		for ev := range sub {
 			if ev.Type == "result" {
 				var res *swagger.FuzzResult
@@ -409,7 +462,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					msg = string(statsJSON)
 					logInfo("[Fuzz Progress] Run %s: %s", runID, msg)
 				}
-				d.sendEventOf(runID, exec, "runner_log", map[string]interface{}{
+				sendEvent("runner_log", map[string]interface{}{
 					"level":     "info",
 					"message":   msg,
 					"timestamp": time.Now().Format(time.RFC3339),
@@ -426,26 +479,37 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					msg = string(statsJSON)
 					logInfo("[Fuzz Complete] Run %s: %s", runID, msg)
 				}
-				d.sendEventOf(runID, exec, "runner_log", map[string]interface{}{
-					"level":     "warning",
+				sendEvent("runner_log", map[string]interface{}{
+					"level":     "info",
 					"message":   msg,
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
 			} else if ev.Type == "error" {
 				logError("[Fuzz Error] Run %s: %v", runID, ev.Data)
-				d.sendEventOf(runID, exec, "runner_log", map[string]interface{}{
+				sendEvent("runner_log", map[string]interface{}{
 					"level":     "error",
 					"message":   fmt.Sprintf("%v", ev.Data),
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
 			}
-			d.sendEventOf(runID, exec, ev.Type, ev.Data)
+			sendEvent(ev.Type, ev.Data)
 		}
 	}(dispatch.RunID)
 
 	go func(runID string) {
+		defer func() {
+			panicked := recover()
+			if panicked != nil {
+				logError("Runner for %s panicked: %v\n%s", runID, panicked, debug.Stack())
+				r.Close()
+			}
+			d.finishExecution(runID, panicked != nil, terminal.Load, subDone, sendEvent, sendError)
+			d.activeRunnersMu.Lock()
+			delete(d.activeRunners, runID)
+			d.activeRunnersMu.Unlock()
+		}()
 		sendRunnerLog := func(level, msg string) {
-			d.sendEventOf(runID, exec, "runner_log", map[string]interface{}{
+			sendEvent("runner_log", map[string]interface{}{
 				"level":     level,
 				"message":   msg,
 				"timestamp": time.Now().Format(time.RFC3339),
@@ -453,7 +517,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		}
 
 		logInfo("Starting fuzz runner for runID: %s", runID)
-		sendRunnerLog("warning", fmt.Sprintf("Starting fuzz runner for runID: %s", runID))
+		sendRunnerLog("info", fmt.Sprintf("Starting fuzz runner for runID: %s", runID))
 		if r.Config() != nil && r.Config().Settings.UseLLMPrepass {
 			msg := fmt.Sprintf("[AI] 🤖 Pre-Scan LLM Batching enabled (Gateway: %s)", r.Config().Settings.AIGatewayURL)
 			logInfo("%s", msg)
@@ -467,7 +531,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		IncrementGlobalScanTelemetry(tURL, d.disableTelemetry)
 		if err := r.Start(ctx); err != nil {
 			logError("Runner failed: %v", err)
-			d.sendErrorOf(runID, exec, err.Error())
+			sendError(err.Error())
 		}
 
 		// Post-scan Smart Triage (LLM False Positive Classifier)
@@ -518,10 +582,6 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 
 		r.Close()
 		logInfo("Runner for %s finished", runID)
-
-		d.activeRunnersMu.Lock()
-		delete(d.activeRunners, runID)
-		d.activeRunnersMu.Unlock()
 	}(dispatch.RunID)
 }
 

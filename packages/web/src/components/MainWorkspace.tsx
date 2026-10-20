@@ -30,6 +30,7 @@ import { useFeatureGate } from '../hooks/useFeatureGate.js';
 import { FEATURE_REPORT_EXPORTS, FEATURE_CLOUD_HISTORY } from '@swazz/shared';
 import { sanitizeTargetUrl } from '../utils/url.js';
 import { useToast } from '../hooks/useToast.js';
+import { ScanIssueBanner } from './ScanIssueBanner.js';
 
 // Helper to compute deduplicated count for Grouped Errors
 function getGroupedFindingsCount(rows: ResultSummary[]): number {
@@ -326,6 +327,7 @@ export function MainWorkspace({
 
     return (
         <div className="workspace-container">
+            <ScanIssueBanner />
             {loadedRunId && activeTab !== 'settings' && (
                 <div className="workspace-history-banner">
                     <div className="workspace-history-banner-info">

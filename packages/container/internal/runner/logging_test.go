@@ -315,3 +315,52 @@ func TestTruncateLog(t *testing.T) {
 	assert.True(t, strings.HasSuffix(truncated, "... [TRUNCATED]"))
 	assert.Equal(t, 32768+len("... [TRUNCATED]"), len(truncated))
 }
+
+// A warning that repeats on every request reaches the user's log a bounded number of times, and
+// the user is told how many repeats were left out.
+func TestUserLog_RepeatsAreBoundedAndSummarized(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+	defer r.Close()
+	sub := r.Subscribe()
+
+	for i := 0; i < maxUserLogRepeats+3; i++ {
+		r.logError("Automatic re-authentication failed: %v", i)
+	}
+	r.logWarn("Something else: %s", "x")
+	r.logSuppressedSummary()
+
+	var errs, warns []string
+	deadline := time.After(time.Second)
+collect:
+	for {
+		select {
+		case ev := <-sub:
+			if ev.Type != "runner_log" {
+				continue
+			}
+			d := ev.Data.(map[string]interface{})
+			if d["level"] == "error" {
+				errs = append(errs, d["message"].(string))
+			} else {
+				warns = append(warns, d["message"].(string))
+			}
+		case <-time.After(200 * time.Millisecond):
+			break collect
+		case <-deadline:
+			break collect
+		}
+	}
+	require.Len(t, errs, maxUserLogRepeats+1)
+	assert.Equal(t, "Automatic re-authentication failed: 0", errs[0])
+	assert.Equal(t, "[Runner] 3 more message(s) like this one were left out: Automatic re-authentication failed: …", errs[maxUserLogRepeats])
+	assert.Equal(t, []string{"Something else: x"}, warns)
+
+	// A new run starts counting again.
+	r.userLogRepeats.reset()
+	assert.Empty(t, r.userLogRepeats.suppressed())
+}
+
+func TestFormatTemplate(t *testing.T) {
+	assert.Equal(t, "a … b … 100% …", formatTemplate("a %v b %-5.2f 100%% %s"))
+	assert.Equal(t, "trailing …", formatTemplate("trailing %"))
+}

@@ -10,6 +10,7 @@ import { sendScanCompletedDigestEmail } from '../services/email';
 import { WorkersAIService } from '../services/ai';
 import { logError } from '../../../common/logging/logger';
 import { eventIdFor, isValidExec } from '../coordinator/delivery';
+import { runnerErrorText } from '../utils/runnerMessages';
 
 export interface IScansRepository {
   createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null, triggerType?: string): Promise<void>;
@@ -35,6 +36,8 @@ export interface IScansRepository {
   updateScanReportUrl(scanId: string, reportUrl: string): Promise<void>;
   
   getRunnerLogs(scanId: string): Promise<any[]>;
+  getFailureReasons(scanIds: string[]): Promise<Map<string, string>>;
+  getStalledActiveScans(idleMinutes: number, limit: number): Promise<string[]>;
   getFindings(scanId: string): Promise<any[]>;
   getFindingDetails(findingId: string): Promise<any | null>;
   updateFinding(findingId: string, fields: Record<string, any>, ctx?: any): Promise<any>;
@@ -100,6 +103,9 @@ export function sanitizeRunnerFinding(raw: unknown): { id: string; ruleId: strin
     evidence,
   };
 }
+
+// A stored runner error: the runner's error message, or an event of type "error".
+const ERROR_EVENT_SQL = "(type = 'error' OR (type = 'event' AND json_extract(payload, '$.type') = 'error'))";
 
 // D1 allows at most 100 bound parameters per statement.
 const EVENT_ID_LOOKUP_CHUNK = 90;
@@ -212,11 +218,45 @@ export class ScansRepository extends BaseService implements IScansRepository {
       .run();
   }
 
+  /** The scan's runner log: runner_log events and errors, oldest first. */
   async getRunnerLogs(scanId: string): Promise<any[]> {
     const { results } = await this.db.prepare(
-      "SELECT * FROM scan_events WHERE scan_id = ? AND type = 'event' AND json_extract(payload, '$.type') = 'runner_log' ORDER BY created_at ASC"
+      `SELECT * FROM scan_events WHERE scan_id = ? AND (${ERROR_EVENT_SQL} OR (type = 'event' AND json_extract(payload, '$.type') = 'runner_log')) ORDER BY created_at ASC`
     ).bind(scanId).all();
     return results || [];
+  }
+
+  /** Each scan's most recent error, as user-facing text (see runnerErrorText). */
+  async getFailureReasons(scanIds: string[]): Promise<Map<string, string>> {
+    const reasons = new Map<string, string>();
+    const ids = Array.from(new Set(scanIds));
+    for (let i = 0; i < ids.length; i += EVENT_ID_LOOKUP_CHUNK) {
+      const chunk = ids.slice(i, i + EVENT_ID_LOOKUP_CHUNK);
+      const { results } = await this.db.prepare(
+        `SELECT scan_id, payload FROM scan_events WHERE scan_id IN (${chunk.map(() => '?').join(',')}) AND ${ERROR_EVENT_SQL} ORDER BY created_at DESC`
+      ).bind(...chunk).all<{ scan_id: string; payload: string }>();
+      for (const row of results ?? []) {
+        if (reasons.has(row.scan_id)) continue;
+        const text = runnerErrorText(row.payload);
+        if (text) reasons.set(row.scan_id, text);
+      }
+    }
+    return reasons;
+  }
+
+  /**
+   * Dispatched or paused scans with no event for idleMinutes (counted from creation when they
+   * have none): candidates for the stalled scan watchdog, which still checks that no connected
+   * runner owns them.
+   */
+  async getStalledActiveScans(idleMinutes: number, limit: number): Promise<string[]> {
+    const { results } = await this.db.prepare(
+      `SELECT s.id FROM scans s
+       WHERE s.status IN ('dispatched', 'paused')
+         AND COALESCE((SELECT MAX(e.created_at) FROM scan_events e WHERE e.scan_id = s.id), s.created_at) < datetime('now', ?)
+       ORDER BY s.created_at ASC LIMIT ?`
+    ).bind(`-${Math.max(1, Math.floor(idleMinutes))} minutes`, limit).all<{ id: string }>();
+    return (results ?? []).map(r => r.id);
   }
 
   private mapFindingRow(row: any): any {

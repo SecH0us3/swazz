@@ -115,7 +115,9 @@ type Runner struct {
 
 	lifecycle runnerLifecycle
 	progress  runnerProgress
-	pause     runnerPause
+	// Repeats of the same warning or error in one run's user-facing log (see logging.go).
+	userLogRepeats logRepeats
+	pause          runnerPause
 
 	// Stats aggregation — channel-based, owned by statsAggregator goroutine.
 	statsChan      chan statsMsg

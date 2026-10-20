@@ -305,6 +305,17 @@ Swazz is an advanced, high-performance Smart API Fuzzer designed to identify cra
 
   return c.json({ service: 'swazz-edge', status: 'ok' });
 });
+/** Ends scans whose runner went away for good (coordinator/watchdog.ts). */
+async function runStalledScanWatchdog(env: Env, ctx: any): Promise<void> {
+  try {
+    const stub = env.COORDINATOR_DO.get(env.COORDINATOR_DO.idFromName('global-coordinator'));
+    const res = await stub.fetch(new Request('http://do/watchdog', { method: 'POST' }));
+    if (!res.ok) logError({ env, executionCtx: ctx }, 'Watchdog', `Stalled scan watchdog failed with status ${res.status}`);
+  } catch (err) {
+    logError({ env, executionCtx: ctx }, 'Watchdog', 'Stalled scan watchdog failed', { error: err });
+  }
+}
+
 app.get('/health', (c) => c.json({ service: 'swazz-edge', status: 'ok' }));
 
 app.all('/api/oob/:runId/:uuid', async (c) => {
@@ -519,6 +530,7 @@ export default {
     ctx.waitUntil(cleanupScheduledDeletions(env, ctx));
     ctx.waitUntil(cleanupSecurityTables(getDB(env, undefined, ctx), env, ctx));
     ctx.waitUntil(handleScheduledScans(env));
+    ctx.waitUntil(runStalledScanWatchdog(env, ctx));
   },
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
     if (batch.queue === 'swazz-scan-queue') {

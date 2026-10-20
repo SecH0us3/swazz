@@ -12,6 +12,7 @@ import { ulid } from 'ulidx';
 import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, markScanFinished } from './utils';
 import { resumeRuns } from './resume';
 import { logError, logWarn } from '../../../common/logging/logger';
+import { runnerErrorText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
 
 export class WebSocketHandler {
   constructor(
@@ -291,7 +292,11 @@ export class WebSocketHandler {
 
           const clientSet = this.stateManager.clients.get(runId);
           if (clientSet) {
-            const outMsg = JSON.stringify(msg.payload);
+            // A runner error ({"error": ...}) has no type of its own; the dashboard needs one to
+            // end the scan and show why (see utils/runnerMessages.ts).
+            const outMsg = msg.type === 'error'
+              ? JSON.stringify({ type: 'error', data: { message: runnerErrorText(msg.payload) || UNKNOWN_FAILURE } })
+              : JSON.stringify(msg.payload);
             for (const client of clientSet) {
               try {
                 client.send(outMsg);

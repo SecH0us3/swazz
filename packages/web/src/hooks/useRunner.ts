@@ -5,7 +5,9 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { RunStats, AnalysisFinding } from '../types.js';
-import { useAppStore } from '../store/appStore.js';
+import { useAppStore, type ScanIssue } from '../store/appStore.js';
+import { interpretRunMessage, fetchScanStatus, fetchRunnerWarnings } from '../services/runStream.js';
+import { hintForRunnerMessage } from '../utils/runnerErrorHints.js';
 
 const VALUE_LIMIT = 80;
 const RESPONSE_VALUE_LIMIT = 400;
@@ -128,9 +130,228 @@ export function toSummary(r: any): ResultSummary {
 
 const PROGRESS_THROTTLE_MS = 300;
 
+/** A new scan starts without the previous one's issue, warnings or stall. */
+const FRESH_RUN_STATE = { scanIssue: null, runWarnings: { count: 0, recent: [] as string[] }, runStalled: false };
+
+/** With nothing from the scan for this long, the dashboard says so and checks its status. */
+export const RUN_STALL_AFTER_MS = 90_000;
+/** How often a quiet scan's status is checked. */
+export const RUN_STATUS_CHECK_MS = 15_000;
+/** Reconnects of the live stream before the dashboard only polls the scan's status. */
+export const RUN_MAX_RECONNECTS = 5;
+const RECENT_WARNINGS = 5;
+
+export interface RunHandlers {
+    onResult: (rawResult: any) => void;
+    onComplete: (stats: RunStats) => void;
+    /** The scan failed; message is for the user. */
+    onError?: (message: string) => void;
+}
+
+function firstHint(messages: string[]) {
+    for (const m of messages) {
+        const hint = hintForRunnerMessage(m);
+        if (hint) return hint;
+    }
+    return null;
+}
+
+/** What the dashboard shows about a scan that failed. */
+export function failureIssue(message: string, warnings: string[]): ScanIssue {
+    return { level: 'error', title: 'The scan failed', details: [message], hint: firstHint([message, ...warnings]) };
+}
+
+/** What the dashboard shows about a scan that completed with warnings, if it did. */
+export function warningsIssue(count: number, recent: string[]): ScanIssue | null {
+    if (count === 0) return null;
+    return {
+        level: 'warning',
+        title: `The scan completed with ${count} warning${count === 1 ? '' : 's'}`,
+        details: recent,
+        hint: firstHint(recent),
+    };
+}
+
+/**
+ * Follows a scan's live stream until the scan ends, and makes sure the dashboard learns that it
+ * ended however it does: a complete or error event, the stream dropping (it checks the scan's
+ * status and reconnects), or the scan going quiet (it checks the status periodically). Returns a
+ * function that stops following.
+ */
+export function followRun(runId: string, proxyUrl: string, handlers: RunHandlers, wsRef: { current: WebSocket | null }): () => void {
+    let finished = false;
+    let ws: WebSocket | null = null;
+    let reconnects = 0;
+    let lastActivity = Date.now();
+    // Nothing received yet: the scan may have ended before the dashboard connected.
+    let receivedAny = false;
+    let lastProgressTime = 0;
+    let lastStats: RunStats | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const end = () => {
+        finished = true;
+        clearInterval(statusTimer);
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        if (wsRef.current === ws) wsRef.current = null;
+        ws?.close();
+        useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false, runStalled: false });
+    };
+
+    const fail = (message: string) => {
+        if (finished) return;
+        end();
+        useAppStore.setState({ scanIssue: failureIssue(message, useAppStore.getState().runWarnings.recent) });
+        handlers.onError?.(message);
+    };
+
+    const complete = (stats: RunStats, issue?: ScanIssue) => {
+        if (finished) return;
+        end();
+        const { count, recent } = useAppStore.getState().runWarnings;
+        useAppStore.setState({ stats, scanIssue: issue ?? warningsIssue(count, recent) });
+        handlers.onComplete(stats);
+        if (!issue) void includeStoredWarnings(count, useAppStore.getState().scanIssue);
+    };
+
+    // The stored runner log also has what the runner said before the dashboard connected. It
+    // replaces what was shown only if that is still on screen: not dismissed, no new scan since.
+    const includeStoredWarnings = async (liveCount: number, shown: ScanIssue | null) => {
+        const stored = await fetchRunnerWarnings(runId, proxyUrl, RECENT_WARNINGS);
+        if (!stored || stored.count <= liveCount) return;
+        const state = useAppStore.getState();
+        if (state.scanIssue !== shown || state.isRunning) return;
+        useAppStore.setState({ runWarnings: stored, scanIssue: warningsIssue(stored.count, stored.recent) });
+    };
+
+    /** Settles the scan from its status in the API; true if it has ended. */
+    const settleFromStatus = async (): Promise<boolean> => {
+        const status = await fetchScanStatus(runId, proxyUrl);
+        if (finished) return true;
+        if (status.state === 'failed') {
+            fail(status.reason);
+            return true;
+        }
+        if (status.state === 'completed') {
+            complete(lastStats ?? (useAppStore.getState().stats as RunStats), {
+                level: 'warning',
+                title: 'The live connection to this scan was lost before it finished',
+                details: ['The scan completed, but the dashboard may not have received all results. Open it from History to see them all.'],
+                hint: null,
+            });
+            return true;
+        }
+        return false;
+    };
+
+    const onMessage = (raw: string) => {
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            return;
+        }
+        lastActivity = Date.now();
+        receivedAny = true;
+        if (useAppStore.getState().runStalled) useAppStore.setState({ runStalled: false });
+        const event = interpretRunMessage(parsed);
+        switch (event.kind) {
+            case 'queued':
+                useAppStore.setState({ isQueued: true });
+                break;
+            case 'result':
+                useAppStore.setState({ isQueued: false });
+                handlers.onResult(event.data);
+                break;
+            case 'progress': {
+                lastStats = event.stats;
+                useAppStore.setState({ isQueued: false });
+                const now = Date.now();
+                if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
+                    lastProgressTime = now;
+                    useAppStore.setState({ stats: event.stats });
+                }
+                break;
+            }
+            case 'complete':
+                complete(event.stats);
+                break;
+            case 'error':
+                fail(event.message);
+                break;
+            case 'log':
+                if (event.level !== 'info') {
+                    const { count, recent } = useAppStore.getState().runWarnings;
+                    useAppStore.setState({ runWarnings: { count: count + 1, recent: [...recent, event.message].slice(-RECENT_WARNINGS) } });
+                }
+                break;
+        }
+    };
+
+    const connect = () => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const wsUrl = proxyUrl ? proxyUrl.replace(/^http/, 'ws') : `${protocol}//${host}`;
+        const wsToken = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+        const socket = new WebSocket(`${wsUrl}/api/runs/${runId}/events${wsToken ? `?token=${encodeURIComponent(wsToken)}` : ''}`);
+        ws = socket;
+        wsRef.current = socket;
+        socket.onmessage = (e) => onMessage(e.data);
+        socket.onopen = () => {
+            if (!receivedAny) void settleFromStatus();
+        };
+        socket.onerror = () => socket.close();
+        socket.onclose = () => {
+            if (finished || ws !== socket) return;
+            void onDrop();
+        };
+    };
+
+    // The stream dropped before the scan ended: it may have ended meanwhile, or keep running.
+    const onDrop = async () => {
+        if (wsRef.current === ws) wsRef.current = null;
+        if (await settleFromStatus()) return;
+        if (reconnects >= RUN_MAX_RECONNECTS) {
+            useAppStore.setState({ runStalled: true });
+            return;
+        }
+        reconnects++;
+        reconnectTimer = setTimeout(() => {
+            if (!finished) connect();
+        }, 1000 * reconnects);
+    };
+
+    const statusTimer = setInterval(() => {
+        if (finished) return;
+        const { isQueued, isPaused } = useAppStore.getState();
+        const quiet = Date.now() - lastActivity >= RUN_STALL_AFTER_MS;
+        // A queued or paused scan is quiet by design; it is still checked, without the warning.
+        if (quiet && !isQueued && !isPaused && !useAppStore.getState().runStalled) {
+            useAppStore.setState({ runStalled: true });
+        }
+        if (quiet || !receivedAny || !ws || ws.readyState === WebSocket.CLOSED) void settleFromStatus();
+    }, RUN_STATUS_CHECK_MS);
+
+    connect();
+    return () => {
+        if (finished) return;
+        finished = true;
+        clearInterval(statusTimer);
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        if (wsRef.current === ws) wsRef.current = null;
+        ws?.close();
+    };
+}
+
 export function useRunner(proxyUrl: string) {
     const wsRef = useRef<WebSocket | null>(null);
     const runIdRef = useRef<string | null>(null);
+    const stopFollowingRef = useRef<(() => void) | null>(null);
+
+    const follow = useCallback((runId: string, handlers: RunHandlers) => {
+        stopFollowingRef.current?.();
+        stopFollowingRef.current = followRun(runId, proxyUrl, handlers, wsRef);
+    }, [proxyUrl]);
 
     const sendRequest = useCallback(
         async (req: {
@@ -170,11 +391,12 @@ export function useRunner(proxyUrl: string) {
             config: any,
             onResult: (rawResult: any) => void,
             onComplete: (stats: RunStats) => void,
-            clientRunId?: string
+            clientRunId?: string,
+            onError?: (message: string) => void,
         ) => {
             if (useAppStore.getState().isRunning) return;
 
-            useAppStore.setState({ isRunning: true, isPaused: false, isQueued: false });
+            useAppStore.setState({ isRunning: true, isPaused: false, isQueued: false, ...FRESH_RUN_STATE });
 
             let runId = '';
             try {
@@ -222,54 +444,9 @@ export function useRunner(proxyUrl: string) {
                 throw err;
             }
 
-            let lastProgressTime = 0;
-
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host;
-            const wsUrl = proxyUrl ? proxyUrl.replace(/^http/, 'ws') : `${protocol}//${host}`;
-            const wsToken = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
-            const ws = new WebSocket(`${wsUrl}/api/runs/${runId}/events${wsToken ? `?token=${encodeURIComponent(wsToken)}` : ''}`);
-            wsRef.current = ws;
-
-            ws.onmessage = (e) => {
-                try {
-                    const msg = JSON.parse(e.data);
-                    
-                    if (msg.type === 'queued') {
-                        useAppStore.setState({ isQueued: true });
-                    } else if (msg.type === 'result') {
-                        useAppStore.setState({ isQueued: false });
-                        onResult(msg.data);
-                    } else if (msg.type === 'progress') {
-                        useAppStore.setState({ isQueued: false });
-                        const now = Date.now();
-                        if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
-                            lastProgressTime = now;
-                            useAppStore.setState({ stats: msg.data });
-                        }
-                    } else if (msg.type === 'complete') {
-                        const finalStats = msg.data;
-                        useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false, isQueued: false });
-                        ws.close();
-                        wsRef.current = null;
-                        onComplete(finalStats);
-                    } else if (msg.type === 'error') {
-                        useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false });
-                        ws.close();
-                        wsRef.current = null;
-                    }
-                } catch {
-                    // ignore parse errors
-                }
-            };
-
-            ws.onerror = () => {
-                ws.close();
-                wsRef.current = null;
-                useAppStore.setState({ isRunning: false, isQueued: false });
-            };
+            follow(runId, { onResult, onComplete, onError });
         },
-        [proxyUrl],
+        [proxyUrl, follow],
     );
 
     const stop = useCallback(async () => {
@@ -290,9 +467,11 @@ export function useRunner(proxyUrl: string) {
             console.error(err);
             throw err;
         } finally {
+            stopFollowingRef.current?.();
+            stopFollowingRef.current = null;
             wsRef.current?.close();
             wsRef.current = null;
-            useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false });
+            useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false, runStalled: false });
         }
     }, [proxyUrl]);
 
@@ -333,64 +512,22 @@ export function useRunner(proxyUrl: string) {
             runId: string,
             onResult: (rawResult: any) => void,
             onComplete: (stats: RunStats) => void,
+            onError?: (message: string) => void,
         ) => {
             if (useAppStore.getState().isRunning) return;
 
-            useAppStore.setState({ isRunning: true, isPaused: false, isQueued: false });
+            useAppStore.setState({ isRunning: true, isPaused: false, isQueued: false, ...FRESH_RUN_STATE });
             runIdRef.current = runId;
-
-            let lastProgressTime = 0;
-
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host;
-            const wsUrl = proxyUrl ? proxyUrl.replace(/^http/, 'ws') : `${protocol}//${host}`;
-            const wsToken = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
-            const ws = new WebSocket(`${wsUrl}/api/runs/${runId}/events${wsToken ? `?token=${encodeURIComponent(wsToken)}` : ''}`);
-            wsRef.current = ws;
-
-            ws.onmessage = (e) => {
-                try {
-                    const msg = JSON.parse(e.data);
-                    
-                    if (msg.type === 'queued') {
-                        useAppStore.setState({ isQueued: true });
-                    } else if (msg.type === 'result') {
-                        useAppStore.setState({ isQueued: false });
-                        onResult(msg.data);
-                    } else if (msg.type === 'progress') {
-                        useAppStore.setState({ isQueued: false });
-                        const now = Date.now();
-                        if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
-                            lastProgressTime = now;
-                            useAppStore.setState({ stats: msg.data });
-                        }
-                    } else if (msg.type === 'complete') {
-                        const finalStats = msg.data;
-                        useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false, isQueued: false });
-                        ws.close();
-                        wsRef.current = null;
-                        onComplete(finalStats);
-                    } else if (msg.type === 'error') {
-                        useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false });
-                        ws.close();
-                        wsRef.current = null;
-                    }
-                } catch {
-                    // ignore
-                }
-            };
-
-            ws.onerror = () => {
-                ws.close();
-                wsRef.current = null;
-                useAppStore.setState({ isRunning: false, isQueued: false });
-            };
+            follow(runId, { onResult, onComplete, onError });
         },
-        [proxyUrl]
+        [follow]
     );
 
     useEffect(() => {
-        return () => { wsRef.current?.close(); };
+        return () => {
+            stopFollowingRef.current?.();
+            wsRef.current?.close();
+        };
     }, []);
 
     return { start, stop, pause, resume, sendRequest, connectToExisting };

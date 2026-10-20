@@ -16,8 +16,8 @@ import { sanitizeTargetUrl, hasSupportedScheme } from '../utils/url.js';
 interface UseFuzzSessionProps {
     config: SwazzConfig;
     updateConfig: (updates: Partial<SwazzConfig>) => void;
-    start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, clientRunId?: string) => void;
-    connectToExisting: (runId: string, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void) => void;
+    start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, clientRunId?: string, onError?: (message: string) => void) => void;
+    connectToExisting: (runId: string, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, onError?: (message: string) => void) => void;
     saveRun: (runRecord: ScanRun, rows?: any[]) => void;
     getDb: () => IDBDatabase | null;
     showToast: (message: string, type: 'info' | 'success' | 'error') => void;
@@ -205,8 +205,15 @@ export function useFuzzSession({
             showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
         };
 
+        // The reason stays with the run, so History shows why it failed (see ScanIssueBanner).
+        const onError = (message: string) => {
+            saveRun({ ...runRec, completedAt: Date.now(), stats: useAppStore.getState().stats as RunStats, failureReason: message });
+            useAppStore.setState({ liveCount });
+            showToast('Scan failed — see the details above the results', 'error');
+        };
+
         try {
-            await start({ ...finalConfig, projectId: activeProject?.id }, onResult, onComplete, runId);
+            await start({ ...finalConfig, projectId: activeProject?.id }, onResult, onComplete, runId, onError);
             showToast(
                 `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
                 'info',
@@ -276,8 +283,14 @@ export function useFuzzSession({
                 showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
             };
 
+            const onError = (message: string) => {
+                saveRun({ ...runRec, completedAt: Date.now(), stats: useAppStore.getState().stats as RunStats, failureReason: message });
+                useAppStore.setState({ liveCount });
+                showToast('Scan failed — see the details above the results', 'error');
+            };
+
             try {
-                await connectToExisting(runId, onResult, onComplete);
+                await connectToExisting(runId, onResult, onComplete, onError);
             } catch (err: any) {
                 showToast(`Failed to connect to active scan: ${err.message}`, 'error');
                 useAppStore.setState({ liveRunId: null });

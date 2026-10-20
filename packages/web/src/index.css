@@ -438,6 +438,21 @@ body.resizing .sidebar-resizer {
   color: rgb(249,115,22);
 }
 
+/* The running scan has sent nothing for a while; the dashboard is checking its status. */
+.header-status.stalled {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.stalled-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 2px solid var(--color-warning);
+  flex-shrink: 0;
+}
+
 /* ─── Sidebar ────────────────────────────────────────────── */
 
 .sidebar {
@@ -11825,4 +11840,16 @@ kbd {
 [data-theme="light"] .audit-diff-val--new,
 [data-theme="light"] .webhook-headers-badge {
   color: var(--color-success);
+}
+
+/* Why a scan in the history failed (HistoryPage). */
+.history-failure-reason {
+  margin-top: 4px;
+  max-width: 360px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-error);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

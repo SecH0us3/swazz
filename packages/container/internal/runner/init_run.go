@@ -8,6 +8,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -75,193 +76,31 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 
 	oob.GlobalStore.Clear()
 	sstistore.GlobalStore.Clear()
+	r.userLogRepeats.reset()
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	r.lifecycle.cancel = cancel
 
-	// Connect to MCP Server if configured
+	// Connect to the MCP server if configured. An unreachable MCP server costs only its own part
+	// of the scan: the rest is scanned as usual, with a warning in the runner log saying why the
+	// MCP part was skipped and what to change. Only a scan with nothing else to scan fails.
 	if r.mcpClient != nil {
 		logger.Info("[Runner] Connecting to MCP Server...")
-		if err := r.mcpClient.Connect(ctx); err != nil {
-			logger.Error("[Runner] Failed to connect to MCP server: %v", err)
-			cancel()
-			r.lifecycle.isRunning.Store(false)
-			return nil, fmt.Errorf("failed to connect to MCP server: %w", err)
-		}
-
-		hasAnyMcpInConfig := false
-		for _, ep := range r.config.Endpoints {
-			if ep.Method == "CALL" || ep.Method == "MCP" || strings.HasPrefix(ep.Path, "mcp://") {
-				hasAnyMcpInConfig = true
-				break
-			}
-		}
-
-		if r.config.Settings.MCPFuzzToolsEnabled() {
-			logger.Info("[Runner] Listing MCP Tools...")
-			tools, err := r.mcpClient.ListTools(ctx)
-			if err != nil {
-				logger.Error("[Runner] Failed to list MCP tools: %v", err)
-				_ = r.mcpClient.Close()
+		if err := r.prepareMCP(ctx); err != nil {
+			_ = r.mcpClient.Close()
+			r.mcpClient = nil
+			kept, skipped := withoutMCPEndpoints(r.config.Endpoints)
+			if len(kept) == 0 {
+				r.logError("[MCP] ❌ %v. The MCP server is the only target of this scan, so the scan cannot run. %s", err, mcpFixHint)
 				cancel()
 				r.lifecycle.isRunning.Store(false)
-				return nil, fmt.Errorf("failed to list MCP tools: %w", err)
+				return nil, err
 			}
-
-			logger.Info("[Runner] Found %d MCP Tools", len(tools))
-			var skipped []string
-			for _, tool := range tools {
-				toolPath := "mcp://tool/" + tool.Name
-
-				// Check if this tool is already in r.config.Endpoints (either with mcp://tool/ prefix or raw name)
-				foundIndex := -1
-				for i, ep := range r.config.Endpoints {
-					if ep.Path == toolPath || ep.Path == tool.Name {
-						foundIndex = i
-						break
-					}
-				}
-
-				if foundIndex != -1 {
-					logger.Info("[Runner] Upgrading MCP tool in-place: %s", tool.Name)
-					r.config.Endpoints[foundIndex].Path = toolPath
-					r.config.Endpoints[foundIndex].Method = "CALL"
-					r.config.Endpoints[foundIndex].Schema = tool.InputSchema
-					r.config.Endpoints[foundIndex].ContentType = "application/json"
-				} else if !hasAnyMcpInConfig {
-					logger.Info("[Runner] Mapping new MCP tool: %s", tool.Name)
-					ep := swagger.EndpointConfig{
-						Path:        toolPath,
-						Method:      "CALL",
-						Schema:      tool.InputSchema,
-						ContentType: "application/json",
-					}
-					r.config.Endpoints = append(r.config.Endpoints, ep)
-				} else {
-					// The config names its own MCP tools, so this one is deliberately
-					// out of scope. Say so by name — a silent skip looks identical to
-					// a tool that does not exist, which is how a typo in the allowlist
-					// turns into "the scan passed".
-					skipped = append(skipped, tool.Name)
-				}
-			}
-
-			if len(skipped) > 0 {
-				logger.Info("[Runner] Skipping %d MCP tool(s) not in the config allowlist: %s",
-					len(skipped), strings.Join(skipped, ", "))
-			}
-		}
-
-		if r.config.Settings.MCPFuzzResourcesEnabled() {
-			resources, resErr := r.mcpClient.ListResources(ctx)
-			if resErr == nil && len(resources) > 0 {
-				logger.Info("[Runner] Found %d MCP Resources", len(resources))
-				for _, res := range resources {
-					resPath := "mcp://resource/" + res.URI
-					if !hasAnyMcpInConfig {
-						r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
-							Path:   resPath,
-							Method: "READ",
-							Schema: swagger.SchemaProperty{
-								Type: "object",
-								Properties: map[string]*swagger.SchemaProperty{
-									"uri": {Type: "string"},
-								},
-							},
-							ContentType: "application/json",
-						})
-					}
-				}
-			}
-		}
-
-		if r.config.Settings.MCPFuzzPromptsEnabled() {
-			prompts, promptErr := r.mcpClient.ListPrompts(ctx)
-			if promptErr == nil && len(prompts) > 0 {
-				logger.Info("[Runner] Found %d MCP Prompts", len(prompts))
-				for _, pr := range prompts {
-					promptPath := "mcp://prompt/" + pr.Name
-					if !hasAnyMcpInConfig {
-						props := make(map[string]*swagger.SchemaProperty, len(pr.Arguments))
-						var required []string
-						for _, arg := range pr.Arguments {
-							props[arg.Name] = &swagger.SchemaProperty{
-								Type: "string",
-							}
-							if arg.Required {
-								required = append(required, arg.Name)
-							}
-						}
-						r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
-							Path:   promptPath,
-							Method: "PROMPT",
-							Schema: swagger.SchemaProperty{
-								Type:       "object",
-								Properties: props,
-								Required:   required,
-							},
-							ContentType: "application/json",
-						})
-					}
-				}
-			}
-		}
-
-		if r.config.Settings.MCPMethodFuzzingEnabled() {
-			if r.config.Settings.MCPFuzzToolsEnabled() {
-				logger.Info("[Runner] MCP Method & Tool Name Fuzzing enabled: appending %d dispatch probe endpoints", len(mcpMethodProbes))
-				for _, probe := range mcpMethodProbes {
-					toolPath := "mcp://tool/" + probe
-					r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
-						Path:        toolPath,
-						Method:      "CALL",
-						Schema:      swagger.SchemaProperty{Type: "object"},
-						ContentType: "application/json",
-					})
-				}
-			}
-			// Resource traversal and SSRF probes
-			if r.config.Settings.MCPFuzzResourcesEnabled() {
-				resourceProbes := []string{
-					"file:///etc/passwd",
-					"file:///etc/shadow",
-					"file:///C:/Windows/win.ini",
-					"http://169.254.169.254/latest/meta-data/",
-					"internal://secrets/config",
-				}
-				for _, rp := range resourceProbes {
-					r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
-						Path:   "mcp://resource/" + rp,
-						Method: "READ",
-						Schema: swagger.SchemaProperty{
-							Type: "object",
-							Properties: map[string]*swagger.SchemaProperty{
-								"uri": {Type: "string"},
-							},
-						},
-						ContentType: "application/json",
-					})
-				}
-			}
-			// Prompt injection and reflection probes
-			if r.config.Settings.MCPFuzzPromptsEnabled() {
-				promptProbes := []string{
-					"__proto__",
-					"__class__",
-					"system/prompt",
-					"debug/instructions",
-				}
-				for _, pp := range promptProbes {
-					r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
-						Path:        "mcp://prompt/" + pp,
-						Method:      "PROMPT",
-						Schema:      swagger.SchemaProperty{Type: "object"},
-						ContentType: "application/json",
-					})
-				}
-			}
+			r.config.Endpoints = kept
+			r.logWarn("[MCP] ⚠️ %v. The MCP part of the scan is skipped (%d MCP endpoint(s)); everything else is scanned as usual. %s", err, skipped, mcpFixHint)
 		}
 	}
+	r.logScanTargets()
 
 	go r.statsAggregator()
 
@@ -292,6 +131,7 @@ func (r *Runner) finaliseRun() {
 	final.Progress.CurrentEndpoint = ""
 	final.Progress.CurrentProfile = ""
 	r.latestStats.Store(&final)
+	r.logSuppressedSummary()
 	r.Broadcast(Event{Type: EventComplete, Data: final})
 	r.logCompletionSummary(final)
 
@@ -300,4 +140,238 @@ func (r *Runner) finaliseRun() {
 	}
 	sstistore.GlobalStore.Clear()
 	oob.GlobalStore.ClearSession(r.config.RunID)
+}
+
+// mcpFixHint tells the user what to change when the MCP server cannot be used.
+const mcpFixHint = "Check the MCP server URL and its credentials (Global Headers), or remove the MCP server in Project Settings if it should not be scanned."
+
+// prepareMCP connects to the MCP server and adds its tools, resources, prompts and probes to the
+// scan as configured. An error means the MCP part of the scan cannot run.
+func (r *Runner) prepareMCP(ctx context.Context) error {
+	if err := r.mcpClient.Connect(ctx); err != nil {
+		return fmt.Errorf("could not connect to the MCP server: %w", err)
+	}
+
+	hasAnyMcpInConfig := false
+	for _, ep := range r.config.Endpoints {
+		if ep.Method == "CALL" || ep.Method == "MCP" || strings.HasPrefix(ep.Path, "mcp://") {
+			hasAnyMcpInConfig = true
+			break
+		}
+	}
+
+	if r.config.Settings.MCPFuzzToolsEnabled() {
+		logger.Info("[Runner] Listing MCP Tools...")
+		tools, err := r.mcpClient.ListTools(ctx)
+		if err != nil {
+			return fmt.Errorf("could not list the MCP server's tools: %w", err)
+		}
+
+		logger.Info("[Runner] Found %d MCP Tools", len(tools))
+		var skipped []string
+		for _, tool := range tools {
+			toolPath := "mcp://tool/" + tool.Name
+
+			// Check if this tool is already in r.config.Endpoints (either with mcp://tool/ prefix or raw name)
+			foundIndex := -1
+			for i, ep := range r.config.Endpoints {
+				if ep.Path == toolPath || ep.Path == tool.Name {
+					foundIndex = i
+					break
+				}
+			}
+
+			if foundIndex != -1 {
+				logger.Info("[Runner] Upgrading MCP tool in-place: %s", tool.Name)
+				r.config.Endpoints[foundIndex].Path = toolPath
+				r.config.Endpoints[foundIndex].Method = "CALL"
+				r.config.Endpoints[foundIndex].Schema = tool.InputSchema
+				r.config.Endpoints[foundIndex].ContentType = "application/json"
+			} else if !hasAnyMcpInConfig {
+				logger.Info("[Runner] Mapping new MCP tool: %s", tool.Name)
+				ep := swagger.EndpointConfig{
+					Path:        toolPath,
+					Method:      "CALL",
+					Schema:      tool.InputSchema,
+					ContentType: "application/json",
+				}
+				r.config.Endpoints = append(r.config.Endpoints, ep)
+			} else {
+				// The config names its own MCP tools, so this one is deliberately
+				// out of scope. Say so by name — a silent skip looks identical to
+				// a tool that does not exist, which is how a typo in the allowlist
+				// turns into "the scan passed".
+				skipped = append(skipped, tool.Name)
+			}
+		}
+
+		if len(skipped) > 0 {
+			logger.Info("[Runner] Skipping %d MCP tool(s) not in the config allowlist: %s",
+				len(skipped), strings.Join(skipped, ", "))
+		}
+	}
+
+	if r.config.Settings.MCPFuzzResourcesEnabled() {
+		resources, resErr := r.mcpClient.ListResources(ctx)
+		if resErr == nil && len(resources) > 0 {
+			logger.Info("[Runner] Found %d MCP Resources", len(resources))
+			for _, res := range resources {
+				resPath := "mcp://resource/" + res.URI
+				if !hasAnyMcpInConfig {
+					r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+						Path:   resPath,
+						Method: "READ",
+						Schema: swagger.SchemaProperty{
+							Type: "object",
+							Properties: map[string]*swagger.SchemaProperty{
+								"uri": {Type: "string"},
+							},
+						},
+						ContentType: "application/json",
+					})
+				}
+			}
+		}
+	}
+
+	if r.config.Settings.MCPFuzzPromptsEnabled() {
+		prompts, promptErr := r.mcpClient.ListPrompts(ctx)
+		if promptErr == nil && len(prompts) > 0 {
+			logger.Info("[Runner] Found %d MCP Prompts", len(prompts))
+			for _, pr := range prompts {
+				promptPath := "mcp://prompt/" + pr.Name
+				if !hasAnyMcpInConfig {
+					props := make(map[string]*swagger.SchemaProperty, len(pr.Arguments))
+					var required []string
+					for _, arg := range pr.Arguments {
+						props[arg.Name] = &swagger.SchemaProperty{
+							Type: "string",
+						}
+						if arg.Required {
+							required = append(required, arg.Name)
+						}
+					}
+					r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+						Path:   promptPath,
+						Method: "PROMPT",
+						Schema: swagger.SchemaProperty{
+							Type:       "object",
+							Properties: props,
+							Required:   required,
+						},
+						ContentType: "application/json",
+					})
+				}
+			}
+		}
+	}
+
+	if r.config.Settings.MCPMethodFuzzingEnabled() {
+		if r.config.Settings.MCPFuzzToolsEnabled() {
+			logger.Info("[Runner] MCP Method & Tool Name Fuzzing enabled: appending %d dispatch probe endpoints", len(mcpMethodProbes))
+			for _, probe := range mcpMethodProbes {
+				toolPath := "mcp://tool/" + probe
+				r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+					Path:        toolPath,
+					Method:      "CALL",
+					Schema:      swagger.SchemaProperty{Type: "object"},
+					ContentType: "application/json",
+				})
+			}
+		}
+		// Resource traversal and SSRF probes
+		if r.config.Settings.MCPFuzzResourcesEnabled() {
+			resourceProbes := []string{
+				"file:///etc/passwd",
+				"file:///etc/shadow",
+				"file:///C:/Windows/win.ini",
+				"http://169.254.169.254/latest/meta-data/",
+				"internal://secrets/config",
+			}
+			for _, rp := range resourceProbes {
+				r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+					Path:   "mcp://resource/" + rp,
+					Method: "READ",
+					Schema: swagger.SchemaProperty{
+						Type: "object",
+						Properties: map[string]*swagger.SchemaProperty{
+							"uri": {Type: "string"},
+						},
+					},
+					ContentType: "application/json",
+				})
+			}
+		}
+		// Prompt injection and reflection probes
+		if r.config.Settings.MCPFuzzPromptsEnabled() {
+			promptProbes := []string{
+				"__proto__",
+				"__class__",
+				"system/prompt",
+				"debug/instructions",
+			}
+			for _, pp := range promptProbes {
+				r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+					Path:        "mcp://prompt/" + pp,
+					Method:      "PROMPT",
+					Schema:      swagger.SchemaProperty{Type: "object"},
+					ContentType: "application/json",
+				})
+			}
+		}
+	}
+	return nil
+}
+
+// isMCPEndpoint reports whether the endpoint is served by the MCP server.
+func isMCPEndpoint(ep swagger.EndpointConfig) bool {
+	switch ep.Method {
+	case "CALL", "MCP", "READ", "PROMPT":
+		return true
+	}
+	return strings.HasPrefix(ep.Path, "mcp://")
+}
+
+// withoutMCPEndpoints returns the endpoints not served by the MCP server, and how many were.
+func withoutMCPEndpoints(eps []swagger.EndpointConfig) ([]swagger.EndpointConfig, int) {
+	kept := make([]swagger.EndpointConfig, 0, len(eps))
+	for _, ep := range eps {
+		if !isMCPEndpoint(ep) {
+			kept = append(kept, ep)
+		}
+	}
+	return kept, len(eps) - len(kept)
+}
+
+// logScanTargets tells the user up front what this scan covers, so a part they did not expect
+// (an MCP server left in the project settings) is visible before it matters.
+func (r *Runner) logScanTargets() {
+	api, mcpCount := 0, 0
+	for _, ep := range r.config.Endpoints {
+		if isMCPEndpoint(ep) {
+			mcpCount++
+		} else {
+			api++
+		}
+	}
+	msg := fmt.Sprintf("Scan targets: %d API endpoint(s)", api)
+	if r.mcpClient != nil {
+		msg += fmt.Sprintf(", MCP server %s with %d endpoint(s)", mcpServerLabel(r.config.MCPServer), mcpCount)
+	}
+	r.logInfo("%s", msg)
+}
+
+// mcpServerLabel names the MCP server for the user: its host, never its full URL (which may
+// carry a token) or its command line (which may carry secrets).
+func mcpServerLabel(cfg *swagger.MCPServerConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	if cfg.URL != "" {
+		if u, err := url.Parse(cfg.URL); err == nil && u.Host != "" {
+			return u.Host
+		}
+		return "(invalid URL)"
+	}
+	return "(local command)"
 }

@@ -5,6 +5,7 @@
 
 import { RouteHandler, HandlerContext } from './types';
 import { ScansRepository } from '../../repositories/scans';
+import { UNKNOWN_FAILURE } from '../../utils/runnerMessages';
 
 export class ConnectClientHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -30,10 +31,13 @@ export class ConnectClientHandler implements RouteHandler {
           if (scan.summary_stats) {
             stats = typeof scan.summary_stats === 'string' ? JSON.parse(scan.summary_stats) : scan.summary_stats;
           }
-          server.send(JSON.stringify({
-            type: scan.status === 'completed' ? 'complete' : 'error',
-            data: stats
-          }));
+          if (scan.status === 'completed') {
+            server.send(JSON.stringify({ type: 'complete', data: stats }));
+          } else {
+            // The dashboard connected after the scan failed: tell it why, as the live stream would.
+            const reasons = typeof scansRepo.getFailureReasons === 'function' ? await scansRepo.getFailureReasons([runId]) : new Map();
+            server.send(JSON.stringify({ type: 'error', data: { ...stats, message: reasons.get(runId) || UNKNOWN_FAILURE } }));
+          }
         } catch (e) {
           // ignore send error
         }

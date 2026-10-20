@@ -22,6 +22,18 @@ The Web UI is the easiest way to manage your fuzzer, inspect requests, and visua
    - **Configuration Management**: Configure target hosts, auth tokens, and fuzzing parameters directly in the browser. Fuzzing & Rate Limit settings are logically organized into horizontal sub-tabs (**Concurrency & Rate Limits**, **Fuzzing & Intensity**, **Timeout & Duration**, and **WAF Evasion & AI**).
    - **WAF Check Tab**: An on-demand perimeter firewall analysis tool accessible from the main results bar (alongside Endpoint Heatmap, Request Logs, Grouped Errors, and OWASP Top 10). Features an editable target URL field (local to the check, does not alter project configuration), invokes domain-level fingerprinting powered by `waf.secmy.app`, probes sensitive files (`.env`, `.git/config`, `wp-config.php`, etc.) for perimeter leaks, and synthesizes ready-to-deploy virtual patch rules across 9 vendor dialects (Cloudflare, AWS, GCP, Azure, ModSecurity, nginx, HAProxy, Caddy, K8s). Free for all users and not license-gated.
 
+### When a scan fails or warns
+
+A scan always ends on the dashboard, and says why it ended the way it did:
+
+- **Failed scans** show a red panel above the results with the reason (for example `could not connect to the MCP server: SSE connection failed with status 401`), a suggestion of what to change, and a button to the right setting. The reason is also in the **Runner Logs** tab and in **History**, where the scan is listed under **Failed**.
+- **Scans with warnings** (part of the scan skipped, re-authentication failing, a WAF check that could not run) complete and show a yellow panel: *The scan completed with N warnings*, with the latest warnings and what to do about them.
+- **Quiet scans**: if nothing arrives from the runner for 90 seconds, the status pill in the header switches to **No activity** and the dashboard checks the scan's status every 15 seconds. If the live connection drops, the dashboard checks the status and reconnects.
+- **Lost runners**: a scan whose runner disconnected and that no other runner took over is ended as failed by the coordinator, once no runner has owned it for 5 minutes and it has reported nothing for 10 minutes.
+- **Scheduled scans**: when the latest scheduled scan of the project failed (or the last several did), the dashboard says so the next time you open the project, until you dismiss it.
+
+Every runner log starts with what the scan covers (`Scan targets: 42 API endpoint(s), MCP server mcp.example.com with 7 endpoint(s)`), so a part you did not expect is visible before it matters. A warning or error that repeats on every request appears at most 5 times per scan, followed by how many more were left out.
+
 ## CLI Mode
 
 The CLI is ideal for CI/CD pipelines, headless testing, and automation workflows.

@@ -39,6 +39,8 @@ import { TipsOffNotice } from './components/DidYouKnow/TipsOffNotice.js';
 import { explainFindingWithChromeAI, getAlgorithmicFindingAnalysis } from './services/chromeAiService.js';
 import { matchesFinding } from './utils/findings.js';
 import { useWebMcp } from './hooks/useWebMcp.js';
+import { scheduledFailureIssue } from './utils/scheduledFailures.js';
+import { UNKNOWN_FAILURE } from './services/runStream.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -312,7 +314,9 @@ export default function App() {
                         const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
                         const serverCompletedAt = s.completed_at ? new Date(s.completed_at).getTime() : 0;
 
-                        if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer)) {
+                        const failureReason = s.status === 'failed' ? (s.failure_reason || UNKNOWN_FAILURE) : undefined;
+                        const lacksReason = !!failureReason && localRun?.failureReason !== failureReason;
+                        if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer) || lacksReason) {
                             const stats = s.summary_stats ? JSON.parse(s.summary_stats) : null;
                             const startedAt = s.created_at ? new Date(s.created_at).getTime() : Date.now();
                             const scanRun: ScanRun = {
@@ -322,10 +326,17 @@ export default function App() {
                                 baseUrl: s.target_url || '',
                                 stats,
                                 projectId: s.project_id,
-                                triggerType: s.trigger_type || 'manual'
+                                triggerType: s.trigger_type || 'manual',
+                                ...(failureReason ? { failureReason } : {}),
                             };
-                            await saveRun(scanRun);
+                            await saveRun(localRun && localRun.completedAt > 0 ? { ...localRun, failureReason } : scanRun);
                         }
+                    }
+
+                    // Scheduled scans run while nobody watches: say so when the latest ones failed.
+                    const scheduledIssue = scheduledFailureIssue(scans);
+                    if (scheduledIssue && !useAppStore.getState().scanIssue && !useAppStore.getState().isRunning) {
+                        useAppStore.setState({ scanIssue: scheduledIssue });
                     }
 
                     const activeScan = scans.find(
