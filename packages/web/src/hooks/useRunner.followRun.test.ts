@@ -127,6 +127,18 @@ describe('followRun', () => {
         expect(useAppStore.getState().isRunning).toBe(true);
     });
 
+    // A long scan on a flaky network: each reconnect works, so the stream must keep coming back.
+    it('keeps reconnecting after drops that each recovered', async () => {
+        followRun('r1', '', handlers, wsRef);
+        for (let i = 0; i < RUN_MAX_RECONNECTS * 2; i++) {
+            socket().drop();
+            await vi.advanceTimersByTimeAsync(1000 + 10);
+            socket().emit({ type: 'progress', data: {} });
+        }
+        expect(FakeSocket.instances).toHaveLength(RUN_MAX_RECONNECTS * 2 + 1);
+        expect(useAppStore.getState().runStalled).toBe(false);
+    });
+
     it('says so when the scan goes quiet, and ends it once its status is known', async () => {
         followRun('r1', '', handlers, wsRef);
         await vi.advanceTimersByTimeAsync(RUN_STALL_AFTER_MS + RUN_STATUS_CHECK_MS);

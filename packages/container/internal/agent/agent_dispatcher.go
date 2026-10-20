@@ -197,14 +197,18 @@ func (d *AgentDispatcher) sendErrorOf(runID, exec, errStr string) {
 }
 
 // executionDrainTimeout bounds how long finishExecution waits for a run's last events to be
-// forwarded before deciding whether the run reported its end.
-var executionDrainTimeout = 5 * time.Second
+// forwarded (behind a backlog queued while the coordinator connection was down, say) before it
+// reports the run's end itself.
+var executionDrainTimeout = 2 * time.Minute
 
 // finishExecution makes sure the coordinator and the dashboard learn that an execution ended. A
-// run that neither completed nor reported an error (a panic, or a path that returned without a
-// word) would otherwise look like it was still running, forever. Messages are for the user: no
-// stack traces or internal detail, which stay in the agent's own log.
-func (d *AgentDispatcher) finishExecution(runID string, panicked bool, terminal func() bool, subDone <-chan struct{}, sendEvent func(string, interface{}), sendError func(string)) {
+// run that ended without its terminal event reaching them would otherwise look like it was still
+// running, forever: its "complete" can be dropped (a stalled forwarder) or still be queued, or the
+// run panicked. A run that returned normally is reported complete, with the runner's final stats
+// (a late original "complete" is then a duplicate the coordinator ignores); only a panic is
+// reported as an error. Messages are for the user: no stack traces or internal detail, which stay
+// in the agent's own log.
+func (d *AgentDispatcher) finishExecution(runID string, panicked bool, terminal func() bool, subDone <-chan struct{}, finalStats func() interface{}, sendEvent func(string, interface{}), sendError func(string)) {
 	select {
 	case <-subDone:
 	case <-time.After(executionDrainTimeout):
@@ -213,10 +217,12 @@ func (d *AgentDispatcher) finishExecution(runID string, panicked bool, terminal 
 	if terminal() {
 		return
 	}
-	msg := "The scan ended without reporting completion. Start it again; if this keeps happening, update the runner."
-	if panicked {
-		msg = "The runner hit an internal error and stopped the scan. Start it again; if this keeps happening, update the runner or report the issue."
+	if !panicked {
+		logWarn("Run %s ended without its completion being forwarded; reporting it now", runID)
+		sendEvent("complete", finalStats())
+		return
 	}
+	msg := "The runner hit an internal error and stopped the scan. Start it again; if this keeps happening, update the runner or report the issue."
 	sendEvent("runner_log", map[string]interface{}{
 		"level":     "error",
 		"message":   "[Runner] ❌ " + msg,
@@ -503,7 +509,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 				logError("Runner for %s panicked: %v\n%s", runID, panicked, debug.Stack())
 				r.Close()
 			}
-			d.finishExecution(runID, panicked != nil, terminal.Load, subDone, sendEvent, sendError)
+			d.finishExecution(runID, panicked != nil, terminal.Load, subDone, func() interface{} { return r.GetStats() }, sendEvent, sendError)
 			d.activeRunnersMu.Lock()
 			delete(d.activeRunners, runID)
 			d.activeRunnersMu.Unlock()

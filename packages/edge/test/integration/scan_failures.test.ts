@@ -32,7 +32,46 @@ describe('scan failure queries', () => {
     await applyMigrations(env);
   });
 
-  it('reads the most recent error of each scan, in either stored shape', async () => {
+  it('reads the reason a scan failed with from the scan', async () => {
+    const repo = new ScansRepository(env);
+    const id = await seedScan('dispatched', '-1 hour');
+    const { ended } = await repo.processFindingsQueueMessages([{ body: { scanId: id, type: 'error', payload: { error: 'could not connect to https://u:p@mcp.example/sse?token=SECRET' } } }]);
+    expect(ended).toEqual([id]);
+    const row = await env.DB.prepare('SELECT status, failure_reason FROM scans WHERE id = ?').bind(id).first<any>();
+    expect(row.status).toBe('failed');
+    expect(row.failure_reason).toBe('could not connect to https://…@mcp.example/sse?…');
+    expect((await repo.getFailureReasons([id])).get(id)).toBe('could not connect to https://…@mcp.example/sse?…');
+
+    expect(await repo.markFailedIfActive(id, 'too late')).toBe(false);
+    const stopped = await seedScan('queued', '-1 minutes');
+    expect(await repo.markFailedIfActive(stopped, 'The scan was stopped before a runner started it.')).toBe(true);
+    expect((await repo.getFailureReasons([stopped])).get(stopped)).toBe('The scan was stopped before a runner started it.');
+  });
+
+  // The stalled scan watchdog failed it; the runner came back and completed it: the user was told
+  // it failed, and the scan.failed webhook went out, so it stays failed.
+  it('lets the first terminal event of a scan win', async () => {
+    const repo = new ScansRepository(env);
+    const id = await seedScan('dispatched', '-1 hour');
+    const failed = await repo.processFindingsQueueMessages([{ body: { scanId: id, type: 'error', payload: { error: 'Runner lost' } } }]);
+    const completed = await repo.processFindingsQueueMessages([{ body: { scanId: id, type: 'event', payload: { type: 'complete', data: { totalRequests: 3 } } } }]);
+    expect(failed.ended).toEqual([id]);
+    expect(completed.ended).toEqual([]);
+    const row = await env.DB.prepare('SELECT status, summary_stats FROM scans WHERE id = ?').bind(id).first<any>();
+    expect(row.status).toBe('failed');
+    expect(row.summary_stats).toBeNull();
+
+    // Within one batch too.
+    const other = await seedScan('dispatched', '-1 hour');
+    const both = await repo.processFindingsQueueMessages([
+      { body: { scanId: other, type: 'event', payload: { type: 'complete', data: {} } } },
+      { body: { scanId: other, type: 'error', payload: { error: 'late' } } },
+    ]);
+    expect(both.ended).toEqual([other]);
+    expect((await env.DB.prepare('SELECT status FROM scans WHERE id = ?').bind(other).first<any>()).status).toBe('completed');
+  });
+
+  it('falls back to the most recent stored error for scans that failed before reasons were kept', async () => {
     const repo = new ScansRepository(env);
     const a = await seedScan('failed', '-1 hour');
     const b = await seedScan('failed', '-1 hour');
@@ -42,6 +81,7 @@ describe('scan failure queries', () => {
     await seedEvent(a, 'event', { type: 'runner_log', data: { level: 'error', message: 'not an error event' } }, '-1 minutes');
     await seedEvent(b, 'event', { type: 'error', data: { message: 'from the runner event bus' } }, '-5 minutes');
 
+    await env.DB.prepare("UPDATE scans SET failure_reason = NULL WHERE id IN (?, ?, ?)").bind(a, b, quiet).run();
     const reasons = await repo.getFailureReasons([a, b, quiet]);
     expect(reasons.get(a)).toBe('newest');
     expect(reasons.get(b)).toBe('from the runner event bus');
@@ -71,8 +111,15 @@ describe('scan failure queries', () => {
     const queued = await seedScan('queued', '-2 hours');
 
     const found = await repo.getStalledActiveScans(10, 500);
-    expect(found).toEqual(expect.arrayContaining([idleDispatched, idlePaused, oldButReported]));
-    for (const id of [recentlyActive, justCreated, finished, queued]) expect(found).not.toContain(id);
+    const ids = found.map(s => s.id);
+    expect(ids).toEqual(expect.arrayContaining([idleDispatched, idlePaused, oldButReported]));
+    for (const id of [recentlyActive, justCreated, finished, queued]) expect(ids).not.toContain(id);
+    const byId = new Map(found.map(s => [s.id, s]));
+    expect(byId.get(idleDispatched)).toMatchObject({ status: 'dispatched' });
+    expect(byId.get(idlePaused)).toMatchObject({ status: 'paused' });
+    expect(byId.get(idleDispatched)!.idle_minutes).toBeGreaterThanOrEqual(119);
+    expect(byId.get(oldButReported)!.idle_minutes).toBeGreaterThanOrEqual(29);
+    expect(byId.get(oldButReported)!.idle_minutes).toBeLessThan(35);
     expect((await repo.getStalledActiveScans(10, 1)).length).toBe(1);
   });
 });

@@ -28,6 +28,8 @@ func (s *sentByExecution) sendEvent(typ string, payload interface{}) {
 
 func (s *sentByExecution) sendError(msg string) { s.errors = append(s.errors, msg) }
 
+func noStats() interface{} { return nil }
+
 func closedChan() chan struct{} {
 	c := make(chan struct{})
 	close(c)
@@ -37,27 +39,29 @@ func closedChan() chan struct{} {
 func TestFinishExecution_NothingMoreOnceTheRunReportedItsEnd(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
 	var sent sentByExecution
-	d.finishExecution("run-1", false, func() bool { return true }, closedChan(), sent.sendEvent, sent.sendError)
+	d.finishExecution("run-1", false, func() bool { return true }, closedChan(), noStats, sent.sendEvent, sent.sendError)
 	assert.Empty(t, sent.events)
 	assert.Empty(t, sent.errors)
 }
 
-// A run that returned without completing or reporting an error would look like it was still
-// running, forever.
-func TestFinishExecution_EndsARunThatNeverReportedItsEnd(t *testing.T) {
+// A run that returned normally but whose "complete" never made it (dropped by a stalled forwarder,
+// or still queued) would look like it was still running, forever; nor did it fail, so it is
+// reported complete, with the runner's final stats.
+func TestFinishExecution_ReportsCompletionThatWasNotForwarded(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
 	var sent sentByExecution
-	d.finishExecution("run-1", false, func() bool { return false }, closedChan(), sent.sendEvent, sent.sendError)
-	require.Len(t, sent.errors, 1)
-	assert.Contains(t, sent.errors[0], "ended without reporting completion")
-	require.Len(t, sent.logs, 1)
-	assert.Contains(t, sent.logs[0], sent.errors[0])
+	var payload interface{}
+	sendEvent := func(typ string, p interface{}) { sent.sendEvent(typ, p); payload = p }
+	d.finishExecution("run-1", false, func() bool { return false }, closedChan(), func() interface{} { return map[string]int{"totalRequests": 7} }, sendEvent, sent.sendError)
+	assert.Equal(t, []string{"complete"}, sent.events)
+	assert.Equal(t, map[string]int{"totalRequests": 7}, payload)
+	assert.Empty(t, sent.errors, "a run that finished must not be reported as failed")
 }
 
 func TestFinishExecution_PanicIsReportedWithoutInternals(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
 	var sent sentByExecution
-	d.finishExecution("run-1", true, func() bool { return false }, closedChan(), sent.sendEvent, sent.sendError)
+	d.finishExecution("run-1", true, func() bool { return false }, closedChan(), noStats, sent.sendEvent, sent.sendError)
 	require.Len(t, sent.errors, 1)
 	assert.Contains(t, sent.errors[0], "internal error")
 	for _, m := range append(sent.errors, sent.logs...) {
@@ -76,15 +80,15 @@ func TestFinishExecution_WaitsForForwardingBoundedly(t *testing.T) {
 
 	var sent sentByExecution
 	start := time.Now()
-	d.finishExecution("run-1", false, func() bool { return false }, make(chan struct{}), sent.sendEvent, sent.sendError)
+	d.finishExecution("run-1", false, func() bool { return false }, make(chan struct{}), noStats, sent.sendEvent, sent.sendError)
 	assert.Less(t, time.Since(start), time.Second)
-	assert.Len(t, sent.errors, 1)
+	assert.Equal(t, []string{"complete"}, sent.events)
 
 	// The terminal event forwarded while it waited counts.
 	sent = sentByExecution{}
 	done := make(chan struct{})
 	completed := false
 	go func() { time.Sleep(10 * time.Millisecond); completed = true; close(done) }()
-	d.finishExecution("run-1", false, func() bool { return completed }, done, sent.sendEvent, sent.sendError)
-	assert.Empty(t, sent.errors)
+	d.finishExecution("run-1", false, func() bool { return completed }, done, noStats, sent.sendEvent, sent.sendError)
+	assert.Empty(t, sent.events)
 }

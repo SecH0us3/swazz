@@ -143,7 +143,7 @@ export class CommandHandler implements RouteHandler {
       if (!runner) {
         try {
           const scansRepo = new ScansRepository(context.env);
-          const marked = await scansRepo.markFailedIfActive(payload.runId);
+          const marked = await scansRepo.markFailedIfActive(payload.runId, 'The scan was stopped before a runner started it.');
           if (marked) {
             const ref = await context.state.storage.get<string>(`config_ref:${payload.runId}`);
             await clearScanState(context.state.storage, payload.runId);

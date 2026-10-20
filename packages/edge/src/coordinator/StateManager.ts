@@ -33,8 +33,6 @@ export class StateManager {
   pendingParseRunners = new Map<string, WebSocket>();
   sseStreams = new Map<string, ReadableStreamDefaultController>();
   delivery: DeliveryTracker;
-  // Stalled scan watchdog (watchdog.ts): when each candidate was first seen with no runner.
-  unownedSince = new Map<string, number>();
 
   constructor(private state: DurableObjectState) {
     this.delivery = new DeliveryTracker(state);

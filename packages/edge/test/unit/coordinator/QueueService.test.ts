@@ -387,7 +387,7 @@ describe('QueueService', () => {
     const stateManager = new StateManager(mockState);
     await new QueueService(mockEnv, mockState, stateManager).checkAndDispatchQueuedScans(mockWs);
 
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-poison');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-poison', expect.any(String));
     expect(mockWs.send).toHaveBeenCalledTimes(1);
     expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('scan-good');
   });
@@ -530,7 +530,7 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockGetScanConfigByProject).not.toHaveBeenCalled();
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1', expect.any(String));
     expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
     expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(deletedKeys(mockState)).toContain('user_public_key:scan-1');
@@ -549,7 +549,7 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1', expect.any(String));
     expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
     expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(mockLogError).toHaveBeenCalled();
@@ -568,7 +568,7 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1', expect.any(String));
     expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
     expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(mockLogError).toHaveBeenCalled();
@@ -721,7 +721,7 @@ describe('QueueService', () => {
     await queueService.checkAndDispatchQueuedScans(mockWs);
 
     expect(mockWs.send).not.toHaveBeenCalled();
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1', expect.any(String));
     expect(mockState.storage.delete).not.toHaveBeenCalled();
   });
 

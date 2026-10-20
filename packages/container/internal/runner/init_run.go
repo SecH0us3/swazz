@@ -7,8 +7,10 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -89,15 +91,18 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 		if err := r.prepareMCP(ctx); err != nil {
 			_ = r.mcpClient.Close()
 			r.mcpClient = nil
+			// The user sees this (runner log, failure reason): Go's HTTP errors quote the full
+			// URL, whose query or userinfo may carry the MCP server's token.
+			reason := redactURLs(err.Error())
 			kept, skipped := withoutMCPEndpoints(r.config.Endpoints)
 			if len(kept) == 0 {
-				r.logError("[MCP] ❌ %v. The MCP server is the only target of this scan, so the scan cannot run. %s", err, mcpFixHint)
+				r.logError("[MCP] ❌ %s. The MCP server is the only target of this scan, so the scan cannot run. %s", reason, mcpFixHint)
 				cancel()
 				r.lifecycle.isRunning.Store(false)
-				return nil, err
+				return nil, errors.New(reason)
 			}
 			r.config.Endpoints = kept
-			r.logWarn("[MCP] ⚠️ %v. The MCP part of the scan is skipped (%d MCP endpoint(s)); everything else is scanned as usual. %s", err, skipped, mcpFixHint)
+			r.logWarn("[MCP] ⚠️ %s. The MCP part of the scan is skipped (%d MCP endpoint(s)); everything else is scanned as usual. %s", reason, skipped, mcpFixHint)
 		}
 	}
 	r.logScanTargets()
@@ -154,7 +159,7 @@ func (r *Runner) prepareMCP(ctx context.Context) error {
 
 	hasAnyMcpInConfig := false
 	for _, ep := range r.config.Endpoints {
-		if ep.Method == "CALL" || ep.Method == "MCP" || strings.HasPrefix(ep.Path, "mcp://") {
+		if isMCPEndpoint(ep) {
 			hasAnyMcpInConfig = true
 			break
 		}
@@ -359,6 +364,32 @@ func (r *Runner) logScanTargets() {
 		msg += fmt.Sprintf(", MCP server %s with %d endpoint(s)", mcpServerLabel(r.config.MCPServer), mcpCount)
 	}
 	r.logInfo("%s", msg)
+}
+
+// urlInText finds URLs inside free text (error messages).
+var urlInText = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
+
+// redactURLs keeps each URL in text down to scheme, host and path: userinfo, query and fragment
+// may carry credentials and are replaced by "…".
+func redactURLs(text string) string {
+	return urlInText.ReplaceAllStringFunc(text, func(raw string) string {
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" {
+			return "(URL)"
+		}
+		out := u.Scheme + "://"
+		if u.User != nil {
+			out += "…@"
+		}
+		out += u.Host + u.EscapedPath()
+		if u.RawQuery != "" || u.ForceQuery {
+			out += "?…"
+		}
+		if u.Fragment != "" {
+			out += "#…"
+		}
+		return out
+	})
 }
 
 // mcpServerLabel names the MCP server for the user: its host, never its full URL (which may

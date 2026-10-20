@@ -253,6 +253,8 @@ export function followRun(runId: string, proxyUrl: string, handlers: RunHandlers
         }
         lastActivity = Date.now();
         receivedAny = true;
+        // The stream works again: the reconnect budget is for consecutive failures, not a lifetime.
+        reconnects = 0;
         if (useAppStore.getState().runStalled) useAppStore.setState({ runStalled: false });
         const event = interpretRunMessage(parsed);
         switch (event.kind) {

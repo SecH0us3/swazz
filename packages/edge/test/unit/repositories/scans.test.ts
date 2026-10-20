@@ -387,12 +387,12 @@ describe('ScansRepository Unit Tests', () => {
     it('returns true when an active scan was transitioned to failed', async () => {
       const repo = new ScansRepository(mockEnv);
       mockAll.mockResolvedValueOnce({ meta: { changes: 1 } });
-      const result = await repo.markFailedIfActive('scan-123');
+      const result = await repo.markFailedIfActive('scan-123', 'The scan was stopped.');
 
       expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ? AND status IN ('queued','dispatched','paused')")
+        expect.stringContaining("UPDATE scans SET status = 'failed', completed_at = datetime('now'), failure_reason = ? WHERE id = ? AND status IN ('queued','dispatched','paused')")
       );
-      expect(mockBind).toHaveBeenCalledWith('scan-123');
+      expect(mockBind).toHaveBeenCalledWith('The scan was stopped.', 'scan-123');
       expect(result).toBe(true);
     });
 

@@ -6,7 +6,9 @@
 // Runner errors shown to users: on the dashboard's live stream, in the runner log and as a failed
 // scan's reason. They come from a runner (the user's own, or a shared one the operator runs), so
 // they are untrusted text: reduced to one bounded line, with stack traces (internal paths and
-// code locations, no help to the user) cut off. React renders them as text, never as HTML.
+// code locations, no help to the user) cut off, and URLs kept to scheme, host and path (Go's HTTP
+// errors quote the full URL, whose userinfo or query may carry a token, and everyone with access
+// to the project sees a failed scan's reason). React renders them as text, never as HTML.
 //
 // Non-goal: redacting what a runner chose to put in its own message (a target hostname, a status
 // code); those describe the user's own scan. Coordinator-originated failures use fixed texts.
@@ -19,6 +21,8 @@ export const UNKNOWN_FAILURE = 'The scan failed without an error message.';
 const STACK_TRACE_START = /(?:^|\n)\s*(?:goroutine \d+ \[|panic:|at [\w$.<>]+ \(|[\w./\\-]+\.(?:go|ts|js|mjs):\d+)/;
 // ANSI escape sequences (colored terminal output).
 const ANSI_ESCAPES = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+// URLs inside free text.
+const URL_IN_TEXT = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"'<>]+/g;
 // C0 and C1 control characters, which include line breaks.
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]+/g;
 
@@ -38,9 +42,25 @@ export function sanitizeRunnerText(raw: unknown, max: number = MAX_RUNNER_MESSAG
   }
   const stackAt = text.search(STACK_TRACE_START);
   if (stackAt >= 0) text = text.slice(0, stackAt);
+  text = text.replace(URL_IN_TEXT, redactUrl);
   text = text.replace(ANSI_ESCAPES, '').replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim();
   if (text.length > max) text = `${text.slice(0, max - 1).trimEnd()}…`;
   return text;
+}
+
+/** A URL down to scheme, host and path; userinfo, query and fragment become "…". */
+function redactUrl(raw: string): string {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return '(URL)';
+  }
+  if (!u.host) return `${u.protocol}…`;
+  const userinfo = u.username || u.password ? '…@' : '';
+  const query = u.search || raw.includes('?') ? '?…' : '';
+  const fragment = u.hash ? '#…' : '';
+  return `${u.protocol}//${userinfo}${u.host}${u.pathname}${query}${fragment}`;
 }
 
 /**

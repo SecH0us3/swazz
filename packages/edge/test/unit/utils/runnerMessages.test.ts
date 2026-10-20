@@ -26,6 +26,16 @@ describe('runner messages shown to users', () => {
     expect(sanitizeRunnerText('panic: runtime error: index out of range')).toBe('');
   });
 
+  // Go's HTTP errors quote the full URL; its userinfo or query may carry a token, and everyone with
+  // access to the project sees a failed scan's reason.
+  it('keeps URLs to scheme, host and path', () => {
+    expect(sanitizeRunnerText('Get "https://user:pw@mcp.example.com:8443/sse?token=SECRET#x": dial tcp: refused'))
+      .toBe('Get "https://…@mcp.example.com:8443/sse?…#…": dial tcp: refused');
+    expect(sanitizeRunnerText('see http://h.example/a/b and wss://x.io/ws?k=v')).toBe('see http://h.example/a/b and wss://x.io/ws?…');
+    expect(sanitizeRunnerText('bad http://[::1')).toBe('bad (URL)');
+    expect(runnerErrorText({ error: 'post https://h/p?api_key=abc failed' })).toBe('post https://h/p?… failed');
+  });
+
   it('bounds the length', () => {
     const text = sanitizeRunnerText('x'.repeat(5000));
     expect(text.length).toBe(MAX_RUNNER_MESSAGE_LENGTH);

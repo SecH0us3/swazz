@@ -302,3 +302,29 @@ func TestMCPServerLabel_NeverShowsCredentialsOrCommands(t *testing.T) {
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+// Go's HTTP errors quote the full URL; the MCP server's token must not reach the user's log, the
+// scan's failure reason, or the dashboard.
+func TestInitRun_MCPErrorsNeverShowTheURLsCredentials(t *testing.T) {
+	leaky := errors.New(`Get "https://user:pw@mcp.example.com/sse?token=SECRET#frag": dial tcp 10.0.0.1:443: connection refused`)
+	cfg := &swagger.Config{MCPServer: &swagger.MCPServerConfig{Type: "sse", URL: "https://user:pw@mcp.example.com/sse?token=SECRET"}}
+	r := New(cfg, nil)
+	defer r.Close()
+	r.mcpClient = &failingMCPClient{connectErr: leaky}
+	sub := r.Subscribe()
+
+	_, err := r.initRun(context.Background())
+	require.Error(t, err)
+	for _, text := range append(logsAt(userLogs(t, sub), "error"), err.Error()) {
+		assert.NotContains(t, text, "SECRET")
+		assert.NotContains(t, text, "pw")
+		assert.Contains(t, text, "https://…@mcp.example.com/sse?…#…")
+	}
+}
+
+func TestRedactURLs(t *testing.T) {
+	assert.Equal(t, `open https://h.example/p?… and wss://…@x.io:8443/ws now`, redactURLs(`open https://h.example/p?a=1&b=2 and wss://u:p@x.io:8443/ws now`))
+	assert.Equal(t, "no urls here", redactURLs("no urls here"))
+	assert.Equal(t, "http://h/", redactURLs("http://h/"))
+	assert.Equal(t, "(URL)", redactURLs("http://%zz"))
+}
