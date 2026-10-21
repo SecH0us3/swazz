@@ -14,10 +14,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 
 	"github.com/stretchr/testify/assert"
@@ -864,4 +866,58 @@ func TestSSEClient_Errors(t *testing.T) {
 
 	_, _, err = client.GetPrompt(ctx, "test", nil, nil)
 	assert.Error(t, err)
+}
+
+// An error answer to a request reads only the start of its body into the error: the MCP server
+// under test controls it.
+func TestSSEClient_ErrorBodyIsCapped(t *testing.T) {
+	big := strings.Repeat("x", 1<<20)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, "event: endpoint\ndata: /message\n\n")
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			<-r.Context().Done()
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(big))
+	}))
+	defer ts.Close()
+
+	client := NewSSEClient(ts.URL, true, nil, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer func() { _ = client.Close() }()
+
+	err := client.Connect(ctx) // the initialize request gets the 500
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "status 500")
+	assert.Less(t, len(err.Error()), 2*safenet.MaxErrorBodyBytes+256, "the response body and the request body are both cut")
+}
+
+// The HTTP client fails a response past maxResponseBytes instead of parsing a truncated one, and
+// cuts an error body.
+func TestHTTPClient_BodyIsCapped(t *testing.T) {
+	for _, tc := range []struct {
+		status  int
+		wantErr string
+	}{
+		{http.StatusOK, "larger than"},
+		{http.StatusInternalServerError, "status 500"},
+	} {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(tc.status)
+			_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBytes+1)))
+		}))
+		client := NewHTTPClient(ts.URL+"/mcp", true, nil)
+		_, err := client.ListTools(context.Background())
+		ts.Close()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), tc.wantErr)
+		assert.Less(t, len(err.Error()), safenet.MaxErrorBodyBytes+256)
+	}
 }

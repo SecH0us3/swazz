@@ -19,6 +19,10 @@ import (
 	"swazz-engine/internal/logger"
 )
 
+// maxGatewayResponseBytes caps an AI Gateway response body; a larger one fails the call. A
+// completion is far smaller.
+const maxGatewayResponseBytes = 4 << 20
+
 // GatewayClient provides a shared HTTP client for Cloudflare AI Gateway
 // supporting both Gemini and OpenAI completions with exponential backoff on 429s.
 type GatewayClient struct {
@@ -138,12 +142,11 @@ func (g *GatewayClient) ChatCompletion(ctx context.Context, systemPrompt, userPr
 			continue
 		}
 
-		respBytes, err := io.ReadAll(resp.Body)
+		respBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxGatewayResponseBytes+1))
 		_ = resp.Body.Close()
 		if err != nil {
 			return "", fmt.Errorf("failed to read AI Gateway response body: %w", err)
 		}
-
 		if resp.StatusCode == http.StatusTooManyRequests {
 			if attempt < maxRetries {
 				logger.Warn("[AI] ⚠️ AI Gateway 429 Rate Limit encountered, backing off for %v (attempt %d/%d)", backoff, attempt+1, maxRetries)
@@ -156,6 +159,9 @@ func (g *GatewayClient) ChatCompletion(ctx context.Context, systemPrompt, userPr
 		if resp.StatusCode != http.StatusOK {
 			gwErr := parseGatewayError(resp.StatusCode, respBytes)
 			return "", gwErr
+		}
+		if len(respBytes) > maxGatewayResponseBytes {
+			return "", fmt.Errorf("AI Gateway response is larger than %d bytes", maxGatewayResponseBytes)
 		}
 
 		return extractResponseText(respBytes, isGemini)

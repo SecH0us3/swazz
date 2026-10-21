@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/security"
 )
 
@@ -274,11 +275,11 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusNoContent {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		body := safenet.ReadErrorBody(resp.Body)
 		c.pendingMu.Lock()
 		delete(c.pending, key)
 		c.pendingMu.Unlock()
-		return nil, fmt.Errorf("POST request to %s failed with status %d: %s (req body: %s)", c.writeURL, resp.StatusCode, string(bodyBytes), string(data))
+		return nil, fmt.Errorf("POST request to %s failed with status %d: %s (req body: %s)", c.writeURL, resp.StatusCode, body, safenet.Truncate(string(data), safenet.MaxErrorBodyBytes))
 	}
 
 	select {

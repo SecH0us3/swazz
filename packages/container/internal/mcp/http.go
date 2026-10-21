@@ -17,8 +17,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/security"
 )
+
+// maxResponseBytes caps an MCP response body; a larger one fails the request.
+const maxResponseBytes = 10 << 20
 
 // HTTPClient implements the Client interface using simple HTTP POST JSON-RPC.
 type HTTPClient struct {
@@ -93,17 +97,17 @@ func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		limitReader := io.LimitReader(resp.Body, 4096)
-		respBytes, _ := io.ReadAll(limitReader)
-		return nil, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, string(bytes.TrimSpace(respBytes)))
+		return nil, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, safenet.ReadErrorBody(resp.Body))
 	}
 
 	contentType := resp.Header.Get("Content-Type")
 
-	limitReader := io.LimitReader(resp.Body, 10*1024*1024)
-	respBytes, err := io.ReadAll(limitReader)
+	respBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(respBytes) > maxResponseBytes {
+		return nil, fmt.Errorf("HTTP response is larger than %d bytes", maxResponseBytes)
 	}
 
 	// Some non-standard MCP servers respond to POST with an SSE stream containing the JSON-RPC response.
