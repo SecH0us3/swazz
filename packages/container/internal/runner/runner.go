@@ -159,15 +159,17 @@ type Runner struct {
 	// Per-run baselines, results, and concurrency control.
 	sizeBaselines *sync.Map
 	timeBaselines *sync.Map
-	harvestedIDs  sync.Map // path prefix → []string
-	idSources     sync.Map // ID string → source string
 	resultsMu     sync.Mutex
 	allResults    []*swagger.FuzzResult
 	limiter       *ConcurrencyLimiter
 	gate          license.Gate
 
 	analyzer *analyzer.AnalyzerRegistry
-	detector *bola.Detector
+	// detector harvests IDs from responses during a run and replays them in its BOLA phase.
+	// initRun gives each run a new one; it is atomic because a worker the previous run gave up
+	// waiting for (workerStopTimeout) may still be reading it. Such a worker can harvest into
+	// the new run's detector; that is not prevented.
+	detector atomic.Pointer[bola.Detector]
 
 	mcpClient      mcp.Client
 	mcpMutex       sync.Mutex
@@ -254,7 +256,7 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency, gate.ConcurrencyCeiling())
 	r.pause.cond = sync.NewCond(&r.pause.mu)
 	r.updateReplacer()
-	r.detector = bola.NewDetector(r)
+	r.detector.Store(bola.NewDetector(r))
 
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
@@ -428,8 +430,8 @@ func (r *Runner) Start(ctx context.Context) error {
 	copy(candidates, r.allResults)
 	r.resultsMu.Unlock()
 
-	detector := bola.NewDetector(r)
-	_ = detector.BolaPhase(runCtx, candidates)
+	// The run's detector holds the IDs harvested from the responses above.
+	_ = r.detector.Load().BolaPhase(runCtx, candidates)
 
 	diffPhase := differential.NewPhase(r)
 	_ = diffPhase.Run(runCtx, candidates)
@@ -533,7 +535,6 @@ func (r *Runner) LockConfig()    { r.configMu.Lock() }
 func (r *Runner) UnlockConfig() {
 	r.configMu.Unlock()
 	r.updateReplacer()
-	r.detector = bola.NewDetector(r)
 }
 
 func (r *Runner) LockResults()   { r.resultsMu.Lock() }

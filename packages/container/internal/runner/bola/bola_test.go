@@ -496,7 +496,7 @@ func TestBuildPathsToTest(t *testing.T) {
 		Method:       "GET",
 	}
 
-	targets, paramName := d.buildPathsToTest(cand)
+	targets, paramName := d.buildPathsToTest(cand, true)
 
 	if paramName != "id" {
 		t.Errorf("Expected paramName 'id', got '%s'", paramName)
@@ -535,7 +535,7 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 			ResolvedPath: "/api/goods/123",
 			Method:       "GET",
 		}
-		_, paramName := d.buildPathsToTest(cand)
+		_, paramName := d.buildPathsToTest(cand, true)
 		if paramName == "" {
 			t.Errorf("Expected non-empty paramName for endpoint with path param, got empty")
 		}
@@ -551,7 +551,7 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 			Method:       "GET",
 			Payload:      nil,
 		}
-		_, paramName := d.buildPathsToTest(cand)
+		_, paramName := d.buildPathsToTest(cand, true)
 		if paramName != "" {
 			t.Errorf("Expected empty paramName for health endpoint, got %q", paramName)
 		}
@@ -570,7 +570,7 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 				"total": 99.99,
 			},
 		}
-		_, paramName := d.buildPathsToTest(cand)
+		_, paramName := d.buildPathsToTest(cand, true)
 		if paramName == "" {
 			t.Errorf("Expected non-empty paramName for payload with id field, got empty")
 		}
@@ -588,7 +588,7 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 				"name": "foo",
 			},
 		}
-		_, paramName := d.buildPathsToTest(cand)
+		_, paramName := d.buildPathsToTest(cand, true)
 		if paramName != "" {
 			t.Errorf("Expected empty paramName for payload with no id field, got %q", paramName)
 		}
@@ -617,7 +617,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 
 		var bolaResults []*swagger.FuzzResult
 		var bolaMu sync.Mutex
-		d.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, nil, nil, &bolaMu, &bolaResults)
+		d.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, true, nil, nil, &bolaMu, &bolaResults)
 
 		if len(bolaResults) != 0 {
 			t.Errorf("Expected 0 results (skipped BOLA), got %d", len(bolaResults))
@@ -663,7 +663,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 
 		var bolaResults []*swagger.FuzzResult
 		var bolaMu sync.Mutex
-		d.replayCandidate(context.Background(), cand, cfg.Endpoints[0], nil, nil, &bolaMu, &bolaResults)
+		d.replayCandidate(context.Background(), cand, cfg.Endpoints[0], true, nil, nil, &bolaMu, &bolaResults)
 
 		// Should not be skipped, but since there's no other identities and no anonymous bypass (both mock server and anonymous return similarity 1.0 which is >= 0.75 threshold),
 		// it should produce an anonymous finding!
@@ -692,7 +692,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 
 		var bolaResults []*swagger.FuzzResult
 		var bolaMu sync.Mutex
-		d.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, nil, nil, &bolaMu, &bolaResults)
+		d.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, true, nil, nil, &bolaMu, &bolaResults)
 
 		if len(bolaResults) != 0 {
 			t.Errorf("Expected 0 results (skipped BOLA since no auth cookies matched exactly), got %d", len(bolaResults))
@@ -738,7 +738,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 
 		var bolaResults []*swagger.FuzzResult
 		var bolaMu sync.Mutex
-		d.replayCandidate(context.Background(), cand, cfg.Endpoints[0], nil, nil, &bolaMu, &bolaResults)
+		d.replayCandidate(context.Background(), cand, cfg.Endpoints[0], true, nil, nil, &bolaMu, &bolaResults)
 
 		if len(bolaResults) != 1 {
 			t.Errorf("Expected 1 result (not skipped, anonymous bypass flagged), got %d", len(bolaResults))

@@ -88,22 +88,6 @@ func arePrefixesRelated(p1, p2 string) bool {
 	return true
 }
 
-// mergeUniqueStrings returns the union of two string slices without duplicates.
-func mergeUniqueStrings(a, b []string) []string {
-	seen := make(map[string]bool, len(a)+len(b))
-	for _, s := range a {
-		seen[s] = true
-	}
-	for _, s := range b {
-		seen[s] = true
-	}
-	out := make([]string, 0, len(seen))
-	for s := range seen {
-		out = append(out, s)
-	}
-	return out
-}
-
 // containsFold reports whether any element of list equals s
 // (case-insensitive).
 func containsFold(list []string, s string) bool {

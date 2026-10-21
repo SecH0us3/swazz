@@ -6,10 +6,15 @@
 package bola
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
 )
 
@@ -177,4 +182,36 @@ func TestCandidate_BuildPayload(t *testing.T) {
 	pExGET, qpExGET := buildCandidatePayload(epExampleGET, nil, "", nil, 0)
 	assert.Nil(t, pExGET)
 	assert.Equal(t, map[string]any{"key": "val"}, qpExGET)
+}
+
+// A missing candidate goes out as User A: harvested IDs (real objects) are tried only with a
+// read-only method, so the phase never deletes or overwrites the object it is about to test.
+func TestGenerateCandidateForEndpoint_HarvestedIDsOnlyForReadOnly(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.Method+" "+r.URL.EscapedPath())
+		mu.Unlock()
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	cfg := &swagger.Config{BaseURL: ts.URL}
+	d := NewDetector(NewMock(cfg, ts.Client()))
+	d.harvestedIDs.Store("/items", []string{"h1", "h2"})
+	gen := generator.New(nil, swagger.ProfileRandom, swagger.DefaultSettings())
+
+	d.generateCandidateForEndpoint(context.Background(), swagger.EndpointConfig{Path: "/items/{itemId}", Method: "DELETE"}, gen)
+	d.generateCandidateForEndpoint(context.Background(), swagger.EndpointConfig{Path: "/items/{itemId}", Method: "GET"}, gen)
+	d.generateCandidateForEndpoint(context.Background(), swagger.EndpointConfig{Path: "/items/{name}", Method: "GET"}, gen)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{
+		"DELETE /items/00000000-0000-4000-8000-000000000000",
+		"GET /items/h1",
+		"GET /items/h2",
+		"GET /items/%7Bname%7D",
+	}, paths, "one placeholder DELETE; the IDs only on GET; one request where no ID can be placed")
 }

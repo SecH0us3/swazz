@@ -7,6 +7,8 @@ package bola
 
 import (
 	"context"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,17 +28,31 @@ const (
 // e.g. substituteIDInPath("/api/goods/{id}", "42") → "/api/goods/42".
 func substituteIDInPath(templatePath, id string) string {
 	parts := strings.Split(strings.Trim(templatePath, "/"), "/")
-	out := make([]string, len(parts))
-	copy(out, parts)
-	for i, part := range parts {
-		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-			paramName := part[1 : len(part)-1]
-			if isIDParam(paramName) {
-				out[i] = id
-			}
+	return "/" + strings.Join(placeIDInSegments(parts, parts, id), "/")
+}
+
+// placeIDInSegments returns a copy of base with id in every segment where template has an
+// ID-like {param}. The id is path-escaped: a harvested ID comes from the target, and escaped it
+// stays one literal segment ("../admin?x=1" cannot move the path or add a query). template and
+// base must have the same length.
+func placeIDInSegments(template, base []string, id string) []string {
+	out := slices.Clone(base)
+	for i, part := range template {
+		if isIDSegment(part) {
+			out[i] = url.PathEscape(id)
 		}
 	}
-	return "/" + strings.Join(out, "/")
+	return out
+}
+
+// templateHasIDParam reports whether a path template has an ID-like {param} to put an ID in.
+func templateHasIDParam(templatePath string) bool {
+	return slices.ContainsFunc(strings.Split(strings.Trim(templatePath, "/"), "/"), isIDSegment)
+}
+
+// isIDSegment reports whether a template path segment is an ID-like {param}.
+func isIDSegment(part string) bool {
+	return strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") && isIDParam(part[1:len(part)-1])
 }
 
 // SubstituteIDsInPayload replaces ID-like field values in a JSON structure
@@ -166,7 +182,6 @@ func (d *Detector) generateCandidateForEndpoint(
 	ep swagger.EndpointConfig,
 	safeGen *generator.Generator,
 ) *swagger.FuzzResult {
-	harvested := d.collectAllHarvestedIDs()
 	hasPathParams := strings.Contains(ep.Path, "{")
 
 	// Build baseline payload once — reused and copied per iteration.
@@ -177,7 +192,19 @@ func (d *Detector) generateCandidateForEndpoint(
 
 	paramName := CandidateParamName(ep, hasPathParams, baseBody)
 
-	limit := min(len(harvested), maxHarvestedIDsToTest)
+	// Harvested IDs name real objects on the target, and this request goes out as User A: try
+	// them only with a safe, bodiless method (a DELETE would remove the object it is about to test),
+	// and only where there is somewhere to put them. Otherwise one request with the placeholder.
+	var harvested []string
+	placesID := paramName != ""
+	if hasPathParams {
+		placesID = templateHasIDParam(ep.Path)
+	}
+	if placesID && isNoBodyMethod(ep.Method) {
+		harvested = d.harvestedIDsFor(getPathPrefix(ep.Path), maxHarvestedIDsToTest)
+	}
+
+	limit := len(harvested)
 	if limit == 0 {
 		limit = 1 // always try at least once (random / empty ID)
 	}

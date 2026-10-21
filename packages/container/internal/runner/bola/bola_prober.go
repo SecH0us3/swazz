@@ -7,6 +7,8 @@ package bola
 
 import (
 	"context"
+	"net/url"
+	"slices"
 	"strings"
 	"sync"
 
@@ -47,6 +49,8 @@ func (d *Detector) replayCandidates(
 		bolaWg      sync.WaitGroup
 	)
 
+	expandIDs := d.pickIDExpansionCandidates(candidates)
+
 	for _, cand := range candidates {
 		if err := d.ctx.LimiterAcquire(ctx); err != nil {
 			break
@@ -67,7 +71,7 @@ func (d *Detector) replayCandidates(
 				return
 			}
 
-			d.replayCandidate(ctx, cand, ep, identityHeaders, identityCookies, &bolaMu, &bolaResults)
+			d.replayCandidate(ctx, cand, ep, expandIDs[cand], identityHeaders, identityCookies, &bolaMu, &bolaResults)
 
 			d.ctx.AddCompletedEndpoints(1)
 			d.ctx.BroadcastProgress()
@@ -77,65 +81,156 @@ func (d *Detector) replayCandidates(
 	return bolaResults
 }
 
-// buildPathsToTest returns the set of concrete paths to probe for a given
-// candidate, expanding harvested IDs into path parameters up to the cap.
-func (d *Detector) buildPathsToTest(cand *swagger.FuzzResult) ([]replayTarget, string) {
+// pickIDExpansionCandidates picks, for each endpoint, the one candidate whose replay also tries
+// the harvested IDs: a run has a candidate for every 2xx result, and each ID target is probed
+// under every identity, so expanding all of them multiplied the phase's requests. Only a
+// read-only (safe, bodiless) method is picked: the IDs name real objects on the target, and replaying a DELETE,
+// PUT or PATCH with them would change those objects. The pick is the first candidate in order
+// that is replayed at all (its baseline carried auth) and has somewhere to put an ID (an ID
+// param, a path that lines up with its template), preferring one not from an echo-prone profile
+// (malicious, boundary), whose payload and response make a poor baseline.
+func (d *Detector) pickIDExpansionCandidates(candidates []*swagger.FuzzResult) map[*swagger.FuzzResult]bool {
+	picked := make(map[*swagger.FuzzResult]bool)
+	done := make(map[string]bool)
+	for _, allowEchoProne := range []bool{false, true} {
+		for _, cand := range candidates {
+			key := strings.ToUpper(cand.Method) + " " + cand.Endpoint
+			if done[key] || (!allowEchoProne && isEchoProneProfile(cand.Profile)) ||
+				!isNoBodyMethod(cand.Method) || replayParamName(cand) == "" {
+				continue
+			}
+			if strings.Contains(cand.Endpoint, "{") {
+				if _, _, aligned := alignedSegments(cand); !aligned || !templateHasIDParam(cand.Endpoint) {
+					continue
+				}
+			}
+			if d.baselineHasAuth(cand) {
+				picked[cand] = true
+				done[key] = true
+			}
+		}
+	}
+	return picked
+}
+
+// isEchoProneProfile reports whether the profile sends payloads a target tends to echo or choke
+// on, so its 2xx responses make a poor replay baseline.
+func isEchoProneProfile(p swagger.FuzzingProfile) bool {
+	return p == swagger.ProfileMalicious || p == swagger.ProfileBoundary
+}
+
+// replayParamName is the parameter a replay puts an ID in: the first path parameter, or an
+// ID-like key of the candidate's payload.
+func replayParamName(cand *swagger.FuzzResult) string {
+	if strings.Contains(cand.Endpoint, "{") {
+		return firstPathParam(cand.Endpoint)
+	}
+	if m, ok := cand.Payload.(map[string]any); ok {
+		for k := range m {
+			if isIDParam(k) {
+				return k
+			}
+		}
+	}
+	return ""
+}
+
+// alignedSegments splits the candidate's template and resolved path into segments; ok is false
+// when their counts differ, so no ID can be placed by position.
+func alignedSegments(cand *swagger.FuzzResult) (template, resolved []string, ok bool) {
+	template = strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
+	resolved = strings.Split(strings.Trim(cand.ResolvedPath, "/"), "/")
+	return template, resolved, len(template) == len(resolved)
+}
+
+// buildPathsToTest returns the set of concrete paths to probe for a given candidate: its own
+// path and, when expandIDs (pickIDExpansionCandidates), harvested IDs placed in its ID
+// parameter, up to the cap.
+func (d *Detector) buildPathsToTest(cand *swagger.FuzzResult, expandIDs bool) ([]replayTarget, string) {
 	targets := []replayTarget{{path: cand.ResolvedPath, id: ""}}
 
 	hasPathParams := strings.Contains(cand.Endpoint, "{")
-	paramName := ""
-	if hasPathParams {
-		paramName = firstPathParam(cand.Endpoint)
-	} else if m, ok := cand.Payload.(map[string]any); ok {
-		for k := range m {
-			if isIDParam(k) {
-				paramName = k
-				break
-			}
-		}
-	}
-
-	if paramName == "" {
+	paramName := replayParamName(cand)
+	if paramName == "" || !expandIDs {
 		return targets, paramName
 	}
 
-	harvested := d.collectAllHarvestedIDs()
-	limit := min(len(harvested), maxHarvestedIDsToTest)
+	origParts, resolParts, aligned := alignedSegments(cand)
+	if hasPathParams && !aligned {
+		return targets, paramName
+	}
 
-	for i := range limit {
-		var newPath string
+	for _, id := range d.harvestedIDsFor(getPathPrefix(cand.Endpoint), maxHarvestedIDsToTest) {
+		newPath := cand.ResolvedPath
 		if hasPathParams {
-			origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
-			resolParts := strings.Split(strings.Trim(cand.ResolvedPath, "/"), "/")
-			if len(origParts) == len(resolParts) {
-				for idx, part := range origParts {
-					if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-						if isIDParam(part[1 : len(part)-1]) {
-							resolParts[idx] = harvested[i]
-						}
-					}
-				}
-				newPath = "/" + strings.Join(resolParts, "/")
+			newPath = "/" + strings.Join(placeIDInSegments(origParts, resolParts, id), "/")
+		}
+		// The candidate's own path already is the first target (a generated candidate already
+		// carries a harvested ID), and the same path + ID is probed once.
+		if templateHasIDParam(cand.Endpoint) {
+			if unescaped, err := url.PathUnescape(newPath); newPath == cand.ResolvedPath || (err == nil && unescaped == cand.ResolvedPath) {
+				continue
+			}
+		} else if m, ok := cand.Payload.(map[string]any); ok {
+			if own, ok := formatIDScalar(m[paramName]); ok && own == id {
+				continue
 			}
 		}
-		if newPath == "" {
-			newPath = cand.ResolvedPath
-		}
-
-		// Skip duplicates (same path + same injected ID).
-		isDup := false
-		for _, t := range targets {
-			if t.path == newPath && t.id == harvested[i] {
-				isDup = true
-				break
-			}
-		}
-		if !isDup {
-			targets = append(targets, replayTarget{path: newPath, id: harvested[i]})
+		if !slices.Contains(targets, replayTarget{path: newPath, id: id}) {
+			targets = append(targets, replayTarget{path: newPath, id: id})
 		}
 	}
 
 	return targets, paramName
+}
+
+var (
+	defaultAuthHeaders = swagger.DefaultSettings().AuthHeaders
+	defaultAuthCookies = swagger.DefaultSettings().AuthCookies
+)
+
+// authHeaderNames are the headers that carry credentials: the configured ones, or the defaults.
+func authHeaderNames(s swagger.Settings) []string {
+	if len(s.AuthHeaders) > 0 {
+		return s.AuthHeaders
+	}
+	return defaultAuthHeaders
+}
+
+// authCookieNames are the cookies that carry credentials: the configured ones, or the defaults.
+func authCookieNames(s swagger.Settings) []string {
+	if len(s.AuthCookies) > 0 {
+		return s.AuthCookies
+	}
+	return defaultAuthCookies
+}
+
+// baselineHasAuth reports whether the candidate's request carried authentication credentials: a
+// configured (or default) auth header or auth cookie.
+func (d *Detector) baselineHasAuth(cand *swagger.FuzzResult) bool {
+	settings := d.ctx.Config().Settings
+	headerNames := authHeaderNames(settings)
+	for k := range cand.RequestHeaders {
+		if containsFold(headerNames, k) {
+			return true
+		}
+	}
+	dropCookies := authCookieNames(settings)
+	cookieHeader, ok := cand.RequestHeaders["Cookie"]
+	if !ok {
+		return false
+	}
+	for _, part := range strings.Split(cookieHeader, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		cookieName := strings.TrimSpace(strings.SplitN(part, "=", 2)[0])
+		if containsFold(dropCookies, cookieName) {
+			return true
+		}
+	}
+	return false
 }
 
 // replayCandidate probes all paths for one candidate under each identity and
@@ -144,56 +239,21 @@ func (d *Detector) replayCandidate(
 	ctx context.Context,
 	cand *swagger.FuzzResult,
 	ep swagger.EndpointConfig,
+	expandIDs bool,
 	identityHeaders, identityCookies map[string]map[string]string,
 	bolaMu *sync.Mutex,
 	bolaResults *[]*swagger.FuzzResult,
 ) {
-	targets, paramName := d.buildPathsToTest(cand)
-
 	// Skip BOLA/IDOR replay if the baseline request did not use any authentication credentials.
 	// Replaying unauthenticated endpoints anonymously or under other identities
 	// is guaranteed to succeed and only generates false positives.
-	hasAuth := false
-	dropHeaders := d.ctx.Config().Settings.AuthHeaders
-	if len(dropHeaders) == 0 {
-		dropHeaders = []string{"Authorization", "X-API-Key"}
-	}
-	for k := range cand.RequestHeaders {
-		if containsFold(dropHeaders, k) {
-			hasAuth = true
-			break
-		}
-	}
-	if !hasAuth {
-		dropCookies := d.ctx.Config().Settings.AuthCookies
-		if len(dropCookies) == 0 {
-			dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
-		}
-		if cookieHeader, ok := cand.RequestHeaders["Cookie"]; ok {
-			for _, part := range strings.Split(cookieHeader, ";") {
-				part = strings.TrimSpace(part)
-				if part == "" {
-					continue
-				}
-				nameVal := strings.SplitN(part, "=", 2)
-				cookieName := strings.TrimSpace(nameVal[0])
-				for _, dropCookie := range dropCookies {
-					if strings.EqualFold(cookieName, dropCookie) {
-						hasAuth = true
-						break
-					}
-				}
-				if hasAuth {
-					break
-				}
-			}
-		}
-	}
-	if !hasAuth {
+	if !d.baselineHasAuth(cand) {
 		d.ctx.LogDebug("[BOLA] Skipping %s %s — no auth credentials in baseline request",
 			cand.Method, cand.Endpoint)
 		return
 	}
+
+	targets, paramName := d.buildPathsToTest(cand, expandIDs)
 
 	confirmed := make(map[string]bool)
 
@@ -360,14 +420,8 @@ func (d *Detector) probeAnonymous(
 // stripAuthCredentials returns copies of global headers and cookies with
 // known auth fields removed, simulating an anonymous request.
 func (d *Detector) stripAuthCredentials() (headers, cookies map[string]string) {
-	dropHeaders := d.ctx.Config().Settings.AuthHeaders
-	if len(dropHeaders) == 0 {
-		dropHeaders = []string{"Authorization", "X-API-Key"}
-	}
-	dropCookies := d.ctx.Config().Settings.AuthCookies
-	if len(dropCookies) == 0 {
-		dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
-	}
+	dropHeaders := authHeaderNames(d.ctx.Config().Settings)
+	dropCookies := authCookieNames(d.ctx.Config().Settings)
 
 	d.ctx.RLockConfig()
 	headers = make(map[string]string, len(d.ctx.Config().GlobalHeaders))
