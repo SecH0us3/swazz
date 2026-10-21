@@ -162,7 +162,11 @@ type Runner struct {
 	harvestedIDs  sync.Map // path prefix → []string
 	idSources     sync.Map // ID string → source string
 	resultsMu     sync.Mutex
-	allResults    []*swagger.FuzzResult
+	allResults    []*swagger.FuzzResult // see retainResult
+	retainedPer   map[retainKey]int
+	retainedPlain int
+	retainedSlim  int
+	notRetained   int
 	limiter       *ConcurrencyLimiter
 	gate          license.Gate
 
@@ -424,8 +428,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 
 	r.resultsMu.Lock()
-	candidates := make([]*swagger.FuzzResult, len(r.allResults))
-	copy(candidates, r.allResults)
+	candidates := replayCandidates(r.allResults)
 	r.resultsMu.Unlock()
 
 	detector := bola.NewDetector(r)

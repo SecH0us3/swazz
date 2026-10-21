@@ -158,8 +158,9 @@ func (o *Orchestrator) GroupFindings(results []*swagger.FuzzResult) []*GroupFind
 				orderedKeys = append(orderedKeys, defectKey)
 			} else {
 				gf.AffectedFindingIDs = append(gf.AffectedFindingIDs, findingID)
-				// Prefer finding with longer evidence field as representative
-				if len(finding.Evidence) > len(gf.Representative.Evidence) {
+				// Prefer finding with longer evidence field as representative, but never trade a
+				// whole result for one the runner kept without its response body.
+				if len(finding.Evidence) > len(gf.Representative.Evidence) && (!res.Slim || gf.Result.Slim) {
 					gf.Representative = finding
 					gf.Result = res
 				}

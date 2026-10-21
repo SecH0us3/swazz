@@ -551,7 +551,11 @@ func (r *Runner) logCompletionSummary(stats swagger.RunStats) {
 	for _, res := range r.allResults {
 		findingsCount += len(res.AnalyzerFindings)
 	}
+	notRetained := r.notRetained
 	r.resultsMu.Unlock()
+	if notRetained > 0 {
+		r.logDebug("%d successful result(s) were streamed but not kept for the post-scan phases (see retainResult)", notRetained)
+	}
 
 	sentStr := formatBytes(int(stats.TotalSentBytes))
 	recvStr := formatBytes(int(stats.TotalResponseBytes))
