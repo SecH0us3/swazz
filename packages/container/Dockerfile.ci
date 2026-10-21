@@ -3,7 +3,7 @@
 # This is required by runners like GitLab CI which inject pipeline scripts via shell.
 
 # Stage 1: Build Go Application
-FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine3.23@sha256:6750308561953d451210ed1a8086d36c8c8bdcbf672d38d9d0d424b8a7a0216c AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine3.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /app
