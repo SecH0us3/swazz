@@ -41,6 +41,9 @@ type Generator struct {
 	// hasActiveMaliciousStrings tracks if any malicious string categories are enabled
 	hasActiveMaliciousStrings bool
 
+	// The boundary strings this generator's payload size cap can carry (BoundaryStringsFitting).
+	boundaryStrings []any
+
 	oobServerURL string
 	Endpoint     string
 	RunID        string
@@ -71,6 +74,9 @@ func New(dictionaries map[string][]any, profile swagger.FuzzingProfile, settings
 		settings:         settings,
 		oobServerURL:     settings.OOBServerURL,
 		mSecHeaderIdxs:   make(map[string]int),
+	}
+	if profile == swagger.ProfileBoundary {
+		g.boundaryStrings = payloads.BoundaryStringsFitting(settings.PayloadSizeCap())
 	}
 	g.cachedMaliciousStrings, g.hasActiveMaliciousStrings = g.getActiveMaliciousStrings()
 	return g
@@ -127,8 +133,8 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 	switch profile {
 	case swagger.ProfileBoundary:
 		max := 0
-		if is(payloads.CatBoundaryStrings) && len(payloads.BoundaryStrings) > max {
-			max = len(payloads.BoundaryStrings)
+		if is(payloads.CatBoundaryStrings) {
+			max = len(payloads.BoundaryStringsFitting(settings.PayloadSizeCap()))
 		}
 		if is(payloads.CatBoundaryIntegers) && len(payloads.BoundaryIntegers) > max {
 			max = len(payloads.BoundaryIntegers)

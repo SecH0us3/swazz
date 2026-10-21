@@ -32,10 +32,7 @@ func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
 		}
 
 		// For primitive items (uuid, integer, date, boolean, short string), calculate budget based on payload limit.
-		maxBudget := 1048576 // 1MB default budget for array accumulation
-		if g.settings.MaxPayloadSizeBytes > 0 {
-			maxBudget = g.settings.MaxPayloadSizeBytes
-		}
+		maxBudget := g.settings.PayloadSizeCap()
 
 		approxItemBytes := 30 // default item size in JSON
 		switch itemSchema.Type {

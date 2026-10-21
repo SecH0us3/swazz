@@ -46,7 +46,7 @@ func (r *Runner) fuzzEndpoint(
 	}
 
 	effectiveIter := calcEffectiveIterations(profile, r.config.Settings, &endpoint)
-	maxPayload := calcMaxPayloadSize(profile, r.config.Settings)
+	maxPayload := r.config.Settings.PayloadSizeCap()
 	enableDedup := profile == swagger.ProfileRandom
 
 	var wg sync.WaitGroup
@@ -149,6 +149,38 @@ func (r *Runner) fuzzEndpoint(
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 }
 
+// sizedPayloadHash hashes the payload's JSON encoding, which also decides whether it fits: fits is
+// false when the encoding is over maxBytes. A payload whose encoding cannot fit is rejected before
+// it is encoded, since encoding a multi-megabyte boundary string only to discard it dominated a
+// scan's allocations.
+func sizedPayloadHash(p generatedPayload, maxBytes int) (hash uint32, fits bool) {
+	payloadMap := make(map[string]any)
+	if p.body != nil {
+		payloadMap["body"] = p.body
+	}
+	if p.queryParams != nil {
+		payloadMap["queryParams"] = p.queryParams
+	}
+	if p.pathParams != nil {
+		payloadMap["pathParams"] = p.pathParams
+	}
+	if minEncodedSize(payloadMap, maxBytes) > maxBytes {
+		return 0, false
+	}
+
+	buf := bufPool.Get().(*bytes.Buffer)
+	defer PutBuffer(buf)
+	buf.Reset()
+	if err := json.NewEncoder(buf).Encode(payloadMap); err != nil {
+		return 0, false
+	}
+	b := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+	if len(b) > maxBytes {
+		return 0, false
+	}
+	return payloads.HashBytes(b), true
+}
+
 // buildFuzzIteration generates one payload attempt, enforces the size cap and
 // dedup check, and returns the result along with its hash and whether it was a
 // duplicate. The caller owns the outer retry loop via effectiveIter.
@@ -175,38 +207,11 @@ func (r *Runner) buildFuzzIteration(
 	for range maxRetries {
 		attempt := buildFuzzPayload(endpoint, gen, safeGen, isSecHeaderIter, enableDedup)
 
-		// Size check via buffer pool.
-		buf := bufPool.Get().(*bytes.Buffer)
-		buf.Reset()
-		var encErr error
-		payloadMap := make(map[string]any)
-		if attempt.body != nil {
-			payloadMap["body"] = attempt.body
-		}
-		if attempt.queryParams != nil {
-			payloadMap["queryParams"] = attempt.queryParams
-		}
-		if attempt.pathParams != nil {
-			payloadMap["pathParams"] = attempt.pathParams
-		}
-		if len(payloadMap) > 0 {
-			encErr = json.NewEncoder(buf).Encode(payloadMap)
-		} else {
-			buf.WriteByte('{')
-			buf.WriteByte('}')
-		}
-
-		if encErr != nil || buf.Len() > maxPayloadSize {
-			PutBuffer(buf)
+		h, fits := sizedPayloadHash(attempt, maxPayloadSize)
+		if !fits {
 			continue
 		}
-
-		b := buf.Bytes()
-		if len(b) > 0 && b[len(b)-1] == '\n' {
-			b = b[:len(b)-1]
-		}
-		hash = payloads.HashBytes(b)
-		PutBuffer(buf)
+		hash = h
 
 		if enableDedup && seenHashes[hash] {
 			continue
@@ -226,4 +231,52 @@ func isSecurityHeaderIteration(gen *generator.Generator, profile swagger.Fuzzing
 		return false
 	}
 	return i >= gen.BodyIterations()
+}
+
+// minEncodedSize returns a lower bound on the length of v's JSON encoding, the way the payload
+// size check encodes it (json.Encoder: no indentation). It counts only what any encoding has
+// (string content, quotes, colons, commas, brackets); escaping only adds to it, so a value it puts
+// above the cap is certainly above it. It stops counting once the bound exceeds limit.
+func minEncodedSize(v any, limit int) int {
+	switch t := v.(type) {
+	case string:
+		return len(t) + 2
+	case map[string]any:
+		n := 2 + commas(len(t))
+		for k, item := range t {
+			n += len(k) + 3 // quotes and colon
+			n += minEncodedSize(item, limit-n)
+			if n > limit {
+				return n
+			}
+		}
+		return n
+	case []any:
+		n := 2 + commas(len(t))
+		for _, item := range t {
+			n += minEncodedSize(item, limit-n)
+			if n > limit {
+				return n
+			}
+		}
+		return n
+	case map[string]string:
+		n := 2 + commas(len(t))
+		for k, item := range t {
+			n += len(k) + len(item) + 5 // two pairs of quotes and a colon
+			if n > limit {
+				return n
+			}
+		}
+		return n
+	}
+	return 1 // every JSON value takes at least one byte
+}
+
+// commas is how many separators a JSON object or array of n entries has.
+func commas(n int) int {
+	if n == 0 {
+		return 0
+	}
+	return n - 1
 }

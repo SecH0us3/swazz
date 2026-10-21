@@ -316,7 +316,7 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 		profileNames = []string{"NONE"}
 	}
 
-	payloadSizeStr := formatBytes(r.config.Settings.MaxPayloadSizeBytes)
+	payloadSizeStr := formatBytes(r.config.Settings.PayloadSizeCap())
 	plannedTotal := r.progress.totalPlanned.Load()
 	etaStr := estimateScanDuration(plannedTotal, r.config.Settings.Concurrency, r.config.Settings.DelayBetweenRequestMs, isMCP)
 	if r.config.Settings.MaxScanDurationMin > 0 {

@@ -7,14 +7,17 @@ package runner
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"swazz-engine/internal/generator"
+	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
@@ -224,9 +227,9 @@ func TestHashPayload(t *testing.T) {
 		body: map[string]any{"a": 2},
 	}
 
-	h1 := hashPayload(p1)
-	h2 := hashPayload(p2)
-	h3 := hashPayload(p3)
+	h1, _ := sizedPayloadHash(p1, 1<<20)
+	h2, _ := sizedPayloadHash(p2, 1<<20)
+	h3, _ := sizedPayloadHash(p3, 1<<20)
 
 	if h1 != h2 {
 		t.Errorf("expected h1 == h2, got %d != %d", h1, h2)
@@ -333,4 +336,67 @@ func TestRunActiveParameterFuzzing_Execution(t *testing.T) {
 	r.finaliseRun()
 	stats := r.GetStats()
 	assert.Greater(t, stats.TotalRequests, int64(0))
+}
+
+// Active parameter fuzzing enforces the payload size cap too: a boundary payload over it is
+// skipped and taken off the plan, not sent.
+func TestRunActiveParameterFuzzing_EnforcesPayloadCap(t *testing.T) {
+	const capBytes = 1010 // the 1000-byte strings, cut to fit a one-letter key, overflow with "name"
+	var mu sync.Mutex
+	var sent, largest int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		sent++
+		largest = max(largest, len(b))
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: ts.URL,
+		Endpoints: []swagger.EndpointConfig{{
+			Path:   "/api/v1/user",
+			Method: "POST",
+			Schema: swagger.SchemaProperty{
+				Type:       "object",
+				Properties: map[string]*swagger.SchemaProperty{"name": {Type: "string"}},
+			},
+		}},
+		Settings: swagger.Settings{
+			IterationsPerProfile:   1,
+			Concurrency:            2,
+			TimeoutMs:              1000,
+			MaxPayloadSizeBytes:    capBytes,
+			ActiveParameterFuzzing: true,
+			Profiles:               []swagger.FuzzingProfile{swagger.ProfileBoundary},
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileBoundary: {payloads.CatBoundaryStrings},
+			},
+		},
+		Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+	}
+
+	r := New(cfg, &http.Client{})
+	defer r.Close()
+	ctx, err := r.initRun(context.Background())
+	require.NoError(t, err)
+
+	gen := generator.New(nil, swagger.ProfileBoundary, cfg.Settings)
+	safeGen := generator.New(nil, swagger.ProfileRandom, cfg.Settings)
+	fields := collectTargetFields(&cfg.Endpoints[0])
+	require.Len(t, fields, 1)
+	planned := calcEffectiveIterations(swagger.ProfileBoundary, cfg.Settings, &cfg.Endpoints[0])
+	r.progress.totalPlanned.Store(int64(planned))
+
+	r.runActiveParameterFuzzing(ctx, 0, swagger.ProfileBoundary, 0, cfg.Endpoints[0], gen, safeGen, fields, 0)
+	r.finaliseRun()
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.LessOrEqual(t, largest, capBytes, "no body over the cap is sent")
+	assert.Positive(t, sent)
+	assert.Less(t, sent, planned, "the payloads over the cap are skipped")
+	assert.Equal(t, int64(sent), r.progress.totalPlanned.Load(), "each skip is taken off the plan")
 }
