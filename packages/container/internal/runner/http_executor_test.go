@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -119,6 +120,8 @@ func TestExecuteGRPCRequest_LiveServerAndAnalyzer(t *testing.T) {
 			GlobalHeaders: map[string]string{
 				"Authorization": "Bearer test-jwt",
 			},
+			// The target is in-process, on loopback.
+			Security: swagger.SecurityConfig{AllowPrivateIPs: true},
 			Settings: swagger.Settings{
 				TimeoutMs:           2000,
 				AnalyzeResponseBody: true,
@@ -152,6 +155,50 @@ func TestExecuteGRPCRequest_LiveServerAndAnalyzer(t *testing.T) {
 		}
 	}
 	assert.True(t, foundGrpcInternal, "expected finding swazz/grpc-internal-error to be captured")
+}
+
+// A scan that may not reach private addresses (the default, and what the coordinator forces on
+// shared runners) must not reach a loopback gRPC target either: only the HTTP executor enforced it
+// before.
+func TestExecuteGRPCRequest_BlocksPrivateTarget(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer lis.Close()
+
+	var called atomic.Bool
+	srv := grpc.NewServer(
+		grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {
+			called.Store(true)
+			return status.Error(codes.Internal, "panic: runtime error: invalid memory address")
+		}),
+	)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	defer srv.Stop()
+
+	r := &Runner{
+		config: &swagger.Config{
+			BaseURL:  "grpc://" + lis.Addr().String(),
+			Settings: swagger.Settings{TimeoutMs: 2000, AnalyzeResponseBody: true},
+		},
+		analyzer: analyzer.NewRegistry(),
+	}
+	defer r.Close()
+
+	res := r.executeGRPCRequest(
+		context.Background(), "grpc://"+lis.Addr().String(),
+		"/demo.UserService/GetUser", "/demo.UserService/GetUser",
+		map[string]any{"id": 1}, swagger.ProfileRandom, nil,
+	)
+
+	require.NotNil(t, res)
+	assert.Contains(t, res.Error, "SSRF policy")
+	assert.NotEqual(t, 200, res.Status)
+	for _, f := range res.AnalyzerFindings {
+		assert.NotEqual(t, "swazz/grpc-internal-error", f.RuleID, "no answer from the target may be analyzed")
+	}
+	assert.False(t, called.Load(), "the blocked target must not be contacted")
 }
 
 // fakeMCPClient records the extraHeaders it was called with, to prove the BOLA

@@ -8,6 +8,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 
@@ -19,6 +20,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+
+	"swazz-engine/internal/security"
 )
 
 func init() {
@@ -59,22 +62,25 @@ func (c *rawCodec) Name() string {
 
 // Client manages connections and unary gRPC method invocations.
 type Client struct {
-	addr     string
-	isTLS    bool
-	metadata map[string]string
-	conn     *grpc.ClientConn
-	mu       sync.Mutex
+	addr         string
+	isTLS        bool
+	allowPrivate bool
+	metadata     map[string]string
+	conn         *grpc.ClientConn
+	mu           sync.Mutex
 }
 
-// NewClient creates a new gRPC client instance.
-func NewClient(addr string, isTLS bool, md map[string]string) *Client {
+// NewClient creates a new gRPC client instance. Unless allowPrivate is set, it refuses to connect
+// to private and reserved addresses, like the runner's HTTP client (see dialOptions).
+func NewClient(addr string, isTLS bool, md map[string]string, allowPrivate bool) *Client {
 	cleanAddr := strings.TrimPrefix(addr, "grpc://")
 	cleanAddr = strings.TrimPrefix(cleanAddr, "grpcs://")
 	cleanAddr = strings.TrimRight(cleanAddr, "/")
 	return &Client{
-		addr:     cleanAddr,
-		isTLS:    isTLS,
-		metadata: md,
+		addr:         cleanAddr,
+		isTLS:        isTLS,
+		allowPrivate: allowPrivate,
+		metadata:     md,
 	}
 }
 
@@ -86,19 +92,36 @@ func (c *Client) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	var dialOpt grpc.DialOption
-	if c.isTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
-	} else {
-		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
-	}
-
-	conn, err := grpc.NewClient(c.addr, dialOpt)
+	conn, err := grpc.NewClient(c.addr, dialOptions(c.isTLS, c.allowPrivate)...)
 	if err != nil {
 		return fmt.Errorf("failed to create gRPC client for %s: %w", c.addr, err)
 	}
 	c.conn = conn
 	return nil
+}
+
+// dialOptions are the options every gRPC connection of the runner is made with. Unless
+// allowPrivate is set, connections go through security.SSRFDialContext, the dial function the
+// HTTP executor uses, so a gRPC target cannot reach a private or reserved address the HTTP one
+// may not. A proxy is then not used: it would resolve and dial the target itself, out of the
+// check's reach. Non-goal: other schemes than TCP (unix sockets) are refused, not supported.
+func dialOptions(isTLS, allowPrivate bool) []grpc.DialOption {
+	var opts []grpc.DialOption
+	if isTLS {
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(nil)))
+	} else {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+	if !allowPrivate {
+		dial := security.SSRFDialContext(false)
+		opts = append(opts,
+			grpc.WithNoProxy(),
+			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+				return dial(ctx, "tcp", addr)
+			}),
+		)
+	}
+	return opts
 }
 
 // Close closes the gRPC client connection.

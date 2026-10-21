@@ -12,8 +12,6 @@ import (
 	"strings"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/protobuf/proto"
@@ -24,19 +22,13 @@ import (
 	"swazz-engine/internal/swagger"
 )
 
-// DiscoverViaReflection queries a live gRPC server for available services and schemas.
-func DiscoverViaReflection(ctx context.Context, targetAddr string, isTLS bool, reqHeaders map[string]string) (*swagger.ParseResult, error) {
+// DiscoverViaReflection queries a live gRPC server for available services and schemas. Unless
+// allowPrivate is set, the server may not be at a private or reserved address (see dialOptions).
+func DiscoverViaReflection(ctx context.Context, targetAddr string, isTLS bool, reqHeaders map[string]string, allowPrivate bool) (*swagger.ParseResult, error) {
 	cleanAddr := strings.TrimPrefix(targetAddr, "grpc://")
 	cleanAddr = strings.TrimPrefix(cleanAddr, "grpcs://")
 
-	var dialOpt grpc.DialOption
-	if isTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
-	} else {
-		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
-	}
-
-	conn, err := grpc.NewClient(cleanAddr, dialOpt)
+	conn, err := grpc.NewClient(cleanAddr, dialOptions(isTLS, allowPrivate)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC server at %s: %w", cleanAddr, err)
 	}

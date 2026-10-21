@@ -79,7 +79,7 @@ func (r *Runner) executeWebSocketRequest(
 	var client *ws.Client
 	c, ok := r.wsClients.Load(urlStr)
 	if !ok {
-		client = ws.NewClient()
+		client = ws.NewClient(r.allowPrivateIPs())
 		r.wsClients.Store(urlStr, client)
 	} else {
 		client = c.(*ws.Client)

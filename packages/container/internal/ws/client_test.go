@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,7 +67,7 @@ func TestClient_SendMessage(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 
-	client := NewClient()
+	client := NewClient(true)
 
 	t.Run("close nil", func(t *testing.T) {
 		assert.NoError(t, client.Close())
@@ -127,4 +128,40 @@ func TestClient_SendMessage(t *testing.T) {
 		assert.Equal(t, 200, status)
 		assert.Equal(t, "ping", string(msg))
 	})
+}
+
+// Unless the scan may reach private addresses, the handshake must not reach a loopback target:
+// the WebSocket executor goes through the same SSRF check as the HTTP one.
+func TestClient_BlocksPrivateAddress(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		typ, msg, err := c.Read(r.Context())
+		if err != nil {
+			return
+		}
+		_ = c.Write(r.Context(), typ, msg)
+	}))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, status, err := NewClient(false).SendMessage(ctx, wsURL, []byte("hello"), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "SSRF policy")
+	assert.NotEqual(t, http.StatusOK, status)
+	assert.Zero(t, hits.Load(), "the blocked target must not be contacted")
+
+	msg, status, err := NewClient(true).SendMessage(ctx, wsURL, []byte("hello"), nil)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, status)
+	assert.Equal(t, "hello", string(msg))
+	assert.Equal(t, int32(1), hits.Load())
 }

@@ -41,13 +41,19 @@ var mcpMethodProbes = []string{
 	"; id ;",
 }
 
+// allowPrivateIPs reports whether this run may reach private and reserved addresses; without a
+// config it may not.
+func (r *Runner) allowPrivateIPs() bool {
+	return r.config != nil && r.config.Security.AllowPrivateIPs
+}
+
 func (r *Runner) getGRPCClient(addr string, isTLS bool, md map[string]string) *swazzGrpc.Client {
 	if val, ok := r.grpcClients.Load(addr); ok {
 		if c, ok := val.(*swazzGrpc.Client); ok {
 			return c
 		}
 	}
-	c := swazzGrpc.NewClient(addr, isTLS, md)
+	c := swazzGrpc.NewClient(addr, isTLS, md, r.allowPrivateIPs())
 	actual, _ := r.grpcClients.LoadOrStore(addr, c)
 	if client, ok := actual.(*swazzGrpc.Client); ok {
 		return client

@@ -8,6 +8,7 @@ package grpc
 import (
 	"context"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
 
@@ -96,7 +98,7 @@ func TestClient_Invoke(t *testing.T) {
 	}()
 	defer srv.Stop()
 
-	client := NewClient("grpc://"+lis.Addr().String(), false, map[string]string{"client-hdr": "val1"})
+	client := NewClient("grpc://"+lis.Addr().String(), false, map[string]string{"client-hdr": "val1"}, true)
 	defer client.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -128,8 +130,70 @@ func TestClient_Invoke(t *testing.T) {
 }
 
 func TestClient_TLSInit(t *testing.T) {
-	client := NewClient("grpcs://localhost:50051", true, nil)
+	client := NewClient("grpcs://localhost:50051", true, nil, true)
 	assert.NotNil(t, client)
 	assert.True(t, client.isTLS)
 	assert.Equal(t, "localhost:50051", client.addr)
+}
+
+// countingListener counts the connections a server accepts.
+type countingListener struct {
+	net.Listener
+	accepted atomic.Int32
+}
+
+func (l *countingListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err == nil {
+		l.accepted.Add(1)
+	}
+	return c, err
+}
+
+// startEchoServer starts a gRPC server on loopback that answers any method.
+func startEchoServer(t *testing.T) *countingListener {
+	t.Helper()
+	inner, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	lis := &countingListener{Listener: inner}
+	srv := grpc.NewServer(
+		grpc.UnknownServiceHandler(func(_ any, stream grpc.ServerStream) error {
+			var req []byte
+			if err := stream.RecvMsg(&req); err != nil {
+				return err
+			}
+			return stream.SendMsg(&req)
+		}),
+	)
+	reflection.Register(srv)
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+	return lis
+}
+
+// Unless the scan may reach private addresses, neither a call nor reflection may connect to a
+// loopback target: gRPC goes through the same SSRF check as the HTTP executor.
+func TestClient_BlocksPrivateAddress(t *testing.T) {
+	lis := startEchoServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	blocked := NewClient("grpc://"+lis.Addr().String(), false, nil, false)
+	defer blocked.Close()
+	_, code, err := blocked.Invoke(ctx, "/test.Service/Echo", []byte("hi"), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "SSRF policy")
+	assert.NotEqual(t, 200, code)
+
+	_, err = DiscoverViaReflection(ctx, "grpc://"+lis.Addr().String(), false, nil, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "SSRF policy")
+	assert.Zero(t, lis.accepted.Load(), "the blocked target must not be contacted")
+
+	allowed := NewClient("grpc://"+lis.Addr().String(), false, nil, true)
+	defer allowed.Close()
+	resp, code, err := allowed.Invoke(ctx, "/test.Service/Echo", []byte("hi"), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 200, code)
+	assert.Equal(t, "hi", string(resp))
 }

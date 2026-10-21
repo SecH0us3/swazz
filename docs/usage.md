@@ -339,7 +339,7 @@ To prevent Server-Side Request Forgery (SSRF) when Swazz is hosted as a shared r
 
 ### Security Configurations
 
-Swazz enforces SSRF protection by verifying resolved host IP addresses before making spec-fetching or fuzzing HTTP requests.
+Swazz enforces SSRF protection by verifying resolved host IP addresses before every connection it makes for a scan: spec fetching and fuzzing over HTTP, WebSocket (`ws://`, `wss://`) and gRPC (`grpc://`, `grpcs://`, including reflection discovery). All protocols share one check, so a target unreachable over HTTP is unreachable over the others too. While the check applies, WebSocket and gRPC connections do not go through an `HTTP(S)_PROXY` from the environment, since a proxy would resolve the target itself.
 
 - **Runner Agent Mode (`swazz-engine run-agent`)**:
   - By default, requests targeting private IP ranges (RFC 1918, loopback, link-local) are **blocked**.

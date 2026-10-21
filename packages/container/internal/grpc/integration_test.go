@@ -313,7 +313,7 @@ func TestGRPCIntegration_EndToEnd(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	reflRes, err := swazzGrpc.DiscoverViaReflection(ctx, "grpc://"+serverAddr, false, nil)
+	reflRes, err := swazzGrpc.DiscoverViaReflection(ctx, "grpc://"+serverAddr, false, nil, true)
 	require.NoError(t, err)
 	require.NotNil(t, reflRes)
 	require.Len(t, reflRes.Endpoints, 5)

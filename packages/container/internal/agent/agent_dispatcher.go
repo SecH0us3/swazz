@@ -680,7 +680,7 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 			isTLS := strings.HasPrefix(strings.ToLower(reqPayload.URL), "grpcs://")
 			grpcCtx, grpcCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer grpcCancel()
-			grpcResult, grpcErr := grpc.DiscoverViaReflection(grpcCtx, reqPayload.URL, isTLS, reqPayload.Headers)
+			grpcResult, grpcErr := grpc.DiscoverViaReflection(grpcCtx, reqPayload.URL, isTLS, reqPayload.Headers, safenet.AllowLocalNetwork)
 			if grpcErr != nil {
 				err = fmt.Errorf("failed to discover gRPC service via reflection: %w", grpcErr)
 			} else {
