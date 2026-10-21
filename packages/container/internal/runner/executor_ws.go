@@ -79,13 +79,24 @@ func (r *Runner) executeWebSocketRequest(
 	var client *ws.Client
 	c, ok := r.wsClients.Load(urlStr)
 	if !ok {
-		client = ws.NewClient()
+		client = ws.NewClient(r.allowPrivateIPs())
 		r.wsClients.Store(urlStr, client)
 	} else {
 		client = c.(*ws.Client)
 	}
 
-	respMsg, status, err := client.SendMessage(ctx, urlStr, payloadBytes, mergedHeaders)
+	// Each exchange is bounded like an HTTP or gRPC request: the run's context alone would let a
+	// target that accepts the connection and never answers stall the scan.
+	timeoutMs := 10000
+	r.configMu.RLock()
+	if r.config.Settings.TimeoutMs > 0 {
+		timeoutMs = r.config.Settings.TimeoutMs
+	}
+	r.configMu.RUnlock()
+	reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	defer reqCancel()
+
+	respMsg, status, err := client.SendMessage(reqCtx, urlStr, payloadBytes, mergedHeaders)
 
 	duration := time.Since(start).Milliseconds()
 	result.Duration = duration

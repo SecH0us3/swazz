@@ -67,7 +67,9 @@ func (r *Runner) executeGRPCRequest(
 	if r != nil {
 		client = r.getGRPCClient(cleanAddr, isTLS, mergedHeaders)
 	} else {
-		client = swazzGrpc.NewClient(cleanAddr, isTLS, mergedHeaders)
+		// No runner to cache and close it: this call's own client.
+		client = swazzGrpc.NewClient(cleanAddr, isTLS, mergedHeaders, false)
+		defer client.Close()
 	}
 
 	method := resolvedPath

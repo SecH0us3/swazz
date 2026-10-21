@@ -12,16 +12,33 @@ import (
 	"sync"
 
 	"nhooyr.io/websocket"
+
+	"swazz-engine/internal/security"
 )
 
 type Client struct {
 	mu   sync.Mutex
 	conn *websocket.Conn
+	// The HTTP client of the handshake; nil is the library's default (http.DefaultClient).
+	httpClient *http.Client
 }
 
-func NewClient() *Client {
-	return &Client{}
+// NewClient creates a WebSocket client. Unless allowPrivate is set, it refuses to connect to
+// private and reserved addresses, like the runner's HTTP client (see protectedHTTPClient).
+func NewClient(allowPrivate bool) *Client {
+	c := &Client{}
+	if !allowPrivate {
+		c.httpClient = protectedHTTPClient
+	}
+	return c
 }
+
+// protectedHTTPClient makes the handshake through security.NewSSRFProtectedTransport, the
+// transport the HTTP executor's guard is built from, so a WebSocket target cannot reach a private
+// or reserved address the HTTP one may not; the connection then stays on that checked socket. It
+// has no proxy: a proxy would resolve and dial the target itself, out of the check's reach. No
+// Timeout, which the WebSocket library refuses: the caller's context bounds the handshake.
+var protectedHTTPClient = &http.Client{Transport: security.NewSSRFProtectedTransport(false)}
 
 func (c *Client) Close() error {
 	c.mu.Lock()
@@ -63,8 +80,13 @@ func (c *Client) SendMessage(ctx context.Context, endpoint string, payload []byt
 
 	conn, resp, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{
 		HTTPHeader: httpHeader,
+		HTTPClient: c.httpClient,
 	})
 	if err != nil {
+		if errors.Is(err, security.ErrSSRFBlocked) {
+			// Never contacted: a network error like the HTTP executor's, not a status of the target.
+			return nil, 0, err
+		}
 		if resp != nil {
 			return nil, resp.StatusCode, err
 		}

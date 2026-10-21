@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,8 +52,9 @@ func wsURL(srv *httptest.Server) string {
 	return "ws" + strings.TrimPrefix(srv.URL, "http")
 }
 
+// newWSRunner returns a runner that may reach the in-process (loopback) targets.
 func newWSRunner() *Runner {
-	return &Runner{config: &swagger.Config{}}
+	return &Runner{config: &swagger.Config{Security: swagger.SecurityConfig{AllowPrivateIPs: true}}}
 }
 
 func findingRuleIDs(res *swagger.FuzzResult) []string {
@@ -151,7 +153,10 @@ func TestExecuteWebSocketRequest_SendsMergedHeaders(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	r := &Runner{config: &swagger.Config{GlobalHeaders: map[string]string{"X-Global": "g"}}}
+	r := &Runner{config: &swagger.Config{
+		GlobalHeaders: map[string]string{"X-Global": "g"},
+		Security:      swagger.SecurityConfig{AllowPrivateIPs: true},
+	}}
 	res := r.executeWebSocketRequest(
 		context.Background(), wsURL(srv), "/ws", "/ws",
 		map[string]any{"ping": true},
@@ -163,4 +168,25 @@ func TestExecuteWebSocketRequest_SendsMergedHeaders(t *testing.T) {
 	assert.Equal(t, "gen", h.Get("X-Generated"))
 	assert.Equal(t, "g", h.Get("X-Global"))
 	assert.Equal(t, "gen", res.RequestHeaders["X-Generated"])
+}
+
+// A scan that may not reach private addresses (the default, and what the coordinator forces on
+// shared runners) must not reach a loopback WebSocket target either: only the HTTP executor
+// enforced it before.
+func TestExecuteWebSocketRequest_BlocksPrivateTarget(t *testing.T) {
+	var hits atomic.Int32
+	srv := newWSTarget(t, func(ctx context.Context, c *websocket.Conn, msg []byte) {
+		hits.Add(1)
+		_ = c.Write(ctx, websocket.MessageText, msg)
+	})
+
+	r := &Runner{config: &swagger.Config{}}
+	res := r.executeWebSocketRequest(
+		context.Background(), wsURL(srv), "/ws", "/ws",
+		map[string]any{"ping": true}, swagger.ProfileRandom, nil, nil,
+	)
+
+	assert.Contains(t, res.Error, "SSRF policy")
+	assert.Zero(t, res.Status, "a blocked target never answered: no status, not a 5xx finding")
+	assert.Zero(t, hits.Load(), "the blocked target must not be contacted")
 }
