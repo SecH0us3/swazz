@@ -194,9 +194,9 @@ func TestNewSSRFProtectedClient(t *testing.T) {
 	assert.Equal(t, http.DefaultTransport, cAllowed.Transport)
 }
 
-// SSRFDialContext is the dial function the WebSocket and gRPC executors connect through; it must
-// refuse what the HTTP transport refuses, whether the target is an IP literal or a name.
-func TestSSRFDialContext(t *testing.T) {
+// GuardedDialContext is the dial function the WebSocket and gRPC executors connect through; it
+// must refuse what the HTTP transport refuses, whether the target is an IP literal or a name.
+func TestGuardedDialContext(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer lis.Close()
@@ -222,17 +222,27 @@ func TestSSRFDialContext(t *testing.T) {
 		net.JoinHostPort("169.254.169.254", "80"),  // cloud metadata
 		net.JoinHostPort("100.64.0.1", "80"),       // CGNAT
 	}
-	dial := SSRFDialContext(false)
+	dial := GuardedDialContext()
 	for _, addr := range blocked {
 		conn, err := dial(ctx, "tcp", addr)
 		if conn != nil {
 			_ = conn.Close()
 		}
 		require.Error(t, err, addr)
-		assert.Contains(t, err.Error(), "SSRF policy", addr)
+		assert.ErrorIs(t, err, ErrSSRFBlocked, addr)
+		assert.Contains(t, err.Error(), "request blocked by SSRF policy", addr)
 	}
+}
 
-	conn, err := SSRFDialContext(true)(ctx, "tcp", lis.Addr().String())
-	require.NoError(t, err, "allowPrivate must let the dial through")
-	_ = conn.Close()
+// One private address blocks the whole host, the rule every protocol shares.
+func TestResolvePublic(t *testing.T) {
+	ctx := context.Background()
+	_, err := ResolvePublic(ctx, "localhost")
+	assert.ErrorIs(t, err, ErrSSRFBlocked)
+	_, err = ResolvePublic(ctx, "10.0.0.1")
+	assert.ErrorIs(t, err, ErrSSRFBlocked)
+
+	ips, err := ResolvePublic(ctx, "8.8.8.8")
+	require.NoError(t, err)
+	assert.Equal(t, "8.8.8.8", ips[0].String())
 }

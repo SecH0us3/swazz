@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
+
+	"swazz-engine/internal/security"
 )
 
 func TestMapWSCloseCodeToHTTPStatus(t *testing.T) {
@@ -154,9 +156,8 @@ func TestClient_BlocksPrivateAddress(t *testing.T) {
 	defer cancel()
 
 	_, status, err := NewClient(false).SendMessage(ctx, wsURL, []byte("hello"), nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "SSRF policy")
-	assert.NotEqual(t, http.StatusOK, status)
+	require.ErrorIs(t, err, security.ErrSSRFBlocked)
+	assert.Zero(t, status, "a blocked target never answered: no status, not a 5xx finding")
 	assert.Zero(t, hits.Load(), "the blocked target must not be contacted")
 
 	msg, status, err := NewClient(true).SendMessage(ctx, wsURL, []byte("hello"), nil)

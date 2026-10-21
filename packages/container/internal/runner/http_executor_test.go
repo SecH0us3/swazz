@@ -194,7 +194,7 @@ func TestExecuteGRPCRequest_BlocksPrivateTarget(t *testing.T) {
 
 	require.NotNil(t, res)
 	assert.Contains(t, res.Error, "SSRF policy")
-	assert.NotEqual(t, 200, res.Status)
+	assert.Zero(t, res.Status, "a blocked target never answered: no status, not a 5xx finding")
 	for _, f := range res.AnalyzerFindings {
 		assert.NotEqual(t, "swazz/grpc-internal-error", f.RuleID, "no answer from the target may be analyzed")
 	}

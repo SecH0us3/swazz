@@ -19,6 +19,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
+
+	"swazz-engine/internal/security"
 )
 
 func TestMapGRPCCodeToHTTPStatus(t *testing.T) {
@@ -181,13 +183,20 @@ func TestClient_BlocksPrivateAddress(t *testing.T) {
 	blocked := NewClient("grpc://"+lis.Addr().String(), false, nil, false)
 	defer blocked.Close()
 	_, code, err := blocked.Invoke(ctx, "/test.Service/Echo", []byte("hi"), nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "SSRF policy")
-	assert.NotEqual(t, 200, code)
+	require.ErrorIs(t, err, security.ErrSSRFBlocked)
+	assert.Zero(t, code, "a blocked target never answered: no status, not a 5xx finding")
+
+	// By name too: the whole host is checked before gRPC resolves it address by address.
+	_, port, err := net.SplitHostPort(lis.Addr().String())
+	require.NoError(t, err)
+	byName := NewClient("grpc://localhost:"+port, false, nil, false)
+	defer byName.Close()
+	_, code, err = byName.Invoke(ctx, "/test.Service/Echo", []byte("hi"), nil)
+	require.ErrorIs(t, err, security.ErrSSRFBlocked)
+	assert.Zero(t, code)
 
 	_, err = DiscoverViaReflection(ctx, "grpc://"+lis.Addr().String(), false, nil, false)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "SSRF policy")
+	require.ErrorIs(t, err, security.ErrSSRFBlocked)
 	assert.Zero(t, lis.accepted.Load(), "the blocked target must not be contacted")
 
 	allowed := NewClient("grpc://"+lis.Addr().String(), false, nil, true)

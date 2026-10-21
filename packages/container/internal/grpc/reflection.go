@@ -28,7 +28,11 @@ func DiscoverViaReflection(ctx context.Context, targetAddr string, isTLS bool, r
 	cleanAddr := strings.TrimPrefix(targetAddr, "grpc://")
 	cleanAddr = strings.TrimPrefix(cleanAddr, "grpcs://")
 
-	conn, err := grpc.NewClient(cleanAddr, dialOptions(isTLS, allowPrivate)...)
+	target, err := checkedTarget(ctx, cleanAddr, allowPrivate)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := grpc.NewClient(target, dialOptions(isTLS, allowPrivate)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC server at %s: %w", cleanAddr, err)
 	}

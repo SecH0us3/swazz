@@ -7,6 +7,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -92,7 +93,11 @@ func (c *Client) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	conn, err := grpc.NewClient(c.addr, dialOptions(c.isTLS, c.allowPrivate)...)
+	target, err := checkedTarget(ctx, c.addr, c.allowPrivate)
+	if err != nil {
+		return err
+	}
+	conn, err := grpc.NewClient(target, dialOptions(c.isTLS, c.allowPrivate)...)
 	if err != nil {
 		return fmt.Errorf("failed to create gRPC client for %s: %w", c.addr, err)
 	}
@@ -100,11 +105,31 @@ func (c *Client) Connect(ctx context.Context) error {
 	return nil
 }
 
+// checkedTarget returns the gRPC target to connect to addr (host:port). Unless allowPrivate is
+// set, it first checks the host the way the HTTP executor does (security.ResolvePublic: one
+// private address blocks the host, the error wraps security.ErrSSRFBlocked), and makes gRPC hand
+// the name, not its addresses one by one, to the guarded dialer (passthrough), so the dialer
+// applies the same rule on every connection. Non-goal: targets with a resolver scheme (dns:///,
+// unix:) are refused, not supported, while the check applies.
+func checkedTarget(ctx context.Context, addr string, allowPrivate bool) (string, error) {
+	if allowPrivate {
+		return addr, nil
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		host, port = addr, "443" // gRPC's default port
+	}
+	if _, err := security.ResolvePublic(ctx, host); err != nil {
+		return "", fmt.Errorf("gRPC target %s: %w", addr, err)
+	}
+	return "passthrough:///" + net.JoinHostPort(host, port), nil
+}
+
 // dialOptions are the options every gRPC connection of the runner is made with. Unless
-// allowPrivate is set, connections go through security.SSRFDialContext, the dial function the
-// HTTP executor uses, so a gRPC target cannot reach a private or reserved address the HTTP one
-// may not. A proxy is then not used: it would resolve and dial the target itself, out of the
-// check's reach. Non-goal: other schemes than TCP (unix sockets) are refused, not supported.
+// allowPrivate is set, connections go through security.GuardedDialContext, the dial function the
+// HTTP executor's guard uses, so a gRPC target cannot reach a private or reserved address the HTTP
+// one may not. A proxy is then not used: it would resolve and dial the target itself, out of the
+// check's reach.
 func dialOptions(isTLS, allowPrivate bool) []grpc.DialOption {
 	var opts []grpc.DialOption
 	if isTLS {
@@ -113,7 +138,7 @@ func dialOptions(isTLS, allowPrivate bool) []grpc.DialOption {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	if !allowPrivate {
-		dial := security.SSRFDialContext(false)
+		dial := security.GuardedDialContext()
 		opts = append(opts,
 			grpc.WithNoProxy(),
 			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
@@ -139,6 +164,10 @@ func (c *Client) Close() error {
 // Invoke executes a unary RPC call with binary request payload.
 func (c *Client) Invoke(ctx context.Context, method string, reqPayload []byte, extraHeaders map[string]string) ([]byte, int, error) {
 	if err := c.Connect(ctx); err != nil {
+		if errors.Is(err, security.ErrSSRFBlocked) {
+			// Never contacted: a network error like the HTTP executor's, not a status of the target.
+			return nil, 0, err
+		}
 		return nil, 500, err
 	}
 

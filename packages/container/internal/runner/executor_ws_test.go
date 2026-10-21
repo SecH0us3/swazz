@@ -187,6 +187,6 @@ func TestExecuteWebSocketRequest_BlocksPrivateTarget(t *testing.T) {
 	)
 
 	assert.Contains(t, res.Error, "SSRF policy")
-	assert.NotEqual(t, http.StatusOK, res.Status)
+	assert.Zero(t, res.Status, "a blocked target never answered: no status, not a 5xx finding")
 	assert.Zero(t, hits.Load(), "the blocked target must not be contacted")
 }

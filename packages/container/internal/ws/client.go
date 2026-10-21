@@ -10,7 +10,6 @@ import (
 	"errors"
 	"net/http"
 	"sync"
-	"time"
 
 	"nhooyr.io/websocket"
 
@@ -34,17 +33,12 @@ func NewClient(allowPrivate bool) *Client {
 	return c
 }
 
-// protectedHTTPClient makes the handshake through security.SSRFDialContext, the dial function the
-// HTTP executor uses, so a WebSocket target cannot reach a private or reserved address the HTTP
-// one may not; the connection then stays on that checked socket. It has no proxy: a proxy would
-// resolve and dial the target itself, out of the check's reach. No Timeout, which the WebSocket
-// library refuses: the caller's context bounds the handshake.
-var protectedHTTPClient = &http.Client{
-	Transport: &http.Transport{
-		DialContext:         security.SSRFDialContext(false),
-		TLSHandshakeTimeout: 10 * time.Second,
-	},
-}
+// protectedHTTPClient makes the handshake through security.NewSSRFProtectedTransport, the
+// transport the HTTP executor's guard is built from, so a WebSocket target cannot reach a private
+// or reserved address the HTTP one may not; the connection then stays on that checked socket. It
+// has no proxy: a proxy would resolve and dial the target itself, out of the check's reach. No
+// Timeout, which the WebSocket library refuses: the caller's context bounds the handshake.
+var protectedHTTPClient = &http.Client{Transport: security.NewSSRFProtectedTransport(false)}
 
 func (c *Client) Close() error {
 	c.mu.Lock()
@@ -89,6 +83,10 @@ func (c *Client) SendMessage(ctx context.Context, endpoint string, payload []byt
 		HTTPClient: c.httpClient,
 	})
 	if err != nil {
+		if errors.Is(err, security.ErrSSRFBlocked) {
+			// Never contacted: a network error like the HTTP executor's, not a status of the target.
+			return nil, 0, err
+		}
 		if resp != nil {
 			return nil, resp.StatusCode, err
 		}
