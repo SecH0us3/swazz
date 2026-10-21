@@ -43,6 +43,26 @@ const (
 	heartbeatTimeout  = 90 * time.Second
 )
 
+// Bounds on talking to the coordinator. A coordinator (or a proxy in front of it) that accepts the
+// TCP connection and then stops answering would otherwise hold the agent for good: in the upgrade
+// or the challenge handshake it never reaches the reconnect loop, and a write into a connection
+// nobody reads blocks the write loop for good. When a write loop write fails, timed out or not,
+// the loop closes the connection and the message goes to the next one (carry).
+const (
+	// connectTimeout covers the WebSocket upgrade and, with signature auth, the challenge
+	// handshake, a cold coordinator included.
+	connectTimeout = 60 * time.Second
+	// A write may take writeTimeout plus the time its message needs at minWriteRate, so a large
+	// message on a slow link is not cut off over and over (1 MB: about 3 minutes).
+	writeTimeout = 30 * time.Second
+	minWriteRate = 8 << 10 // bytes per second
+)
+
+// writeDeadline is how long a write of n bytes may take.
+func (s *agentSession) writeDeadline(n int) time.Duration {
+	return s.writeTimeout + time.Duration(n)*time.Second/time.Duration(s.minWriteRate)
+}
+
 // agentSession is the part of the agent that outlives a single coordinator connection: the
 // dispatcher with its running scans and the queue of messages they emit. Scans keep running
 // across a reconnect; their events wait in the queue and go out over the next connection, which
@@ -57,6 +77,9 @@ type agentSession struct {
 
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
+	connectTimeout    time.Duration
+	writeTimeout      time.Duration
+	minWriteRate      int
 }
 
 func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agentSession {
@@ -68,6 +91,9 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 
 		heartbeatInterval: heartbeatInterval,
 		heartbeatTimeout:  heartbeatTimeout,
+		connectTimeout:    connectTimeout,
+		writeTimeout:      writeTimeout,
+		minWriteRate:      minWriteRate,
 	}
 	// Still to reach the coordinator: queued, carried over from a failed write, or sent but not
 	// acknowledged (with a coordinator that acknowledges).
@@ -83,7 +109,9 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 	if err != nil {
 		return err
 	}
-	c, resp, err := websocket.Dial(ctx, dialURL, opts)
+	setupCtx, setupCancel := context.WithTimeout(ctx, s.connectTimeout)
+	defer setupCancel()
+	c, resp, err := websocket.Dial(setupCtx, dialURL, opts)
 	if err != nil {
 		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			logError("Critical Authentication Error: Unauthorized/Forbidden (Status Code: %d). Revoked or invalid credentials. Terminating agent process.", resp.StatusCode)
@@ -126,7 +154,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			Type  string `json:"type"`
 			Nonce string `json:"nonce"`
 		}
-		if err := wsjson.Read(ctx, c, &challengeMsg); err != nil {
+		if err := wsjson.Read(setupCtx, c, &challengeMsg); err != nil {
 			return fmt.Errorf("failed to read challenge message from coordinator: %w", err)
 		}
 
@@ -144,7 +172,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			"type":      "challenge_response",
 			"signature": signatureHex,
 		}
-		if err := wsjson.Write(ctx, c, responseMsg); err != nil {
+		if err := wsjson.Write(setupCtx, c, responseMsg); err != nil {
 			return fmt.Errorf("failed to send challenge response: %w", err)
 		}
 
@@ -152,7 +180,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			Type  string `json:"type"`
 			Error string `json:"error"`
 		}
-		if err := wsjson.Read(ctx, c, &authResult); err != nil {
+		if err := wsjson.Read(setupCtx, c, &authResult); err != nil {
 			return fmt.Errorf("failed to read authentication result: %w", err)
 		}
 
@@ -164,7 +192,14 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		}
 	}
 
+	setupCancel()
 	logInfo("Successfully connected to coordinator. Awaiting jobs...")
+
+	write := func(b []byte) error {
+		wctx, cancel := context.WithTimeout(connCtx, s.writeDeadline(len(b)))
+		defer cancel()
+		return c.Write(wctx, websocket.MessageText, b)
+	}
 
 	if len(runIDs) > 0 {
 		// The coordinator decides which claims it honours; events of a refused run are dropped there.
@@ -210,7 +245,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 				logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
 				return true
 			}
-			if err := c.Write(connCtx, websocket.MessageText, b); err != nil {
+			if err := write(b); err != nil {
 				logError("Failed to write to WS: %v", err)
 				// An ack request speaks only for the connection it was written on.
 				if _, isAckRequest := msg.(ackRequestMsg); !isAckRequest {
@@ -310,9 +345,10 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 					_ = c.Close(websocket.StatusGoingAway, "heartbeat timeout")
 					return
 				}
-				if err := c.Write(connCtx, websocket.MessageText, []byte(heartbeatPing)); err != nil {
-					return
-				}
+				// A ping that cannot go out (the write loop holds the connection with a long
+				// write, or the connection is closing) is skipped: the pong check above keeps
+				// running, and a closed connection ends this loop through connCtx.
+				_ = write([]byte(heartbeatPing))
 			case <-connCtx.Done():
 				return
 			}

@@ -234,6 +234,7 @@ func StartAgent(args []string) {
 	backoff := 2 * time.Second
 	const maxBackoff = 30 * time.Second
 	for {
+		connected := time.Now()
 		runErr := session.runConnection(ctx, urlWithParams, opts, useSignatureAuth, privKey)
 		if runErr == nil {
 			return
@@ -243,6 +244,9 @@ func StartAgent(args []string) {
 		}
 		if errors.Is(runErr, errAgentAuthFatal) {
 			os.Exit(1)
+		}
+		if time.Since(connected) > 2*maxBackoff {
+			backoff = 2 * time.Second // the connection had held up: start over
 		}
 		logError("Agent connection lost (%v). Reconnecting in %v...", runErr, backoff)
 		time.Sleep(backoff)
