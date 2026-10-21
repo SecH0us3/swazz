@@ -28,3 +28,13 @@ func TestStoreRegisterAndGet(t *testing.T) {
 		t.Error("expected payload to be cleared from store")
 	}
 }
+
+// A nil store holds nothing and never panics: an analyzer without one matches no randomized payload.
+func TestStore_Nil(t *testing.T) {
+	var s *Store
+	s.Register("{{23*37}}", SSTIContext{RawExpr: "23*37", Expected: "851"})
+	s.Clear()
+	if _, found := s.Get("{{23*37}}"); found {
+		t.Error("nil store returned a context")
+	}
+}

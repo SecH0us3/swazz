@@ -127,7 +127,7 @@ func TestExecuteGRPCRequest_LiveServerAndAnalyzer(t *testing.T) {
 				AnalyzeResponseBody: true,
 			},
 		},
-		analyzer: analyzer.NewRegistry(),
+		analyzer: analyzer.NewRegistry(nil),
 	}
 	defer r.Close()
 
@@ -182,7 +182,7 @@ func TestExecuteGRPCRequest_BlocksPrivateTarget(t *testing.T) {
 			BaseURL:  "grpc://" + lis.Addr().String(),
 			Settings: swagger.Settings{TimeoutMs: 2000, AnalyzeResponseBody: true},
 		},
-		analyzer: analyzer.NewRegistry(),
+		analyzer: analyzer.NewRegistry(nil),
 	}
 	defer r.Close()
 
@@ -324,7 +324,7 @@ func TestExecuteMCPRequest_ResourceLeakAnalyzerFires(t *testing.T) {
 	// Return /etc/passwd content to trigger the swazz/mcp-resource-leak rule.
 	fake.resourceText = "root:x:0:0:root:/root:/bin/bash"
 
-	reg := analyzer.NewRegistry()
+	reg := analyzer.NewRegistry(nil)
 	r := &Runner{
 		client: &http.Client{},
 		config: &swagger.Config{Settings: swagger.Settings{
@@ -435,7 +435,8 @@ func TestExecuteMCPRequest_ToolErrorAndCrash(t *testing.T) {
 
 func TestExecuteWebSocketRequest(t *testing.T) {
 	r := &Runner{
-		config: &swagger.Config{},
+		config:   &swagger.Config{},
+		analyzer: analyzer.NewRegistry(nil),
 	}
 
 	// Non-listening WS endpoint to test error capture and payload serialization

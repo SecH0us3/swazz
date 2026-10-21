@@ -133,8 +133,7 @@ func (r *Runner) executeWebSocketRequest(
 		Settings:        r.config.Settings,
 	}
 
-	analyzerChain := analyzer.NewRegistry()
-	result.AnalyzerFindings = analyzerChain.Analyze(input)
+	result.AnalyzerFindings = r.analyzer.Analyze(input)
 
 	return result
 }

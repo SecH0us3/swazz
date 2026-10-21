@@ -41,7 +41,7 @@ func TestHandleOOBTrigger(t *testing.T) {
 			Headers:      map[string]string{"Content-Type": "application/json"},
 		},
 	}
-	oob.GlobalStore.RegisterUUID(uuid, ctx)
+	r.oobStore.RegisterUUID(uuid, ctx)
 
 	// Call HandleOOBTrigger
 	r.HandleOOBTrigger(uuid)
@@ -93,7 +93,7 @@ func TestHandleOOBTrigger_MissingRequest(t *testing.T) {
 		Payload:   "http://localhost:8080/api/oob/test-run-id-2/oob-test-uuid-888",
 		Request:   nil,
 	}
-	oob.GlobalStore.RegisterUUID(uuid, ctx)
+	r.oobStore.RegisterUUID(uuid, ctx)
 
 	r.HandleOOBTrigger(uuid)
 
