@@ -3,10 +3,10 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { ProjectSettings } from './ProjectSettings.js';
+import { ProjectSettings, PROJECT_SETTINGS_DOCS } from './ProjectSettings.js';
 import { useAppStore } from '../store/appStore.js';
 
 describe('ProjectSettings Component — Runners Tab', () => {
@@ -204,5 +204,24 @@ describe('ProjectSettings Component — Runners Tab', () => {
 
         expect(wafBtn.className).toContain('active');
         expect(screen.getByText(/Enable Pre-Scan WAF Fingerprinting/i)).toBeTruthy();
+    });
+    it('links each section to its documentation page in a new tab', () => {
+        render(<ProjectSettings />);
+
+        const sectionDocs = () => screen.getByRole('link', { name: /^Docs:/ });
+        expect(sectionDocs()).toHaveAttribute('href', PROJECT_SETTINGS_DOCS.general.href);
+        expect(sectionDocs()).toHaveAttribute('target', '_blank');
+
+        fireEvent.click(screen.getByRole('button', { name: /Request Chaining/i }));
+        expect(sectionDocs()).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/usage.html#request-chaining');
+
+        fireEvent.click(screen.getByRole('button', { name: /Active Runners/i }));
+        expect(sectionDocs()).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/deployment.html#runner-agent-setup');
+        expect(screen.getByRole('link', { name: /Sandboxing the runner host/i })).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/runner_sandboxing_guide.html');
+
+        const resources = screen.getByRole('navigation', { name: /Help and resources/i });
+        expect(within(resources).getByRole('link', { name: /Documentation/i })).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/');
+        expect(within(resources).getByRole('link', { name: /GitHub repository/i })).toHaveAttribute('href', 'https://github.com/SecH0us3/swazz');
+        expect(within(resources).getByRole('link', { name: /Blog/i })).toHaveAttribute('href', 'https://yoursec.substack.com/t/swazz');
     });
 });

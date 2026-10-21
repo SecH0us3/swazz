@@ -36,7 +36,7 @@ jobs:
 
 ---
 
-## 👥 Recipe 2: Detecting BOLA (IDOR) with Multi-Identity
+## 👥 Recipe 2: Detecting BOLA (IDOR) with Multi-Identity {#bola-multi-identity}
 
 To scan for Broken Object Level Authorization, you must feed Swazz the authorization headers for two distinct users (Victim and Attacker).
 
@@ -186,7 +186,7 @@ Audit a target MCP server across tool arguments, prototype pollution in tool nam
 
 ---
 
-## 🛡️ Recipe 5: Automated WAF Detection & Virtual Patching in CI/CD
+## 🛡️ Recipe 8: Automated WAF Detection & Virtual Patching in CI/CD
 
 Combine automated WAF detection with post-scan virtual patch generation in your CI/CD pipeline. If vulnerabilities are confirmed during fuzzing, Swazz exports ready-to-deploy mitigation rules to protect production APIs immediately while code-level fixes are being developed.
 

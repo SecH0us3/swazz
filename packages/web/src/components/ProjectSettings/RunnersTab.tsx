@@ -6,6 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore.js';
 import { useToast } from '../../hooks/useToast.js';
+import { DocsLink } from '../Shared/DocsLink.js';
+import { DOCS } from '../../utils/docsLinks.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -376,6 +378,11 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                         <p className="runner-setup-guide-desc">
                             Swazz uses distributed agent runners to execute headless fuzz tests. Connect a private runner on your local workstation or server infrastructure, or contribute compute to the shared community pool.
                         </p>
+                        <div className="runner-setup-docs-links">
+                            <DocsLink href={DOCS.runnerSetup} label="Runner setup guide" />
+                            <DocsLink href={DOCS.runnerSandboxing} label="Sandboxing the runner host" />
+                            <DocsLink href={DOCS.kubernetes} label="Run runners on Kubernetes" />
+                        </div>
 
                         {/* Tab Switcher */}
                         <div className="runner-setup-tab-switcher">

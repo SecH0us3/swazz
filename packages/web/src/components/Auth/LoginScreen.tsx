@@ -328,7 +328,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                         <a href="#pricing" className="nav-link">Pricing</a>
                         <div className="nav-divider"></div>
                         <a href="https://sech0us3.github.io/swazz/" className="nav-link" target="_blank" rel="noopener noreferrer">Docs</a>
-                        <a href="https://yoursec.substack.com/" className="nav-link" target="_blank" rel="noopener noreferrer">Blog</a>
+                        <a href="https://yoursec.substack.com/t/swazz" className="nav-link" target="_blank" rel="noopener noreferrer">Blog</a>
                         <a href="https://github.com/SecH0us3/swazz" className="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>
                     </nav>
                 </div>

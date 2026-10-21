@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { Logo } from './Common/Logo.js';
+import { BLOG_URL, DOCS, REPO_URL } from '../utils/docsLinks.js';
 
 export function AboutPage() {
     return (
@@ -14,7 +15,7 @@ export function AboutPage() {
                     <Logo size={64} />
                 </div>
                 <h1 className="about-title">Swazz API Fuzzer</h1>
-                <p className="about-subtitle">A high-performance smart fuzzer for REST APIs and OpenAPI specifications.</p>
+                <p className="about-subtitle">A high-performance smart fuzzer for REST, GraphQL, gRPC, WebSocket and MCP APIs.</p>
             </div>
 
             <div className="about-grid">
@@ -45,7 +46,7 @@ export function AboutPage() {
                 <div className="about-card">
                     <h3 className="about-card-title">🛡️ Security & Privacy</h3>
                     <p className="about-card-text">
-                        Scans run from isolated agent nodes. Only high-level vulnerability metrics and metadata are sent back to the central edge coordinator, keeping application traffic and sensitive data securely within your private VPC or perimeter.
+                        Scans run from runner agents you can host inside your own network: the target API is only ever contacted from the runner, so internal services never need to be exposed. The runner streams scan progress, findings and the request/response samples shown in the Inspector back to the coordinator.
                     </p>
                 </div>
             </div>
@@ -53,8 +54,9 @@ export function AboutPage() {
             <div className="about-footer-info">
                 <p className="about-footer-text">Swazz is open source and designed for modern, automated AppSec pipelines.</p>
                 <div className="about-links">
-                    <a href="https://github.com/SecH0us3/swazz" target="_blank" rel="noopener noreferrer" className="about-btn-link">GitHub Repository</a>
-                    <a href="https://sech0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer" className="about-btn-link">Documentation</a>
+                    <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="about-btn-link">GitHub Repository</a>
+                    <a href={DOCS.home} target="_blank" rel="noopener noreferrer" className="about-btn-link">Documentation</a>
+                    <a href={BLOG_URL} target="_blank" rel="noopener noreferrer" className="about-btn-link">Blog</a>
                 </div>
             </div>
         </div>

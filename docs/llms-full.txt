@@ -36,7 +36,7 @@ If you prefer to run everything locally without containers, follow these steps:
 
    Clone the Swazz repository from GitHub to your local machine:
    ```bash
-   git clone https://github.com/your-org/swazz.git
+   git clone https://github.com/SecH0us3/swazz.git
    cd swazz
    ```
 
@@ -147,23 +147,25 @@ The fuzzer engine relies on a JSON configuration file. Here is an example of wha
 
 ```json
 {
-  "targetUrl": "https://api.example.com",
-  "openapiSpec": "https://api.example.com/openapi.yaml",
-  "wordlist_files": {
-    "xss": "custom_xss.txt"
-  },
-  "authHeader": "Bearer YOUR_TOKEN_HERE",
-  "concurrency": 50,
-  "timeoutMs": 5000,
-  "fuzzProfiles": ["xss", "sql_injection", "boundary"]
+  "swagger_urls": ["https://api.example.com/openapi.yaml"],
+  "base_url": "https://api.example.com",
+  "global_headers": { "Authorization": "Bearer YOUR_TOKEN_HERE" },
+  "wordlist_files": { "xss": "wordlists/custom_xss.txt" },
+  "settings": {
+    "iterations_per_profile": 10,
+    "concurrency": 10,
+    "timeout_ms": 5000,
+    "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+  }
 }
 ```
 
-- **`targetUrl`**: The base URL of the API you are testing.
-- **`openapiSpec`**: Path or URL to the OpenAPI/Swagger specification.
+- **`swagger_urls`**: Paths or URLs of the API definitions (OpenAPI/Swagger, Postman, WSDL, GraphQL, AsyncAPI, HAR, `.proto`, or a live `grpc://` / `ws://` endpoint).
+- **`base_url`**: The base URL of the API you are testing.
+- **`global_headers`**: Headers sent with every request.
 - **`wordlist_files`**: Key-value mapping of payload categories to custom `.txt` wordlists. For security, files must be placed within a `wordlists/` directory.
-- **`concurrency`**: Number of parallel requests to send.
-- **`fuzzProfiles`**: Which payload generators to run (e.g., boundaries, malicious payloads).
+- **`settings.concurrency`**: Number of parallel requests to send.
+- **`settings.profiles`**: Which payload generators to run: `RANDOM`, `BOUNDARY`, `MALICIOUS`.
 
 ### GraphQL Schema Parsing & Fuzzing 🛡️
 

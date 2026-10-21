@@ -1238,7 +1238,7 @@ cd swazz
                 <div className="footer-links">
                     <a href="https://sech0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer">Documentation</a>
                     <a href="https://github.com/SecH0us3/swazz" target="_blank" rel="noopener noreferrer">GitHub</a>
-                    <a href="https://yoursec.substack.com/" target="_blank" rel="noopener noreferrer">Blog</a>
+                    <a href="https://yoursec.substack.com/t/swazz" target="_blank" rel="noopener noreferrer">Blog</a>
                 </div>
                 <div className="footer-copyright">
                     &copy; {new Date().getFullYear()} Swazz Security. All rights reserved.
