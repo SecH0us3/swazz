@@ -23,6 +23,20 @@ function brokenReason(url: string): string | null {
     return null;
 }
 
+// Every non-test .ts/.tsx file under src/.
+function sourceFiles(): string[] {
+    const files: string[] = [];
+    const walk = (dir: string) => {
+        for (const name of readdirSync(dir)) {
+            const path = join(dir, name);
+            if (statSync(path).isDirectory()) walk(path);
+            else if (/\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)) files.push(path);
+        }
+    };
+    walk(srcDir);
+    return files;
+}
+
 describe('docsLinks', () => {
     it('builds page and anchor URLs', () => {
         expect(docsUrl('usage')).toBe('https://sech0us3.github.io/swazz/usage.html');
@@ -37,22 +51,23 @@ describe('docsLinks', () => {
     });
 
     it('has no hard-coded docs-site URLs with dead anchors anywhere in the web source', () => {
-        const files: string[] = [];
-        const walk = (dir: string) => {
-            for (const name of readdirSync(dir)) {
-                const path = join(dir, name);
-                if (statSync(path).isDirectory()) walk(path);
-                else if (/\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)) files.push(path);
-            }
-        };
-        walk(srcDir);
         const broken: string[] = [];
-        for (const file of files) {
+        for (const file of sourceFiles()) {
             for (const match of readFileSync(file, 'utf8').matchAll(/https:\/\/sech0us3\.github\.io\/swazz\/[^'"`\s)]*/gi)) {
                 const reason = brokenReason(match[0].replace(/^https:\/\/sech0us3\.github\.io\/swazz\//i, DOCS_URL));
                 if (reason) broken.push(`${file.slice(srcDir.length)}: ${match[0]} (${reason})`);
             }
         }
         expect(broken).toEqual([]);
+    });
+
+    it('has no relative /docs links (the dashboard does not serve the documentation site)', () => {
+        const relative: string[] = [];
+        for (const file of sourceFiles()) {
+            for (const match of readFileSync(file, 'utf8').matchAll(/href=["'`{]*\/docs\b[^'"`\s}]*/g)) {
+                relative.push(`${file.slice(srcDir.length)}: ${match[0]}`);
+            }
+        }
+        expect(relative).toEqual([]);
     });
 });

@@ -5,6 +5,8 @@
 
 import { useAppStore } from '../store/appStore.js';
 import { dismissScanIssue } from '../utils/scheduledFailures.js';
+import { DOCS } from '../utils/docsLinks.js';
+import { DocsLink } from './Shared/DocsLink.js';
 import './ScanIssueBanner.css';
 
 /**
@@ -47,6 +49,7 @@ export function ScanIssueBanner() {
                     >
                         {logsAction.label}
                     </button>
+                    <DocsLink href={DOCS.activeRunners} label="Runners & scans docs" />
                 </div>
             </div>
             <button className="scan-issue-dismiss" aria-label="Dismiss" onClick={dismiss}>×</button>

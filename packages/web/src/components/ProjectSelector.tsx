@@ -7,6 +7,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { fetchProjects, createProject } from '../services/projectService.js';
 import { useToast } from '../hooks/useToast.js';
+import { DOCS } from '../utils/docsLinks.js';
+import { ExternalLinkIcon } from './Shared/DocsLink.js';
 
 interface Project {
     id: string;
@@ -180,6 +182,21 @@ export function ProjectSelector() {
                         </svg>
                         Project Settings
                     </button>
+                    <a
+                        className="dropdown-item"
+                        href={DOCS.projectSettings}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setIsOpen(false)}
+                        style={{ padding: '8px 12px', textDecoration: 'none', color: 'var(--text-muted)', display: 'flex', gap: '8px', alignItems: 'center' }}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                        </svg>
+                        Projects documentation
+                        <ExternalLinkIcon />
+                    </a>
                 </div>
             )}
         </div>

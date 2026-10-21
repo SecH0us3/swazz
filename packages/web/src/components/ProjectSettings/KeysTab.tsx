@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore.js';
 import { useEncryption } from '../../hooks/useEncryption.js';
+import { DOCS } from '../../utils/docsLinks.js';
 
 export function KeysTab() {
     const activeProject = useAppStore(state => state.activeProject);
@@ -240,7 +241,7 @@ export function KeysTab() {
                 </div>
 
                 <div className="e2ee-sub-section e2ee-text-center">
-                    Read the <a href="/docs/encryption_backup" target="_blank" className="e2ee-link">Key Backup & Recovery guide</a> to learn more.
+                    Read the <a href={DOCS.encryptionKeys} target="_blank" rel="noopener noreferrer" className="e2ee-link">Key Backup & Recovery guide</a> to learn more.
                 </div>
             </div>
         </div>

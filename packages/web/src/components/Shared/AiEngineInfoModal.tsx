@@ -4,6 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import React, { useState, useEffect } from 'react';
+import { DOCS } from '../../utils/docsLinks.js';
+import { DocsLink } from './DocsLink.js';
 import { Modal } from './Modal.js';
 import { isChromeAIAvailable } from '../../services/chromeAiService.js';
 
@@ -28,6 +30,7 @@ export const AiEngineInfoModal: React.FC<AiEngineInfoModalProps> = ({ onClose })
   return (
     <Modal title="✨ Swazz AI Engine (On-Device & Fallback)" onClose={onClose} width="640px">
       <div className="ai-info-modal-body">
+        <DocsLink href={DOCS.aiRemediation} label="AI remediation documentation" />
         {/* Dynamic status card */}
         <div className={`ai-info-status-card ${chromeAvailable ? 'active' : 'inactive'}`}>
           <div className="ai-info-status-icon">
