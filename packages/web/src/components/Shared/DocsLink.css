@@ -1,0 +1,110 @@
+/* Links from the dashboard to the documentation site (see utils/docsLinks.ts). */
+
+.docs-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--accent-light);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.docs-link:hover,
+.docs-link:focus-visible {
+  text-decoration: underline;
+}
+
+.docs-help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-muted);
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: color var(--duration-fast), border-color var(--duration-fast);
+}
+
+.docs-help-icon:hover,
+.docs-help-icon:focus-visible {
+  color: var(--accent-light);
+  border-color: var(--accent-light);
+}
+
+/* Contextual "docs for this section" line under a settings page subtitle */
+.settings-section-docs {
+  margin-top: 6px;
+}
+
+/* Help & resources block at the bottom of a settings navigation list */
+.settings-resource-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 10px 14px 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.settings-resource-links-title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.settings-resource-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.settings-resource-link:hover,
+.settings-resource-link:focus-visible {
+  color: var(--accent-light);
+}
+
+/* On narrow screens the settings navigation becomes a horizontal tab strip;
+   the per-section docs link in the header stays, this block would only crowd it. */
+@media (max-width: 768px) {
+  .settings-resource-links {
+    display: none;
+  }
+}
+
+/* Row of docs links inside a settings card (e.g. the runner setup guide) */
+.runner-setup-docs-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+/* External help links in the header account dropdown (UserMenu) */
+.user-menu-resource-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.user-menu-resource-link:hover,
+.user-menu-resource-link:focus-visible {
+  color: var(--accent-light);
+}

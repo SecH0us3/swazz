@@ -9,12 +9,20 @@
 [![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
 [![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
 [![Edge Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/edge-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
-[![E2E: Playwright](https://img.shields.io/badge/e2e-43%20specs-brightgreen?logo=playwright)](tests/e2e)
+[![E2E: Playwright](https://img.shields.io/badge/e2e-playwright-brightgreen?logo=playwright)](tests/e2e)
 [![SARIF](https://img.shields.io/badge/report-SARIF-blueviolet)](https://sarifweb.azurewebsites.net/)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](https://mariadb.com/bsl11/)
 [![Docs](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://SecH0us3.github.io/swazz/)
 
 **swazz** is a modern, smart API fuzzer designed for security researchers and developers. It parses OpenAPI (Swagger) specifications (in both JSON and YAML formats), Postman Collections, SOAP (WSDL), and gRPC services (via Protobuf `.proto` schemas or live gRPC Server Reflection) to automatically identify crashes, logic flaws, and security vulnerabilities (XSS, Injection, etc.) through intelligent payload generation.
+
+| 🌐 [**Open the dashboard**](https://swazz.secmy.app) | 📖 [**Documentation**](https://sech0us3.github.io/swazz/) | 📝 [**Blog**](https://yoursec.substack.com/t/swazz) | 🍳 [**Recipes**](https://sech0us3.github.io/swazz/recipes.html) |
+| :---: | :---: | :---: | :---: |
+
+**New here?** Pick one:
+- **Browser** — sign up at [swazz.secmy.app](https://swazz.secmy.app), load a spec URL, and connect a runner from **Project Settings → Active Runners** (one `docker run` command, copied from that page). Scans run on the runner, not in your browser.
+- **Terminal / CI** — grab a binary from [Releases](https://github.com/SecH0us3/swazz/releases), run `./swazz-engine wizard`, then `./swazz-engine start --config swazz.config.json` ([Quick Start](#-quick-start)).
+- **Self-host** — `git clone` and `docker compose up --build` ([DOCKER.md](DOCKER.md), [Deployment Guide](https://sech0us3.github.io/swazz/deployment.html)).
 
 ---
 
@@ -37,7 +45,7 @@ Swazz is divided into multiple packages across the stack. The coverage is contin
 | [**`packages/container`**](packages/container) | [![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Core Go Fuzzing Engine, Triage Workers, Classifiers |
 | [**`packages/web`**](packages/web) | [![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | React Frontend, Interactive Dashboard, Settings UI |
 | [**`packages/edge`**](packages/edge) | [![Edge Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/edge-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Cloudflare Workers API Gateway, Auth, Database Migrations |
-| [**`tests/e2e`**](tests/e2e) | [![E2E Tests](https://img.shields.io/badge/playwright-43%20suites-brightgreen?logo=playwright)](tests/e2e) | End-to-End browser test suite across 8 parallel shards |
+| [**`tests/e2e`**](tests/e2e) | [![E2E Tests](https://img.shields.io/badge/e2e-playwright-brightgreen?logo=playwright)](tests/e2e) | End-to-End browser test suite across 8 parallel shards |
 
 ---
 
@@ -89,13 +97,13 @@ docker compose up --build
 ```
 See [DOCKER.md](DOCKER.md) for configuration details.
 
-#### Cloudflare Pages Frontend & External Backend (GCP / Cloud)
-If you run the backend container on a cloud platform like GCP (Google Cloud Platform), you can host the client dashboard on Cloudflare Pages and proxy API requests to the cloud container.
+#### Hosting the Dashboard Separately from the Coordinator
+The dashboard's Cloudflare worker (`packages/web/worker.ts`) can serve the static UI on its own domain and proxy `/api/*` and `/health` to the edge coordinator, which avoids CORS:
+1. Deploy the coordinator (`packages/edge`) as described in the [Deployment Guide](https://sech0us3.github.io/swazz/deployment.html).
+2. Deploy the dashboard with `npm run deploy:web`.
+3. Set the `API_URL` variable of the dashboard worker to the coordinator's URL (e.g. `https://swazz-api.yourdomain.com`).
 
-To configure this:
-1. Deploy the frontend to Cloudflare Pages using `npm run deploy:web`.
-2. Configure the `API_URL` environment variable (or variable binding in your Cloudflare Pages dashboard) to point to your GCP backend instance (e.g., `https://swazz-api.yourdomain.com`).
-3. The Cloudflare Pages worker will automatically proxy `/api/*` and `/health` requests to the configured `API_URL` to avoid CORS issues.
+Runner agents do not need to be reachable from the dashboard: they connect out to the coordinator over WebSocket.
 
 ### Build from Source
 ```bash
@@ -156,7 +164,7 @@ Swazz supports native fuzzing of gRPC microservices via live Server Reflection (
     "grpc://localhost:50051"
   ],
   "settings": {
-    "iterations": 10,
+    "iterations_per_profile": 10,
     "concurrency": 5,
     "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
   }
@@ -183,7 +191,7 @@ Swazz natively supports security fuzzing of WebSocket interfaces (`ws://` and `w
     "Authorization": "Bearer my_jwt_token"
   },
   "settings": {
-    "iterations": 20,
+    "iterations_per_profile": 20,
     "concurrency": 5,
     "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
   }
@@ -292,7 +300,8 @@ For a full set of examples (including BOLA testing, Multi-step Auth, and Petstor
 
 - **Engine**: Go (High-performance concurrency)
 - **Dashboard**: React 19, Vite, Vanilla CSS
-- **Formats**: OpenAPI 2.0/3.0, Postman Collections, SOAP (WSDL), SARIF, JSON
+- **Input formats**: OpenAPI/Swagger 2.0 and 3.x, GraphQL (introspection), Postman Collections, HAR, SOAP (WSDL), gRPC (`.proto` / Server Reflection), WebSocket (AsyncAPI, HAR, live `ws://`), MCP servers
+- **Report formats**: SARIF, JSON, JUnit XML, Markdown, HTML
 
 ## 🙈 Ignore Rules & Suppressions
 
@@ -332,13 +341,16 @@ To suppress false positives and filter noisy findings, Swazz supports ignore rul
 Comprehensive documentation, including installation guides, usage instructions, and architecture details, is available at the [Official Swazz Documentation](https://SecH0us3.github.io/swazz/).
 
 Key pages to explore:
-*   [Installation Guide](docs/installation.md)
-*   [Deployment Guidelines](docs/deployment.md)
-*   [Usage & Configuration](docs/usage.md)
-*   [Model Context Protocol (MCP) Guide](docs/mcp.md)
-*   [CI/CD Integration Guide](docs/ci_cd.md)
-*   [Architecture & Internals](docs/architecture.md)
-*   [Security Review & Threat Model](docs/security_review.md)
+*   [Installation Guide](https://sech0us3.github.io/swazz/installation.html) — the three ways to run Swazz, and what a runner is
+*   [Usage & Configuration](https://sech0us3.github.io/swazz/usage.html) — dashboard, CLI, `swazz.config.json` reference
+*   [Recipes](https://sech0us3.github.io/swazz/recipes.html) — CI/CD, BOLA, HAR replay, gRPC, MCP, WAF patches
+*   [Deployment Guidelines](https://sech0us3.github.io/swazz/deployment.html) and [Kubernetes (Helm)](https://sech0us3.github.io/swazz/kubernetes.html)
+*   [CI/CD Integration Guide](https://sech0us3.github.io/swazz/ci_cd.html)
+*   [Webhooks](https://sech0us3.github.io/swazz/webhooks.html) and [MCP Server](https://sech0us3.github.io/swazz/mcp.html)
+*   [Architecture & Internals](https://sech0us3.github.io/swazz/architecture.html)
+*   [Security Review & Threat Model](https://sech0us3.github.io/swazz/security_review.html)
+
+Release notes and deep dives are published on the [Swazz blog](https://yoursec.substack.com/t/swazz).
 
 ---
 
@@ -364,7 +376,7 @@ The engine automatically runs these rules against all HTTP responses and routes 
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) for the local setup (`bash scripts/start-local-dev.sh`), tests and conventions, then open a Pull Request. Found a bug or have an idea? [Open an issue](https://github.com/SecH0us3/swazz/issues). Security issues go to [SECURITY.md](SECURITY.md), not the issue tracker.
 
 ---
 

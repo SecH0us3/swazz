@@ -4,14 +4,21 @@ title: Installation
 
 # Installation Guide 🛠
 
-Swazz is built using **Go** for the backend engine and **Node.js (TypeScript/React)** for the frontend web dashboard. To get started, you'll need both environments configured.
+There are three ways to use Swazz — pick the one that matches what you need:
+
+| You want to… | Do this | Needs |
+| :--- | :--- | :--- |
+| Try it in the browser | Sign up at [swazz.secmy.app](https://swazz.secmy.app) and connect a runner from **Project Settings → Active Runners** | Docker, for your own runner |
+| Scan from a terminal or CI | Download a binary from [Releases](https://github.com/SecH0us3/swazz/releases) or use the `ghcr.io/sech0us3/swazz-cli` image ([CLI Mode](#cli-mode-backend-only)) | nothing else |
+| Self-host the whole stack | Follow this page, then [Deployment](./deployment.md) for production | Go, Node.js |
+
+The dashboard never sends fuzz traffic itself: every scan runs on a **runner agent** — the Go engine in `run-agent` mode — which connects out to the coordinator over WebSocket. Scans go to your own runner first; only if you have no runner connected, no private runner key registered and shared runners are not disabled for the project, they fall back to an operator-run shared runner when one is online. To scan internal or `localhost` targets, connect your own runner.
 
 ## Prerequisites
 
-Before installing, ensure you have the following installed on your system:
-- **Go** (version 1.21 or later)
-- **Node.js** (version 18 or later)
-- **npm** (Node Package Manager)
+To build from source you need:
+- **Go** 1.26 or later (see `packages/container/go.mod`)
+- **Node.js** 22.12 or later (Vite 8 and Wrangler 4 need it; CI uses Node 25) with **npm**
 
 ## Getting Started (Without Docker)
 
@@ -21,7 +28,7 @@ If you prefer to run everything locally without containers, follow these steps:
 
    Clone the Swazz repository from GitHub to your local machine:
    ```bash
-   git clone https://github.com/your-org/swazz.git
+   git clone https://github.com/SecH0us3/swazz.git
    cd swazz
    ```
 
@@ -66,10 +73,13 @@ Alternatively, if you only want to start the frontend Web UI and edge coordinato
 npm run dev
 ```
 
-### Docker & Compose (Recommended for Production)
+### Docker & Compose
 
-We package and run the Swazz application components via Docker and Docker Compose. We publish the following container image:
+We publish two container images, tagged with the commit SHA (`latest` follows every push to `master`, so pin a SHA for anything you rely on):
 - **Headless CLI Fuzzer / Scanner**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
+- **Runner Agent**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz) — connects out to the coordinator over WebSocket and listens on no port.
+
+For production deployments (Cloudflare coordinator, isolated runners) see the [Deployment Guide](./deployment.md); for Kubernetes see [Kubernetes](./kubernetes.md).
 
 For detailed instructions on running the entire Web UI, coordinator, and runner agent locally, please see the [Docker Deployment Guide](https://github.com/SecH0us3/swazz/blob/master/DOCKER.md).
 
@@ -77,7 +87,7 @@ For detailed instructions on running the entire Web UI, coordinator, and runner 
 ```bash
 docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
 # Run fuzzing directly (mount your config file using a volume):
-docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> --config /app/swazz.config.json
+docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> start --config /app/swazz.config.json
 ```
 
 If you use this repository's Compose setup, you can launch the complete dashboard, Cloudflare coordinator, and runner agent stack with a single command:
@@ -99,7 +109,7 @@ If you just want to run the core Go engine from the command line without the web
    go run main.go start --config /path/to/config.json
    ```
 
-### Runner Agent Mode (Web Dashboard Backend)
+### Runner Agent Mode (Web Dashboard Backend) {#runner-agent}
 
 The web dashboard is served by the Cloudflare edge coordinator; the Go engine
 joins it as a runner agent over WebSocket rather than exposing its own API
@@ -108,6 +118,11 @@ server:
 cd packages/container
 go run main.go run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --token <runner-token>
 ```
+
+`<runner-token>` is a project API key or a runner token; the dashboard prints the
+exact command (with a pre-filled token, or a signing-key variant) under
+**Project Settings → Active Runners**. For hardening the runner host see
+[Runner Sandboxing](./runner_sandboxing_guide.md).
 
 To bring up the whole local stack (coordinator, dashboard, demo targets and a
 connected runner agent) in one step, run `bash scripts/start-local-dev.sh` from

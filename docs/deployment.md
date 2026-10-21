@@ -82,7 +82,7 @@ The entire stack is deployed on a single virtual machine (VM) using **Docker Com
    ```
    *(Ensure you configure Pages Custom Domain to match your `ALLOWED_ORIGINS` setting.)*
 
-### 4. Runner Agent Setup (Isolated VM)
+### 4. Runner Agent Setup (Isolated VM) {#runner-agent-setup}
 1. Generate an Ed25519 keypair for the agent:
    ```bash
    swazz-engine generate-keys

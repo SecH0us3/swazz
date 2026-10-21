@@ -5,6 +5,13 @@ on:
     branches: [ master ]
     paths:
       - 'docs/**'
+  # ci.yml ignores docs/**, so docs-only PRs are checked here: the dashboard's
+  # docs links (packages/web/src/utils/docsLinks.ts) must still resolve.
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'docs/**'
+      - 'packages/web/src/utils/docsLinks*'
   workflow_dispatch:
 
 permissions:
@@ -32,6 +39,7 @@ jobs:
           cache: 'npm'
 
       - name: Setup Pages
+        if: github.event_name != 'pull_request'
         # v6.0.0
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
         with:
@@ -40,16 +48,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check dashboard docs links
+        run: npm run test --workspace=packages/web -- src/utils/docsLinks.test.ts
+
       - name: Build documentation
         run: npm run build --workspace=docs
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         # v3.0.1
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: docs/.vitepress/dist
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

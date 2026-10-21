@@ -5,6 +5,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore.js';
+import { RESOURCE_LINKS } from '../utils/docsLinks.js';
+import { ExternalLinkIcon } from './Shared/DocsLink.js';
 
 interface UserMenuProps {
     onLogout: () => void;
@@ -74,6 +76,20 @@ export function UserMenu({ onLogout, isGuest: isGuestProp }: UserMenuProps) {
                         </svg>
                         Profile Settings
                     </button>
+                    <div style={{ height: '1px', background: 'var(--border-default)', margin: '4px 0' }} />
+                    {RESOURCE_LINKS.map(link => (
+                        <a
+                            key={link.href}
+                            className="dropdown-item user-menu-resource-link"
+                            href={link.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setIsOpen(false)}
+                        >
+                            {link.label}
+                            <ExternalLinkIcon />
+                        </a>
+                    ))}
                     <div style={{ height: '1px', background: 'var(--border-default)', margin: '4px 0' }} />
                     <button 
                         className="dropdown-item" 

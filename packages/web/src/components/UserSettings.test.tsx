@@ -291,4 +291,19 @@ describe('UserSettings Component', () => {
 
         expect(screen.getByText(/Commercial License Key/i)).toBeTruthy();
     });
+    it('links the active section to its documentation and lists help resources', () => {
+        render(<UserSettings />);
+
+        const sectionDocs = () => screen.getByRole('link', { name: /^Docs:/ });
+        expect(sectionDocs()).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/installation.html');
+
+        fireEvent.click(screen.getByRole('button', { name: /MCP Integration/i }));
+        expect(sectionDocs()).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/mcp.html');
+        expect(sectionDocs()).toHaveAttribute('target', '_blank');
+
+        fireEvent.click(screen.getByRole('button', { name: /Danger Zone/i }));
+        expect(sectionDocs()).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/usage.html#account-deletion');
+
+        expect(screen.getByRole('link', { name: /Report an issue/i })).toHaveAttribute('href', 'https://github.com/SecH0us3/swazz/issues');
+    });
 });
