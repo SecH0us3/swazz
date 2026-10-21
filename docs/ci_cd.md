@@ -22,7 +22,7 @@ Before wiring Swazz into a pipeline you need:
 
 1. **A reachable target API** — either a staging environment, an ephemeral preview deployment, or a locally spun-up test server within the same CI job.
 2. **A `swazz.config.json`** — committed to your repository (or generated at runtime). See [Usage & Configuration](./usage.md) for the full schema.
-3. **The `swazz-engine` binary** — built from source (Go 1.21+) or pulled from a [GitHub Release](https://github.com/SecH0us3/swazz/releases).
+3. **The `swazz-engine` binary** — built from source (Go 1.26+) or pulled from a [GitHub Release](https://github.com/SecH0us3/swazz/releases).
 
 ---
 

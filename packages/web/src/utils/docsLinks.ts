@@ -22,22 +22,18 @@ export const DOCS = {
     installation: docsUrl('installation'),
     runnerAgent: docsUrl('installation', 'runner-agent'),
     usage: docsUrl('usage'),
-    webUi: docsUrl('usage', 'web-ui'),
     configFile: docsUrl('usage', 'configuration-file'),
     specFormats: docsUrl('usage', 'spec-formats'),
     authSequence: docsUrl('usage', 'auth-sequence'),
     requestChaining: docsUrl('usage', 'request-chaining'),
-    suppressions: docsUrl('usage', 'suppressions'),
     uiPerformance: docsUrl('usage', 'ui-performance'),
     wafAnalysis: docsUrl('usage', 'waf-analysis'),
     accountDeletion: docsUrl('usage', 'account-deletion'),
-    projectSettings: docsUrl('usage', 'project-settings'),
     membersRoles: docsUrl('usage', 'members-roles'),
     scanScheduler: docsUrl('usage', 'scan-scheduler'),
     auditTrail: docsUrl('usage', 'audit-trail'),
-    recipes: docsUrl('recipes'),
+    activeRunners: docsUrl('usage', 'active-runners'),
     bolaMultiIdentity: docsUrl('recipes', 'bola-multi-identity'),
-    deployment: docsUrl('deployment'),
     runnerSetup: docsUrl('deployment', 'runner-agent-setup'),
     runnerSandboxing: docsUrl('runner_sandboxing_guide'),
     kubernetes: docsUrl('kubernetes'),
@@ -52,3 +48,11 @@ export const DOCS = {
     pricing: docsUrl('PRICING'),
     securityReview: docsUrl('security_review'),
 } as const;
+
+/** The general help links offered in the account menu and under the settings navigation. */
+export const RESOURCE_LINKS = [
+    { href: DOCS.home, label: 'Documentation' },
+    { href: REPO_URL, label: 'GitHub' },
+    { href: BLOG_URL, label: 'Blog' },
+    { href: ISSUES_URL, label: 'Report an issue' },
+] as const;

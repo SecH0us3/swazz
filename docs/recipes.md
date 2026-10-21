@@ -152,7 +152,7 @@ swazz-engine start --config swazz.config.grpc.json --sarif grpc-findings.sarif -
 
 ---
 
-## 🤖 Recipe 7: Fuzzing & Auditing Target Model Context Protocol (MCP) Servers
+## 🤖 Recipe 7: Fuzzing & Auditing Target Model Context Protocol (MCP) Servers {#mcp-servers}
 
 Audit a target MCP server across tool arguments, prototype pollution in tool names, and confirmation contracts:
 

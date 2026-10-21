@@ -92,3 +92,19 @@
   flex-wrap: wrap;
   gap: 6px 16px;
 }
+
+/* External help links in the header account dropdown (UserMenu) */
+.user-menu-resource-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.user-menu-resource-link:hover,
+.user-menu-resource-link:focus-visible {
+  color: var(--accent-light);
+}

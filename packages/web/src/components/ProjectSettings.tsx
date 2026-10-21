@@ -32,14 +32,14 @@ type ProjectSettingsSubTab = 'general' | 'members' | 'api_specs' | 'performance'
 
 // The documentation page that explains each settings section.
 export const PROJECT_SETTINGS_DOCS: Record<ProjectSettingsSubTab, { label: string; href: string }> = {
-    general: { label: 'Configuration reference', href: DOCS.configFile },
+    general: { label: 'swazz.config.json reference', href: DOCS.configFile },
     members: { label: 'Members, roles & service accounts', href: DOCS.membersRoles },
     api_specs: { label: 'Supported API formats', href: DOCS.specFormats },
-    performance: { label: 'Fuzzing & performance settings', href: DOCS.configFile },
+    performance: { label: 'swazz.config.json reference', href: DOCS.configFile },
     anomalies: { label: 'BOLA / multi-identity testing', href: DOCS.bolaMultiIdentity },
-    runners: { label: 'Runner agent setup', href: DOCS.runnerSetup },
-    wordlists: { label: 'Custom wordlists', href: DOCS.configFile },
-    dictionaries: { label: 'Fuzzing dictionaries', href: DOCS.configFile },
+    runners: { label: 'Active runners', href: DOCS.activeRunners },
+    wordlists: { label: 'swazz.config.json reference', href: DOCS.configFile },
+    dictionaries: { label: 'swazz.config.json reference', href: DOCS.configFile },
     chaining: { label: 'Request chaining', href: DOCS.requestChaining },
     ai_remediation: { label: 'AI remediation', href: DOCS.aiRemediation },
     keys: { label: 'Key backup & recovery', href: DOCS.encryptionKeys },

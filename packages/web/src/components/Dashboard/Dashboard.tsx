@@ -110,15 +110,9 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
                                     <div className="welcome-docker-item-label">
                                         Runner Agent (executes your scans)
                                     </div>
-                                    <pre className="welcome-pre">
-                                        <code>
-                                            docker run --rm ghcr.io/sech0us3/swazz:latest run-agent \{'\n'}
-                                            {'  '}--coordinator wss://&lt;dashboard-host&gt;/api/runners/connect --token &lt;API_KEY&gt;
-                                        </code>
-                                    </pre>
-                                    <div className="welcome-docker-item-label">
-                                        Copy the ready-made command from Project Settings → Active Runners. <a href={DOCS.runnerAgent} target="_blank" rel="noopener noreferrer">How runners work →</a>
-                                    </div>
+                                    <p className="welcome-docker-item-label">
+                                        Scans run on a runner agent. Copy the ready-made <code>docker run … run-agent</code> command for this dashboard from Project Settings → Active Runners. <a href={DOCS.runnerAgent} target="_blank" rel="noopener noreferrer">How runners work →</a>
+                                    </p>
                                 </div>
                                 <div>
                                     <div className="welcome-docker-item-label">

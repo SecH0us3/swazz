@@ -216,12 +216,12 @@ describe('ProjectSettings Component — Runners Tab', () => {
         expect(sectionDocs()).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/usage.html#request-chaining');
 
         fireEvent.click(screen.getByRole('button', { name: /Active Runners/i }));
-        expect(sectionDocs()).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/deployment.html#runner-agent-setup');
+        expect(sectionDocs()).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/usage.html#active-runners');
         expect(screen.getByRole('link', { name: /Sandboxing the runner host/i })).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/runner_sandboxing_guide.html');
 
         const resources = screen.getByRole('navigation', { name: /Help and resources/i });
         expect(within(resources).getByRole('link', { name: /Documentation/i })).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/');
-        expect(within(resources).getByRole('link', { name: /GitHub repository/i })).toHaveAttribute('href', 'https://github.com/SecH0us3/swazz');
+        expect(within(resources).getByRole('link', { name: /GitHub/i })).toHaveAttribute('href', 'https://github.com/SecH0us3/swazz');
         expect(within(resources).getByRole('link', { name: /Blog/i })).toHaveAttribute('href', 'https://yoursec.substack.com/t/swazz');
     });
 });

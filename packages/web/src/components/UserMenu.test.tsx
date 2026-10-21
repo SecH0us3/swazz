@@ -4,12 +4,16 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { UserMenu } from './UserMenu.js';
 import { useAppStore } from '../store/appStore.js';
 
 describe('UserMenu', () => {
+    afterEach(() => {
+        useAppStore.setState({ userProfile: null } as any);
+    });
+
     it('offers documentation, GitHub and blog links that open in a new tab', () => {
         useAppStore.setState({ userProfile: { username: 'alice' } as any });
         render(<UserMenu onLogout={vi.fn()} />);
@@ -20,6 +24,7 @@ describe('UserMenu', () => {
             [/Documentation/, 'https://sech0us3.github.io/swazz/'],
             [/GitHub/, 'https://github.com/SecH0us3/swazz'],
             [/Blog/, 'https://yoursec.substack.com/t/swazz'],
+            [/Report an issue/, 'https://github.com/SecH0us3/swazz/issues'],
         ];
         for (const [name, href] of expected) {
             const link = screen.getByRole('link', { name });

@@ -75,7 +75,7 @@ npm run dev
 
 ### Docker & Compose
 
-We publish two container images (tagged with the commit SHA, plus `latest` for releases):
+We publish two container images, tagged with the commit SHA (`latest` follows every push to `master`, so pin a SHA for anything you rely on):
 - **Headless CLI Fuzzer / Scanner**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
 - **Runner Agent**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz) — connects out to the coordinator over WebSocket and listens on no port.
 

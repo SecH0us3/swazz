@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { HighlightedCode } from './Shared/HighlightedCode.js';
 import { Logo } from './Common/Logo.js';
+import { BLOG_URL, DOCS, REPO_URL } from '../utils/docsLinks.js';
 import './LandingShowcase.css';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
@@ -1236,9 +1237,9 @@ cd swazz
                     <span className="footer-logo-text">Swazz</span>
                 </div>
                 <div className="footer-links">
-                    <a href="https://sech0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer">Documentation</a>
-                    <a href="https://github.com/SecH0us3/swazz" target="_blank" rel="noopener noreferrer">GitHub</a>
-                    <a href="https://yoursec.substack.com/t/swazz" target="_blank" rel="noopener noreferrer">Blog</a>
+                    <a href={DOCS.home} target="_blank" rel="noopener noreferrer">Documentation</a>
+                    <a href={REPO_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
+                    <a href={BLOG_URL} target="_blank" rel="noopener noreferrer">Blog</a>
                 </div>
                 <div className="footer-copyright">
                     &copy; {new Date().getFullYear()} Swazz Security. All rights reserved.

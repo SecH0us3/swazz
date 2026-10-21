@@ -53,13 +53,13 @@ export const TIPS: Tip[] = [
         id: 'schedule-scans',
         title: 'Schedule recurring scans',
         summary: 'Automate regular scans so your API is continuously checked against new vulnerabilities as it changes. Recurring scans catch regressions and newly introduced weaknesses between manual review cycles. Set a cadence that matches your release frequency.',
-        docsUrl: DOCS.ciCd,
+        docsUrl: DOCS.scanScheduler,
     },
     {
         id: 'chaining-rules',
         title: 'Chain multi-step attacks',
         summary: 'Some vulnerabilities only appear when multiple requests are combined into a single attack flow. Use chaining rules to sequence requests that build on each other, such as login followed by privilege escalation. Multi-step chains reveal logic flaws a single request misses.',
-        docsUrl: DOCS.authSequence,
+        docsUrl: DOCS.requestChaining,
     },
     {
         id: 'webhooks',

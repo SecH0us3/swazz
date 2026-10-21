@@ -24,8 +24,8 @@ Swazz is built using **Go** for the backend engine and **Node.js (TypeScript/Rea
 ### Prerequisites
 
 Before installing, ensure you have the following installed on your system:
-- **Go** (version 1.21 or later)
-- **Node.js** (version 18 or later)
+- **Go** 1.26 or later
+- **Node.js** 22.12 or later
 - **npm** (Node Package Manager)
 
 ### Getting Started (Without Docker)
@@ -124,7 +124,7 @@ Swazz provides two primary methods of operation: a feature-rich Web UI Dashboard
 The Web UI is the easiest way to manage your fuzzer, inspect requests, and visually analyze results.
 
 1. **Start the Web UI**
-   Run `npm run dev` from the project root. This starts the React frontend and Go API.
+   Run `bash scripts/start-local-dev.sh` from the project root for the full stack (coordinator, dashboard, demo targets and a runner agent). `npm run dev` starts only the coordinator and the dashboard, not the Go runner.
 2. **Dashboard Features**
    - **Heatmap**: Visualizes the `Endpoint × Status Code` responses in real time. Perfect for quickly identifying anomalous 500 errors or unexpected 200s.
    - **Inspector**: Click on any cell in the heatmap to drill down into the raw HTTP requests and responses. Filter by method or status.
@@ -204,7 +204,7 @@ Before wiring Swazz into a pipeline you need:
 
 1. **A reachable target API** — either a staging environment, an ephemeral preview deployment, or a locally spun-up test server within the same CI job.
 2. **A `swazz.config.json`** — committed to your repository (or generated at runtime). See [Usage & Configuration](./usage.html) for the full schema.
-3. **The `swazz-engine` binary** — built from source (Go 1.21+) or pulled from a [GitHub Release](https://github.com/SecH0us3/swazz/releases).
+3. **The `swazz-engine` binary** — built from source (Go 1.26+) or pulled from a [GitHub Release](https://github.com/SecH0us3/swazz/releases).
 
 ### GitHub Actions — SARIF Reporting
 

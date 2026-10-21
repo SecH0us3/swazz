@@ -11,7 +11,7 @@ Swazz provides two primary methods of operation: a feature-rich Web UI Dashboard
 The Web UI is the easiest way to manage your fuzzer, inspect requests, and visually analyze results.
 
 1. **Open the Web UI**  
-   Use the hosted dashboard at [swazz.secmy.app](https://swazz.secmy.app), or run your own: `bash scripts/start-local-dev.sh` from the project root starts the edge coordinator (`:8787`), the dashboard (`http://localhost:5173`), the demo targets and a connected Go runner agent. `npm run dev` starts only the coordinator and the dashboard — scans then wait until a runner joins (**Project Settings → Runners**, see [Installation → Runner Agent Mode](./installation.md#runner-agent)).
+   Use the hosted dashboard at [swazz.secmy.app](https://swazz.secmy.app), or run your own: `bash scripts/start-local-dev.sh` from the project root starts the edge coordinator (`:8787`), the dashboard (`http://localhost:5173`), the demo targets and a connected Go runner agent. `npm run dev` starts only the coordinator and the dashboard — scans then wait until a runner joins (**Project Settings → Active Runners**, see [Installation → Runner Agent Mode](./installation.md#runner-agent)).
 2. **Dashboard Features**
    - **Heatmap**: Visualizes the `Endpoint × Status Code` responses in real time. Perfect for quickly identifying anomalous 500 errors or unexpected 200s.
    - **Sidebar Endpoint Tree & Filters**: Organize and manage scanned endpoints by hierarchical folder paths. Use HTTP method filter badges (`GET`, `POST`, etc.) and search to filter visible endpoints. Enable the **Included Only** toggle to hide excluded/disabled endpoints in the Web Dashboard view so you can focus exclusively on active endpoints (preference persists across sessions).
@@ -84,7 +84,7 @@ cd packages/container
 go run . start --config swazz.config.json
 ```
 
-### Headless Browser Crawler (`swazz spider`) 🕷️
+### Headless Browser Crawler (`swazz spider`) 🕷️ {#spider}
 
 Autonomous target discovery for modern Single Page Applications (SPAs: React, Vue, Angular). It launches a local Chrome/Chromium instance, injects authentication cookies, navigates dynamic UI elements, intercepts background HTTP requests, and exports them as an OpenAPI v3 specification or HAR file.
 
@@ -179,9 +179,9 @@ Unknown keys are ignored, so a misspelled key silently falls back to its default
 | SOAP (WSDL) | `.wsdl` URL or file | — |
 | gRPC | `grpc://` / `grpcs://` (Server Reflection) or `.proto` file | [gRPC](#grpc) |
 | WebSocket | `ws://` / `wss://`, AsyncAPI file or HAR | [WebSocket](#websocket) |
-| MCP server | `mcp_server` block | [Recipe 7](./recipes.md) |
+| MCP server | `mcp_server` block | [Recipe 7](./recipes.md#mcp-servers) |
 
-No spec at all? Record traffic with the [browser extension](./browser_extension.md) or crawl a SPA with [`swazz spider`](#headless-browser-crawler-swazz-spider-🕷️).
+No spec at all? Record traffic with the [browser extension](./browser_extension.md) or crawl a SPA with [`swazz spider`](#spider).
 
 ## Request Chaining {#request-chaining}
 

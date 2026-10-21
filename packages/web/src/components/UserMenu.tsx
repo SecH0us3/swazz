@@ -5,16 +5,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore.js';
-import { BLOG_URL, DOCS, REPO_URL } from '../utils/docsLinks.js';
+import { RESOURCE_LINKS } from '../utils/docsLinks.js';
 import { ExternalLinkIcon } from './Shared/DocsLink.js';
-
-const MENU_ITEM_STYLE: React.CSSProperties = { padding: '8px 12px', background: 'transparent', border: 'none', textAlign: 'left', color: 'var(--text-default)', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center', textDecoration: 'none', fontSize: 'inherit' };
-
-const RESOURCE_LINKS = [
-    { href: DOCS.home, label: 'Documentation' },
-    { href: REPO_URL, label: 'GitHub' },
-    { href: BLOG_URL, label: 'Blog' },
-];
 
 interface UserMenuProps {
     onLogout: () => void;
@@ -88,8 +80,7 @@ export function UserMenu({ onLogout, isGuest: isGuestProp }: UserMenuProps) {
                     {RESOURCE_LINKS.map(link => (
                         <a
                             key={link.href}
-                            className="dropdown-item"
-                            style={{ ...MENU_ITEM_STYLE, justifyContent: 'space-between' }}
+                            className="dropdown-item user-menu-resource-link"
                             href={link.href}
                             target="_blank"
                             rel="noopener noreferrer"

@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import React from 'react';
-import { BLOG_URL, DOCS, ISSUES_URL, REPO_URL } from '../../utils/docsLinks.js';
+import { RESOURCE_LINKS } from '../../utils/docsLinks.js';
 import './DocsLink.css';
 
 export function ExternalLinkIcon({ size = 11 }: { size?: number }) {
@@ -49,16 +49,10 @@ export function DocsLink({ href, label, title }: DocsLinkProps) {
 
 /** Documentation, repository, blog and issue links shown under a settings navigation list. */
 export function SettingsResourceLinks() {
-    const links = [
-        { href: DOCS.home, label: 'Documentation' },
-        { href: REPO_URL, label: 'GitHub repository' },
-        { href: BLOG_URL, label: 'Blog' },
-        { href: ISSUES_URL, label: 'Report an issue' },
-    ];
     return (
         <nav className="settings-resource-links" aria-label="Help and resources">
             <div className="settings-resource-links-title">Help & resources</div>
-            {links.map(link => (
+            {RESOURCE_LINKS.map(link => (
                 <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer" className="settings-resource-link">
                     <span>{link.label}</span>
                     <ExternalLinkIcon />
