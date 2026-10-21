@@ -140,9 +140,6 @@ type Runner struct {
 	configMu    sync.RWMutex
 	varReplacer *strings.Replacer
 
-	// WebSocket clients map (key: string address/endpoint, value: *ws.Client)
-	wsClients sync.Map
-
 	// Domain state & regex cache — used by chaining rules.
 	stateMu       sync.RWMutex
 	state         map[string]string

@@ -43,12 +43,6 @@ func (r *Runner) Close() {
 		}
 		return true
 	})
-	r.wsClients.Range(func(key, value any) bool {
-		if c, ok := value.(interface{ Close() error }); ok {
-			_ = c.Close()
-		}
-		return true
-	})
 	r.subsMu.Lock()
 	for ch := range r.subs {
 		delete(r.subs, ch)
