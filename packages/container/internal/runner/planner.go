@@ -10,11 +10,6 @@ import (
 	"swazz-engine/internal/swagger"
 )
 
-const (
-	defaultMaxPayloadBytes  = 10 << 20 // 10 MiB
-	boundaryMaxPayloadBytes = 10 << 20 // 10 MiB
-)
-
 // getOrderedProfiles returns configured profiles with boundary testing last,
 // ensuring cheap profiles run first so results arrive early.
 func (r *Runner) getOrderedProfiles() []swagger.FuzzingProfile {
@@ -53,19 +48,6 @@ func calcEffectiveIterations(
 		return minNeeded
 	}
 	return 1
-}
-
-// calcMaxPayloadSize returns the per-profile payload size ceiling in bytes.
-// If settings.MaxPayloadSizeBytes is explicitly set (> 0), it is honored for all profiles.
-// Otherwise, defaults to boundaryMaxPayloadBytes for BOUNDARY profile and defaultMaxPayloadBytes for others.
-func calcMaxPayloadSize(profile swagger.FuzzingProfile, settings swagger.Settings) int {
-	if settings.MaxPayloadSizeBytes > 0 {
-		return settings.MaxPayloadSizeBytes
-	}
-	if profile == swagger.ProfileBoundary {
-		return boundaryMaxPayloadBytes
-	}
-	return defaultMaxPayloadBytes
 }
 
 func endpointRequests(profile swagger.FuzzingProfile, settings swagger.Settings, ep *swagger.EndpointConfig) int {

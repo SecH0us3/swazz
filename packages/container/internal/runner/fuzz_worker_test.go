@@ -7,9 +7,11 @@ package runner
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"swazz-engine/internal/generator"
+	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/swagger"
 
 	"github.com/stretchr/testify/assert"
@@ -50,7 +52,7 @@ func TestBuildFuzzIteration_EnforcesMaxPayloadSize(t *testing.T) {
 	})
 
 	t.Run("payload size within 10MB default limit", func(t *testing.T) {
-		limit := defaultMaxPayloadBytes
+		limit := swagger.DefaultMaxPayloadSizeBytes
 		seenHashes := make(map[uint32]bool)
 
 		built, _, isDuplicate := r.buildFuzzIteration(endpoint, gen, safeGen, false, limit, false, seenHashes)
@@ -61,4 +63,50 @@ func TestBuildFuzzIteration_EnforcesMaxPayloadSize(t *testing.T) {
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(bodyBytes), limit)
 	})
+}
+
+// minEncodedSize decides, without encoding, that a payload is over the size cap; it may only do
+// so when the real encoding is over it too, so it must never exceed the encoded length.
+func TestMinEncodedSize_IsALowerBound(t *testing.T) {
+	cases := []any{
+		"",
+		strings.Repeat("A", 1000),
+		`quotes " and \ backslashes <script>&`,
+		"multi-byte あ🔥",
+		map[string]any{},
+		map[string]any{"body": map[string]any{"name": "x", "tags": []any{"a", "b", 1, nil, true}}},
+		map[string]any{"queryParams": map[string]any{"q": 1.5, "s": "v"}, "pathParams": map[string]string{"id": "42", "x": ""}},
+		[]any{},
+		[]any{map[string]any{"k": []any{}}, "z"},
+		map[string]string{},
+		nil,
+		42,
+	}
+	for _, v := range cases {
+		encoded, err := json.Marshal(v)
+		require.NoError(t, err)
+		assert.LessOrEqual(t, minEncodedSize(v, 1<<30), len(encoded), "%#v", v)
+	}
+
+	// Over the cap: decided without encoding.
+	big := map[string]any{"body": map[string]any{"a": strings.Repeat("A", 2000), "b": strings.Repeat("B", 2000)}}
+	assert.Greater(t, minEncodedSize(big, 1000), 1000)
+}
+
+// The size check is the same for both fuzz paths: an encoding over the cap does not fit, one at
+// the cap does, and the hash is that of the encoding without the encoder's trailing newline.
+func TestSizedPayloadHash(t *testing.T) {
+	p := generatedPayload{body: map[string]any{"a": "xyz"}}
+	encoded := `{"body":{"a":"xyz"}}`
+
+	h, fits := sizedPayloadHash(p, len(encoded))
+	assert.True(t, fits)
+	assert.Equal(t, payloads.HashStr(encoded), h)
+
+	_, fits = sizedPayloadHash(p, len(encoded)-1)
+	assert.False(t, fits)
+
+	big := generatedPayload{body: map[string]any{"a": strings.Repeat("A", 1<<20)}}
+	_, fits = sizedPayloadHash(big, 1<<10)
+	assert.False(t, fits)
 }

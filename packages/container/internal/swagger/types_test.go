@@ -312,3 +312,12 @@ func TestMCPSettingsDefaults(t *testing.T) {
 	assert.True(t, sExplicit.MCPFuzzResourcesEnabled())
 	assert.False(t, sExplicit.MCPFuzzPromptsEnabled())
 }
+
+// TestPayloadSizeCap pins the cap the runner enforces: an explicit setting wins for every
+// profile, and 0 falls back to the shared default rather than to no cap at all.
+func TestPayloadSizeCap(t *testing.T) {
+	assert.Equal(t, DefaultMaxPayloadSizeBytes, Settings{}.PayloadSizeCap())
+	assert.Equal(t, 2048, Settings{MaxPayloadSizeBytes: 2048}.PayloadSizeCap())
+	assert.Equal(t, DefaultMaxPayloadSizeBytes+1024,
+		Settings{MaxPayloadSizeBytes: DefaultMaxPayloadSizeBytes + 1024}.PayloadSizeCap())
+}

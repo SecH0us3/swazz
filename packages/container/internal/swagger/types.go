@@ -402,13 +402,25 @@ type Checkpoint struct {
 	Paused    bool   `json:"paused,omitempty"`
 }
 
+// DefaultMaxPayloadSizeBytes is the cap on an encoded fuzz payload when the settings set none.
+const DefaultMaxPayloadSizeBytes = 10 << 20 // 10 MiB
+
+// PayloadSizeCap is the most bytes an encoded fuzz payload may take: the runner discards a larger
+// one, and the generator does not build values that could not fit.
+func (s Settings) PayloadSizeCap() int {
+	if s.MaxPayloadSizeBytes > 0 {
+		return s.MaxPayloadSizeBytes
+	}
+	return DefaultMaxPayloadSizeBytes
+}
+
 // DefaultSettings returns sensible defaults matching the original TS implementation.
 func DefaultSettings() Settings {
 	return Settings{
 		IterationsPerProfile:          20,
 		Concurrency:                   5,
 		TimeoutMs:                     10000,
-		MaxPayloadSizeBytes:           10485760, // 10MB
+		MaxPayloadSizeBytes:           DefaultMaxPayloadSizeBytes,
 		DelayBetweenRequestMs:         0,
 		Profiles:                      []FuzzingProfile{ProfileRandom, ProfileBoundary, ProfileMalicious},
 		AnalyzeResponseBody:           true,

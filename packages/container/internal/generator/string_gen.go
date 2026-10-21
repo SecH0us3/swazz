@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -37,6 +38,18 @@ var maliciousStringCategories = []struct {
 	{payloads.CatMaliciousGraphQL, payloads.MaliciousGraphQL},
 }
 
+// cutUTF8 returns s cut to at most n bytes, on a rune boundary so the result stays valid UTF-8: a
+// boundary value cut mid-rune would be sent as U+FFFD, not as the value it stands for.
+func cutUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
+}
+
 func (g *Generator) generateString(format, propName string) any {
 	return g.generateStringInternal(format, propName, false)
 }
@@ -57,18 +70,17 @@ func (g *Generator) generateStringInternal(format, propName string, inArray bool
 	switch g.profile {
 	case swagger.ProfileBoundary:
 		if g.isCategoryEnabled(payloads.CatBoundaryStrings) {
-			val := seqPick(&g.mu, payloads.BoundaryStrings, &g.bStrIdx)
-			if strVal, ok := val.(string); ok {
-				maxAllowed := 104_857_600 // 100MB default ceiling
-				if inArray {
-					maxAllowed = 1024 // 1KB per item in arrays to prevent OOM
-				} else if g.settings.MaxPayloadSizeBytes > 0 {
-					maxAllowed = g.settings.MaxPayloadSizeBytes
-				}
-				if len(strVal) > maxAllowed {
-					return strVal[:maxAllowed]
-				}
-				return strVal
+			// Leave room for the JSON around the field, or a string cut to the cap never fits.
+			maxAllowed := max(g.settings.PayloadSizeCap()-payloads.MinEnvelopeBytes, 1)
+			if inArray {
+				maxAllowed = 1024 // 1KB per item in arrays to prevent OOM
+			}
+			val := seqPick(&g.mu, g.boundaryStrings, &g.bStrIdx)
+			switch v := val.(type) {
+			case payloads.LongString:
+				return v.Build(maxAllowed)
+			case string:
+				return cutUTF8(v, maxAllowed)
 			}
 			return val
 		}

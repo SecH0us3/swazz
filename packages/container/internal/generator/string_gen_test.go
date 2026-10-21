@@ -9,11 +9,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
@@ -151,6 +153,66 @@ func TestStringGen_GenerateString_Boundary(t *testing.T) {
 			if str, ok := val.(string); ok {
 				assert.LessOrEqual(t, len(str), 64)
 			}
+		}
+	})
+
+	// Megabyte payloads that could not fit the payload size cap are not generated (no payload
+	// could carry them); the ones under it still are, at full length, and every remaining entry
+	// comes up once per pass, so the planned iterations cover them all.
+	t.Run("boundary megabyte payloads under the cap only", func(t *testing.T) {
+		const capBytes = 1 << 20 // 1 MiB: the 512KB payload fits, 1MB and up do not
+		settings := swagger.Settings{MaxPayloadSizeBytes: capBytes}
+		g := New(nil, swagger.ProfileBoundary, settings)
+		fitting := payloads.BoundaryStringsFitting(capBytes)
+		require.Equal(t, len(payloads.BoundaryStrings)-7, len(fitting), "the seven from 1MB to 100MB are left out")
+		assert.Equal(t, len(fitting), MinIterationsNeeded(swagger.ProfileBoundary, settings))
+
+		seen := make(map[string]bool)
+		for range fitting {
+			str, ok := g.generateString("", "").(string)
+			require.True(t, ok)
+			assert.Less(t, len(str), capBytes)
+			seen[str] = true
+		}
+		assert.Equal(t, len(fitting), len(seen), "one pass covers every fitting entry once")
+		assert.True(t, seen[strings.Repeat("A", 524_288)], "the 512KB payload fits and must be generated")
+	})
+
+	// Without a cap in the settings, the generator uses the runner's default one.
+	t.Run("boundary default cap matches the runner's", func(t *testing.T) {
+		g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
+		for range 2 * len(payloads.BoundaryStrings) {
+			str, ok := g.generateString("", "").(string)
+			require.True(t, ok)
+			assert.Less(t, len(str), swagger.DefaultMaxPayloadSizeBytes)
+		}
+	})
+
+	// Every boundary string is cut to leave room for the JSON around the field, so under a cap
+	// smaller than the 1 KB strings they still fit once wrapped instead of all being discarded.
+	t.Run("boundary strings leave room for the envelope", func(t *testing.T) {
+		const capBytes = 512
+		g := New(nil, swagger.ProfileBoundary, swagger.Settings{MaxPayloadSizeBytes: capBytes})
+		for range len(payloads.BoundaryStringsFitting(capBytes)) {
+			str, ok := g.generateString("", "").(string)
+			require.True(t, ok)
+			assert.LessOrEqual(t, len(str)+payloads.MinEnvelopeBytes, capBytes)
+		}
+	})
+
+	// Only the boundary profile rotates through the boundary list, so no other profile pays for it.
+	t.Run("boundary list built for boundary profile only", func(t *testing.T) {
+		assert.Nil(t, New(nil, swagger.ProfileRandom, swagger.Settings{}).boundaryStrings)
+		assert.NotEmpty(t, New(nil, swagger.ProfileBoundary, swagger.Settings{}).boundaryStrings)
+	})
+
+	// A cut never splits a multi-byte rune.
+	t.Run("boundary array item cut on a rune boundary", func(t *testing.T) {
+		g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
+		for range len(payloads.BoundaryStrings) {
+			str, ok := g.generateStringArrayItem("", "").(string)
+			require.True(t, ok)
+			assert.True(t, utf8.ValidString(str), "%q...", str[:min(len(str), 8)])
 		}
 	})
 
