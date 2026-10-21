@@ -293,34 +293,9 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		var clientToUse = r.client
-		proxyStr := getNextProxy(proxyList)
-		var customTransport *http.Transport
-		if proxyStr != "" {
-			if proxyURL, err := url.Parse(proxyStr); err == nil {
-				var baseTransport *http.Transport
-				if r.client.Transport != nil {
-					if t, ok := r.client.Transport.(*http.Transport); ok {
-						baseTransport = t
-					}
-				} else {
-					if t, ok := http.DefaultTransport.(*http.Transport); ok {
-						baseTransport = t
-					}
-				}
-				if baseTransport != nil {
-					customTransport = baseTransport.Clone()
-					customTransport.Proxy = http.ProxyURL(proxyURL)
-					clientToUse = &http.Client{
-						Transport:     customTransport,
-						CheckRedirect: r.client.CheckRedirect,
-						Timeout:       r.client.Timeout,
-					}
-				}
-			}
-		}
-		if customTransport != nil {
-			defer customTransport.CloseIdleConnections()
+		clientToUse := r.client
+		if len(proxyList) > 0 {
+			clientToUse = r.proxiedClient()
 		}
 
 		start := time.Now()
