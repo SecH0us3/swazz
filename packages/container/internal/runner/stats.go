@@ -45,11 +45,56 @@ type CheckpointData struct {
 	Iteration int    `json:"iteration"`
 }
 
+// statsPipe connects one run's workers to its statsAggregator. The run ends it by closing stop,
+// never ch: a worker that outlived the run (finalise gives up waiting for it) may still send,
+// and a send on a closed channel would panic it.
+type statsPipe struct {
+	ch   chan statsMsg
+	stop chan struct{} // closed by finalise; the aggregator drains ch and returns
+	done chan struct{} // closed by the aggregator when it has returned
+}
+
+func newStatsPipe() *statsPipe {
+	return &statsPipe{ch: make(chan statsMsg, 4096), stop: make(chan struct{}), done: make(chan struct{})}
+}
+
+// stoppedStatsPipe is the pipe of a runner with no run: sendStats drops what it is given.
+func stoppedStatsPipe() *statsPipe {
+	p := newStatsPipe()
+	close(p.stop)
+	close(p.done)
+	return p
+}
+
+// sendStats hands msg to the run's statsAggregator. Once the run has ended it drops msg instead
+// of blocking on an aggregator that is gone, and returns false.
+func (r *Runner) sendStats(msg statsMsg) bool {
+	p := r.stats.Load()
+	select {
+	case <-p.stop:
+		return false
+	default:
+	}
+	select {
+	case p.ch <- msg:
+		return true
+	case <-p.stop:
+		return false
+	}
+}
+
+// stopStats ends the run's statsAggregator once it has taken in what was sent, and waits for it.
+func (r *Runner) stopStats() {
+	p := r.stats.Load()
+	close(p.stop)
+	<-p.done
+}
+
 // statsAggregator runs as a single background goroutine that owns all
-// mutable stats data. It consumes results from statsChan, accumulates
+// mutable stats data. It consumes results from the run's statsPipe, accumulates
 // them without any locks, and publishes snapshots at a fixed interval.
-func (r *Runner) statsAggregator() {
-	defer close(r.statsDone)
+func (r *Runner) statsAggregator(p *statsPipe) {
+	defer close(p.done)
 
 	ticker := time.NewTicker(150 * time.Millisecond)
 	defer ticker.Stop()
@@ -65,44 +110,56 @@ func (r *Runner) statsAggregator() {
 	completedIters := make(map[int]bool)
 	var activeEp, activePr string
 
+	handle := func(msg statsMsg) {
+		if !initializedTotalRequests {
+			stats.TotalRequests = r.progress.totalRequests.Load()
+			lastCheckpointRequests = stats.TotalRequests
+			initializedTotalRequests = true
+		}
+		accumulateResult(&stats, msg.result)
+
+		// If we switched to a new endpoint/profile, reset the completed iterations tracking
+		if msg.endpoint != activeEp || msg.profile != activePr {
+			activeEp = msg.endpoint
+			activePr = msg.profile
+			clear(completedIters)
+		}
+		completedIters[msg.currentIteration] = true
+
+		// Compute the contiguous watermark (highest iteration N where 1..N are all complete)
+		watermark := 0
+		for i := 1; i <= msg.totalIterations; i++ {
+			if completedIters[i] {
+				watermark = i
+			} else {
+				break
+			}
+		}
+
+		latestIteration = watermark
+		if msg.totalIterations > latestTotalIterations {
+			latestTotalIterations = msg.totalIterations
+		}
+		dirty = true
+	}
+
 	for {
 		select {
-		case msg, ok := <-r.statsChan:
-			if !ok {
-				// Channel closed — publish final snapshot and exit
-				r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
-				return
-			}
-			if !initializedTotalRequests {
-				stats.TotalRequests = r.progress.totalRequests.Load()
-				lastCheckpointRequests = stats.TotalRequests
-				initializedTotalRequests = true
-			}
-			accumulateResult(&stats, msg.result)
+		case msg := <-p.ch:
+			handle(msg)
 
-			// If we switched to a new endpoint/profile, reset the completed iterations tracking
-			if msg.endpoint != activeEp || msg.profile != activePr {
-				activeEp = msg.endpoint
-				activePr = msg.profile
-				clear(completedIters)
-			}
-			completedIters[msg.currentIteration] = true
-
-			// Compute the contiguous watermark (highest iteration N where 1..N are all complete)
-			watermark := 0
-			for i := 1; i <= msg.totalIterations; i++ {
-				if completedIters[i] {
-					watermark = i
-				} else {
-					break
+		case <-p.stop:
+			// Sends that completed before stop (all of them, when the workers have returned)
+			// are buffered in ch: take them in, publish the final snapshot and exit.
+			for {
+				select {
+				case msg := <-p.ch:
+					handle(msg)
+				default:
+					r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
+					return
 				}
 			}
-
-			latestIteration = watermark
-			if msg.totalIterations > latestTotalIterations {
-				latestTotalIterations = msg.totalIterations
-			}
-			dirty = true
 
 		case <-ticker.C:
 			if dirty {

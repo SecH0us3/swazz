@@ -308,13 +308,13 @@ func (r *Runner) runActiveParameterFuzzing(
 					r.recordTimeBaseline(endpoint.Method, endpoint.Path, result.Duration)
 				}
 
-				r.statsChan <- statsMsg{
+				r.sendStats(statsMsg{
 					result:           result,
 					currentIteration: it + 1,
 					totalIterations:  totalPlanned,
 					endpoint:         endpoint.Method + " " + endpoint.Path,
 					profile:          string(profile),
-				}
+				})
 				r.Broadcast(Event{Type: EventResult, Data: result})
 
 				if result.Status >= 200 && result.Status < 300 {

@@ -122,13 +122,13 @@ func (r *Runner) fuzzEndpoint(
 				r.recordTimeBaseline(endpoint.Method, endpoint.Path, result.Duration)
 			}
 
-			r.statsChan <- statsMsg{
+			r.sendStats(statsMsg{
 				result:           result,
 				currentIteration: it + 1,
 				totalIterations:  effectiveIter,
 				endpoint:         epKey,
 				profile:          string(profile),
-			}
+			})
 			r.Broadcast(Event{Type: EventResult, Data: result})
 
 			if result.Status >= 200 && result.Status < 300 {

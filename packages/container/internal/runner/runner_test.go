@@ -301,16 +301,16 @@ func TestStatsAggregatorShutdown(t *testing.T) {
 	defer r.Close()
 
 	// Manually start the aggregator by mimicking Start's setup
-	r.statsChan = make(chan statsMsg, 4096)
-	r.statsDone = make(chan struct{})
+	p := newStatsPipe()
+	r.stats.Store(p)
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
-	go r.statsAggregator()
+	go r.statsAggregator(p)
 
 	// Send 100 results
 	const numResults = 100
 	for i := 0; i < numResults; i++ {
-		r.statsChan <- statsMsg{
+		p.ch <- statsMsg{
 			result: &swagger.FuzzResult{
 				Method:   "GET",
 				Endpoint: "/test",
@@ -322,10 +322,10 @@ func TestStatsAggregatorShutdown(t *testing.T) {
 		}
 	}
 
-	// Close the channel and wait for aggregator to finish
-	close(r.statsChan)
+	// Stop the aggregator and wait for it to finish
+	close(p.stop)
 	select {
-	case <-r.statsDone:
+	case <-p.done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("aggregator did not shut down in time")
 	}
@@ -957,8 +957,6 @@ func TestCheckpointResuming(t *testing.T) {
 
 func TestCheckpointWatermark(t *testing.T) {
 	r := &Runner{
-		statsChan:  make(chan statsMsg, 100),
-		statsDone:  make(chan struct{}),
 		doneCh:     make(chan struct{}),
 		subs:       make(map[chan Event]struct{}),
 		eventQueue: NewMPSCQueue(),
@@ -967,23 +965,25 @@ func TestCheckpointWatermark(t *testing.T) {
 	r.progress.totalRequests.Store(0)
 
 	// Start the stats aggregator
-	go r.statsAggregator()
+	p := newStatsPipe()
+	r.stats.Store(p)
+	go r.statsAggregator(p)
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 3,
 		totalIterations:  10,
 		endpoint:         "GET /test",
 		profile:          "RANDOM",
 	}
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 1,
 		totalIterations:  10,
 		endpoint:         "GET /test",
 		profile:          "RANDOM",
 	}
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 2,
 		totalIterations:  10,
@@ -997,7 +997,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to be 3, got %d", stats.Progress.CurrentIteration)
 	}
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 5,
 		totalIterations:  10,
@@ -1010,7 +1010,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to remain 3 because 4 is missing, got %d", stats.Progress.CurrentIteration)
 	}
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 4,
 		totalIterations:  10,
@@ -1023,8 +1023,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to jump to 5 once 4 completed, got %d", stats.Progress.CurrentIteration)
 	}
 
-	close(r.statsChan)
-	<-r.statsDone
+	r.stopStats()
 }
 
 func TestInitRun_MCPMethodFuzzing(t *testing.T) {
