@@ -124,6 +124,7 @@ func TestRecycle_SessionCountsQueuedAndUnacknowledgedOutput(t *testing.T) {
 	s := newAgentSession("ws://localhost", "tok", true)
 	assert.False(t, s.dispatcher.pendingOutput())
 	s.dispatcher.delivery.setEnabled(true)
+	s.dispatcher.writerStarted() // a connection is draining the queue
 	s.dispatcher.SendWSEvent("run-1", "result", nil)
 	assert.True(t, s.dispatcher.pendingOutput(), "queued")
 	ev := (<-s.outChan).(WSEventOut)

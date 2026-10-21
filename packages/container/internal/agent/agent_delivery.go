@@ -113,8 +113,9 @@ func (l *deliveryLog) reset(runID string) string {
 // acknowledged. Callers queue the result under AgentDispatcher.sendMu, so a run's events are
 // queued in sequence order. A msg that names an execution (Exec) other than the run's current
 // one is a late event of an earlier execution: it is refused (false), since numbering it in the
-// current one would collide with that execution's own events.
-func (l *deliveryLog) stamp(msg WSEventOut) (WSEventOut, bool) {
+// current one would collide with that execution's own events. kept reports whether msg is in the
+// log, for the next connection to replay (only with a coordinator that acknowledges events).
+func (l *deliveryLog) stamp(msg WSEventOut) (stamped WSEventOut, ok, kept bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	rl := l.runs[msg.RunID]
@@ -126,14 +127,14 @@ func (l *deliveryLog) stamp(msg WSEventOut) (WSEventOut, bool) {
 		rl = &runLog{exec: exec}
 		l.runs[msg.RunID] = rl
 	} else if msg.Exec != "" && msg.Exec != rl.exec {
-		return msg, false
+		return msg, false, false
 	}
 	rl.nextSeq++
 	msg.Seq = rl.nextSeq
 	msg.Exec = rl.exec
 	rl.touched = l.now()
 	if !l.enabled {
-		return msg, true
+		return msg, true, false
 	}
 	rl.unacked = append(rl.unacked, msg)
 	if len(rl.unacked) > maxUnackedPerRun {
@@ -144,7 +145,7 @@ func (l *deliveryLog) stamp(msg WSEventOut) (WSEventOut, bool) {
 		// Copied, so the dropped events do not stay reachable through the backing array.
 		rl.unacked = append([]WSEventOut(nil), rl.unacked[len(rl.unacked)-maxUnackedPerRun/2:]...)
 	}
-	return msg, true
+	return msg, true, true
 }
 
 // ack forgets every message of the run's execution exec up to and including seq. An ack for an

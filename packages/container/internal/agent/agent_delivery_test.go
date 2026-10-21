@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
@@ -40,7 +41,7 @@ func noneActive(string) bool { return false }
 
 func stamped(t *testing.T, l *deliveryLog, msg WSEventOut) WSEventOut {
 	t.Helper()
-	out, ok := l.stamp(msg)
+	out, ok, _ := l.stamp(msg)
 	if !ok {
 		t.Fatalf("stamp refused %+v", msg)
 	}
@@ -148,7 +149,7 @@ func TestDeliveryLog_RefusesLateEventsOfAnEarlierExecution(t *testing.T) {
 	second := l.reset("a")
 	assert.NotEqual(t, first, second)
 
-	_, ok := l.stamp(WSEventOut{RunID: "a", Exec: first})
+	_, ok, _ := l.stamp(WSEventOut{RunID: "a", Exec: first})
 	assert.False(t, ok)
 	ev := stamped(t, l, WSEventOut{RunID: "a", Exec: second})
 	assert.Equal(t, uint64(1), ev.Seq)
@@ -198,6 +199,7 @@ func TestResumeRunIDs_ExecutingRunsFirstThenRunsWithUnackedEvents(t *testing.T) 
 	out := make(chan interface{}, 10)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
 	d.delivery.setEnabled(true)
+	d.writerStarted()
 	d.activeRunners["z-running"] = nil
 	d.SendWSEvent("a-finished", "complete", nil)
 	ev := (<-out).(WSEventOut)
@@ -214,6 +216,7 @@ func TestSendWSEvent_QueuesEachRunsEventsInSeqOrder(t *testing.T) {
 	out := make(chan interface{}, senders*perSender)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
 	d.delivery.setEnabled(true)
+	d.writerStarted() // a connection is draining the queue
 	var wg sync.WaitGroup
 	for i := 0; i < senders; i++ {
 		wg.Add(1)
@@ -338,6 +341,11 @@ func TestAgentSession_NoReplayWithoutDeliverySupport(t *testing.T) {
 	}()
 	first := <-conns
 	session.dispatcher.SendWSEvent("run-1", "result", nil)
+	session.dispatcher.SendWSEvent("run-1", "result", nil)
+	<-first
+	// Seq 2 is written only once the write of seq 1 has returned, so seq 1 is now fully sent.
+	// Seq 2's write may still be in flight when the connection is cancelled: a write that fails
+	// that way is carried to the next connection (at least once), which is not a replay.
 	<-first
 	cancel1()
 	<-done1
@@ -346,10 +354,18 @@ func TestAgentSession_NoReplayWithoutDeliverySupport(t *testing.T) {
 	defer cancel2()
 	go func() { _ = session.runConnection(ctx2, url, nil, false, nil) }()
 	second := <-conns
-	select {
-	case seq := <-second:
-		t.Fatalf("seq %d was replayed to a coordinator that does not acknowledge", seq)
-	case <-time.After(300 * time.Millisecond):
+	deadline := time.After(300 * time.Millisecond)
+	seen := map[uint64]int{}
+	for {
+		select {
+		case seq := <-second:
+			seen[seq]++
+			if seq != 2 || seen[seq] > 1 {
+				t.Fatalf("seq %d was replayed to a coordinator that does not acknowledge", seq)
+			}
+		case <-deadline:
+			return
+		}
 	}
 }
 
@@ -457,4 +473,70 @@ func TestAgentSession_AsksPerRunWhileAnotherRunStreams(t *testing.T) {
 	case <-time.After(ackRequestDelay + 2*time.Second):
 		t.Fatal("the quiet run's tail was never offered for acknowledgement")
 	}
+}
+
+// While no connection is up, an event in the delivery log is left to the log's replay once the
+// queue is full: a long outage no longer blocks every run (their events all go through
+// queueEvent, under one lock) until the coordinator comes back.
+func TestQueueEvent_NoWriterAndAcks_FullQueueLeavesEventsToTheLog(t *testing.T) {
+	out := make(chan interface{}, 1)
+	d := NewAgentDispatcher("http://coordinator", "tok", true, out)
+	d.delivery.setEnabled(true)
+
+	done := make(chan struct{})
+	go func() {
+		for range 100 {
+			d.SendWSEvent("run-1", "result", nil)
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("queueEvent blocked with no connection up")
+	}
+	assert.Len(t, out, 1, "the queue still takes what it has room for")
+	replay := d.delivery.replay(d.isActive)
+	require.Len(t, replay, 100)
+	for i, msg := range replay {
+		assert.Equal(t, uint64(i+1), msg.Seq)
+	}
+}
+
+// sendBlocks reports whether SendWSEvent waits for room in a full queue (released by draining it).
+func sendBlocks(t *testing.T, d *AgentDispatcher, out chan interface{}) bool {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		d.SendWSEvent("run-1", "result", nil)
+		close(done)
+	}()
+	select {
+	case <-done:
+		return false
+	case <-time.After(100 * time.Millisecond):
+	}
+	<-out
+	<-done
+	return true
+}
+
+// A full queue is still backpressure while a connection drains it, and with a coordinator that does
+// not acknowledge events (nothing would replay them).
+func TestQueueEvent_FullQueueBlocksWithAWriterOrWithoutAcks(t *testing.T) {
+	out := make(chan interface{}, 1)
+	d := NewAgentDispatcher("http://coordinator", "tok", true, out)
+
+	d.SendWSEvent("run-1", "result", nil)
+	assert.True(t, sendBlocks(t, d, out), "no acks, no writer")
+
+	d.delivery.setEnabled(true)
+	d.writerStarted()
+	assert.True(t, sendBlocks(t, d, out), "acks, a writer draining the queue")
+
+	d.writerStopped()
+	d.writerStopped() // an extra stop must not leave the count below zero
+	assert.False(t, sendBlocks(t, d, out), "acks, no writer")
+	d.writerStarted()
+	assert.True(t, sendBlocks(t, d, out), "acks, a writer again")
 }

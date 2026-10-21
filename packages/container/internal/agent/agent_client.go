@@ -172,7 +172,9 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 	}
 
 	// Write loop
+	dispatcher.writerStarted()
 	go func() {
+		defer dispatcher.writerStopped()
 		// Highest seq of each run's current execution written on this connection. Replayed events
 		// are still in the queue too (or carried over); those copies are skipped.
 		type sentMark struct {

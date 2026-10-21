@@ -84,6 +84,8 @@ type AgentDispatcher struct {
 	parseReqSem      chan struct{}
 	delivery         *deliveryLog
 	sendMu           sync.Mutex
+	// writers counts the connections whose write loop is draining outChan (guarded by sendMu).
+	writers int
 
 	// Recycling (--recycle-when-idle): once no scan runs and everything sent was delivered, the
 	// agent exits, for its supervisor (Docker's restart policy) to start a clean process.
@@ -156,15 +158,46 @@ func (d *AgentDispatcher) isActive(runID string) bool {
 
 // queueEvent numbers a run event and queues it for sending. sendMu makes the two one step: runs
 // send events from several goroutines, and a higher seq queued before a lower one would be lost.
+//
+// While a connection drains outChan, a full outChan is backpressure and the event waits for room.
+// With no connection up, nothing drains it: once it is full, every run would block here, under
+// sendMu, until the coordinator comes back. So then an event that is in the delivery log (a
+// coordinator that acknowledges events) is left to the log, which the next connection replays
+// before anything else; the log's own bound (maxUnackedPerRun) then applies.
 func (d *AgentDispatcher) queueEvent(msg WSEventOut) {
 	d.sendMu.Lock()
 	defer d.sendMu.Unlock()
-	stamped, ok := d.delivery.stamp(msg)
+	stamped, ok, kept := d.delivery.stamp(msg)
 	if !ok {
 		logWarn("Dropping a late %s event of an earlier execution of run %s", msg.Type, msg.RunID)
 		return
 	}
+	if d.writers == 0 && kept {
+		select {
+		case d.outChan <- stamped:
+		default:
+		}
+		return
+	}
 	d.outChan <- stamped
+}
+
+// writerStarted records that a connection's write loop drains outChan. It must be called before
+// that loop takes the delivery log's replay: an event queueEvent left to the log while no writer
+// was running is then in the replay.
+func (d *AgentDispatcher) writerStarted() {
+	d.sendMu.Lock()
+	d.writers++
+	d.sendMu.Unlock()
+}
+
+// writerStopped records that a connection's write loop has stopped draining outChan.
+func (d *AgentDispatcher) writerStopped() {
+	d.sendMu.Lock()
+	if d.writers > 0 {
+		d.writers--
+	}
+	d.sendMu.Unlock()
 }
 
 func eventOut(runID, exec, typ string, payload interface{}) WSEventOut {
