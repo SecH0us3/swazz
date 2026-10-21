@@ -4,6 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import React, { useState } from 'react';
+import { DOCS } from '../../utils/docsLinks.js';
+import { DocsLink } from '../Shared/DocsLink.js';
 import { useConfig } from '../../hooks/useConfig.js';
 import { useToast } from '../../hooks/useToast.js';
 import { loadSwaggerUrl, parseRawSpec, detectMcpServer, ParsingError } from '../../services/swaggerService.js';
@@ -353,6 +355,11 @@ export function ApiSpecsTab() {
             <div className="specs-upload-section">
                 <h3 className="specs-section-title">Upload API Spec File</h3>
                 <p className="specs-section-desc">Upload a Swagger JSON/YAML, Postman Collection, or HAR file to populate endpoints.</p>
+                <div className="docs-links-row">
+                    <DocsLink href={DOCS.harFuzzing} label="HAR fuzzing" />
+                    <DocsLink href={DOCS.postman} label="Postman collections" />
+                    <DocsLink href={DOCS.graphql} label="GraphQL schemas" />
+                </div>
                 <div className="specs-file-picker-wrapper">
                     <input
                         type="file"
@@ -454,7 +461,7 @@ export function ApiSpecsTab() {
             {/* MCP Fuzzing Section */}
             <div className="specs-urls-section specs-mcp-section">
                 <h3 className="specs-section-title">Model Context Protocol (MCP) Fuzzing</h3>
-                <p className="specs-section-desc">Expose and fuzz an MCP server's tools dynamically during the scan run.</p>
+                <p className="specs-section-desc">Expose and fuzz an MCP server's tools dynamically during the scan run. <DocsLink href={DOCS.mcpServerFuzzing} label="MCP server fuzzing recipe" /></p>
                 {mcpServer && (
                     <p className="specs-section-desc">
                         While enabled, every scan of this project connects to this MCP server. If it cannot (wrong URL, missing token in Global Headers), the MCP part is skipped with a warning and the rest of the API is still scanned; a scan with nothing else to scan fails.

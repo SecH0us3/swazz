@@ -87,7 +87,8 @@
 }
 
 /* Row of docs links inside a settings card (e.g. the runner setup guide) */
-.runner-setup-docs-links {
+.runner-setup-docs-links,
+.docs-links-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 16px;

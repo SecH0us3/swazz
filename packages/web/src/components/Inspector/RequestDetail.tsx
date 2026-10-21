@@ -4,6 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import React, { ReactNode, useState, useEffect } from 'react';
+import { DOCS } from '../../utils/docsLinks.js';
+import { DocsLink } from '../Shared/DocsLink.js';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, parseQueryParamList, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
@@ -585,6 +587,7 @@ export function RequestDetail({
                             const isFinding = ((result.analyzerFindings && result.analyzerFindings.length > 0) || isErrorStatus) && !!onTriage;
                             if (isFinding) {
                                 return (
+                                    <>
                                     <select 
                                         className="btn btn-ghost btn-sm request-detail-triage-select"
                                         value={result.triage || 'none'}
@@ -595,6 +598,8 @@ export function RequestDetail({
                                         <option value="ignored">🙈 Ignored</option>
                                         <option value="acknowledged">✅ Acknowledged</option>
                                     </select>
+                                    <DocsLink href={DOCS.suppressions} title="Triage and false positives" />
+                                    </>
                                 );
                             }
                             return null;
