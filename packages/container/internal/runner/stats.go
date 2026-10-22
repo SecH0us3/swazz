@@ -12,10 +12,13 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"strings"
-	"swazz-engine/internal/swagger"
+	"sync"
 	"time"
+
+	"swazz-engine/internal/swagger"
 )
 
 // statsMsg is sent from worker goroutines to the stats aggregator.
@@ -45,49 +48,86 @@ type CheckpointData struct {
 	Iteration int    `json:"iteration"`
 }
 
-// statsPipe connects one run's workers to its statsAggregator. The run ends it by closing stop,
-// never ch: a worker that outlived the run (finalise gives up waiting for it) may still send,
+// statsPipe connects one run's workers to its statsAggregator. The run ends it with close, never
+// by closing ch: a worker that outlived the run (finalise gives up waiting for it) may still send,
 // and a send on a closed channel would panic it.
 type statsPipe struct {
-	ch   chan statsMsg
-	stop chan struct{} // closed by finalise; the aggregator drains ch and returns
-	done chan struct{} // closed by the aggregator when it has returned
+	ch chan statsMsg
+	// mu is held for reading by every send in progress; close takes it for writing, so once
+	// sealed is closed no send is in progress or can start, and the aggregator's final drain of
+	// ch takes in every message a send reported as delivered.
+	mu      sync.RWMutex
+	stopped bool
+	stop    chan struct{} // closed first: a send blocked on a full ch gives up
+	sealed  chan struct{} // closed once stopped is set; the aggregator drains ch and returns
+	done    chan struct{} // closed by the aggregator when it has returned
+	once    sync.Once
 }
 
 func newStatsPipe() *statsPipe {
-	return &statsPipe{ch: make(chan statsMsg, 4096), stop: make(chan struct{}), done: make(chan struct{})}
+	return &statsPipe{
+		ch:     make(chan statsMsg, 4096),
+		stop:   make(chan struct{}),
+		sealed: make(chan struct{}),
+		done:   make(chan struct{}),
+	}
 }
 
-// stoppedStatsPipe is the pipe of a runner with no run: sendStats drops what it is given.
+// stoppedStatsPipe is the pipe of a runner with no run: sends are dropped, and close returns.
 func stoppedStatsPipe() *statsPipe {
-	p := newStatsPipe()
+	p := &statsPipe{stopped: true, stop: make(chan struct{}), sealed: make(chan struct{}), done: make(chan struct{})}
 	close(p.stop)
+	close(p.sealed)
 	close(p.done)
+	p.once.Do(func() {})
 	return p
 }
 
-// sendStats hands msg to the run's statsAggregator. Once the run has ended it drops msg instead
-// of blocking on an aggregator that is gone, and returns false.
-func (r *Runner) sendStats(msg statsMsg) bool {
-	p := r.stats.Load()
-	select {
-	case <-p.stop:
+// send hands msg to the aggregator and reports whether it did. It gives up (false) once the run
+// has ended, or when cancel is closed while ch is full; a nil cancel never fires.
+func (p *statsPipe) send(msg statsMsg, cancel <-chan struct{}) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.stopped {
 		return false
-	default:
 	}
 	select {
 	case p.ch <- msg:
 		return true
 	case <-p.stop:
 		return false
+	case <-cancel:
+		return false
 	}
+}
+
+// close ends the pipe once its aggregator has taken in every delivered message, and waits for
+// that. Calling it again only waits.
+func (p *statsPipe) close() {
+	p.once.Do(func() {
+		close(p.stop)
+		p.mu.Lock()
+		p.stopped = true
+		p.mu.Unlock()
+		close(p.sealed)
+	})
+	<-p.done
+}
+
+// sendStats hands msg to the run's statsAggregator. Once the run has ended it drops msg instead
+// of blocking on an aggregator that is gone, and returns false.
+func (r *Runner) sendStats(msg statsMsg) bool {
+	return r.stats.Load().send(msg, nil)
+}
+
+// sendStatsUntil is sendStats that also gives up when ctx ends while the pipe is full.
+func (r *Runner) sendStatsUntil(ctx context.Context, msg statsMsg) bool {
+	return r.stats.Load().send(msg, ctx.Done())
 }
 
 // stopStats ends the run's statsAggregator once it has taken in what was sent, and waits for it.
 func (r *Runner) stopStats() {
-	p := r.stats.Load()
-	close(p.stop)
-	<-p.done
+	r.stats.Load().close()
 }
 
 // statsAggregator runs as a single background goroutine that owns all
@@ -148,9 +188,9 @@ func (r *Runner) statsAggregator(p *statsPipe) {
 		case msg := <-p.ch:
 			handle(msg)
 
-		case <-p.stop:
-			// Sends that completed before stop (all of them, when the workers have returned)
-			// are buffered in ch: take them in, publish the final snapshot and exit.
+		case <-p.sealed:
+			// No send is in progress or can start, and every delivered message is buffered in
+			// ch: take them in, publish the final snapshot and exit.
 			for {
 				select {
 				case msg := <-p.ch:

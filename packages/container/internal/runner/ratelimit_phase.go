@@ -111,7 +111,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 				totalIterations:  len(statusCodes),
 			}
 
-			if ctx.Err() != nil || !r.sendStats(msg) {
+			if ctx.Err() != nil || !r.sendStatsUntil(ctx, msg) {
 				return
 			}
 		}

@@ -72,7 +72,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	}
 	// A worker the last run gave up waiting for (finalise) would otherwise send its stats and
 	// results into this one.
-	if n := r.liveWorkers.Load(); n > 0 {
+	if n := r.workers.running(); n > 0 {
 		return nil, fmt.Errorf("the previous run's workers are still stopping (%d)", n)
 	}
 
@@ -135,11 +135,9 @@ const defaultWorkerStopTimeout = 30 * time.Second
 // executor) must not take the agent and every other run on it down: it is logged locally,
 // stack included, and stops this run, which then ends with an error (see Start).
 func (r *Runner) goWorker(fn func()) {
-	r.workers.Add(1)
-	r.liveWorkers.Add(1)
+	r.workers.add()
 	go func() {
-		defer r.workers.Done()
-		defer r.liveWorkers.Add(-1)
+		defer r.workers.done()
 		defer func() {
 			if p := recover(); p != nil {
 				logger.Error("[Runner] A worker panicked: %v\n%s", p, debug.Stack())
@@ -161,15 +159,56 @@ func (r *Runner) cancelRun() {
 
 // waitWorkers waits for the run's workers to return, at most timeout; false if they did not.
 func (r *Runner) waitWorkers(timeout time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		r.workers.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
+	return r.workers.wait(timeout)
+}
+
+// workerGroup counts a run's workers (goWorker). Unlike a sync.WaitGroup, a wait that gives up
+// leaves no goroutine behind, and the next run can see whether any is still running.
+type workerGroup struct {
+	mu   sync.Mutex
+	n    int
+	idle chan struct{} // closed when n drops to 0; nil before the first worker
+}
+
+func (g *workerGroup) add() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.n == 0 {
+		g.idle = make(chan struct{})
+	}
+	g.n++
+}
+
+func (g *workerGroup) done() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.n--
+	if g.n == 0 {
+		close(g.idle)
+	}
+}
+
+func (g *workerGroup) running() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.n
+}
+
+// wait waits for the count to drop to 0, at most timeout; false if it did not.
+func (g *workerGroup) wait(timeout time.Duration) bool {
+	g.mu.Lock()
+	if g.n == 0 {
+		g.mu.Unlock()
 		return true
-	case <-time.After(timeout):
+	}
+	idle := g.idle
+	g.mu.Unlock()
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-idle:
+		return true
+	case <-t.C:
 		return false
 	}
 }

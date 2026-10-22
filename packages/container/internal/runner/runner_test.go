@@ -323,7 +323,7 @@ func TestStatsAggregatorShutdown(t *testing.T) {
 	}
 
 	// Stop the aggregator and wait for it to finish
-	close(p.stop)
+	go p.close()
 	select {
 	case <-p.done:
 	case <-time.After(5 * time.Second):

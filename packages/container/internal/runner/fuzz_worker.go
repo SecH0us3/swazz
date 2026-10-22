@@ -122,13 +122,17 @@ func (r *Runner) fuzzEndpoint(
 				r.recordTimeBaseline(endpoint.Method, endpoint.Path, result.Duration)
 			}
 
-			r.sendStats(statsMsg{
+			// A result of a run that has ended (a worker finalise gave up waiting for) is dropped
+			// whole: not counted, streamed or kept.
+			if !r.sendStats(statsMsg{
 				result:           result,
 				currentIteration: it + 1,
 				totalIterations:  effectiveIter,
 				endpoint:         epKey,
 				profile:          string(profile),
-			})
+			}) {
+				return
+			}
 			r.Broadcast(Event{Type: EventResult, Data: result})
 
 			if result.Status >= 200 && result.Status < 300 {

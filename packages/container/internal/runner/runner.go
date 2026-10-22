@@ -115,10 +115,9 @@ type Runner struct {
 
 	lifecycle runnerLifecycle
 	progress  runnerProgress
-	// The run's workers (goWorker), so a run that ends abnormally can wait for them; liveWorkers
-	// counts them too, so that no run starts while one of the last run's is still running.
-	workers        sync.WaitGroup
-	liveWorkers    atomic.Int32
+	// The run's workers (goWorker), so a run that ends abnormally can wait for them and no run
+	// starts while one of the last run's is still running.
+	workers        workerGroup
 	workerPanicked atomic.Bool
 	// How long finalise waits for the workers of a run that ended abnormally; 0 means
 	// defaultWorkerStopTimeout.
@@ -512,13 +511,17 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 				r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
 			}
 
-			r.sendStats(statsMsg{
+			// A result of a run that has ended (a worker finalise gave up waiting for) is dropped
+			// whole: not counted, streamed or kept.
+			if !r.sendStats(statsMsg{
 				result:           result,
 				currentIteration: 1,
 				totalIterations:  1,
 				endpoint:         epKey,
 				profile:          "BASELINE",
-			})
+			}) {
+				return
+			}
 			r.Broadcast(Event{Type: EventResult, Data: result})
 
 			r.progress.completedEndpoints.Add(1)
