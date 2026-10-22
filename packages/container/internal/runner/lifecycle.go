@@ -35,8 +35,8 @@ func (r *Runner) Close() {
 	if r.client != nil {
 		r.client.CloseIdleConnections()
 	}
-	if r.proxyClient != nil {
-		r.proxyClient.CloseIdleConnections()
+	if c := r.proxyClient.Load(); c != nil {
+		c.CloseIdleConnections()
 	}
 	r.grpcClients.Range(func(key, value any) bool {
 		if c, ok := value.(*swazzGrpc.Client); ok {

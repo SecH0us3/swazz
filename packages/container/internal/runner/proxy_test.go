@@ -171,3 +171,29 @@ func TestProxyClient_CustomRoundTripper(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// One unusable entry fails every proxied request, not every Nth: a bad list is not quietly half
+// used, and nothing goes out without a proxy.
+func TestProxyClient_OneBadEntryFailsEveryRequest(t *testing.T) {
+	proxy := newFakeProxy(t)
+	r := proxiedRunner(t, true, proxy.URL, "proxy.example:3128")
+	for range 4 {
+		res := getVia(t, r)
+		assert.Equal(t, 0, res.Status)
+		assert.Contains(t, res.Error, "proxy #2")
+	}
+	assert.EqualValues(t, 0, proxy.requests.Load())
+}
+
+// Close may run while a worker builds the proxy client (go test -race).
+func TestProxyClient_CloseDuringFirstUse(t *testing.T) {
+	proxy := newFakeProxy(t)
+	r := proxiedRunner(t, true, proxy.URL)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.proxiedClient()
+	}()
+	r.Close()
+	<-done
+}

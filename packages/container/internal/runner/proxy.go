@@ -20,6 +20,10 @@ import (
 // so they are reused like direct ones instead of every request opening (and TLS-handshaking) a
 // connection of its own; Close releases them.
 //
+// The list is read and checked once, when the client is built. One unusable entry fails every
+// proxied request with the same error: a request never goes out without a proxy, and a run with a
+// bad list does not quietly send part of its traffic through the good ones.
+//
 // The transport keeps the runner's dial guard. That guard checks the address it dials, which
 // through a proxy is the proxy's, never the target's: it keeps a run from reaching a private
 // network through a proxy on it, not a proxy elsewhere from reaching what that proxy can reach.
@@ -29,28 +33,50 @@ func (r *Runner) proxiedClient() *http.Client {
 		if base, ok := r.client.Transport.(*http.Transport); ok {
 			transport = base.Clone()
 		} else {
-			// Not a transport a proxy can be set on: a guarded default one goes through the proxies.
-			transport = http.DefaultTransport.(*http.Transport).Clone()
+			// Only a client given to New with private addresses allowed keeps a transport a proxy
+			// cannot be set on (New guards every other one in an *http.Transport). Its requests
+			// go through the proxies on a default transport rather than around them.
+			transport = &http.Transport{}
+			if def, ok := http.DefaultTransport.(*http.Transport); ok {
+				transport = def.Clone()
+			}
 			security.ConfigureTransport(transport)
-			transport = security.WrapWithSSRFProtection(transport, r.config.Security.AllowPrivateIPs).(*http.Transport)
 		}
-		transport.Proxy = func(*http.Request) (*url.URL, error) { return r.nextProxy() }
+
+		r.configMu.RLock()
+		proxies, err := parseProxyList(r.config.Settings.ProxyList)
+		r.configMu.RUnlock()
+		if err != nil {
+			r.logError("Proxy list: %v; every request sent through the proxies fails", err)
+		}
+		transport.Proxy = func(*http.Request) (*url.URL, error) {
+			if err != nil {
+				return nil, err
+			}
+			i := int((r.proxyTurn.Add(1) - 1) % uint32(len(proxies))) // #nosec G115 -- a proxy list is far shorter than 2^32
+			return proxies[i], nil
+		}
 		client := *r.client
 		client.Transport = transport
-		r.proxyClient = &client
+		r.proxyClient.Store(&client)
 	})
-	return r.proxyClient
+	return r.proxyClient.Load()
 }
 
-// nextProxy returns the next proxy of the rotation. A proxy that is not a usable URL fails the
-// request instead of letting it go out without one.
-func (r *Runner) nextProxy() (*url.URL, error) {
-	proxies := r.config.Settings.ProxyList
-	if len(proxies) == 0 {
+// parseProxyList parses every proxy of the list, or fails on the first unusable one.
+func parseProxyList(raw []string) ([]*url.URL, error) {
+	if len(raw) == 0 {
 		return nil, errors.New("no proxy configured")
 	}
-	i := int((r.proxyTurn.Add(1) - 1) % uint32(len(proxies))) // #nosec G115 -- a proxy list is far shorter than 2^32
-	return parseProxyURL(proxies[i], i)
+	proxies := make([]*url.URL, len(raw))
+	for i, p := range raw {
+		u, err := parseProxyURL(p, i)
+		if err != nil {
+			return nil, err
+		}
+		proxies[i] = u
+	}
+	return proxies, nil
 }
 
 // parseProxyURL parses an http, https or socks5 proxy URL. Its errors name the proxy by its
