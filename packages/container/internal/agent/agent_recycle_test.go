@@ -29,6 +29,7 @@ func recyclingDispatcher(t *testing.T) (*AgentDispatcher, chan int) {
 	recyclePollInterval, recycleDrainTimeout = 5*time.Millisecond, time.Second
 	t.Cleanup(func() { recyclePollInterval, recycleDrainTimeout = oldPoll, oldTimeout })
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
+	t.Cleanup(d.Close)
 	exits := make(chan int, 4)
 	d.exit = func(code int) { exits <- code }
 	d.EnableRecycleWhenIdle()
@@ -56,6 +57,7 @@ func expectNoExit(t *testing.T, exits chan int, within time.Duration) {
 
 func TestRecycle_OffByDefault(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
+	t.Cleanup(d.Close)
 	exited := false
 	d.exit = func(int) { exited = true }
 	d.maybeRecycle()
@@ -121,8 +123,31 @@ func TestRecycle_DeliveryWaitIsBounded(t *testing.T) {
 	expectExit(t, exits)
 }
 
+// The drain timeout bounds the wait for acknowledgements only: a message never written would be
+// lost with the process, however long the coordinator is away.
+func TestRecycle_NeverExitsWithUnwrittenMessages(t *testing.T) {
+	out := make(chan interface{}, 10)
+	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
+	oldPoll, oldTimeout := recyclePollInterval, recycleDrainTimeout
+	recyclePollInterval, recycleDrainTimeout = 5*time.Millisecond, 20*time.Millisecond
+	t.Cleanup(func() { recyclePollInterval, recycleDrainTimeout = oldPoll, oldTimeout })
+	exits := make(chan int, 1)
+	d.exit = func(code int) { exits <- code }
+	d.pendingOutput = func() bool { return true } // never acknowledged
+	d.EnableRecycleWhenIdle()
+
+	d.SendWSEvent("run-1", "complete", nil)
+	ev := (<-out).(WSEventOut) // taken by the write loop, not written yet
+	d.maybeRecycle()
+	expectNoExit(t, exits, 200*time.Millisecond)
+	d.delivery.written(ev, true)
+	expectExit(t, exits)
+}
+
 func TestRecycle_SessionCountsQueuedAndUnacknowledgedOutput(t *testing.T) {
 	s := newAgentSession("ws://localhost", "tok", true)
+	t.Cleanup(s.dispatcher.Close)
 	assert.False(t, s.dispatcher.pendingOutput())
 	s.dispatcher.delivery.setEnabled(true)
 	s.dispatcher.SendWSEvent("run-1", "result", nil)
@@ -147,6 +172,7 @@ func TestRecycle_AfterARealScanEnds(t *testing.T) {
 
 	out := make(chan interface{}, 1000)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
 	oldPoll := recyclePollInterval
 	recyclePollInterval = 5 * time.Millisecond
 	defer func() { recyclePollInterval = oldPoll }()

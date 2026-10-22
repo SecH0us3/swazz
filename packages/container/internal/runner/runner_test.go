@@ -1174,3 +1174,42 @@ func TestRunner_Start_AlreadyRunning(t *testing.T) {
 	r.Stop()
 	wg.Wait()
 }
+
+// Time a scan spends held (the agent's coordinator is away) is not counted against its maximum
+// duration: a hold pauses the scan, it must not end it.
+func TestRunner_MaxScanDurationExcludesHeldTime(t *testing.T) {
+	scanDurationUnit = time.Millisecond
+	defer func() { scanDurationUnit = time.Minute }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	r := New(&swagger.Config{
+		BaseURL:   server.URL,
+		Security:  swagger.SecurityConfig{AllowPrivateIPs: true},
+		Endpoints: []swagger.EndpointConfig{{Path: "/fast", Method: "GET"}},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 5,
+			Concurrency:          1,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
+			MaxScanDurationMin:   500, // 500ms here
+		},
+	}, nil)
+	defer r.Close()
+
+	r.Hold()
+	done := make(chan error, 1)
+	go func() { done <- r.Start(context.Background()) }()
+	time.Sleep(800 * time.Millisecond) // held past the maximum
+	assert.False(t, r.stopped(), "stopped while held")
+	r.Release()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the released scan did not finish")
+	}
+	assert.False(t, r.stopped(), "the held time was charged to the scan")
+	assert.GreaterOrEqual(t, r.heldFor(), 800*time.Millisecond)
+}

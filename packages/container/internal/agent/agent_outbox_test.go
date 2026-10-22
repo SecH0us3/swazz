@@ -125,11 +125,12 @@ func heldRunner() *runner.Runner {
 	return runner.New(&swagger.Config{}, nil)
 }
 
-// Past the high mark every scan is held, including one that starts meanwhile, until the queue
-// is back at its low mark.
+// Past the high mark every scan is held until the queue is back at its low mark (a scan that
+// starts meanwhile: TestHandleJobDispatch_StartsHeldWhileHolding).
 func TestQueueEvent_HoldsScansUntilTheQueueDrains(t *testing.T) {
 	out := make(chan interface{})
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
 	d.outbox.high, d.outbox.low = 10, 2
 	running := heldRunner()
 	d.activeRunners["running"] = running
@@ -141,21 +142,12 @@ func TestQueueEvent_HoldsScansUntilTheQueueDrains(t *testing.T) {
 	d.SendWSEvent("running", "result", nil)
 	assert.True(t, running.Held())
 
-	late := heldRunner()
-	d.activeRunnersMu.Lock()
-	if d.held.Load() {
-		late.Hold()
-	}
-	d.activeRunners["late"] = late
-	d.activeRunnersMu.Unlock()
-	assert.True(t, late.Held())
-
 	for i := 0; i < 7; i++ { // 10 queued: one taken by the pump, 9 -> 3 left in the queue
 		<-out
 	}
 	assert.True(t, running.Held(), "above the low mark")
 	<-out
-	assert.Eventually(t, func() bool { return !running.Held() && !late.Held() }, time.Second, time.Millisecond)
+	assert.Eventually(t, func() bool { return !running.Held() }, time.Second, time.Millisecond)
 }
 
 // A scan dispatched while the scans are held starts held.
@@ -170,6 +162,7 @@ func TestHandleJobDispatch_StartsHeldWhileHolding(t *testing.T) {
 
 	out := make(chan interface{}, 1000)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
 	d.outbox.high, d.outbox.low = 1_000_000, -1 // only this test holds or releases
 	d.activeRunnersMu.Lock()
 	d.held.Store(true)
@@ -232,6 +225,7 @@ func TestAgentSession_DeliversEverythingQueuedDuringALongOutage(t *testing.T) {
 	url := "ws" + strings.TrimPrefix(ts.URL, "http")
 
 	session := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(session.dispatcher.Close)
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	done1 := make(chan struct{})
 	go func() {
@@ -286,6 +280,7 @@ func TestOutbox_RepliesGoFirst(t *testing.T) {
 func TestAgentDispatcher_CloseStopsThePump(t *testing.T) {
 	out := make(chan interface{})
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
 	d.Close()
 	d.Close() // idempotent
 	d.SendWSEvent("run-1", "result", nil)
@@ -300,7 +295,7 @@ func TestAgentDispatcher_CloseStopsThePump(t *testing.T) {
 // noticed and replaced, and so what drains the outbox in the end.
 func TestDispatch_DoesNotWaitForRoomOnTheReadLoop(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}))
-	defer d.Close()
+	t.Cleanup(d.Close)
 	d.outbox.high, d.outbox.hardLimit = 1_000_000, 2
 	d.SendWSEvent("other", "result", nil)
 	d.SendWSEvent("other", "result", nil)

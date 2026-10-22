@@ -32,6 +32,7 @@ func TestParseRequest_AuthErrorBodyIsSanitized(t *testing.T) {
 
 	outChan := make(chan interface{}, 5)
 	d := NewAgentDispatcher("ws://localhost", "tok", false, outChan)
+	t.Cleanup(d.Close)
 	payload, _ := json.Marshal(map[string]string{"url": ts.URL + "/openapi.json"})
 	d.Dispatch(context.Background(), WSMessageIn{Type: "parse_request", ReqID: "r1", Payload: payload})
 

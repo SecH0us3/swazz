@@ -22,6 +22,7 @@ import (
 
 func TestActiveRunIDs_Sorted(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 1))
+	t.Cleanup(d.Close)
 	assert.Empty(t, d.ActiveRunIDs())
 	d.activeRunners["run-b"] = nil
 	d.activeRunners["run-a"] = nil
@@ -52,6 +53,7 @@ func TestAgentSession_ReconnectClaimsRunsInConnectionURL(t *testing.T) {
 	defer ts.Close()
 
 	session := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(session.dispatcher.Close)
 	session.dispatcher.activeRunners["run-b"] = nil // scans still running from the previous connection
 	session.dispatcher.activeRunners["run-a"] = nil
 	session.dispatcher.SendWSEvent("run-a", "result", map[string]int{"status": 200})
@@ -83,6 +85,7 @@ func TestWithResumeParam(t *testing.T) {
 func TestHandleJobDispatch_IgnoresRunAlreadyRunning(t *testing.T) {
 	out := make(chan interface{}, 10)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
 	d.activeRunners["run-1"] = nil
 	payload, _ := json.Marshal(map[string]interface{}{"runId": "run-1", "config": map[string]interface{}{}})
 
@@ -113,6 +116,7 @@ func TestAgentSession_ClaimsOnlyRunsWithSomethingLeft(t *testing.T) {
 	url := "ws" + strings.TrimPrefix(ts.URL, "http")
 
 	session := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(session.dispatcher.Close)
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	done1 := make(chan struct{})
 	go func() {
@@ -226,6 +230,7 @@ func TestAgentSession_CarriedMessagesAreResent(t *testing.T) {
 	defer ts.Close()
 
 	session := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(session.dispatcher.Close)
 	session.carry <- WSEventOut{Type: "event", RunID: "carried-before"}
 	session.dispatcher.SendWSEvent("queued", "result", nil)
 

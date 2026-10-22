@@ -262,4 +262,20 @@ func TestExecuteRequest_WaitsWhileHeld(t *testing.T) {
 		t.Fatal("the request never went out")
 	}
 	assert.Equal(t, int32(1), hits.Load())
+
+	// Stopped while held: nothing is sent, and the result says so instead of passing for a timeout.
+	r.Hold()
+	results := make(chan *swagger.FuzzResult, 1)
+	go func() {
+		results <- r.executeRequest(context.Background(), srv.URL, "/x", "/x", "GET", nil, nil, nil, swagger.ProfileRandom, nil, nil, "")
+	}()
+	time.Sleep(20 * time.Millisecond)
+	r.Stop()
+	select {
+	case res := <-results:
+		assert.Contains(t, res.Error, "not sent")
+	case <-time.After(5 * time.Second):
+		t.Fatal("a stopped held request kept waiting")
+	}
+	assert.Equal(t, int32(1), hits.Load())
 }

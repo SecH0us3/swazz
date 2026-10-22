@@ -81,7 +81,9 @@ func (r *Runner) Pause() {
 
 // Resume resumes a paused runner.
 func (r *Runner) Resume() {
+	r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
 	r.lifecycle.isPaused.Store(false)
+	r.pause.mu.Unlock()
 	r.pause.cond.Broadcast()
 }
 
@@ -92,15 +94,34 @@ func (r *Runner) Resume() {
 // requests that do not go through executeRequest (the rate-limit probe's burst, authentication)
 // still run; they are few and bounded.
 func (r *Runner) Hold() {
-	r.lifecycle.held.Store(true)
+	r.pause.mu.Lock()
+	defer r.pause.mu.Unlock()
+	if !r.lifecycle.held.Load() {
+		r.lifecycle.heldSince.Store(time.Now().UnixNano())
+		r.lifecycle.held.Store(true)
+	}
 }
 
 // Release ends a Hold.
 func (r *Runner) Release() {
 	r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
-	r.lifecycle.held.Store(false)
+	if r.lifecycle.held.Load() {
+		r.lifecycle.heldTotal.Add(time.Now().UnixNano() - r.lifecycle.heldSince.Load())
+		r.lifecycle.held.Store(false)
+	}
 	r.pause.mu.Unlock()
 	r.pause.cond.Broadcast()
+}
+
+// heldFor is how long the runner has been held in all.
+func (r *Runner) heldFor() time.Duration {
+	r.pause.mu.Lock()
+	defer r.pause.mu.Unlock()
+	total := r.lifecycle.heldTotal.Load()
+	if r.lifecycle.held.Load() {
+		total += time.Now().UnixNano() - r.lifecycle.heldSince.Load()
+	}
+	return time.Duration(total)
 }
 
 // Held reports whether the runner is held (Hold).
@@ -120,10 +141,10 @@ func (r *Runner) waitIfPaused() {
 }
 
 // waitWhileHeld blocks a request while the runner is held, until it is released, stopped, or ctx
-// ends.
-func (r *Runner) waitWhileHeld(ctx context.Context) {
+// ends; it reports whether the request waited and the scan stopped (or ctx ended) meanwhile.
+func (r *Runner) waitWhileHeld(ctx context.Context) (abandoned bool) {
 	if !r.lifecycle.held.Load() {
-		return
+		return false
 	}
 	stopWaking := context.AfterFunc(ctx, func() {
 		r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
@@ -136,6 +157,7 @@ func (r *Runner) waitWhileHeld(ctx context.Context) {
 		r.pause.cond.Wait()
 	}
 	r.pause.mu.Unlock()
+	return r.lifecycle.shouldStop.Load() || ctx.Err() != nil
 }
 
 func (r *Runner) stopped() bool { return r.lifecycle.shouldStop.Load() }

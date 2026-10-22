@@ -85,6 +85,10 @@ type runnerLifecycle struct {
 	// held is a pause the embedding program asks for (Hold), apart from the user's: the agent
 	// holds its scans while their events cannot reach the coordinator.
 	held atomic.Bool
+	// heldSince (unix nanos) is when the current hold began; heldTotal (nanos) adds up the holds
+	// that ended. A held scan's time does not count toward MaxScanDurationMin.
+	heldSince atomic.Int64
+	heldTotal atomic.Int64
 
 	mu     sync.Mutex // guards cancel only
 	cancel context.CancelFunc
@@ -297,14 +301,24 @@ func (r *Runner) Start(ctx context.Context) error {
 	if r.config.Settings.MaxScanDurationMin > 0 {
 		timerCtx, cancelTimer := context.WithCancel(runCtx)
 		defer cancelTimer()
+		maxDuration := time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit
+		started := time.Now()
 		go func() {
-			timer := time.NewTimer(time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit)
+			timer := time.NewTimer(maxDuration)
 			defer timer.Stop()
-			select {
-			case <-timer.C:
-				r.logDebug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
-				r.Stop()
-			case <-timerCtx.Done():
+			for {
+				select {
+				case <-timer.C:
+					if left := maxDuration - (time.Since(started) - r.heldFor()); left > 0 {
+						timer.Reset(left) // held meanwhile: that time is not the scan's
+						continue
+					}
+					r.logDebug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
+					r.Stop()
+					return
+				case <-timerCtx.Done():
+					return
+				}
 			}
 		}()
 	}
@@ -465,6 +479,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 	var wg sync.WaitGroup
 
 	for _, endpoint := range r.config.Endpoints {
+		r.waitIfPaused()
 		if r.stopped() {
 			break
 		}

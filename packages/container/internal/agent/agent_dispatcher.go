@@ -87,6 +87,7 @@ type AgentDispatcher struct {
 	held         atomic.Bool
 	holdingSince time.Time
 	stopPump     chan struct{}
+	closeOnce    sync.Once
 	parseReqSem  chan struct{}
 	delivery     *deliveryLog
 	sendMu       sync.Mutex
@@ -120,11 +121,7 @@ func NewAgentDispatcher(coordinatorURL, token string, disableTelemetry bool, out
 // Close stops moving queued messages on. The agent's dispatcher lives as long as the process;
 // tests close theirs.
 func (d *AgentDispatcher) Close() {
-	select {
-	case <-d.stopPump:
-	default:
-		close(d.stopPump)
-	}
+	d.closeOnce.Do(func() { close(d.stopPump) })
 }
 
 // StopAllRunners stops all running jobs cleanly.
@@ -341,8 +338,11 @@ func (d *AgentDispatcher) maybeRecycle() {
 				d.recycling.Store(false)
 			}
 		}()
+		// The deadline bounds only the wait for acknowledgements: what was never written would be
+		// lost with the process, so the agent waits for it however long the coordinator is away.
 		deadline := time.Now().Add(recycleDrainTimeout)
-		for d.pendingOutput != nil && d.pendingOutput() && time.Now().Before(deadline) {
+		for d.pendingOutput != nil && d.pendingOutput() &&
+			(time.Now().Before(deadline) || d.outbox.pending() > 0 || d.delivery.anyQueued()) {
 			if len(d.ActiveRunIDs()) > 0 {
 				return
 			}

@@ -237,6 +237,18 @@ func (l *deliveryLog) ackRequest(runID, exec string, seq uint64) (ackRequestMsg,
 	return ackRequestMsg{Type: "ack_request", RunID: runID, Exec: exec, Seq: seq}, true
 }
 
+// anyQueued reports whether some run has messages not yet written.
+func (l *deliveryLog) anyQueued() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, rl := range l.runs {
+		if rl.writtenSeq < rl.nextSeq {
+			return true
+		}
+	}
+	return false
+}
+
 // undeliveredRuns lists the runs that still have messages on their way: queued, or written but
 // not acknowledged; the most recently active first.
 func (l *deliveryLog) undeliveredRuns() []string {

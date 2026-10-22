@@ -46,7 +46,18 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
-	r.waitWhileHeld(ctx)
+	if r.waitWhileHeld(ctx) {
+		// Stopped while held: the request was never sent, and must not pass for a timeout.
+		return &swagger.FuzzResult{
+			ID:           uuid.New().String(),
+			Endpoint:     originalPath,
+			ResolvedPath: resolvedPath,
+			Method:       method,
+			Profile:      profile,
+			Error:        "not sent: the scan stopped while it was held",
+			Timestamp:    time.Now().UnixMilli(),
+		}
+	}
 	if strings.HasPrefix(originalPath, "mcp://") {
 		return r.executeMCPRequest(ctx, originalPath, payload, profile, headers, cookies)
 	}

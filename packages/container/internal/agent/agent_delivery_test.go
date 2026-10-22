@@ -270,6 +270,7 @@ func TestDeliveryLog_GCKeepsRunsWithQueuedMessages(t *testing.T) {
 func TestResumeRunIDs_ExecutingRunsFirstThenRunsWithUnackedEvents(t *testing.T) {
 	out := make(chan interface{}, 10)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
 	d.delivery.setEnabled(true)
 	d.activeRunners["z-running"] = nil
 	d.SendWSEvent("a-finished", "complete", nil)
@@ -288,6 +289,7 @@ func TestSendWSEvent_QueuesEachRunsEventsInSeqOrder(t *testing.T) {
 	const senders, perSender = 8, 500
 	out := make(chan interface{}, senders*perSender)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
 	d.delivery.setEnabled(true)
 	var wg sync.WaitGroup
 	for i := 0; i < senders; i++ {
@@ -340,6 +342,7 @@ func TestAgentSession_ReplaysUnacknowledgedEventsAfterReconnect(t *testing.T) {
 	url := "ws" + strings.TrimPrefix(ts.URL, "http")
 
 	session := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(session.dispatcher.Close)
 	session.dispatcher.activeRunners["run-1"] = nil
 
 	// First connection: two events go out and are never acknowledged (lost with the connection).
@@ -406,6 +409,7 @@ func TestAgentSession_NoReplayWithoutDeliverySupport(t *testing.T) {
 	url := "ws" + strings.TrimPrefix(ts.URL, "http")
 
 	session := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(session.dispatcher.Close)
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	done1 := make(chan struct{})
 	go func() {
@@ -471,6 +475,7 @@ func TestAgentSession_AsksForAcknowledgementOfTheTailWhenQuiet(t *testing.T) {
 	defer ts.Close()
 
 	session := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(session.dispatcher.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _ = session.runConnection(ctx, "ws"+strings.TrimPrefix(ts.URL, "http"), nil, false, nil) }()
@@ -517,6 +522,7 @@ func TestAgentSession_AsksPerRunWhileAnotherRunStreams(t *testing.T) {
 	defer ts.Close()
 
 	session := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(session.dispatcher.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _ = session.runConnection(ctx, "ws"+strings.TrimPrefix(ts.URL, "http"), nil, false, nil) }()
