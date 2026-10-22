@@ -174,6 +174,10 @@ type Runner struct {
 	mcpRateLimiter *mcp.RateLimiter
 
 	grpcClients sync.Map // map[string]*swazzGrpc.Client
+
+	proxyOnce   sync.Once
+	proxyClient atomic.Pointer[http.Client] // see proxiedClient
+	proxyTurn   atomic.Uint32               // rotation through Settings.ProxyList
 }
 
 // New creates a new Runner with sensible defaults.
