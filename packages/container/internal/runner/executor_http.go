@@ -26,8 +26,15 @@ import (
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/oob"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
+
+// maxResponseRead is how much of a response body is read in all: the analyzers' prefix and then
+// the drain that keeps the connection reusable and measures a body sent without a Content-Length.
+// The target controls the body; past this much it is dropped with its connection. It sits well
+// above the size baselines the response-size-anomaly analyzer compares against.
+const maxResponseRead = 8 << 20
 
 func (r *Runner) executeRequest(
 	ctx context.Context,
@@ -409,8 +416,8 @@ func (r *Runner) executeRequest(
 			}
 			PutBuffer(buf)
 		}
-		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
-		resp.Body.Close()                              // #nosec G104 -- close error irrelevant after body fully consumed
+		discarded := safenet.DrainBody(resp.Body, maxResponseRead-int64(len(rawBodyBytes)))
+		resp.Body.Close() // #nosec G104 -- close error irrelevant once the body is no longer read
 		reqCancel()
 
 		// Extract and save CSRF token if present
@@ -468,6 +475,8 @@ func (r *Runner) executeRequest(
 			}
 		}
 
+		// Without a Content-Length this is what was read: for a body cut off past maxResponseRead,
+		// a lower bound.
 		responseSize := resp.ContentLength
 		if responseSize < 0 {
 			responseSize = int64(len(rawBodyBytes)) + discarded
