@@ -97,7 +97,7 @@ func (r *Runner) Hold() {
 	r.pause.mu.Lock()
 	defer r.pause.mu.Unlock()
 	if !r.lifecycle.held.Load() {
-		r.lifecycle.heldSince.Store(time.Now().UnixNano())
+		r.lifecycle.heldSince = time.Now()
 		r.lifecycle.held.Store(true)
 	}
 }
@@ -106,7 +106,7 @@ func (r *Runner) Hold() {
 func (r *Runner) Release() {
 	r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
 	if r.lifecycle.held.Load() {
-		r.lifecycle.heldTotal.Add(time.Now().UnixNano() - r.lifecycle.heldSince.Load())
+		r.lifecycle.heldTotal += time.Since(r.lifecycle.heldSince)
 		r.lifecycle.held.Store(false)
 	}
 	r.pause.mu.Unlock()
@@ -117,11 +117,11 @@ func (r *Runner) Release() {
 func (r *Runner) heldFor() time.Duration {
 	r.pause.mu.Lock()
 	defer r.pause.mu.Unlock()
-	total := r.lifecycle.heldTotal.Load()
+	total := r.lifecycle.heldTotal
 	if r.lifecycle.held.Load() {
-		total += time.Now().UnixNano() - r.lifecycle.heldSince.Load()
+		total += time.Since(r.lifecycle.heldSince)
 	}
-	return time.Duration(total)
+	return total
 }
 
 // Held reports whether the runner is held (Hold).
@@ -130,14 +130,27 @@ func (r *Runner) Held() bool { return r.lifecycle.held.Load() }
 // IsRunning reports whether the runner is currently executing a fuzz run.
 func (r *Runner) IsRunning() bool { return r.lifecycle.isRunning.Load() }
 
-// waitIfPaused blocks the calling goroutine until the runner is resumed or
-// stopped. It must only be called from the main iteration loop (single writer).
-func (r *Runner) waitIfPaused() {
+// waitIfPaused blocks the calling goroutine until the runner is resumed (and released, see Hold),
+// stopped, or ctx ends. It must only be called from the main iteration loop (single writer).
+func (r *Runner) waitIfPaused(ctx context.Context) {
+	if !r.lifecycle.isPaused.Load() && !r.lifecycle.held.Load() {
+		return
+	}
+	defer r.wakeOnDone(ctx)()
 	r.pause.mu.Lock()
-	for (r.lifecycle.isPaused.Load() || r.lifecycle.held.Load()) && !r.lifecycle.shouldStop.Load() {
+	for (r.lifecycle.isPaused.Load() || r.lifecycle.held.Load()) && !r.lifecycle.shouldStop.Load() && ctx.Err() == nil {
 		r.pause.cond.Wait()
 	}
 	r.pause.mu.Unlock()
+}
+
+// wakeOnDone wakes the pause waiters once ctx ends; the returned func stops that.
+func (r *Runner) wakeOnDone(ctx context.Context) (stop func() bool) {
+	return context.AfterFunc(ctx, func() {
+		r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
+		r.pause.cond.Broadcast()
+		r.pause.mu.Unlock()
+	})
 }
 
 // waitWhileHeld blocks a request while the runner is held, until it is released, stopped, or ctx
@@ -146,12 +159,7 @@ func (r *Runner) waitWhileHeld(ctx context.Context) (abandoned bool) {
 	if !r.lifecycle.held.Load() {
 		return false
 	}
-	stopWaking := context.AfterFunc(ctx, func() {
-		r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
-		r.pause.cond.Broadcast()
-		r.pause.mu.Unlock()
-	})
-	defer stopWaking()
+	defer r.wakeOnDone(ctx)()
 	r.pause.mu.Lock()
 	for r.lifecycle.held.Load() && !r.lifecycle.shouldStop.Load() && ctx.Err() == nil {
 		r.pause.cond.Wait()

@@ -98,6 +98,10 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 	}
 	// Still to reach the coordinator: queued, carried over from a failed write, or sent but not
 	// acknowledged (with a coordinator that acknowledges).
+	s.dispatcher.unwrittenOutput = func() bool {
+		return s.dispatcher.outbox.pending() > 0 || len(s.outChan) > 0 || len(s.carry) > 0 ||
+			s.dispatcher.delivery.anyQueued()
+	}
 	s.dispatcher.pendingOutput = func() bool {
 		return s.dispatcher.outbox.pending() > 0 || len(s.outChan) > 0 || len(s.carry) > 0 ||
 			len(s.dispatcher.delivery.undeliveredRuns()) > 0

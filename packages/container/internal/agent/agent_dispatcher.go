@@ -96,9 +96,11 @@ type AgentDispatcher struct {
 	// agent exits, for its supervisor (Docker's restart policy) to start a clean process.
 	recycleWhenIdle bool
 	recycling       atomic.Bool
-	// Whether anything is still waiting to reach the coordinator; set by the session.
-	pendingOutput func() bool
-	exit          func(code int)
+	// Whether anything is still waiting to reach the coordinator (pendingOutput) or has not even
+	// been written yet (unwrittenOutput); set by the session.
+	pendingOutput   func() bool
+	unwrittenOutput func() bool
+	exit            func(code int)
 }
 
 // NewAgentDispatcher creates a new dispatcher instance.
@@ -338,11 +340,16 @@ func (d *AgentDispatcher) maybeRecycle() {
 				d.recycling.Store(false)
 			}
 		}()
-		// The deadline bounds only the wait for acknowledgements: what was never written would be
-		// lost with the process, so the agent waits for it however long the coordinator is away.
+		// The deadline bounds only the wait for acknowledgements, from the last write on: what was
+		// never written would be lost with the process, so the agent waits for it however long the
+		// coordinator is away.
 		deadline := time.Now().Add(recycleDrainTimeout)
-		for d.pendingOutput != nil && d.pendingOutput() &&
-			(time.Now().Before(deadline) || d.outbox.pending() > 0 || d.delivery.anyQueued()) {
+		for d.pendingOutput != nil && d.pendingOutput() {
+			if d.unwritten() {
+				deadline = time.Now().Add(recycleDrainTimeout)
+			} else if !time.Now().Before(deadline) {
+				break
+			}
 			if len(d.ActiveRunIDs()) > 0 {
 				return
 			}
@@ -356,6 +363,14 @@ func (d *AgentDispatcher) maybeRecycle() {
 		exited = true
 		d.exit(0)
 	}()
+}
+
+// unwritten reports whether some message has not been written to a connection yet.
+func (d *AgentDispatcher) unwritten() bool {
+	if d.unwrittenOutput != nil {
+		return d.unwrittenOutput()
+	}
+	return d.outbox.pending() > 0 || d.delivery.anyQueued()
 }
 
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.

@@ -61,7 +61,7 @@ func TestLifecycle_WaitIfPaused_Resume(t *testing.T) {
 
 	unblocked := make(chan struct{})
 	go func() {
-		r.waitIfPaused()
+		r.waitIfPaused(context.Background())
 		close(unblocked)
 	}()
 
@@ -92,7 +92,7 @@ func TestLifecycle_WaitIfPaused_Stop(t *testing.T) {
 
 	unblocked := make(chan struct{})
 	go func() {
-		r.waitIfPaused()
+		r.waitIfPaused(context.Background())
 		close(unblocked)
 	}()
 
@@ -151,7 +151,7 @@ func TestLifecycle_HoldOutlastsTheUsersResume(t *testing.T) {
 	require.True(t, r.Held())
 	unblocked := make(chan struct{})
 	go func() {
-		r.waitIfPaused()
+		r.waitIfPaused(context.Background())
 		close(unblocked)
 	}()
 
@@ -175,7 +175,7 @@ func TestLifecycle_HoldOutlastsTheUsersResume(t *testing.T) {
 	r.Hold()
 	stopped := make(chan struct{})
 	go func() {
-		r.waitIfPaused()
+		r.waitIfPaused(context.Background())
 		close(stopped)
 	}()
 	r.Stop()
@@ -278,4 +278,38 @@ func TestExecuteRequest_WaitsWhileHeld(t *testing.T) {
 		t.Fatal("a stopped held request kept waiting")
 	}
 	assert.Equal(t, int32(1), hits.Load())
+}
+
+// A main loop paused or held stops waiting once its context ends, without Stop: a held agent
+// shutting down must not hang its scans.
+func TestLifecycle_WaitIfPausedEndsWithItsContext(t *testing.T) {
+	r := &Runner{config: &swagger.Config{}}
+	r.pause.cond = sync.NewCond(&r.pause.mu)
+	r.Hold()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		r.waitIfPaused(ctx)
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatal("went on while held")
+	case <-time.After(50 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a cancelled main loop kept waiting")
+	}
+}
+
+// A request the scan stopped before sending is not a result: it is not counted or streamed.
+func TestSendStats_DropsRequestsNotSent(t *testing.T) {
+	r := &Runner{}
+	assert.True(t, notSent(&swagger.FuzzResult{Error: errNotSentWhileHeld}))
+	assert.False(t, notSent(&swagger.FuzzResult{Error: "Request timed out"}))
+	assert.False(t, notSent(nil))
+	assert.False(t, r.sendStats(statsMsg{result: &swagger.FuzzResult{Error: errNotSentWhileHeld}}))
 }

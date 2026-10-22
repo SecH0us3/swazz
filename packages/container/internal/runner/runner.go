@@ -94,10 +94,10 @@ type runnerLifecycle struct {
 	// held is a pause the embedding program asks for (Hold), apart from the user's: the agent
 	// holds its scans while their events cannot reach the coordinator.
 	held atomic.Bool
-	// heldSince (unix nanos) is when the current hold began; heldTotal (nanos) adds up the holds
-	// that ended. A held scan's time does not count toward MaxScanDurationMin.
-	heldSince atomic.Int64
-	heldTotal atomic.Int64
+	// heldSince is when the current hold began, heldTotal adds up the holds that ended (guarded by
+	// Runner.pause.mu; monotonic). A held scan's time does not count toward MaxScanDurationMin.
+	heldSince time.Time
+	heldTotal time.Duration
 
 	mu     sync.Mutex // guards cancel only
 	cancel context.CancelFunc
@@ -312,15 +312,20 @@ func (r *Runner) Start(ctx context.Context) error {
 		timerCtx, cancelTimer := context.WithCancel(runCtx)
 		defer cancelTimer()
 		maxDuration := time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit
-		started := time.Now()
+		started, heldBefore := time.Now(), r.heldFor()
 		go func() {
 			timer := time.NewTimer(maxDuration)
 			defer timer.Stop()
 			for {
 				select {
 				case <-timer.C:
-					if left := maxDuration - (time.Since(started) - r.heldFor()); left > 0 {
-						timer.Reset(left) // held meanwhile: that time is not the scan's
+					if left := maxDuration - (time.Since(started) - (r.heldFor() - heldBefore)); left > 0 {
+						// Held meanwhile: that time is not the scan's. While still held, the time
+						// left does not shrink, so check back no more than once a second.
+						if r.Held() && left < time.Second {
+							left = time.Second
+						}
+						timer.Reset(left)
 						continue
 					}
 					r.logDebug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
@@ -488,7 +493,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 	var wg sync.WaitGroup
 
 	for _, endpoint := range r.config.Endpoints {
-		r.waitIfPaused()
+		r.waitIfPaused(ctx)
 		if r.stopped() {
 			break
 		}

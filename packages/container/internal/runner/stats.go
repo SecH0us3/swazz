@@ -117,12 +117,24 @@ func (p *statsPipe) close() {
 // sendStats hands msg to the run's statsAggregator. Once the run has ended it drops msg instead
 // of blocking on an aggregator that is gone, and returns false.
 func (r *Runner) sendStats(msg statsMsg) bool {
+	if notSent(msg.result) {
+		return false
+	}
 	return r.stats.Load().send(msg, nil)
 }
 
 // sendStatsUntil is sendStats that also gives up when ctx ends while the pipe is full.
 func (r *Runner) sendStatsUntil(ctx context.Context, msg statsMsg) bool {
+	if notSent(msg.result) {
+		return false
+	}
 	return r.stats.Load().send(msg, ctx.Done())
+}
+
+// notSent reports a request the scan stopped before sending (executeRequest under a hold): it is
+// dropped whole like a late result, not counted as a status-0 error.
+func notSent(res *swagger.FuzzResult) bool {
+	return res != nil && res.Status == 0 && res.Error == errNotSentWhileHeld
 }
 
 // stopStats ends the run's statsAggregator once it has taken in what was sent, and waits for it.

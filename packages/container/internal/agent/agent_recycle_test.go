@@ -130,7 +130,7 @@ func TestRecycle_NeverExitsWithUnwrittenMessages(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
 	t.Cleanup(d.Close)
 	oldPoll, oldTimeout := recyclePollInterval, recycleDrainTimeout
-	recyclePollInterval, recycleDrainTimeout = 5*time.Millisecond, 20*time.Millisecond
+	recyclePollInterval, recycleDrainTimeout = 5*time.Millisecond, 150*time.Millisecond
 	t.Cleanup(func() { recyclePollInterval, recycleDrainTimeout = oldPoll, oldTimeout })
 	exits := make(chan int, 1)
 	d.exit = func(code int) { exits <- code }
@@ -140,9 +140,26 @@ func TestRecycle_NeverExitsWithUnwrittenMessages(t *testing.T) {
 	d.SendWSEvent("run-1", "complete", nil)
 	ev := (<-out).(WSEventOut) // taken by the write loop, not written yet
 	d.maybeRecycle()
-	expectNoExit(t, exits, 200*time.Millisecond)
+	expectNoExit(t, exits, 300*time.Millisecond) // past the drain timeout
 	d.delivery.written(ev, true)
+	// The wait for its acknowledgement starts now, not when recycling began.
+	expectNoExit(t, exits, 50*time.Millisecond)
 	expectExit(t, exits)
+}
+
+// A reply (no seq) already handed to the write loop, or carried after a failed write, is unwritten
+// too.
+func TestRecycle_SessionCountsUnwrittenReplies(t *testing.T) {
+	s := newAgentSession("ws://localhost", "tok", true)
+	t.Cleanup(s.dispatcher.Close)
+	assert.False(t, s.dispatcher.unwritten())
+	s.carry <- map[string]interface{}{"type": "parse_result"}
+	assert.True(t, s.dispatcher.unwritten())
+	<-s.carry
+	s.dispatcher.queueReply(map[string]interface{}{"type": "parse_result"})
+	assert.True(t, s.dispatcher.unwritten())
+	<-s.outChan // taken by the write loop; the drain timeout that follows covers the write itself
+	assert.Eventually(t, func() bool { return !s.dispatcher.unwritten() }, time.Second, time.Millisecond)
 }
 
 func TestRecycle_SessionCountsQueuedAndUnacknowledgedOutput(t *testing.T) {

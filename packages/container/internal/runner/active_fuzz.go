@@ -279,7 +279,7 @@ func (r *Runner) runActiveParameterFuzzing(
 				}
 			}
 
-			r.waitIfPaused()
+			r.waitIfPaused(ctx)
 			if r.stopped() {
 				break
 			}
