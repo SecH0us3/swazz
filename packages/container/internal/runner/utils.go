@@ -23,17 +23,15 @@ import (
 )
 
 func (r *Runner) updateReplacer() {
-	r.configMu.RLock()
-	vars := r.config.Variables
-	r.configMu.RUnlock()
-
-	args := make([]string, 0, len(vars)*2)
-	for k, v := range vars {
-		args = append(args, "{{"+k+"}}", toString(v))
-	}
-
+	// One write lock for reading the variables and storing the replacer: under separate locks,
+	// two workers extracting at once could store the older value's replacer last, and ranging
+	// over the map while a worker writes it is a fatal error.
 	r.configMu.Lock()
 	defer r.configMu.Unlock()
+	args := make([]string, 0, len(r.config.Variables)*2)
+	for k, v := range r.config.Variables {
+		args = append(args, "{{"+k+"}}", toString(v))
+	}
 	if len(args) > 0 {
 		r.varReplacer = strings.NewReplacer(args...)
 	} else {

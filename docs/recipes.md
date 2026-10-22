@@ -38,34 +38,45 @@ jobs:
 
 ## 👥 Recipe 2: Detecting BOLA (IDOR) with Multi-Identity {#bola-multi-identity}
 
-To scan for Broken Object Level Authorization, you must feed Swazz the authorization headers for two distinct users (Victim and Attacker).
+Broken Object Level Authorization (BOLA, also known as IDOR) happens when an API endpoint relies on user-supplied IDs to access resources, but fails to verify that the requesting user actually owns that resource.
 
-1. Create a `swazz.config.json` containing:
+Swazz detects BOLA by collecting real resource IDs generated or accessed under **User A**, and then attempting to access, modify, or delete those resources under **User B** (or anonymously).
+
+### How It Works
+
+1. **Harvesting phase (User A):** During the main scan, Swazz collects legitimate object IDs returned in successful (`2xx`) responses (e.g. from `GET /api/orders` or `POST /api/items`).
+2. **Replay phase (User B):** Swazz tests those harvested IDs against target endpoints under User B's identity:
+   - **`GET` / `HEAD`**: Probes read access to private data.
+   - **`PUT` / `PATCH`**: Probes unauthorized modification of User A's objects.
+   - **`POST`**: Tests JSON body fields (e.g. `{"order_id": "..."}`) or action endpoints.
+   - **`DELETE`**: Replayed in a dedicated final batch so User B does not destroy test objects before `GET`/`PUT` tests finish.
+3. **Similarity analysis:** If User B receives a `2xx` response whose structure matches User A's response (or successfully executes a `DELETE`), Swazz flags a confirmed BOLA/IDOR vulnerability.
+
+### Configuration Example
+
+Add `bola_testing: true` and configure your secondary identity in `swazz.config.json`:
+
 ```json
 {
   "base_url": "https://api.target.local",
-  "rules": {
-    "bola_testing": {
-      "enabled": true,
-      "identities": [
-        {
-          "name": "User_A_Victim",
-          "headers": {
-            "Authorization": "Bearer eyJhbGciOi..."
-          }
-        },
-        {
-          "name": "User_B_Attacker",
-          "headers": {
-            "Authorization": "Bearer eyJhbGciOi..."
-          }
-        }
-      ]
+  "settings": {
+    "bola_testing": true,
+    "bola_similarity_threshold": 0.85
+  },
+  "global_headers": {
+    "Authorization": "Bearer <User_A_Token>"
+  },
+  "auth_identities": {
+    "userB": {
+      "headers": {
+        "Authorization": "Bearer <User_B_Token>"
+      }
     }
   }
 }
 ```
-2. Run the scan. Swazz will automatically substitute cross-identity parameters and verify if User B can access User A's objects.
+
+When the scan runs, Swazz will automatically substitute cross-identity parameters and report any cross-tenant data leakage or unauthorized state changes.
 
 ---
 

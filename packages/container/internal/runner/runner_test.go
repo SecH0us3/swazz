@@ -7,12 +7,14 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1177,6 +1179,87 @@ func TestRunner_Start_AlreadyRunning(t *testing.T) {
 
 	r.Stop()
 	wg.Wait()
+}
+
+// UnlockConfig is called by every request that extracts a variable from a response. It used to
+// replace r.detector, which raced with the workers reading it and threw away the IDs harvested
+// so far.
+func TestUnlockConfig_KeepsDetector(t *testing.T) {
+	r := New(&swagger.Config{Settings: swagger.DefaultSettings()}, &http.Client{})
+	defer r.Close()
+	d := r.detector.Load()
+	r.LockConfig()
+	r.UnlockConfig()
+	assert.Same(t, d, r.detector.Load())
+}
+
+// boladetectorScan runs a scan against a target where GET /items returns an ID in its body and
+// GET /items/{itemId} only answers 2xx for that ID. It returns the paths the target saw.
+func boladetectorScan(t *testing.T, concurrency, iterations int) []string {
+	t.Helper()
+	const harvestedID = "harvested-42"
+	var mu sync.Mutex
+	var seen []string
+	var hits atomic.Int64
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		n := hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		// A new token each time, so every response rewrites the variable (LockConfig/UnlockConfig).
+		_, _ = fmt.Fprintf(w, `{"id":"%s","token":"t-%d"}`, harvestedID, n)
+	})
+	mux.HandleFunc("/items/", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.URL.Path)
+		mu.Unlock()
+		if strings.HasSuffix(r.URL.Path, "/"+harvestedID) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"` + harvestedID + `","owner":"a"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	settings := swagger.DefaultSettings()
+	settings.Profiles = []swagger.FuzzingProfile{swagger.ProfileRandom}
+	settings.IterationsPerProfile = iterations
+	settings.Concurrency = concurrency
+	settings.BOLATesting = true
+
+	r := New(&swagger.Config{
+		BaseURL:  ts.URL,
+		Settings: settings,
+		Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Endpoints: []swagger.EndpointConfig{
+			{Path: "/items", Method: "GET", ExtractVariables: map[string]string{"$.token": "TOKEN"}},
+			{Path: "/items/{itemId}", Method: "GET", PathParams: map[string]*swagger.SchemaProperty{"itemId": {Type: "string"}}},
+		},
+	}, ts.Client())
+	defer r.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	require.NoError(t, r.Start(ctx))
+	require.Positive(t, hits.Load())
+
+	mu.Lock()
+	defer mu.Unlock()
+	return append([]string(nil), seen...)
+}
+
+// An ID harvested during the fuzz loop reaches the BOLA phase: the endpoint that never answered
+// 2xx is tried with it. The phase used to run on a new, empty detector.
+func TestBolaPhase_UsesIDsHarvestedDuringFuzzing(t *testing.T) {
+	paths := boladetectorScan(t, 1, 1)
+	assert.Contains(t, paths, "/items/harvested-42")
+}
+
+// Variable extraction (LockConfig/UnlockConfig) runs concurrently with other workers harvesting
+// through r.detector; run with -race.
+func TestHarvest_ConcurrentWithVariableExtraction(t *testing.T) {
+	assert.Contains(t, boladetectorScan(t, 8, 30), "/items/harvested-42")
 }
 
 // Two scans run at once on one agent: starting and ending one must not wipe, or consume, the OOB

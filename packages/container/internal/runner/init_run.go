@@ -18,6 +18,7 @@ import (
 
 	swazzGrpc "swazz-engine/internal/grpc"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/runner/bola"
 	"swazz-engine/internal/swagger"
 )
 
@@ -82,6 +83,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	r.latestStats.Store(&empty)
 	r.sizeBaselines = &sync.Map{}
 	r.timeBaselines = &sync.Map{}
+	r.detector.Store(bola.NewDetector(r)) // a new run starts with no harvested IDs
 
 	r.oobStore.Clear()
 	r.sstiStore.Clear()

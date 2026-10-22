@@ -491,8 +491,14 @@ func (r *Runner) executeRequest(
 			Timestamp:       time.Now().UnixMilli(),
 		}
 
-		if profile != swagger.FuzzingProfile("BOLA") {
-			r.detector.HarvestFromResponse(originalPath, method, resp.StatusCode, respBody)
+		// Only responses to the scan's own identity feed it: BOLA and DIFFERENTIAL probes go out
+		// as other identities or anonymously, and must not set User A's variables.
+		switch profile {
+		case swagger.ProfileRandom, swagger.FuzzingProfile("BASELINE"):
+			r.detector.Load().HarvestFromResponse(originalPath, method, resp.StatusCode, respBody, payload, queryParams)
+		case swagger.ProfileMalicious, swagger.ProfileBoundary:
+			// The target may echo these payloads in ID-like fields: not IDs to replay.
+			r.detector.Load().ExtractVariablesFromResponse(originalPath, method, resp.StatusCode, respBody)
 		}
 
 		if r.config.Settings.AnalyzeResponseBody {
