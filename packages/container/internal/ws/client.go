@@ -80,11 +80,12 @@ func (c *Client) SendMessage(ctx context.Context, endpoint string, payload []byt
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, http.StatusGatewayTimeout, err
 		}
-		return nil, http.StatusInternalServerError, err
+		// No answer at all (refused, reset, DNS): a network error, not a 5xx of the target.
+		return nil, 0, err
 	}
-
-	// Close when done
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	// No close handshake: the library gives a peer that ignores the close frame seconds of its
+	// own (beyond ctx), which would hold every exchange with such a target past its timeout.
+	defer conn.CloseNow()
 
 	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {

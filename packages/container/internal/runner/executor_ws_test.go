@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,7 +205,7 @@ func TestExecuteWebSocketRequest_SameEndpointRunsInParallel(t *testing.T) {
 		}
 		select {
 		case <-all:
-		case <-ctx.Done():
+		case <-time.After(10 * time.Second): // a hijacked request's context never ends
 			return
 		}
 		_ = c.Write(ctx, websocket.MessageText, msg)

@@ -83,10 +83,11 @@ func (r *Runner) executeWebSocketRequest(
 	// target that accepts the connection and never answers stall the scan.
 	timeoutMs := 10000
 	r.configMu.RLock()
-	if r.config.Settings.TimeoutMs > 0 {
-		timeoutMs = r.config.Settings.TimeoutMs
-	}
+	settings := r.config.Settings
 	r.configMu.RUnlock()
+	if settings.TimeoutMs > 0 {
+		timeoutMs = settings.TimeoutMs
+	}
 	reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer reqCancel()
 
@@ -124,7 +125,7 @@ func (r *Runner) executeWebSocketRequest(
 		Endpoint:        urlStr,
 		Method:          "WS",
 		ResponseSize:    int64(len(respMsg)),
-		Settings:        r.config.Settings,
+		Settings:        settings,
 	}
 
 	analyzerChain := analyzer.NewRegistry()

@@ -186,7 +186,7 @@ func newBarrierWSServer(t *testing.T, n int32) *httptest.Server {
 		}
 		select {
 		case <-all:
-		case <-r.Context().Done():
+		case <-time.After(10 * time.Second): // a hijacked request's context never ends
 			return
 		}
 		_ = c.Write(r.Context(), typ, msg)
@@ -223,4 +223,49 @@ func TestClient_SendMessage_Concurrent(t *testing.T) {
 	for err := range errs {
 		assert.NoError(t, err)
 	}
+}
+
+// A target that answers and then ignores the close frame does not hold the exchange past its
+// context: the library alone would wait seconds for the peer's close frame.
+func TestClient_SendMessage_CloseIsBoundedByTheContext(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		_, msg, err := c.Read(context.Background())
+		if err != nil {
+			return
+		}
+		_ = c.Write(context.Background(), websocket.MessageText, msg)
+		<-release // never reads the client's close frame
+	}))
+	t.Cleanup(func() {
+		close(release)
+		srv.Close()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	msg, status, err := NewClient(true).SendMessage(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), []byte("hi"), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 200, status)
+	assert.Equal(t, "hi", string(msg))
+	assert.Less(t, time.Since(start), 2*time.Second)
+}
+
+// Nothing answered the handshake: a network error (status 0), not a 5xx of the target.
+func TestClient_SendMessage_RefusedIsNotA5xx(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, status, err := NewClient(true).SendMessage(ctx, url, []byte("hi"), nil)
+	require.Error(t, err)
+	assert.Zero(t, status)
 }
