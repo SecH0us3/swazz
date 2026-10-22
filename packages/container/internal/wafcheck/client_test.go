@@ -9,11 +9,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"swazz-engine/internal/safenet"
 )
 
 func TestClient_Detect_Success(t *testing.T) {
@@ -292,3 +295,32 @@ func TestClient_Detect_InvalidEndpointURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid WAF check endpoint")
 }
 
+// An oversized success body fails clearly instead of reaching the JSON decoder cut off; an error
+// body is read only up to safenet.MaxErrorBodyBytes and has its control characters removed.
+func TestClient_BodiesAreCapped(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{"oversized success", http.StatusOK, `{"x":"` + strings.Repeat("a", maxResponseBytes) + `"}`, "WAF check response is larger than"},
+		{"oversized error", http.StatusBadGateway, strings.Repeat("e", maxResponseBytes), "WAF check API error with status 502: eee"},
+		{"forged log line", http.StatusBadRequest, `{"error":"bad\nINFO forged\u001b[0m"}`, "WAF check API error (400): bad INFO forged [0m"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			res, err := NewClient(server.URL).Detect(context.Background(), "https://example.com")
+			require.Error(t, err)
+			assert.Nil(t, res)
+			assert.Contains(t, err.Error(), tc.wantErr)
+			assert.Less(t, len(err.Error()), safenet.MaxErrorBodyBytes+100)
+			assert.NotContains(t, err.Error(), "\n")
+		})
+	}
+}

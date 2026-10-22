@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/safenet"
@@ -67,7 +68,7 @@ func (p *SemanticPlanner) GeneratePreScanPayloads(ctx context.Context, schemaSum
 }
 
 func parseGatewayError(statusCode int, body []byte) error {
-	return fmt.Errorf("AI Gateway error %d: %s", statusCode, safenet.Truncate(gatewayErrorMessage(body), safenet.MaxErrorBodyBytes))
+	return fmt.Errorf("AI Gateway error %d: %s", statusCode, safenet.ReadErrorBody(strings.NewReader(gatewayErrorMessage(body))))
 }
 
 // gatewayErrorMessage returns the message of a gateway error body, or the body itself.

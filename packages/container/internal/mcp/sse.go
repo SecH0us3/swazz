@@ -355,7 +355,7 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 		c.pendingMu.Lock()
 		delete(c.pending, key)
 		c.pendingMu.Unlock()
-		return nil, fmt.Errorf("POST request to %s failed with status %d: %s (req body: %s)", c.writeURL, resp.StatusCode, body, safenet.Truncate(string(data), safenet.MaxErrorBodyBytes))
+		return nil, fmt.Errorf("POST request to %s failed with status %d: %s", c.writeURL, resp.StatusCode, body)
 	}
 
 	select {

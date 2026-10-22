@@ -19,6 +19,9 @@ import (
 	"swazz-engine/internal/logger"
 )
 
+// maxGatewayErrorBytes caps how much of a non-200 response is read to find its error message.
+const maxGatewayErrorBytes = 64 << 10
+
 // maxGatewayResponseBytes caps an AI Gateway response body; a larger one fails the call. A
 // completion is far smaller.
 const maxGatewayResponseBytes = 4 << 20
@@ -142,23 +145,24 @@ func (g *GatewayClient) ChatCompletion(ctx context.Context, systemPrompt, userPr
 			continue
 		}
 
-		respBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxGatewayResponseBytes+1))
-		_ = resp.Body.Close()
-		if err != nil {
-			return "", fmt.Errorf("failed to read AI Gateway response body: %w", err)
-		}
-		if resp.StatusCode == http.StatusTooManyRequests {
-			if attempt < maxRetries {
+		if resp.StatusCode != http.StatusOK {
+			// An error body only feeds an error message (at most safenet.MaxErrorBodyBytes of it),
+			// so no more is read than a structured error needs to still parse.
+			errBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxGatewayErrorBytes))
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusTooManyRequests && attempt < maxRetries {
 				logger.Warn("[AI] ⚠️ AI Gateway 429 Rate Limit encountered, backing off for %v (attempt %d/%d)", backoff, attempt+1, maxRetries)
 				time.Sleep(backoff)
 				backoff *= 2
 				continue
 			}
+			return "", parseGatewayError(resp.StatusCode, errBytes)
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			gwErr := parseGatewayError(resp.StatusCode, respBytes)
-			return "", gwErr
+		respBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxGatewayResponseBytes+1))
+		_ = resp.Body.Close()
+		if err != nil {
+			return "", fmt.Errorf("failed to read AI Gateway response body: %w", err)
 		}
 		if len(respBytes) > maxGatewayResponseBytes {
 			return "", fmt.Errorf("AI Gateway response is larger than %d bytes", maxGatewayResponseBytes)

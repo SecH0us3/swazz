@@ -898,7 +898,9 @@ func TestSSEClient_ErrorBodyIsCapped(t *testing.T) {
 	err := client.Connect(ctx) // the initialize request gets the 500
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "status 500")
-	assert.Less(t, len(err.Error()), 2*safenet.MaxErrorBodyBytes+256, "the response body and the request body are both cut")
+	assert.Less(t, len(err.Error()), safenet.MaxErrorBodyBytes+256, "the response body is cut")
+	// The request carries tool arguments, which may hold secrets: it is not echoed into the error.
+	assert.NotContains(t, err.Error(), "jsonrpc")
 }
 
 // The HTTP client fails a response past maxResponseBytes instead of parsing a truncated one, and
@@ -911,16 +913,18 @@ func TestHTTPClient_BodyIsCapped(t *testing.T) {
 		{http.StatusOK, "larger than"},
 		{http.StatusInternalServerError, "status 500"},
 	} {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(tc.status)
-			_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBytes+1)))
-		}))
-		client := NewHTTPClient(ts.URL+"/mcp", true, nil)
-		_, err := client.ListTools(context.Background())
-		ts.Close()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), tc.wantErr)
-		assert.Less(t, len(err.Error()), safenet.MaxErrorBodyBytes+256)
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBytes+1)))
+			}))
+			defer ts.Close()
+			client := NewHTTPClient(ts.URL+"/mcp", true, nil)
+			_, err := client.ListTools(context.Background())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+			assert.Less(t, len(err.Error()), safenet.MaxErrorBodyBytes+256)
+		})
 	}
 }
 

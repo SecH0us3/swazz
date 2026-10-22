@@ -127,7 +127,10 @@ func TestGatewayClient_ChatCompletion_BodyIsCapped(t *testing.T) {
 		{"oversized success", http.StatusOK, strings.Repeat("x", maxGatewayResponseBytes+1024), "larger than"},
 		{"oversized error", http.StatusBadGateway, strings.Repeat("x", maxGatewayResponseBytes+1024), "AI Gateway error 502: xxx"},
 		{"long error text", http.StatusInternalServerError, strings.Repeat("y", 10<<10), "AI Gateway error 500: yyy"},
-		{"long error message", http.StatusBadRequest, `{"error":{"message":"` + strings.Repeat("z", 1<<20) + `"}}`, "AI Gateway error 400: zzz"},
+		{"long error message", http.StatusBadRequest, `{"error":{"message":"` + strings.Repeat("z", 32<<10) + `"}}`, "AI Gateway error 400: zzz"},
+		{"forged log line", http.StatusInternalServerError, "bad\r\nINFO forged\x1b[0m", "AI Gateway error 500: bad  INFO forged [0m"},
+		// Past maxGatewayErrorBytes the JSON is not parsed: the raw start of the body is used.
+		{"huge error message", http.StatusBadRequest, `{"error":{"message":"` + strings.Repeat("z", 1<<20) + `"}}`, `AI Gateway error 400: {"error"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +140,7 @@ func TestGatewayClient_ChatCompletion_BodyIsCapped(t *testing.T) {
 			defer server.Close()
 			client := NewGatewayClient(server.URL+"/openai", "", "k")
 			_, err := client.ChatCompletion(context.Background(), "s", "u")
-			if err == nil || !strings.HasPrefix(err.Error(), tc.wantErr) && !strings.Contains(err.Error(), tc.wantErr) {
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("got error %.200q", err)
 			}
 			if len(err.Error()) > safenet.MaxErrorBodyBytes+50 {
