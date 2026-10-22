@@ -263,8 +263,10 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			}
 			if err := write(b); err != nil {
 				logError("Failed to write to WS: %v", err)
-				// An ack request speaks only for the connection it was written on.
-				if _, isAckRequest := msg.(ackRequestMsg); !isAckRequest {
+				// An ack request speaks only for the connection it was written on, and a replayed
+				// event is still in the delivery log, which replays it on the next one.
+				_, isAckRequest := msg.(ackRequestMsg)
+				if !isAckRequest && !(sequenced && s.dispatcher.delivery.kept(ev)) {
 					select {
 					case s.carry <- msg:
 					default:
@@ -277,7 +279,9 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			}
 			if sequenced {
 				s.dispatcher.delivery.written(ev, true)
-				sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
+				if mark, ok := sentUpTo[ev.RunID]; !ok || mark.exec != ev.Exec || ev.Seq > mark.seq {
+					sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
+				}
 				lastWrite[ev.RunID] = time.Now()
 				if !ackTimerArmed {
 					ackTimer.Reset(ackRequestDelay)

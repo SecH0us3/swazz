@@ -46,6 +46,7 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
+	r.waitWhileHeld(ctx)
 	if strings.HasPrefix(originalPath, "mcp://") {
 		return r.executeMCPRequest(ctx, originalPath, payload, profile, headers, cookies)
 	}

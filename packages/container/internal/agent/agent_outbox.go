@@ -16,21 +16,27 @@ import "sync"
 //     the queue is back under lowOutboxMark, so an outage pauses scans instead of dropping their
 //     events;
 //   - it is first in, first out, and only its pump moves messages on (to the session's outChan),
-//     so a run's events reach the wire in sequence order.
+//     so a run's events reach the wire in sequence order;
+//   - replies to coordinator requests (parse results) go ahead of the run events: someone is
+//     waiting for them. They are few (AgentDispatcher.parseReqSem) and do not count toward the marks.
 //
 // Past highOutboxMark only what was already in flight is added (each held scan's running
-// requests, a post-scan phase): hardOutboxLimit bounds that, and a sender past it waits, without
+// requests, a post-scan step that sends no requests): hardOutboxLimit bounds that, and a sender past it waits, without
 // holding any lock, until the queue drains (senders that pass that check together may each add
 // one more). Nothing is dropped.
+//
+// highOutboxMark stays below maxUnackedPerRun, so a run held during an outage has not had its
+// delivery log trimmed by the time the connection is back.
 const (
-	highOutboxMark  = 20000
-	lowOutboxMark   = 10000
+	highOutboxMark  = 8000
+	lowOutboxMark   = 4000
 	hardOutboxLimit = 100000
 )
 
 type outbox struct {
-	mu    sync.Mutex
-	items []interface{}
+	mu      sync.Mutex
+	items   []interface{}
+	replies []interface{}
 	// inFlight counts messages the pump has taken but not yet handed on: still pending.
 	inFlight int
 	ready    chan struct{} // signalled (cap 1) when items were added
@@ -74,11 +80,35 @@ func (o *outbox) push(msg interface{}) (full bool) {
 	return full
 }
 
+// pushReply adds msg ahead of every queued item, behind earlier replies.
+func (o *outbox) pushReply(msg interface{}) {
+	o.mu.Lock()
+	o.replies = append(o.replies, msg)
+	o.mu.Unlock()
+	select {
+	case o.ready <- struct{}{}:
+	default:
+	}
+}
+
 // take removes the message at the front, waiting for one; false once stop is closed. The caller
 // hands it on and then calls handed.
 func (o *outbox) take(stop <-chan struct{}) (interface{}, bool) {
 	for {
+		select {
+		case <-stop:
+			return nil, false
+		default:
+		}
 		o.mu.Lock()
+		if len(o.replies) > 0 {
+			msg := o.replies[0]
+			o.replies[0] = nil
+			o.replies = o.replies[1:]
+			o.inFlight++
+			o.mu.Unlock()
+			return msg, true
+		}
 		if len(o.items) > 0 {
 			msg := o.items[0]
 			o.items[0] = nil
@@ -123,7 +153,7 @@ func (o *outbox) queued() int {
 func (o *outbox) pending() int {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return len(o.items) + o.inFlight
+	return len(o.items) + len(o.replies) + o.inFlight
 }
 
 // pump moves the outbox, in order, into out, which the connection's write loop drains, until
@@ -133,6 +163,11 @@ func (o *outbox) pump(out chan<- interface{}, stop <-chan struct{}, onDrained fu
 		msg, ok := o.take(stop)
 		if !ok {
 			return
+		}
+		select {
+		case <-stop:
+			return
+		default:
 		}
 		select {
 		case out <- msg:

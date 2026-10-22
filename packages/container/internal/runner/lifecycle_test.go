@@ -7,7 +7,10 @@ package runner
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -181,4 +184,82 @@ func TestLifecycle_HoldOutlastsTheUsersResume(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Stop did not end a held wait")
 	}
+}
+
+// Every request of every phase waits out a hold: not only the main loops check it.
+func TestLifecycle_RequestsWaitWhileHeld(t *testing.T) {
+	r := &Runner{config: &swagger.Config{}}
+	r.pause.cond = sync.NewCond(&r.pause.mu)
+
+	r.waitWhileHeld(context.Background()) // not held: returns at once
+
+	r.Hold()
+	released := make(chan struct{})
+	go func() {
+		r.waitWhileHeld(context.Background())
+		close(released)
+	}()
+	select {
+	case <-released:
+		t.Fatal("a request went out under a hold")
+	case <-time.After(50 * time.Millisecond):
+	}
+	r.Release()
+	select {
+	case <-released:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Release did not let the request go")
+	}
+
+	// A request whose context ends stops waiting.
+	r.Hold()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelled := make(chan struct{})
+	go func() {
+		r.waitWhileHeld(ctx)
+		close(cancelled)
+	}()
+	cancel()
+	select {
+	case <-cancelled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a cancelled request kept waiting")
+	}
+
+	// And Stop ends it too.
+	stopped := make(chan struct{})
+	go func() {
+		r.waitWhileHeld(context.Background())
+		close(stopped)
+	}()
+	r.Stop()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not end a held request")
+	}
+}
+
+// executeRequest is the gate: a held runner sends nothing.
+func TestExecuteRequest_WaitsWhileHeld(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { hits.Add(1) }))
+	defer srv.Close()
+	r := &Runner{client: srv.Client(), config: &swagger.Config{BaseURL: srv.URL, Settings: swagger.Settings{TimeoutMs: 5000}}}
+	r.pause.cond = sync.NewCond(&r.pause.mu)
+	r.Hold()
+	done := make(chan struct{})
+	go func() {
+		r.executeRequest(context.Background(), srv.URL, "/x", "/x", "GET", nil, nil, nil, swagger.ProfileRandom, nil, nil, "")
+		close(done)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	assert.Zero(t, hits.Load(), "sent under a hold")
+	r.Release()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the request never went out")
+	}
+	assert.Equal(t, int32(1), hits.Load())
 }

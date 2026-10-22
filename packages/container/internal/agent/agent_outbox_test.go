@@ -143,7 +143,7 @@ func TestQueueEvent_HoldsScansUntilTheQueueDrains(t *testing.T) {
 
 	late := heldRunner()
 	d.activeRunnersMu.Lock()
-	if d.holding {
+	if d.held.Load() {
 		late.Hold()
 	}
 	d.activeRunners["late"] = late
@@ -172,7 +172,6 @@ func TestHandleJobDispatch_StartsHeldWhileHolding(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
 	d.outbox.high, d.outbox.low = 1_000_000, -1 // only this test holds or releases
 	d.activeRunnersMu.Lock()
-	d.holding = true
 	d.held.Store(true)
 	d.activeRunnersMu.Unlock()
 
@@ -267,5 +266,56 @@ func TestAgentSession_DeliversEverythingQueuedDuringALongOutage(t *testing.T) {
 	case seq := <-second:
 		t.Fatalf("seq %d was sent twice", seq)
 	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// A reply someone waits for (a parse result) goes ahead of a backlog of run events.
+func TestOutbox_RepliesGoFirst(t *testing.T) {
+	o := smallOutbox(100, 10, 1000)
+	o.push("event-1")
+	o.push("event-2")
+	o.pushReply("reply")
+	assert.Equal(t, 3, o.pending())
+	msg, _ := o.take(nil)
+	assert.Equal(t, "reply", msg)
+	o.handed()
+	msg, _ = o.take(nil)
+	assert.Equal(t, "event-1", msg)
+}
+
+func TestAgentDispatcher_CloseStopsThePump(t *testing.T) {
+	out := make(chan interface{})
+	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	d.Close()
+	d.Close() // idempotent
+	d.SendWSEvent("run-1", "result", nil)
+	select {
+	case <-out:
+		t.Fatal("a closed dispatcher still moved a message on")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// The read loop must never wait for room in the outbox: it is what lets a dead connection be
+// noticed and replaced, and so what drains the outbox in the end.
+func TestDispatch_DoesNotWaitForRoomOnTheReadLoop(t *testing.T) {
+	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}))
+	defer d.Close()
+	d.outbox.high, d.outbox.hardLimit = 1_000_000, 2
+	d.SendWSEvent("other", "result", nil)
+	d.SendWSEvent("other", "result", nil)
+	d.SendWSEvent("other", "result", nil) // the pump holds one; the queue is at its hard limit
+
+	payload, err := json.Marshal(JobDispatchPayload{RunID: "bad-config"}) // no target: config error
+	require.NoError(t, err)
+	returned := make(chan struct{})
+	go func() {
+		d.Dispatch(context.Background(), WSMessageIn{Type: "job_dispatch", Payload: payload})
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Dispatch waited for room in the outbox")
 	}
 }

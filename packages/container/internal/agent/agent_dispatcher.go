@@ -83,11 +83,11 @@ type AgentDispatcher struct {
 	outbox          *outbox
 	activeRunners   map[string]*runner.Runner
 	activeRunnersMu sync.Mutex
-	// holding: every scan is held (runner.Hold) until the outbox drains; guarded by
-	// activeRunnersMu, mirrored in held for the hot path.
-	holding      bool
+	// held: every scan is held (runner.Hold) until the outbox drains. Changed, and runners held or
+	// released, only under activeRunnersMu.
 	held         atomic.Bool
 	holdingSince time.Time
+	stopPump     chan struct{}
 	parseReqSem  chan struct{}
 	delivery     *deliveryLog
 	sendMu       sync.Mutex
@@ -112,10 +112,20 @@ func NewAgentDispatcher(coordinatorURL, token string, disableTelemetry bool, out
 		parseReqSem:      make(chan struct{}, 10),
 		delivery:         newDeliveryLog(),
 		exit:             os.Exit,
+		stopPump:         make(chan struct{}),
 	}
-	// The dispatcher lives as long as the agent process; so does its pump.
-	go d.outbox.pump(outChan, nil, d.releaseScans)
+	go d.outbox.pump(outChan, d.stopPump, d.releaseScans)
 	return d
+}
+
+// Close stops moving queued messages on. The agent's dispatcher lives as long as the process;
+// tests close theirs.
+func (d *AgentDispatcher) Close() {
+	select {
+	case <-d.stopPump:
+	default:
+		close(d.stopPump)
+	}
 }
 
 // StopAllRunners stops all running jobs cleanly.
@@ -167,7 +177,8 @@ func (d *AgentDispatcher) isActive(runID string) bool {
 // queueEvent numbers a run event and queues it for sending. sendMu makes the two one step: runs
 // send events from several goroutines, and a higher seq queued before a lower one would be lost.
 // Queueing never blocks under sendMu; past the outbox's high mark every scan is held until the
-// queue drains (see agent_outbox.go).
+// queue drains (see agent_outbox.go). At the outbox's hard limit it waits, so it must not be
+// called from the connection's read loop (Dispatch), which is what drains the outbox in the end.
 func (d *AgentDispatcher) queueEvent(msg WSEventOut) {
 	d.outbox.waitRoom()
 	d.sendMu.Lock()
@@ -183,12 +194,10 @@ func (d *AgentDispatcher) queueEvent(msg WSEventOut) {
 	}
 }
 
-// queueMessage queues a message that is not a run event (a parse result).
-func (d *AgentDispatcher) queueMessage(msg interface{}) {
-	d.outbox.waitRoom()
-	if d.outbox.push(msg) {
-		d.holdScans()
-	}
+// queueReply queues a reply to a coordinator request (a parse result) ahead of the run events:
+// someone is waiting for it, and it must not wait out a backlog of scan events.
+func (d *AgentDispatcher) queueReply(msg interface{}) {
+	d.outbox.pushReply(msg)
 }
 
 // holdScans holds every scan, and those that start meanwhile, until the outbox drains to its low
@@ -198,8 +207,7 @@ func (d *AgentDispatcher) holdScans() {
 		return
 	}
 	d.activeRunnersMu.Lock()
-	if !d.holding {
-		d.holding = true
+	if !d.held.Load() {
 		d.held.Store(true)
 		d.holdingSince = time.Now()
 		logWarn("%d messages are waiting for the coordinator; holding every scan until they are sent", d.outbox.pending())
@@ -224,10 +232,9 @@ func (d *AgentDispatcher) releaseScans() {
 	}
 	d.activeRunnersMu.Lock()
 	defer d.activeRunnersMu.Unlock()
-	if !d.holding {
+	if !d.held.Load() {
 		return
 	}
-	d.holding = false
 	d.held.Store(false)
 	logInfo("The coordinator caught up; resuming the scans held for %v", time.Since(d.holdingSince).Round(time.Second))
 	for _, r := range d.activeRunners {
@@ -490,12 +497,14 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	if err != nil {
 		logError("Failed to build runner config: %v", err)
 		errMsg := fmt.Sprintf("[Runner] Cannot start scan: %v. Please import an OpenAPI/Swagger schema, capture endpoints, or set a target URL with spec.", err)
-		sendEvent("runner_log", map[string]interface{}{
-			"level":     "ERROR",
-			"message":   errMsg,
-			"timestamp": time.Now().Format(time.RFC3339),
-		})
-		sendError(err.Error())
+		go func() { // off the read loop: queueing may wait for room (queueEvent)
+			sendEvent("runner_log", map[string]interface{}{
+				"level":     "ERROR",
+				"message":   errMsg,
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+			sendError(err.Error())
+		}()
 		return
 	}
 	runCfg.RunID = dispatch.RunID
@@ -512,7 +521,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	r := runner.New(runCfg, client)
 
 	d.activeRunnersMu.Lock()
-	if d.holding {
+	if d.held.Load() {
 		r.Hold()
 	}
 	d.activeRunners[dispatch.RunID] = r
@@ -1090,6 +1099,6 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 				}
 			}
 		}
-		d.queueMessage(msgPayload)
+		d.queueReply(msgPayload)
 	}()
 }

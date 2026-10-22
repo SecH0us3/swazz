@@ -37,8 +37,9 @@ import (
 // acknowledges anything; with any other the log keeps nothing and replays nothing.
 //
 // Bounds: at most maxUnackedPerRun messages are kept per run (beyond that the oldest half is
-// dropped, which the coordinator sees as a gap; the outbox holds the scans long before a run queues
-// that many, see agent_outbox.go), and the log of a run that is no longer executing is
+// dropped, which the coordinator sees as a gap. While the connection is down the outbox holds the
+// scans below that (agent_outbox.go); a half-open connection that keeps taking writes without
+// acknowledging them is bounded only by this cap), and the log of a run that is no longer executing is
 // discarded once it has been idle for idleRunLogTTL.
 
 // deliveryHeader is set to "ack" by coordinators that acknowledge run events.
@@ -58,9 +59,11 @@ type runLog struct {
 	// writtenSeq is the highest seq written (or given up on: too large to send); the events after
 	// it are still queued.
 	writtenSeq uint64
-	unacked    []WSEventOut
-	touched    time.Time
-	dropped    bool
+	// ackedSeq is the highest seq acknowledged.
+	ackedSeq uint64
+	unacked  []WSEventOut
+	touched  time.Time
+	dropped  bool
 }
 
 type deliveryLog struct {
@@ -148,15 +151,28 @@ func (l *deliveryLog) written(msg WSEventOut, sent bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	rl := l.runs[msg.RunID]
-	if rl == nil || rl.exec != msg.Exec || msg.Seq <= rl.writtenSeq {
+	if rl == nil || rl.exec != msg.Exec {
 		return
 	}
-	rl.writtenSeq = msg.Seq
+	if msg.Seq > rl.writtenSeq {
+		rl.writtenSeq = msg.Seq
+	}
 	rl.touched = l.now()
-	if !l.enabled || !sent {
+	if !l.enabled || !sent || msg.Seq <= rl.ackedSeq {
 		return
 	}
-	rl.unacked = append(rl.unacked, msg)
+	// Usually the newest; a message carried over from a failed write can come after later ones.
+	i := sort.Search(len(rl.unacked), func(i int) bool { return rl.unacked[i].Seq >= msg.Seq })
+	switch {
+	case i < len(rl.unacked) && rl.unacked[i].Seq == msg.Seq:
+		return // a replay of a message kept already
+	case i == len(rl.unacked):
+		rl.unacked = append(rl.unacked, msg)
+	default:
+		rl.unacked = append(rl.unacked, WSEventOut{})
+		copy(rl.unacked[i+1:], rl.unacked[i:])
+		rl.unacked[i] = msg
+	}
 	if len(rl.unacked) > maxUnackedPerRun {
 		if !rl.dropped {
 			logError("Run %s: more than %d events are unacknowledged; dropping the oldest", msg.RunID, maxUnackedPerRun)
@@ -167,6 +183,22 @@ func (l *deliveryLog) written(msg WSEventOut, sent bool) {
 	}
 }
 
+// kept reports whether msg, written earlier, is acknowledged or kept for replay: a failed write
+// of it needs no resend, the next connection replays it.
+func (l *deliveryLog) kept(msg WSEventOut) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	rl := l.runs[msg.RunID]
+	if rl == nil || rl.exec != msg.Exec {
+		return false
+	}
+	if msg.Seq <= rl.ackedSeq {
+		return true
+	}
+	i := sort.Search(len(rl.unacked), func(i int) bool { return rl.unacked[i].Seq >= msg.Seq })
+	return i < len(rl.unacked) && rl.unacked[i].Seq == msg.Seq
+}
+
 // ack forgets every message of the run's execution exec up to and including seq. An ack for an
 // earlier execution of the run is ignored.
 func (l *deliveryLog) ack(runID, exec string, seq uint64) {
@@ -175,6 +207,9 @@ func (l *deliveryLog) ack(runID, exec string, seq uint64) {
 	rl := l.runs[runID]
 	if rl == nil || rl.exec != exec {
 		return
+	}
+	if seq > rl.ackedSeq {
+		rl.ackedSeq = seq
 	}
 	i := sort.Search(len(rl.unacked), func(i int) bool { return rl.unacked[i].Seq > seq })
 	switch {
@@ -255,13 +290,15 @@ func (l *deliveryLog) replay(isActive func(runID string) bool) []WSEventOut {
 	return out
 }
 
-// gc discards the logs of runs that no longer execute here and have been idle for idleRunLogTTL.
+// gc discards the logs of runs that no longer execute here, have nothing queued and have been idle
+// for idleRunLogTTL.
 func (l *deliveryLog) gc(isActive func(runID string) bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	cutoff := l.now().Add(-idleRunLogTTL)
 	for id, rl := range l.runs {
-		if rl.touched.Before(cutoff) && !isActive(id) {
+		// Not while some of its messages are still queued: the log is what claims the run.
+		if rl.touched.Before(cutoff) && !isActive(id) && rl.writtenSeq >= rl.nextSeq {
 			delete(l.runs, id)
 		}
 	}

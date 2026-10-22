@@ -227,6 +227,44 @@ func TestDeliveryLog_KeepsWhatWasWritten(t *testing.T) {
 	assert.Empty(t, l.replay(noneActive))
 }
 
+// A message carried over from a failed write can be written after later ones (a later one given
+// up on, or written on the next connection first). It must still be kept for replay, in order.
+func TestDeliveryLog_KeepsALateCarriedMessage(t *testing.T) {
+	l := newDeliveryLog()
+	l.setEnabled(true)
+	e1 := stamped(t, l, WSEventOut{RunID: "a"})
+	e2 := stamped(t, l, WSEventOut{RunID: "a"})
+	e3 := stamped(t, l, WSEventOut{RunID: "a"})
+	l.written(e1, true)
+	l.written(e3, true)
+	assert.False(t, l.kept(e2))
+	l.written(e2, true) // carried, written last
+	assert.Equal(t, []uint64{1, 2, 3}, seqs(l.replay(noneActive)))
+	assert.True(t, l.kept(e2))
+
+	// An acknowledged message is not kept again by a late write.
+	l.ack("a", e1.Exec, 3)
+	l.written(e2, true)
+	assert.Empty(t, l.replay(noneActive))
+	assert.True(t, l.kept(e2), "acknowledged: nothing to resend")
+}
+
+// The log of a run with queued messages is what claims the run after a reconnect; an outage longer
+// than idleRunLogTTL must not discard it.
+func TestDeliveryLog_GCKeepsRunsWithQueuedMessages(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	l := newDeliveryLog()
+	l.now = func() time.Time { return now }
+	l.setEnabled(true)
+	ev := stamped(t, l, WSEventOut{RunID: "finished"})
+	now = now.Add(2 * idleRunLogTTL)
+	l.gc(noneActive)
+	assert.Equal(t, []string{"finished"}, l.undeliveredRuns())
+	l.written(ev, false)
+	l.gc(noneActive)
+	assert.Empty(t, l.undeliveredRuns())
+}
+
 // A run that finished while its last events (possibly "complete") were lost is still claimed,
 // after the runs that are executing: the coordinator honours only so many claims.
 func TestResumeRunIDs_ExecutingRunsFirstThenRunsWithUnackedEvents(t *testing.T) {

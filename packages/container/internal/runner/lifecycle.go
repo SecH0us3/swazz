@@ -6,6 +6,7 @@
 package runner
 
 import (
+	"context"
 	"time"
 
 	swazzGrpc "swazz-engine/internal/grpc"
@@ -59,8 +60,10 @@ func (r *Runner) Close() {
 
 // Stop signals the runner to halt after the current request completes.
 func (r *Runner) Stop() {
+	r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
 	r.lifecycle.shouldStop.Store(true)
 	r.lifecycle.isPaused.Store(false)
+	r.pause.mu.Unlock()
 	r.lifecycle.mu.Lock()
 	if r.lifecycle.cancel != nil {
 		r.lifecycle.cancel()
@@ -82,9 +85,12 @@ func (r *Runner) Resume() {
 	r.pause.cond.Broadcast()
 }
 
-// Hold stops the main loop from starting new requests (as Pause does) until Release, whatever
-// the user pauses or resumes meanwhile: the agent holds a scan while its events cannot reach the
-// coordinator, so the user's own pause state is left as it is.
+// Hold stops the scan from sending requests until Release, whatever the user pauses or resumes
+// meanwhile: the agent holds a scan while its events cannot reach the coordinator, so the user's
+// own pause state is left as it is. The main loops start nothing new, and every request of every
+// phase waits before it is sent (executeRequest), so a held scan emits no new results. Non-goal:
+// requests that do not go through executeRequest (the rate-limit probe's burst, authentication)
+// still run; they are few and bounded.
 func (r *Runner) Hold() {
 	r.lifecycle.held.Store(true)
 }
@@ -108,6 +114,25 @@ func (r *Runner) IsRunning() bool { return r.lifecycle.isRunning.Load() }
 func (r *Runner) waitIfPaused() {
 	r.pause.mu.Lock()
 	for (r.lifecycle.isPaused.Load() || r.lifecycle.held.Load()) && !r.lifecycle.shouldStop.Load() {
+		r.pause.cond.Wait()
+	}
+	r.pause.mu.Unlock()
+}
+
+// waitWhileHeld blocks a request while the runner is held, until it is released, stopped, or ctx
+// ends.
+func (r *Runner) waitWhileHeld(ctx context.Context) {
+	if !r.lifecycle.held.Load() {
+		return
+	}
+	stopWaking := context.AfterFunc(ctx, func() {
+		r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
+		r.pause.cond.Broadcast()
+		r.pause.mu.Unlock()
+	})
+	defer stopWaking()
+	r.pause.mu.Lock()
+	for r.lifecycle.held.Load() && !r.lifecycle.shouldStop.Load() && ctx.Err() == nil {
 		r.pause.cond.Wait()
 	}
 	r.pause.mu.Unlock()
