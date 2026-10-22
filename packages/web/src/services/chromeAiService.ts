@@ -130,23 +130,24 @@ export async function isChromeAIAvailable(): Promise<boolean> {
 }
 
 export type ChromeAISessionResult =
-  | { session: any; status: 'ready' }
+  | { session: any; status: 'ready'; legacy: boolean }
   | { session: null; status: Exclude<ChromeAIStatus, 'ready'> };
 
 /**
  * Opens a Prompt API session with the given system prompt on the factory it found ready. Reports
  * the model's status instead when it is not ready. The caller prompts the session and must
- * destroy it. create() may still reject (quota, permission); that is thrown to the caller.
+ * destroy it. create() may still reject (quota, permission, abort); that is thrown to the caller.
+ * `legacy` marks the origin-trial API, whose streams send the whole text so far in each chunk.
  */
-export async function openChromeAISession(systemPrompt: string): Promise<ChromeAISessionResult> {
+export async function openChromeAISession(systemPrompt: string, signal?: AbortSignal): Promise<ChromeAISessionResult> {
   const api = getPromptApi();
   if (!api || typeof api.factory.create !== 'function') return { session: null, status: 'unavailable' };
   const status = await statusOf(api);
   if (status !== 'ready') return { session: null, status };
   const session = api.legacy
-    ? await api.factory.create({ systemPrompt })
-    : await api.factory.create({ ...PROMPT_LANGUAGES, initialPrompts: [{ role: 'system', content: systemPrompt }] });
-  return { session, status: 'ready' };
+    ? await api.factory.create({ systemPrompt, signal })
+    : await api.factory.create({ ...PROMPT_LANGUAGES, initialPrompts: [{ role: 'system', content: systemPrompt }], signal });
+  return { session, status: 'ready', legacy: api.legacy };
 }
 
 /** openChromeAISession for callers that only need the session, or null when the model is not ready. */

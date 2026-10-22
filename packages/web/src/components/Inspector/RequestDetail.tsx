@@ -9,7 +9,7 @@ import { DocsLink } from '../Shared/DocsLink.js';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, parseQueryParamList, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
-import { generateAdaptivePoc, type AdaptivePocResult } from '../../services/adaptivePocService.js';
+import { generateAdaptivePoc, codeFromReply, type AdaptivePocResult } from '../../services/adaptivePocService.js';
 import { tokenizeCode } from '../../utils/syntaxHighlight.js';
 import { FormattedMarkdown } from '../Shared/FormattedMarkdown.js';
 import { AiEngineInfoModal } from '../Shared/AiEngineInfoModal.js';
@@ -228,6 +228,7 @@ export function RequestDetail({
     const [pocMode, setPocMode] = useState<'template' | 'adaptive'>('template');
     const [adaptiveCache, setAdaptiveCache] = useState<Record<string, AdaptivePocResult>>({});
     const [generatingAdaptive, setGeneratingAdaptive] = useState(false);
+    const [adaptivePartial, setAdaptivePartial] = useState('');
     const [analyzingFindingId, setAnalyzingFindingId] = useState<string | null>(null);
     const [showAiInfoModal, setShowAiInfoModal] = useState(false);
 
@@ -334,7 +335,11 @@ export function RequestDetail({
         }
 
         let active = true;
+        const controller = new AbortController();
+        let latestPartial = '';
+        let frame = 0;
         setGeneratingAdaptive(true);
+        setAdaptivePartial('');
         const firstFinding = result.analyzerFindings?.[0];
 
         generateAdaptivePoc({
@@ -347,10 +352,23 @@ export function RequestDetail({
             message: firstFinding?.message,
             level: firstFinding?.level,
             evidence: firstFinding?.evidence,
+        }, {
+            signal: controller.signal,
+            // One render per frame at most: a stream can deliver far more chunks than that.
+            onPartial: text => {
+                latestPartial = text;
+                if (frame === 0) {
+                    frame = requestAnimationFrame(() => {
+                        frame = 0;
+                        if (active) setAdaptivePartial(latestPartial);
+                    });
+                }
+            },
         }).then(res => {
             if (active) {
                 setAdaptiveCache(prev => ({ ...prev, [pocLang]: res }));
                 setGeneratingAdaptive(false);
+                setAdaptivePartial('');
             }
         }).catch(() => {
             if (active) {
@@ -360,7 +378,10 @@ export function RequestDetail({
 
         return () => {
             active = false;
+            controller.abort();
+            cancelAnimationFrame(frame);
             setGeneratingAdaptive(false);
+            setAdaptivePartial('');
         };
     }, [mainTab, pocMode, pocLang, result.id, initialUrl, hasBody]);
 
@@ -372,7 +393,7 @@ export function RequestDetail({
             body: hasBody ? result.payload : undefined,
         };
         if (pocMode === 'adaptive') {
-            return adaptiveCache[pocLang]?.code || '';
+            return adaptiveCache[pocLang]?.code || codeFromReply(adaptivePartial, true);
         }
         if (pocLang === 'curl') return generateCurl(reqOpts);
         if (pocLang === 'python') return generatePython(reqOpts);
@@ -814,6 +835,8 @@ export function RequestDetail({
                             <div className="poc-header-actions">
                                 <button 
                                     className="btn btn-secondary btn-sm"
+                                    disabled={pocMode === 'adaptive' && generatingAdaptive}
+                                    title={pocMode === 'adaptive' && generatingAdaptive ? 'Wait for the script to finish generating' : undefined}
                                     onClick={() => {
                                         const code = getActivePocCode();
                                         copy(code, 'poc');
@@ -827,19 +850,20 @@ export function RequestDetail({
                         {pocMode === 'adaptive' && (
                             <div className="poc-adaptive-banner">
                                 <span className="poc-adaptive-badge">
-                                    {adaptiveCache[pocLang] && !adaptiveCache[pocLang].simulated
+                                    {(adaptiveCache[pocLang] && !adaptiveCache[pocLang].simulated) || (!adaptiveCache[pocLang] && adaptivePartial)
                                         ? '⚡ Gemini Nano (Defensive QA Regression Test)'
                                         : '🛠️ Deterministic Regression Script'}
                                 </span>
                                 {generatingAdaptive && (
                                     <span className="poc-generating-indicator">
-                                        <span className="spinner-sm" /> Generating script...
+                                        <span className="spinner-sm" /> {adaptivePartial ? 'Generating with on-device AI...' : 'Generating script...'}
                                     </span>
                                 )}
                                 {!generatingAdaptive && adaptiveCache[pocLang]?.fallbackReason && (
                                     <span className="poc-fallback-note">
                                         {{
                                             unavailable: 'On-device AI (Chrome Prompt API) is not available in this browser, so a rule-based template was used.',
+                                            timeout: 'On-device AI took too long, so a rule-based template was used.',
                                             downloadable: 'Chrome has not downloaded its on-device model (Gemini Nano) yet, so a rule-based template was used.',
                                             failed: 'On-device AI failed or did not return a usable script, so a rule-based template was used.',
                                         }[adaptiveCache[pocLang].fallbackReason!]}
@@ -849,7 +873,7 @@ export function RequestDetail({
                         )}
 
                         <div className="poc-code-wrapper">
-                            {generatingAdaptive && !adaptiveCache[pocLang] ? (
+                            {generatingAdaptive && !adaptiveCache[pocLang] && !adaptivePartial ? (
                                 <div className="poc-loading-state">
                                     <span className="spinner-sm" />
                                     <span>Generating adaptive regression test script (on-device AI when available)...</span>
