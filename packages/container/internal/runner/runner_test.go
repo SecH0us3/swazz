@@ -1193,7 +1193,7 @@ func TestRunner_MaxScanDurationExcludesHeldTime(t *testing.T) {
 			IterationsPerProfile: 5,
 			Concurrency:          1,
 			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
-			MaxScanDurationMin:   3000, // 3s here: the scan itself needs far less, even under -race
+			MaxScanDurationMin:   1000, // 1s here: the scan itself needs far less, even under -race
 		},
 	}, nil)
 	defer r.Close()
@@ -1201,7 +1201,7 @@ func TestRunner_MaxScanDurationExcludesHeldTime(t *testing.T) {
 	r.Hold()
 	done := make(chan error, 1)
 	go func() { done <- r.Start(context.Background()) }()
-	time.Sleep(3500 * time.Millisecond) // held past the maximum
+	time.Sleep(1300 * time.Millisecond) // held past the maximum
 	assert.False(t, r.stopped(), "stopped while held")
 	r.Release()
 	select {
@@ -1211,5 +1211,5 @@ func TestRunner_MaxScanDurationExcludesHeldTime(t *testing.T) {
 		t.Fatal("the released scan did not finish")
 	}
 	assert.False(t, r.stopped(), "the held time was charged to the scan")
-	assert.GreaterOrEqual(t, r.heldFor(), 3500*time.Millisecond)
+	assert.GreaterOrEqual(t, r.heldFor(), 1300*time.Millisecond)
 }

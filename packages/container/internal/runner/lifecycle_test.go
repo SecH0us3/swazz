@@ -273,7 +273,7 @@ func TestExecuteRequest_WaitsWhileHeld(t *testing.T) {
 	r.Stop()
 	select {
 	case res := <-results:
-		assert.Contains(t, res.Error, "not sent")
+		assert.True(t, res.NotSent)
 	case <-time.After(5 * time.Second):
 		t.Fatal("a stopped held request kept waiting")
 	}
@@ -306,10 +306,19 @@ func TestLifecycle_WaitIfPausedEndsWithItsContext(t *testing.T) {
 }
 
 // A request the scan stopped before sending is not a result: it is not counted or streamed.
-func TestSendStats_DropsRequestsNotSent(t *testing.T) {
+func TestNotSentResults_AreNeitherCountedNorStreamed(t *testing.T) {
 	r := &Runner{}
-	assert.True(t, notSent(&swagger.FuzzResult{Error: errNotSentWhileHeld}))
-	assert.False(t, notSent(&swagger.FuzzResult{Error: "Request timed out"}))
-	assert.False(t, notSent(nil))
-	assert.False(t, r.sendStats(statsMsg{result: &swagger.FuzzResult{Error: errNotSentWhileHeld}}))
+	assert.False(t, r.sendStats(statsMsg{result: &swagger.FuzzResult{NotSent: true}}))
+
+	r = New(&swagger.Config{}, nil)
+	defer r.Close()
+	events := r.Subscribe()
+	r.BroadcastResult(&swagger.FuzzResult{NotSent: true})
+	r.BroadcastResult(&swagger.FuzzResult{ID: "sent"})
+	select {
+	case evt := <-events:
+		assert.Equal(t, "sent", evt.Data.(*swagger.FuzzResult).ID)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the sent result was not streamed")
+	}
 }

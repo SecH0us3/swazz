@@ -74,6 +74,8 @@ type agentSession struct {
 	// carry holds messages whose write failed when a connection dropped (possibly only after the
 	// next connection is up); the live connection sends them ahead of the queue.
 	carry chan interface{}
+	// sending counts the messages the write loop has taken and not finished writing.
+	sending atomic.Int32
 
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
@@ -96,15 +98,16 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 		connectTimeout:    connectTimeout,
 		writeTimeout:      writeTimeout,
 	}
-	// Still to reach the coordinator: queued, carried over from a failed write, or sent but not
-	// acknowledged (with a coordinator that acknowledges).
+	// Not written to a connection yet: queued, in the hand-off, being written, or carried over
+	// from a failed write (run events: anything stamped and not yet written).
 	s.dispatcher.unwrittenOutput = func() bool {
-		return s.dispatcher.outbox.pending() > 0 || len(s.outChan) > 0 || len(s.carry) > 0 ||
-			s.dispatcher.delivery.anyQueued()
+		return s.dispatcher.outbox.pending() > 0 || len(s.outChan) > 0 || s.sending.Load() > 0 ||
+			len(s.carry) > 0 || s.dispatcher.delivery.anyQueued()
 	}
+	// Still to reach the coordinator: unwritten, or written but not acknowledged (with a
+	// coordinator that acknowledges).
 	s.dispatcher.pendingOutput = func() bool {
-		return s.dispatcher.outbox.pending() > 0 || len(s.outChan) > 0 || len(s.carry) > 0 ||
-			len(s.dispatcher.delivery.undeliveredRuns()) > 0
+		return s.dispatcher.unwrittenOutput() || len(s.dispatcher.delivery.undeliveredRuns()) > 0
 	}
 	return s
 }
@@ -239,6 +242,8 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		ackTimerArmed := false
 		defer ackTimer.Stop()
 		send := func(msg interface{}) bool {
+			s.sending.Add(1)
+			defer s.sending.Add(-1)
 			ev, sequenced := msg.(WSEventOut)
 			sequenced = sequenced && ev.Seq > 0
 			// A run event that cannot be sent is given up on, so the run does not look undelivered forever.

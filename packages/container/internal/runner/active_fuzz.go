@@ -280,7 +280,7 @@ func (r *Runner) runActiveParameterFuzzing(
 			}
 
 			r.waitIfPaused(ctx)
-			if r.stopped() {
+			if r.stopped() || ctx.Err() != nil {
 				break
 			}
 

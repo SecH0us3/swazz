@@ -86,7 +86,7 @@ func (r *Runner) fuzzEndpoint(
 		}
 
 		r.waitIfPaused(ctx)
-		if r.stopped() {
+		if r.stopped() || ctx.Err() != nil {
 			break
 		}
 

@@ -36,9 +36,6 @@ import (
 // above the size baselines the response-size-anomaly analyzer compares against.
 const maxResponseRead = 8 << 20
 
-// errNotSentWhileHeld is the error of a request the scan stopped while it was held (see notSent).
-const errNotSentWhileHeld = "not sent: the scan stopped while it was held"
-
 func (r *Runner) executeRequest(
 	ctx context.Context,
 	baseURL, resolvedPath, originalPath, method string,
@@ -57,7 +54,8 @@ func (r *Runner) executeRequest(
 			ResolvedPath: resolvedPath,
 			Method:       method,
 			Profile:      profile,
-			Error:        errNotSentWhileHeld,
+			Error:        "not sent: the scan stopped while it was held",
+			NotSent:      true,
 			Timestamp:    time.Now().UnixMilli(),
 		}
 	}

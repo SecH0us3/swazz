@@ -313,6 +313,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		defer cancelTimer()
 		maxDuration := time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit
 		started, heldBefore := time.Now(), r.heldFor()
+		heldCheckFloor := scanDurationUnit / 60 // a second
 		go func() {
 			timer := time.NewTimer(maxDuration)
 			defer timer.Stop()
@@ -321,9 +322,9 @@ func (r *Runner) Start(ctx context.Context) error {
 				case <-timer.C:
 					if left := maxDuration - (time.Since(started) - (r.heldFor() - heldBefore)); left > 0 {
 						// Held meanwhile: that time is not the scan's. While still held, the time
-						// left does not shrink, so check back no more than once a second.
-						if r.Held() && left < time.Second {
-							left = time.Second
+						// left does not shrink, so check back no more often than once a second.
+						if r.Held() && left < heldCheckFloor {
+							left = heldCheckFloor
 						}
 						timer.Reset(left)
 						continue
@@ -428,7 +429,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		r.progress.currentProfile.Store(string(profile))
 
 		for epIdx, endpoint := range r.config.Endpoints {
-			if r.stopped() {
+			if r.stopped() || runCtx.Err() != nil {
 				break
 			}
 
@@ -494,7 +495,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 
 	for _, endpoint := range r.config.Endpoints {
 		r.waitIfPaused(ctx)
-		if r.stopped() {
+		if r.stopped() || ctx.Err() != nil {
 			break
 		}
 
@@ -585,6 +586,9 @@ func (r *Runner) LogError(format string, args ...any) { r.logError(format, args.
 
 func (r *Runner) BroadcastProgress() { r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()}) }
 func (r *Runner) BroadcastResult(res *swagger.FuzzResult) {
+	if res != nil && res.NotSent {
+		return
+	}
 	r.Broadcast(Event{Type: EventResult, Data: res})
 }
 
