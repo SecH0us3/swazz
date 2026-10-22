@@ -70,26 +70,88 @@ export function parseJsonFromLlmResponse<T>(rawText: string, fallback: T): T {
 }
 
 /**
- * Checks if Google Chrome Built-in Prompt API (Gemini Nano) is available on this device.
+ * Chrome's built-in Prompt API (Gemini Nano). Current Chrome exposes it as the global
+ * `LanguageModel`; the early origin trial exposed it as `window.ai.languageModel`, with a
+ * `systemPrompt` option instead of `initialPrompts`. Both are supported, the current one first.
  */
-export async function isChromeAIAvailable(): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
-  const ai = (window as any).ai || (globalThis as any).ai;
-  if (!ai || !ai.languageModel) return false;
+interface PromptApi {
+  factory: any;
+  legacy: boolean;
+}
 
-  try {
-    if (typeof ai.languageModel.availability === 'function') {
-      const avail = await ai.languageModel.availability();
-      return avail === 'readily' || avail === 'available';
-    }
-    if (typeof ai.languageModel.capabilities === 'function') {
-      const caps = await ai.languageModel.capabilities();
-      return caps?.available === 'readily' || caps?.available === 'available';
-    }
-    return false;
-  } catch {
-    return false;
+function getPromptApi(): PromptApi | null {
+  const g = globalThis as any;
+  if (g.LanguageModel) {
+    return { factory: g.LanguageModel, legacy: false };
   }
+  const ai = (typeof window !== 'undefined' && (window as any).ai) || g.ai;
+  if (ai?.languageModel) {
+    return { factory: ai.languageModel, legacy: true };
+  }
+  return null;
+}
+
+/** Language options for the current API: it expects them, and availability() and create() must agree. */
+const PROMPT_LANGUAGES = {
+  expectedInputs: [{ type: 'text', languages: ['en'] }],
+  expectedOutputs: [{ type: 'text', languages: ['en'] }],
+};
+
+/**
+ * State of the on-device model: 'ready' to prompt, 'downloadable' when Chrome has the API but the
+ * model still has to be downloaded (that needs a user gesture and time), 'unavailable' otherwise.
+ */
+export type ChromeAIStatus = 'ready' | 'downloadable' | 'unavailable';
+
+async function statusOf(api: PromptApi): Promise<ChromeAIStatus> {
+  try {
+    let avail: string | undefined;
+    if (typeof api.factory.availability === 'function') {
+      avail = await api.factory.availability(api.legacy ? undefined : PROMPT_LANGUAGES);
+    } else if (typeof api.factory.capabilities === 'function') {
+      avail = (await api.factory.capabilities())?.available;
+    }
+    if (avail === 'readily' || avail === 'available') return 'ready';
+    if (avail === 'downloadable' || avail === 'downloading' || avail === 'after-download') return 'downloadable';
+    return 'unavailable';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+export async function getChromeAIStatus(): Promise<ChromeAIStatus> {
+  const api = getPromptApi();
+  return api ? statusOf(api) : 'unavailable';
+}
+
+/** Checks if Google Chrome Built-in Prompt API (Gemini Nano) is ready on this device. */
+export async function isChromeAIAvailable(): Promise<boolean> {
+  return (await getChromeAIStatus()) === 'ready';
+}
+
+export type ChromeAISessionResult =
+  | { session: any; status: 'ready' }
+  | { session: null; status: Exclude<ChromeAIStatus, 'ready'> };
+
+/**
+ * Opens a Prompt API session with the given system prompt on the factory it found ready. Reports
+ * the model's status instead when it is not ready. The caller prompts the session and must
+ * destroy it. create() may still reject (quota, permission); that is thrown to the caller.
+ */
+export async function openChromeAISession(systemPrompt: string): Promise<ChromeAISessionResult> {
+  const api = getPromptApi();
+  if (!api || typeof api.factory.create !== 'function') return { session: null, status: 'unavailable' };
+  const status = await statusOf(api);
+  if (status !== 'ready') return { session: null, status };
+  const session = api.legacy
+    ? await api.factory.create({ systemPrompt })
+    : await api.factory.create({ ...PROMPT_LANGUAGES, initialPrompts: [{ role: 'system', content: systemPrompt }] });
+  return { session, status: 'ready' };
+}
+
+/** openChromeAISession for callers that only need the session, or null when the model is not ready. */
+export async function createChromeAISession(systemPrompt: string): Promise<any | null> {
+  return (await openChromeAISession(systemPrompt)).session;
 }
 
 /**
@@ -99,17 +161,11 @@ export async function isChromeAIAvailable(): Promise<boolean> {
 export async function explainFindingWithChromeAI(
   input: FindingAnalysisInput
 ): Promise<FindingAnalysisResult | null> {
-  const isAvailable = await isChromeAIAvailable();
-  if (!isAvailable) return null;
-
-  const ai = (window as any).ai || (globalThis as any).ai;
   let session: any = null;
 
   try {
-    session = await ai.languageModel.create({
-      systemPrompt: CHROME_AI_SYSTEM_PROMPT,
-      temperature: 0.2,
-    });
+    session = await createChromeAISession(CHROME_AI_SYSTEM_PROMPT);
+    if (!session) return null;
 
     const userPrompt = `Please analyze this security finding:
 Rule ID: ${input.ruleId || 'unknown'}

@@ -652,17 +652,39 @@ describe('RequestDetail Component', () => {
         fireEvent.click(adaptiveBtn);
 
         // Loading state should be displayed
-        expect(screen.getByText(/Generating adaptive regression test script with on-device AI/i)).toBeTruthy();
+        expect(screen.getByText(/Generating adaptive regression test script/i)).toBeTruthy();
 
         // Switch back to Template mode - triggers cleanup
         const templateBtn = screen.getByRole('button', { name: /📄 Template/i });
         fireEvent.click(templateBtn);
 
         // Loading state should no longer be displayed
-        expect(screen.queryByText(/Generating adaptive regression test script with on-device AI/i)).toBeNull();
+        expect(screen.queryByText(/Generating adaptive regression test script/i)).toBeNull();
 
         unmount();
         resolvePromise({ code: '', model: '', simulated: true });
+        spy.mockRestore();
+    });
+
+    it('says when Adaptive AI fell back to the template because on-device AI is unavailable', async () => {
+        const spy = vi.spyOn(adaptivePocModule, 'generateAdaptivePoc').mockResolvedValue({
+            code: 'print("ok")', model: 'algorithmic-rules (local)', simulated: true, fallbackReason: 'unavailable',
+        });
+
+        render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+            />
+        );
+        fireEvent.click(screen.getByRole('tab', { name: /Live Replay & PoC Export/i }));
+        fireEvent.click(screen.getByRole('button', { name: /⚡ Adaptive AI/i }));
+
+        expect(await screen.findByText(/On-device AI \(Chrome Prompt API\) is not available/i)).toBeTruthy();
+        expect(screen.getByText(/Deterministic Regression Script/i)).toBeTruthy();
         spy.mockRestore();
     });
 

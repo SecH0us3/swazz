@@ -72,7 +72,7 @@ export const AiEngineInfoModal: React.FC<AiEngineInfoModalProps> = ({ onClose })
               <span className="badge badge-ai-model">⚡ On-Device</span>
             </div>
             <p className="ai-info-tier-desc">
-              Executes Gemini Nano via <code>window.ai.languageModel</code> locally. 0 latency, 0 cloud cost, 100% private.
+              Executes Gemini Nano locally via Chrome's Prompt API (<code>LanguageModel</code>; older Chrome builds: <code>window.ai.languageModel</code>). 0 latency, 0 cloud cost, 100% private.
             </p>
           </div>
 
