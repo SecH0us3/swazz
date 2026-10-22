@@ -75,24 +75,19 @@ func (r *Runner) executeWebSocketRequest(
 		RequestHeaders: mergedHeaders,
 	}
 
-	// Try to get or create client for this URL
-	var client *ws.Client
-	c, ok := r.wsClients.Load(urlStr)
-	if !ok {
-		client = ws.NewClient(r.allowPrivateIPs())
-		r.wsClients.Store(urlStr, client)
-	} else {
-		client = c.(*ws.Client)
-	}
+	// A client keeps no connection (each exchange opens its own), so one per request costs nothing
+	// and lets exchanges with the same endpoint run in parallel.
+	client := ws.NewClient(r.allowPrivateIPs())
 
 	// Each exchange is bounded like an HTTP or gRPC request: the run's context alone would let a
 	// target that accepts the connection and never answers stall the scan.
 	timeoutMs := 10000
 	r.configMu.RLock()
-	if r.config.Settings.TimeoutMs > 0 {
-		timeoutMs = r.config.Settings.TimeoutMs
-	}
+	settings := r.config.Settings
 	r.configMu.RUnlock()
+	if settings.TimeoutMs > 0 {
+		timeoutMs = settings.TimeoutMs
+	}
 	reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer reqCancel()
 
@@ -130,7 +125,7 @@ func (r *Runner) executeWebSocketRequest(
 		Endpoint:        urlStr,
 		Method:          "WS",
 		ResponseSize:    int64(len(respMsg)),
-		Settings:        r.config.Settings,
+		Settings:        settings,
 	}
 
 	analyzerChain := analyzer.NewRegistry()
