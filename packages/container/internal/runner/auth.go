@@ -26,6 +26,7 @@ import (
 
 	"github.com/pquerna/otp/totp"
 	"swazz-engine/internal/mcp"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
 
@@ -217,7 +218,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		r.logDebug("[Auth] Step %d: %s %s -> %d", i+1, step.Method, fullURL, resp.StatusCode)
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
-		_, _ = io.Copy(io.Discard, resp.Body)
+		safenet.DrainBody(resp.Body, safenet.MaxDrainBytes)
 		_ = resp.Body.Close()
 
 		if err != nil {

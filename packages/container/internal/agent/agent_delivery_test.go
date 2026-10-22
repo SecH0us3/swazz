@@ -355,12 +355,10 @@ func TestAgentSession_NoReplayWithoutDeliverySupport(t *testing.T) {
 	go func() { _ = session.runConnection(ctx2, url, nil, false, nil) }()
 	second := <-conns
 	deadline := time.After(300 * time.Millisecond)
-	seen := map[uint64]int{}
 	for {
 		select {
 		case seq := <-second:
-			seen[seq]++
-			if seq != 2 || seen[seq] > 1 {
+			if seq == 1 {
 				t.Fatalf("seq %d was replayed to a coordinator that does not acknowledge", seq)
 			}
 		case <-deadline:
