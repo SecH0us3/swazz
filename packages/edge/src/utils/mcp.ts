@@ -28,7 +28,7 @@ export const mcpTools: McpToolMetadata[] = [
   },
   {
     name: 'swazz_list_scans',
-    description: 'List scans for a specific project.',
+    description: 'List scans for a specific project, newest first. A response with next_cursor has more: pass it as cursor for the next page.',
     path: '/api/scans',
     method: 'GET',
     inputSchema: {
@@ -37,6 +37,14 @@ export const mcpTools: McpToolMetadata[] = [
         project_id: {
           type: 'string',
           description: 'The project ID to get scans for'
+        },
+        limit: {
+          type: 'integer',
+          description: 'Scans per page (default 50, at most 200)'
+        },
+        cursor: {
+          type: 'string',
+          description: 'next_cursor from the previous page'
         }
       },
       required: ['project_id']
