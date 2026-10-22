@@ -59,13 +59,22 @@ func (r *Runner) Config() *swagger.Config {
 	return r.config
 }
 
-// Results returns a copy of all accumulated FuzzResults.
+// Results returns the successful results kept for the post-scan phases (see retainResult): a
+// bounded sample, in which results marked Slim carry their findings but no payload, body or
+// headers. Use WholeResults where those are needed.
 func (r *Runner) Results() []*swagger.FuzzResult {
 	r.resultsMu.Lock()
 	defer r.resultsMu.Unlock()
 	res := make([]*swagger.FuzzResult, len(r.allResults))
 	copy(res, r.allResults)
 	return res
+}
+
+// WholeResults returns the kept results that still carry their payload, body and headers.
+func (r *Runner) WholeResults() []*swagger.FuzzResult {
+	r.resultsMu.Lock()
+	defer r.resultsMu.Unlock()
+	return replayCandidates(r.allResults)
 }
 
 // GetWAFCheckResult returns the result of the pre-scan WAF check, if any.
@@ -162,7 +171,8 @@ type Runner struct {
 	harvestedIDs  sync.Map // path prefix → []string
 	idSources     sync.Map // ID string → source string
 	resultsMu     sync.Mutex
-	allResults    []*swagger.FuzzResult
+	allResults    []*swagger.FuzzResult // see retainResult
+	retained      retainedResults
 	limiter       *ConcurrencyLimiter
 	gate          license.Gate
 
@@ -427,8 +437,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 
 	r.resultsMu.Lock()
-	candidates := make([]*swagger.FuzzResult, len(r.allResults))
-	copy(candidates, r.allResults)
+	candidates := replayCandidates(r.allResults)
 	r.resultsMu.Unlock()
 
 	detector := bola.NewDetector(r)

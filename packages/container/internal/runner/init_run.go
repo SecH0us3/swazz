@@ -122,7 +122,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	go r.statsAggregator(stats)
 
 	r.resultsMu.Lock()
-	r.allResults = nil
+	r.allResults, r.retained = nil, retainedResults{}
 	r.resultsMu.Unlock()
 
 	return ctx, nil
