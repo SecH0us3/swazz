@@ -9,6 +9,7 @@ import { mcpTools } from '../utils/mcp';
 import { getUserIdFromRequest } from '../utils/auth';
 import { errorStatus } from '../utils/http';
 import { ValidationError, isValidId, LIMITS, readJsonBody, reqString } from '../utils/validation';
+import { coordinatorStub } from '../utils/coordinator';
 
 async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promise<any> {
   if (!reqBody || typeof reqBody !== 'object') {
@@ -150,8 +151,7 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     const connectionId = crypto.randomUUID();
-    const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = c.env.COORDINATOR_DO.get(doId);
+    const stub = coordinatorStub(c.env);
 
     const requestUrl = new URL(c.req.url);
     const host = c.req.header('Host') || c.req.header('host') || requestUrl.host;
@@ -204,8 +204,7 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
 
     const responsePayload = await handleMcpJsonRpc(body, c, app);
     if (responsePayload) {
-      const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-      const stub = c.env.COORDINATOR_DO.get(doId);
+      const stub = coordinatorStub(c.env);
       await stub.fetch(new Request(`http://localhost/sse-send?connectionId=${connectionId}`, {
         method: 'POST',
         body: JSON.stringify(responsePayload)

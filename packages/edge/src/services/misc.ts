@@ -7,6 +7,7 @@ import { Env } from '../env';
 import { IMiscRepository } from '../repositories/misc';
 import { IAuthRepository, AuthRepository } from '../repositories/auth';
 import { validateProxyTargetUrl } from '../utils/ssrf';
+import { coordinatorStub } from '../utils/coordinator';
 
 export function normalizeHostname(urlStr: string): string | null {
   if (!urlStr || typeof urlStr !== 'string') return null;
@@ -236,8 +237,7 @@ export class MiscService implements IMiscService {
     parsedBody.userId = userId || '';
     const newBodyText = JSON.stringify(parsedBody);
 
-    const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = this.env.COORDINATOR_DO.get(id);
+    const stub = coordinatorStub(this.env);
     const res = await stub.fetch(new Request('http://internal/parse', { method: 'POST', body: newBodyText }));
 
     const resText = await res.text();

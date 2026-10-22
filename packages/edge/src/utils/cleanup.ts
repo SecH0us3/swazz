@@ -8,6 +8,7 @@ import { logInfo, logWarn, logError } from '../../../common/logging/logger';
 import { hashApiKey } from './auth';
 import { CleanupRepository } from '../repositories/cleanup';
 import type { Env } from '../env';
+import { coordinatorStub } from './coordinator';
 
 export async function cleanupSecurityTables(db: D1Database, env?: any, ctx?: any): Promise<void> {
   try {
@@ -85,9 +86,8 @@ export async function cleanupScheduledDeletions(env: Env, ctx?: any): Promise<vo
     // 3. Revoke active WebSocket runner connections in Durable Object in parallel
     await Promise.all(userIds.map(async (userId) => {
       try {
-        const doId = env.COORDINATOR_DO.idFromName('global-coordinator');
-        const stub = env.COORDINATOR_DO.get(doId);
-        const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, {
+        const stub = coordinatorStub(env);
+        const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${encodeURIComponent(userId)}`, {
           method: 'POST'
         }));
         if (!doRes.ok) {

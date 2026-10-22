@@ -23,6 +23,7 @@ import {
   type AuthenticatorTransport,
 } from '@simplewebauthn/server';
 import { sendVerificationEmail } from './email';
+import { coordinatorStub } from '../utils/coordinator';
 
 const VALID_TRANSPORTS = new Set<AuthenticatorTransport>([
   'ble', 'hybrid', 'internal', 'nfc', 'usb'
@@ -549,9 +550,8 @@ export class AuthService implements IAuthService {
     deletionCache.delete(userId);
 
     try {
-      const doId = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-      const stub = this.env.COORDINATOR_DO.get(doId);
-      await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, { method: 'POST' }));
+      const stub = coordinatorStub(this.env);
+      await stub.fetch(new Request(`http://do/revoke-user?userId=${encodeURIComponent(userId)}`, { method: 'POST' }));
     } catch {}
 
     return { status: 'deletion_scheduled', eta_days: 7 };

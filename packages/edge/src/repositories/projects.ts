@@ -7,6 +7,7 @@ import { Env } from '../env';
 import { Project, Webhook } from '../types';
 import { ulid } from 'ulidx';
 import { BaseService } from './base';
+import { coordinatorStub } from '../utils/coordinator';
 
 export interface IProjectRepository {
   getProjects(userId: string | null): Promise<Project[]>;
@@ -304,8 +305,7 @@ export class ProjectRepository extends BaseService implements IProjectRepository
     let totalBusy = 0;
     let runnersList: any[] = [];
     try {
-      const doId = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-      const stub = this.env.COORDINATOR_DO.get(doId);
+      const stub = coordinatorStub(this.env);
       const doRes = await stub.fetch(new Request('http://do/runners'));
       if (doRes.ok) {
         const data = await doRes.json() as { runners: any[] };

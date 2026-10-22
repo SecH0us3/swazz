@@ -10,6 +10,7 @@ import { hashApiKey } from '../utils/auth';
 import { ScansRepository } from '../repositories/scans';
 import { isValidRunId, serializeScanConfig, writeScanConfig } from './scanConfigStore';
 import { SCAN_NOT_QUEUED } from '../utils/runnerMessages';
+import { coordinatorStub } from '../utils/coordinator';
 
 export interface IRunnersService {
   connect(
@@ -137,8 +138,7 @@ export class RunnersService implements IRunnersService {
       }
     }
 
-    const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = this.env.COORDINATOR_DO.get(id);
+    const stub = coordinatorStub(this.env);
     const req = new Request(originalUrl, rawRequest);
     const url = new URL(req.url);
     url.pathname = '/connect-runner';
@@ -162,8 +162,7 @@ export class RunnersService implements IRunnersService {
       throw new Error('Unauthorized|401');
     }
 
-    const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = this.env.COORDINATOR_DO.get(id);
+    const stub = coordinatorStub(this.env);
     const res = await stub.fetch(new Request('http://do/runners'));
     if (!res.ok) {
       throw new Error('Failed to fetch runners|500');
@@ -195,8 +194,7 @@ export class RunnersService implements IRunnersService {
       await this.checkScanAccess(runId, userId, 'get:/api/projects/:id/scans');
     }
 
-    const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = this.env.COORDINATOR_DO.get(id);
+    const stub = coordinatorStub(this.env);
     const req = new Request(originalUrl, rawRequest);
     const url = new URL(req.url);
     url.pathname = '/connect-client';
@@ -314,8 +312,7 @@ export class RunnersService implements IRunnersService {
       await this.checkScanAccess(runId, userId, 'post:/api/projects/:id/scans');
     }
 
-    const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = this.env.COORDINATOR_DO.get(id);
+    const stub = coordinatorStub(this.env);
     const doReq = new Request('http://do/command', {
       method: 'POST',
       body: JSON.stringify({ runId, command: 'stop' }),
@@ -332,8 +329,7 @@ export class RunnersService implements IRunnersService {
       await this.checkScanAccess(runId, userId, 'post:/api/projects/:id/scans');
     }
 
-    const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = this.env.COORDINATOR_DO.get(id);
+    const stub = coordinatorStub(this.env);
     const doReq = new Request('http://do/command', {
       method: 'POST',
       body: JSON.stringify({ runId, command: 'pause' }),
@@ -356,8 +352,7 @@ export class RunnersService implements IRunnersService {
       await this.checkScanAccess(runId, userId, 'post:/api/projects/:id/scans');
     }
 
-    const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = this.env.COORDINATOR_DO.get(id);
+    const stub = coordinatorStub(this.env);
     const doReq = new Request('http://do/command', {
       method: 'POST',
       body: JSON.stringify({ runId, command: 'resume' }),
@@ -380,8 +375,7 @@ export class RunnersService implements IRunnersService {
       throw new Error('Unauthorized|401');
     }
 
-    const id = this.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = this.env.COORDINATOR_DO.get(id);
+    const stub = coordinatorStub(this.env);
     const doRes = await stub.fetch(
       new Request(`http://do/runners/restart?connectionId=${encodeURIComponent(connectionId)}&userId=${encodeURIComponent(userId)}`, {
         method: 'POST'

@@ -58,3 +58,54 @@ We evaluated three potential database routing strategies for future sharding exp
 1. **Standard UUIDv4**: We continue to generate standard UUIDs for all rows.
 2. **Unified Helper Access**: All API routes, queue consumers, and DO coordinators must call `getDB(env, shardId?)`.
 3. **Database Shard Routing**: When sharding is activated, `getDB` will resolve the `shardId` mapping and route queries to the correct Cloudflare D1 binding.
+
+---
+
+## 5. The coordinator Durable Object {#coordinator}
+
+The database is not the only single instance: there is one coordinator Durable Object (`RunnerCoordinator`, named `global-coordinator`) for the whole deployment. Everything live goes through it:
+
+* runner agents' WebSocket connections and the runner registry (`StateManager`);
+* scan dispatch from the scan queue, and the resume and delivery bookkeeping of running scans;
+* dashboard event streams, MCP SSE sessions and OOB callbacks;
+* spec parse requests forwarded to runners;
+* the stalled-scan watchdog, runner restarts and user revocation.
+
+A Durable Object runs single-threaded (requests interleave only at `await`s), so this one object bounds how many runners, streams and dispatches the platform can serve, and it is a single point of failure for all of them.
+
+### Helper abstraction: `coordinatorStub`
+
+As with `getDB`, every caller reaches the coordinator through one helper, and a test (`test/unit/utils/coordinator.test.ts`) fails if any other source file under `packages/edge/src` names the `COORDINATOR_DO` binding:
+
+```typescript
+import { coordinatorStub } from './utils/coordinator';
+
+const res = await coordinatorStub(env).fetch(new Request('http://do/runners'));
+```
+
+Today it always resolves to `global-coordinator`. Sharding gives it a key.
+
+### Sharding plan
+
+**Key: the owner of the runners.** A scan only ever runs on its project owner's runners (`getProjectOwnerForScan`), so one coordinator per owner (`owner:<userId>`) keeps a scan, its runners and its viewers in one object, with no cross-object messaging on the hot path.
+
+| Entry point | How it finds its shard |
+| --- | --- |
+| Runner connect | The owner of the runner's token or key |
+| Scan dispatch (queue consumer) | The scan's project owner |
+| Dashboard stream, scan controls | The scan's project owner, after the access check that already runs |
+| MCP session | The SSE stream (`/api/mcp/sse`) and the messages posted to it (`/api/mcp/message`) must land in the same object, so the shard key goes into the `connectionId` the stream hands out. Tool calls themselves go through the API routes and are routed there. |
+| Spec parse | The owner of the project being configured. The parse request carries only the user today, so it has to carry the project too. |
+| Runner list, runner restart | The project's owner (list) or the runner's owner (restart) |
+| OOB callback | Needs a lookup from scan to owner, or the shard key in the callback token |
+| Watchdog (cron) | Fans out to the owners that have active scans (one D1 query) |
+| User revocation | The user's own shard, plus the shards of projects they are a member of |
+
+With `AUTH_ENABLED` off there is no owner to route by: everything stays on the default key.
+
+**Migration.**
+1. Route behind a flag, with the default key `global-coordinator`, so nothing changes until it is switched.
+2. Switch: new scans dispatch to owner shards, and runners connect there. The global object stops dispatching but keeps the runners it holds until their scans end; their streams and controls keep routing to it by scan, since it is recorded which object a scan started on.
+3. Then the global object closes its idle runner sockets, and the runners reconnect to their owner's shard on their own. Scans still running there after a deadline are failed and re-queued: their resume and delivery state lives in that object's storage and is not copied.
+
+**Non-goals.** This does not shard D1 (sections 1–4). It also does not split one large owner across objects: an owner whose runners outgrow one object needs a second key level, such as owner plus runner pool.

@@ -24,6 +24,7 @@ import { ScansRepository } from './repositories/scans';
 import { getDevSentEmails, clearDevSentEmails } from './services/email';
 import { ValidationError, isValidId, LIMITS } from './utils/validation';
 import { errorStatus } from './utils/http';
+import { coordinatorStub } from './utils/coordinator';
 
 export { RunnerCoordinator } from './Coordinator';
 export { app };
@@ -310,7 +311,7 @@ async function runStalledScanWatchdog(env: Env, ctx: any): Promise<void> {
   try {
     // Without active scans there is nothing to watch: leave the coordinator asleep.
     if (!(await new ScansRepository(env).hasActiveScans())) return;
-    const stub = env.COORDINATOR_DO.get(env.COORDINATOR_DO.idFromName('global-coordinator'));
+    const stub = coordinatorStub(env);
     const res = await stub.fetch(new Request('http://do/watchdog', { method: 'POST' }));
     if (!res.ok) logError({ env, executionCtx: ctx }, 'Watchdog', `Stalled scan watchdog failed with status ${res.status}`);
   } catch (err) {
@@ -326,8 +327,7 @@ app.all('/api/oob/:runId/:uuid', async (c) => {
   if (!isValidId(runId) || !isValidId(uuid)) {
     return c.json({ error: 'Not Found' }, 404);
   }
-  const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-  const stub = c.env.COORDINATOR_DO.get(id);
+  const stub = coordinatorStub(c.env);
   const url = new URL(c.req.url);
   url.pathname = `/oob/${runId}/${uuid}`;
   const req = new Request(url.toString(), c.req.raw);
@@ -538,8 +538,7 @@ export default {
     if (batch.queue === 'swazz-scan-queue') {
       for (const msg of batch.messages) {
         try {
-          const doId = env.COORDINATOR_DO.idFromName('global-coordinator');
-          const stub = env.COORDINATOR_DO.get(doId);
+          const stub = coordinatorStub(env);
           const doReq = new Request('http://do/dispatch', {
             method: 'POST',
             body: JSON.stringify({
