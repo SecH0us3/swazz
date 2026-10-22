@@ -7,7 +7,7 @@ import { useCallback } from 'react';
 import type { RunStats, SwazzConfig } from '../types.js';
 import { toSummary } from './useRunner.js';
 import { loadSwaggerUrl, ParsingError } from '../services/swaggerService.js';
-import { dbStreamResult } from './useDb.js';
+import { createResultWriter } from './useDb.js';
 import type { ScanRun } from './useDb.js';
 import { useAppStore } from '../store/appStore.js';
 import { matchesPattern } from '../utils/glob.js';
@@ -18,15 +18,16 @@ interface UseFuzzSessionProps {
     updateConfig: (updates: Partial<SwazzConfig>) => void;
     start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, clientRunId?: string, onError?: (message: string) => void) => void;
     connectToExisting: (runId: string, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, onError?: (message: string) => void) => void;
-    saveRun: (runRecord: ScanRun, rows?: any[]) => void;
+    saveRun: (runRecord: ScanRun, rows?: any[]) => void | Promise<void>;
     getDb: () => IDBDatabase | null;
     showToast: (message: string, type: 'info' | 'success' | 'error') => void;
 }
 
 /**
- * The callbacks that follow one scan: each result is written to IndexedDB (no React state in the
- * hot path, only a throttled counter), and the run is saved when it completes or fails. A failed
- * run keeps its reason, so History shows why it failed (see ScanIssueBanner).
+ * The callbacks that follow one scan: each result is written to IndexedDB in batches (no React state
+ * in the hot path, only a throttled counter), and the run is saved when it completes or fails, once
+ * its last results are written. A failed run keeps its reason, so History shows why it failed (see
+ * ScanIssueBanner).
  */
 function createRunHandlers(
     runRec: ScanRun,
@@ -34,16 +35,23 @@ function createRunHandlers(
 ) {
     let liveCount = 0;
     let lastCountUpdate = 0;
+    const writer = createResultWriter(getDb, runRec.id);
+    // Rows still waiting for their batch go out if the tab is closed or reloaded mid-scan.
+    const onPageHide = () => { void writer.flush(); };
+    window.addEventListener('pagehide', onPageHide);
+
+    // Once the last results are written: refresh the count the Inspector reloads on, then save the
+    // run, so neither History nor the Inspector sees a finished run with rows still missing.
+    const end = (run: ScanRun) => writer.flush()
+        .then(() => {
+            window.removeEventListener('pagehide', onPageHide);
+            useAppStore.setState({ liveCount });
+            return saveRun(run);
+        })
+        .catch((err) => console.warn('[swazz] Failed to save the run:', err));
 
     const onResult = (raw: any) => {
-        const db = getDb();
-        if (!db) return;
-
-        const summary = toSummary(raw);
-        // Fire-and-forget IDB write — no await needed in the hot path
-        dbStreamResult(db, runRec.id, summary).catch((err) => {
-            console.warn('[swazz] IDB write error:', err);
-        });
+        writer.add(toSummary(raw));
 
         liveCount++;
         const now = Date.now();
@@ -54,14 +62,12 @@ function createRunHandlers(
     };
 
     const onComplete = (finalStats: RunStats) => {
-        saveRun({ ...runRec, completedAt: Date.now(), stats: finalStats });
-        useAppStore.setState({ liveCount });
+        void end({ ...runRec, completedAt: Date.now(), stats: finalStats });
         showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
     };
 
     const onError = (message: string) => {
-        saveRun({ ...runRec, completedAt: Date.now(), stats: useAppStore.getState().stats as RunStats, failureReason: message });
-        useAppStore.setState({ liveCount });
+        void end({ ...runRec, completedAt: Date.now(), stats: useAppStore.getState().stats as RunStats, failureReason: message });
         showToast('Scan failed — see the details above the results', 'error');
     };
 

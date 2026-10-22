@@ -128,17 +128,11 @@ async function dbGetRuns(db: IDBDatabase): Promise<ScanRun[]> {
 }
 
 /**
- * Write a single result row to IDB. Intended to be called per-SSE-event.
- * Opens a single-item transaction — fast and non-blocking.
+ * Write a single result row to IDB in its own transaction. A live scan goes through
+ * createResultWriter instead, which batches its rows.
  */
 export async function dbStreamResult(db: IDBDatabase, runId: string, row: ResultSummary): Promise<void> {
-    const tx = db.transaction('results', 'readwrite');
-    tx.objectStore('results').put({ ...row, runId });
-    return new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error);
-    });
+    return dbAppendResults(db, runId, [row]);
 }
 
 /**
@@ -148,13 +142,81 @@ async function dbAppendResults(db: IDBDatabase, runId: string, rows: ResultSumma
     if (rows.length === 0) return;
     const tx = db.transaction('results', 'readwrite');
     const store = tx.objectStore('results');
-    for (const r of rows) {
-        store.put({ ...r, runId });
+    try {
+        for (const r of rows) {
+            store.put({ ...r, runId });
+        }
+    } catch (err) {
+        // A row that cannot be stored (DataCloneError): the batch is all or nothing.
+        tx.abort();
+        throw err;
     }
     return new Promise<void>((resolve, reject) => {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
     });
+}
+
+// A live scan streams hundreds of results a second. One readwrite transaction per result queued
+// up behind each other (and behind the Inspector's reads), so the rows are batched: written once
+// RESULT_BATCH_ROWS are waiting or RESULT_BATCH_DELAY_MS after the first of them, whichever first.
+export const RESULT_BATCH_ROWS = 500;
+export const RESULT_BATCH_DELAY_MS = 100;
+
+export interface ResultWriter {
+    add(row: ResultSummary): void;
+    /** Writes what is waiting; resolves once every row added so far is written (or failed). */
+    flush(): Promise<void>;
+}
+
+export function createResultWriter(
+    getDb: () => IDBDatabase | null,
+    runId: string,
+    { maxRows = RESULT_BATCH_ROWS, maxDelayMs = RESULT_BATCH_DELAY_MS } = {},
+): ResultWriter {
+    let pending: ResultSummary[] = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Batches are written in order, one after the other.
+    let written: Promise<void> = Promise.resolve();
+
+    const flush = (): Promise<void> => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+        if (pending.length === 0) return written;
+        const rows = pending;
+        pending = [];
+        written = written.then(async () => {
+            const db = getDb();
+            if (!db) return;
+            try {
+                await dbAppendResults(db, runId, rows);
+            } catch (err) {
+                console.warn('[swazz] IDB write error:', err);
+                // One row that cannot be stored aborts its whole batch: keep the others.
+                if (rows.length > 1) {
+                    for (const row of rows) {
+                        await dbAppendResults(db, runId, [row]).catch(() => {});
+                    }
+                }
+            }
+        });
+        return written;
+    };
+
+    return {
+        add(row) {
+            pending.push(row);
+            if (pending.length >= maxRows) {
+                void flush();
+            } else if (!timer) {
+                timer = setTimeout(() => { void flush(); }, maxDelayMs);
+            }
+        },
+        flush,
+    };
 }
 
 /**
