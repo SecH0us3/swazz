@@ -416,7 +416,7 @@ func TestStringGen_OOBURL(t *testing.T) {
 		assert.NotContains(t, oobVal, "{{OOB_URL}}")
 		sstiVal, ok := g.generateString("", "").(string)
 		require.True(t, ok)
-		assert.NotContains(t, sstiVal, "{{7*7}}")
+		assert.Equal(t, "prefix_{{7*7}}_suffix", sstiVal, "the fixed probe the static fallback detects is kept")
 	})
 
 	t.Run("custom host without scheme and without api/oob", func(t *testing.T) {

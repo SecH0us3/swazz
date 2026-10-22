@@ -210,6 +210,11 @@ func (g *Generator) oobURL(uuidStr string) string {
 var sstiPrimes = []int{11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97}
 
 func (g *Generator) randomizeAndRegisterSSTI(s string) string {
+	// Without a run's store nothing could match a random expression; the fixed 7*7 / 7+'7' probe is
+	// what the analyzer's static fallback recognises.
+	if g.SSTIStore == nil {
+		return s
+	}
 	p1 := sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 	p2 := sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 	for p1 == p2 {

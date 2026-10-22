@@ -128,7 +128,9 @@ func (r *Runner) executeWebSocketRequest(
 		Settings:        settings,
 	}
 
-	result.AnalyzerFindings = r.analyzer.Analyze(input)
+	if r.analyzer != nil {
+		result.AnalyzerFindings = r.analyzer.Analyze(input)
+	}
 
 	return result
 }
