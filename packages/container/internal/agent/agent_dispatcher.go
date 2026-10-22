@@ -78,14 +78,19 @@ type AgentDispatcher struct {
 	coordinatorURL   string
 	token            string
 	disableTelemetry bool
-	outChan          chan<- interface{}
-	activeRunners    map[string]*runner.Runner
-	activeRunnersMu  sync.Mutex
-	parseReqSem      chan struct{}
-	delivery         *deliveryLog
-	sendMu           sync.Mutex
-	// writers counts the connections whose write loop is draining outChan (guarded by sendMu).
-	writers int
+
+	// outbox queues everything for the coordinator; its pump feeds outChan (agent_outbox.go).
+	outbox          *outbox
+	activeRunners   map[string]*runner.Runner
+	activeRunnersMu sync.Mutex
+	// holding: every scan is held (runner.Hold) until the outbox drains; guarded by
+	// activeRunnersMu, mirrored in held for the hot path.
+	holding      bool
+	held         atomic.Bool
+	holdingSince time.Time
+	parseReqSem  chan struct{}
+	delivery     *deliveryLog
+	sendMu       sync.Mutex
 
 	// Recycling (--recycle-when-idle): once no scan runs and everything sent was delivered, the
 	// agent exits, for its supervisor (Docker's restart policy) to start a clean process.
@@ -98,16 +103,19 @@ type AgentDispatcher struct {
 
 // NewAgentDispatcher creates a new dispatcher instance.
 func NewAgentDispatcher(coordinatorURL, token string, disableTelemetry bool, outChan chan<- interface{}) *AgentDispatcher {
-	return &AgentDispatcher{
+	d := &AgentDispatcher{
 		coordinatorURL:   coordinatorURL,
 		token:            token,
 		disableTelemetry: disableTelemetry,
-		outChan:          outChan,
+		outbox:           newOutbox(),
 		activeRunners:    make(map[string]*runner.Runner),
 		parseReqSem:      make(chan struct{}, 10),
 		delivery:         newDeliveryLog(),
 		exit:             os.Exit,
 	}
+	// The dispatcher lives as long as the agent process; so does its pump.
+	go d.outbox.pump(outChan, nil, d.releaseScans)
+	return d
 }
 
 // StopAllRunners stops all running jobs cleanly.
@@ -141,7 +149,7 @@ func (d *AgentDispatcher) ResumeRunIDs() []string {
 	for _, id := range ids {
 		seen[id] = true
 	}
-	for _, id := range d.delivery.unackedRuns() {
+	for _, id := range d.delivery.undeliveredRuns() {
 		if !seen[id] {
 			ids = append(ids, id)
 		}
@@ -158,46 +166,75 @@ func (d *AgentDispatcher) isActive(runID string) bool {
 
 // queueEvent numbers a run event and queues it for sending. sendMu makes the two one step: runs
 // send events from several goroutines, and a higher seq queued before a lower one would be lost.
-//
-// While a connection drains outChan, a full outChan is backpressure and the event waits for room.
-// With no connection up, nothing drains it: once it is full, every run would block here, under
-// sendMu, until the coordinator comes back. So then an event that is in the delivery log (a
-// coordinator that acknowledges events) is left to the log, which the next connection replays
-// before anything else; the log's own bound (maxUnackedPerRun) then applies.
+// Queueing never blocks under sendMu; past the outbox's high mark every scan is held until the
+// queue drains (see agent_outbox.go).
 func (d *AgentDispatcher) queueEvent(msg WSEventOut) {
+	d.outbox.waitRoom()
 	d.sendMu.Lock()
-	defer d.sendMu.Unlock()
-	stamped, ok, kept := d.delivery.stamp(msg)
+	stamped, ok := d.delivery.stamp(msg)
+	full := ok && d.outbox.push(stamped)
+	d.sendMu.Unlock()
 	if !ok {
 		logWarn("Dropping a late %s event of an earlier execution of run %s", msg.Type, msg.RunID)
 		return
 	}
-	if d.writers == 0 && kept {
-		select {
-		case d.outChan <- stamped:
-		default:
-		}
+	if full {
+		d.holdScans()
+	}
+}
+
+// queueMessage queues a message that is not a run event (a parse result).
+func (d *AgentDispatcher) queueMessage(msg interface{}) {
+	d.outbox.waitRoom()
+	if d.outbox.push(msg) {
+		d.holdScans()
+	}
+}
+
+// holdScans holds every scan, and those that start meanwhile, until the outbox drains to its low
+// mark (releaseScans): the coordinator is not taking events as fast as the scans make them.
+func (d *AgentDispatcher) holdScans() {
+	if d.held.Load() {
 		return
 	}
-	d.outChan <- stamped
-}
-
-// writerStarted records that a connection's write loop drains outChan. It must be called before
-// that loop takes the delivery log's replay: an event queueEvent left to the log while no writer
-// was running is then in the replay.
-func (d *AgentDispatcher) writerStarted() {
-	d.sendMu.Lock()
-	d.writers++
-	d.sendMu.Unlock()
-}
-
-// writerStopped records that a connection's write loop has stopped draining outChan.
-func (d *AgentDispatcher) writerStopped() {
-	d.sendMu.Lock()
-	if d.writers > 0 {
-		d.writers--
+	d.activeRunnersMu.Lock()
+	if !d.holding {
+		d.holding = true
+		d.held.Store(true)
+		d.holdingSince = time.Now()
+		logWarn("%d messages are waiting for the coordinator; holding every scan until they are sent", d.outbox.pending())
+		for _, r := range d.activeRunners {
+			if r != nil {
+				r.Hold()
+			}
+		}
 	}
-	d.sendMu.Unlock()
+	d.activeRunnersMu.Unlock()
+	// The pump releases the scans when a hand-off leaves the queue at its low mark. If it drained
+	// before holding was set, no hand-off is left to see that.
+	if d.outbox.queued() <= d.outbox.low {
+		d.releaseScans()
+	}
+}
+
+// releaseScans ends holdScans.
+func (d *AgentDispatcher) releaseScans() {
+	if !d.held.Load() {
+		return
+	}
+	d.activeRunnersMu.Lock()
+	defer d.activeRunnersMu.Unlock()
+	if !d.holding {
+		return
+	}
+	d.holding = false
+	d.held.Store(false)
+	logInfo("The coordinator caught up; resuming the scans held for %v", time.Since(d.holdingSince).Round(time.Second))
+	for _, r := range d.activeRunners {
+		if r != nil {
+			r.Release()
+		}
+	}
 }
 
 func eventOut(runID, exec, typ string, payload interface{}) WSEventOut {
@@ -290,7 +327,14 @@ func (d *AgentDispatcher) maybeRecycle() {
 		return
 	}
 	go func() {
-		defer d.recycling.Store(false)
+		// Once it exits, it stays recycling: exit does not return in the agent, and in a test a
+		// second maybeRecycle must not exit again.
+		exited := false
+		defer func() {
+			if !exited {
+				d.recycling.Store(false)
+			}
+		}()
 		deadline := time.Now().Add(recycleDrainTimeout)
 		for d.pendingOutput != nil && d.pendingOutput() && time.Now().Before(deadline) {
 			if len(d.ActiveRunIDs()) > 0 {
@@ -303,9 +347,11 @@ func (d *AgentDispatcher) maybeRecycle() {
 			return
 		}
 		logInfo("No scan is running: exiting so the runner restarts as a clean process (--recycle-when-idle)")
+		exited = true
 		d.exit(0)
 	}()
 }
+
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.
 func (d *AgentDispatcher) Dispatch(ctx context.Context, wsMsg WSMessageIn) {
 	switch wsMsg.Type {
@@ -466,6 +512,9 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	r := runner.New(runCfg, client)
 
 	d.activeRunnersMu.Lock()
+	if d.holding {
+		r.Hold()
+	}
 	d.activeRunners[dispatch.RunID] = r
 	d.activeRunnersMu.Unlock()
 
@@ -1041,6 +1090,6 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 				}
 			}
 		}
-		d.outChan <- msgPayload
+		d.queueMessage(msgPayload)
 	}()
 }

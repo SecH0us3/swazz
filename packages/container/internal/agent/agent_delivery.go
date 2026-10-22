@@ -26,7 +26,9 @@ import (
 // without having to guess when a dispatch actually started one.
 //
 // Numbers are assigned in the order events are queued for sending (AgentDispatcher.queueEvent),
-// so each run's events reach the wire in sequence order.
+// so each run's events reach the wire in sequence order. An event enters the log only once it is
+// written (written), so the log and the queue never hold the same event: a reconnect replays what
+// went out on an earlier connection, then the queue carries on where it stopped.
 //
 // The coordinator acknowledges every so many events and terminal ones; for the rest (the tail of
 // a run, a run it refuses) the agent asks once the connection has gone quiet (ackRequestMsg).
@@ -35,7 +37,8 @@ import (
 // acknowledges anything; with any other the log keeps nothing and replays nothing.
 //
 // Bounds: at most maxUnackedPerRun messages are kept per run (beyond that the oldest half is
-// dropped, which the coordinator sees as a gap), and the log of a run that is no longer executing is
+// dropped, which the coordinator sees as a gap; the outbox holds the scans long before a run queues
+// that many, see agent_outbox.go), and the log of a run that is no longer executing is
 // discarded once it has been idle for idleRunLogTTL.
 
 // deliveryHeader is set to "ack" by coordinators that acknowledge run events.
@@ -52,9 +55,12 @@ const (
 type runLog struct {
 	exec    string
 	nextSeq uint64
-	unacked []WSEventOut
-	touched time.Time
-	dropped bool
+	// writtenSeq is the highest seq written (or given up on: too large to send); the events after
+	// it are still queued.
+	writtenSeq uint64
+	unacked    []WSEventOut
+	touched    time.Time
+	dropped    bool
 }
 
 type deliveryLog struct {
@@ -109,13 +115,12 @@ func (l *deliveryLog) reset(runID string) string {
 	return rl.exec
 }
 
-// stamp gives msg the run's next sequence number and execution id and keeps it until it is
-// acknowledged. Callers queue the result under AgentDispatcher.sendMu, so a run's events are
-// queued in sequence order. A msg that names an execution (Exec) other than the run's current
-// one is a late event of an earlier execution: it is refused (false), since numbering it in the
-// current one would collide with that execution's own events. kept reports whether msg is in the
-// log, for the next connection to replay (only with a coordinator that acknowledges events).
-func (l *deliveryLog) stamp(msg WSEventOut) (stamped WSEventOut, ok, kept bool) {
+// stamp gives msg the run's next sequence number and execution id. Callers queue the result under
+// AgentDispatcher.sendMu, so a run's events are queued in sequence order. A msg that names an
+// execution (Exec) other than the run's current one is a late event of an earlier execution: it is
+// refused (false), since numbering it in the current one would collide with that execution's own
+// events.
+func (l *deliveryLog) stamp(msg WSEventOut) (WSEventOut, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	rl := l.runs[msg.RunID]
@@ -127,14 +132,29 @@ func (l *deliveryLog) stamp(msg WSEventOut) (stamped WSEventOut, ok, kept bool) 
 		rl = &runLog{exec: exec}
 		l.runs[msg.RunID] = rl
 	} else if msg.Exec != "" && msg.Exec != rl.exec {
-		return msg, false, false
+		return msg, false
 	}
 	rl.nextSeq++
 	msg.Seq = rl.nextSeq
 	msg.Exec = rl.exec
 	rl.touched = l.now()
-	if !l.enabled {
-		return msg, true, false
+	return msg, true
+}
+
+// written records that a stamped msg left the queue: written on the connection (or given up on).
+// It is kept until it is acknowledged. A msg of an execution that is no longer the run's current
+// one is not kept: a replay of it would be refused just the same.
+func (l *deliveryLog) written(msg WSEventOut, sent bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	rl := l.runs[msg.RunID]
+	if rl == nil || rl.exec != msg.Exec || msg.Seq <= rl.writtenSeq {
+		return
+	}
+	rl.writtenSeq = msg.Seq
+	rl.touched = l.now()
+	if !l.enabled || !sent {
+		return
 	}
 	rl.unacked = append(rl.unacked, msg)
 	if len(rl.unacked) > maxUnackedPerRun {
@@ -145,7 +165,6 @@ func (l *deliveryLog) stamp(msg WSEventOut) (stamped WSEventOut, ok, kept bool) 
 		// Copied, so the dropped events do not stay reachable through the backing array.
 		rl.unacked = append([]WSEventOut(nil), rl.unacked[len(rl.unacked)-maxUnackedPerRun/2:]...)
 	}
-	return msg, true, true
 }
 
 // ack forgets every message of the run's execution exec up to and including seq. An ack for an
@@ -183,14 +202,14 @@ func (l *deliveryLog) ackRequest(runID, exec string, seq uint64) (ackRequestMsg,
 	return ackRequestMsg{Type: "ack_request", RunID: runID, Exec: exec, Seq: seq}, true
 }
 
-// unackedRuns lists the runs that still have messages waiting for an acknowledgement, the most
-// recently active first.
-func (l *deliveryLog) unackedRuns() []string {
+// undeliveredRuns lists the runs that still have messages on their way: queued, or written but
+// not acknowledged; the most recently active first.
+func (l *deliveryLog) undeliveredRuns() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	var ids []string
 	for id, rl := range l.runs {
-		if len(rl.unacked) > 0 {
+		if len(rl.unacked) > 0 || rl.writtenSeq < rl.nextSeq {
 			ids = append(ids, id)
 		}
 	}

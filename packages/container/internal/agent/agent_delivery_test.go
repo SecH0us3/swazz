@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
@@ -41,10 +40,18 @@ func noneActive(string) bool { return false }
 
 func stamped(t *testing.T, l *deliveryLog, msg WSEventOut) WSEventOut {
 	t.Helper()
-	out, ok, _ := l.stamp(msg)
+	out, ok := l.stamp(msg)
 	if !ok {
 		t.Fatalf("stamp refused %+v", msg)
 	}
+	return out
+}
+
+// sent stamps msg and records it as written on the connection, as the write loop does.
+func sent(t *testing.T, l *deliveryLog, msg WSEventOut) WSEventOut {
+	t.Helper()
+	out := stamped(t, l, msg)
+	l.written(out, true)
 	return out
 }
 
@@ -60,10 +67,10 @@ func TestDeliveryLog_NumbersPerRunAndKeepsUntilAcked(t *testing.T) {
 	l := newDeliveryLog()
 	l.now = func() time.Time { return time.Unix(1_000_000, 0) } // replay order then falls back to run id
 	l.setEnabled(true)
-	a1 := stamped(t, l, WSEventOut{RunID: "a"})
+	a1 := sent(t, l, WSEventOut{RunID: "a"})
 	assert.Equal(t, uint64(1), a1.Seq)
-	assert.Equal(t, uint64(2), stamped(t, l, WSEventOut{RunID: "a"}).Seq)
-	b1 := stamped(t, l, WSEventOut{RunID: "b"})
+	assert.Equal(t, uint64(2), sent(t, l, WSEventOut{RunID: "a"}).Seq)
+	b1 := sent(t, l, WSEventOut{RunID: "b"})
 	assert.Equal(t, uint64(1), b1.Seq)
 	assert.Equal(t, []uint64{1, 2, 1}, seqs(l.replay(noneActive)))
 
@@ -72,11 +79,11 @@ func TestDeliveryLog_NumbersPerRunAndKeepsUntilAcked(t *testing.T) {
 	l.ack("a", a1.Exec, 2)
 	l.ack("b", b1.Exec, 5)
 	assert.Empty(t, l.replay(noneActive))
-	assert.Empty(t, l.unackedRuns())
+	assert.Empty(t, l.undeliveredRuns())
 	// Numbering continues after an ack; only a new dispatch starts a new execution.
-	assert.Equal(t, uint64(3), stamped(t, l, WSEventOut{RunID: "a"}).Seq)
+	assert.Equal(t, uint64(3), sent(t, l, WSEventOut{RunID: "a"}).Seq)
 	l.reset("a")
-	next := stamped(t, l, WSEventOut{RunID: "a"})
+	next := sent(t, l, WSEventOut{RunID: "a"})
 	assert.Equal(t, uint64(1), next.Seq)
 	assert.NotEmpty(t, next.Exec)
 	assert.NotEqual(t, a1.Exec, next.Exec, "a new execution gets a new exec id")
@@ -86,9 +93,9 @@ func TestDeliveryLog_NumbersPerRunAndKeepsUntilAcked(t *testing.T) {
 func TestDeliveryLog_IgnoresAcksOfAnotherExecution(t *testing.T) {
 	l := newDeliveryLog()
 	l.setEnabled(true)
-	old := stamped(t, l, WSEventOut{RunID: "a"})
+	old := sent(t, l, WSEventOut{RunID: "a"})
 	l.reset("a")
-	stamped(t, l, WSEventOut{RunID: "a"})
+	sent(t, l, WSEventOut{RunID: "a"})
 	l.ack("a", old.Exec, 1)
 	assert.Equal(t, []uint64{1}, seqs(l.replay(noneActive)))
 
@@ -97,8 +104,8 @@ func TestDeliveryLog_IgnoresAcksOfAnotherExecution(t *testing.T) {
 func TestDeliveryLog_AckRequestOnlyForUnacknowledgedEvents(t *testing.T) {
 	l := newDeliveryLog()
 	l.setEnabled(true)
-	e1 := stamped(t, l, WSEventOut{RunID: "a"})
-	stamped(t, l, WSEventOut{RunID: "a"})
+	e1 := sent(t, l, WSEventOut{RunID: "a"})
+	sent(t, l, WSEventOut{RunID: "a"})
 
 	req, ok := l.ackRequest("a", e1.Exec, 2)
 	assert.True(t, ok)
@@ -115,11 +122,11 @@ func TestDeliveryLog_AckRequestOnlyForUnacknowledgedEvents(t *testing.T) {
 // replay duplicates, so nothing is kept.
 func TestDeliveryLog_KeepsNothingWithoutCoordinatorSupport(t *testing.T) {
 	l := newDeliveryLog()
-	assert.Equal(t, uint64(1), stamped(t, l, WSEventOut{RunID: "a"}).Seq)
+	assert.Equal(t, uint64(1), sent(t, l, WSEventOut{RunID: "a"}).Seq)
 	assert.Empty(t, l.replay(noneActive))
 
 	l.setEnabled(true)
-	stamped(t, l, WSEventOut{RunID: "a"})
+	sent(t, l, WSEventOut{RunID: "a"})
 	assert.Len(t, l.replay(noneActive), 1)
 	l.setEnabled(false)
 	assert.Empty(t, l.replay(noneActive))
@@ -129,7 +136,7 @@ func TestDeliveryLog_BoundedPerRun(t *testing.T) {
 	l := newDeliveryLog()
 	l.setEnabled(true)
 	for i := 0; i < maxUnackedPerRun+5; i++ {
-		stamped(t, l, WSEventOut{RunID: "a"})
+		sent(t, l, WSEventOut{RunID: "a"})
 	}
 	kept := l.replay(noneActive)
 	// Beyond the bound the oldest half goes at once (one copy, not one per event).
@@ -145,16 +152,16 @@ func TestDeliveryLog_RefusesLateEventsOfAnEarlierExecution(t *testing.T) {
 	l := newDeliveryLog()
 	l.setEnabled(true)
 	first := l.reset("a")
-	stamped(t, l, WSEventOut{RunID: "a", Exec: first})
+	sent(t, l, WSEventOut{RunID: "a", Exec: first})
 	second := l.reset("a")
 	assert.NotEqual(t, first, second)
 
-	_, ok, _ := l.stamp(WSEventOut{RunID: "a", Exec: first})
+	_, ok := l.stamp(WSEventOut{RunID: "a", Exec: first})
 	assert.False(t, ok)
 	ev := stamped(t, l, WSEventOut{RunID: "a", Exec: second})
 	assert.Equal(t, uint64(1), ev.Seq)
 	// Events that name no execution belong to the current one.
-	assert.Equal(t, second, stamped(t, l, WSEventOut{RunID: "a"}).Exec)
+	assert.Equal(t, second, sent(t, l, WSEventOut{RunID: "a"}).Exec)
 }
 
 // After a reconnect, executing runs' events go out before those of finished or refused runs.
@@ -163,11 +170,11 @@ func TestDeliveryLog_ReplaysExecutingRunsFirst(t *testing.T) {
 	l := newDeliveryLog()
 	l.now = func() time.Time { return now }
 	l.setEnabled(true)
-	stamped(t, l, WSEventOut{RunID: "finished-old"})
+	sent(t, l, WSEventOut{RunID: "finished-old"})
 	now = now.Add(time.Second)
-	stamped(t, l, WSEventOut{RunID: "running"})
+	sent(t, l, WSEventOut{RunID: "running"})
 	now = now.Add(time.Second)
-	stamped(t, l, WSEventOut{RunID: "finished-new"})
+	sent(t, l, WSEventOut{RunID: "finished-new"})
 
 	var order []string
 	for _, m := range l.replay(func(id string) bool { return id == "running" }) {
@@ -181,8 +188,8 @@ func TestDeliveryLog_GCDropsIdleLogsOfFinishedRunsOnly(t *testing.T) {
 	l := newDeliveryLog()
 	l.now = func() time.Time { return now }
 	l.setEnabled(true)
-	stamped(t, l, WSEventOut{RunID: "finished"})
-	stamped(t, l, WSEventOut{RunID: "running"})
+	sent(t, l, WSEventOut{RunID: "finished"})
+	sent(t, l, WSEventOut{RunID: "running"})
 
 	now = now.Add(idleRunLogTTL - time.Minute)
 	l.gc(func(string) bool { return false })
@@ -190,7 +197,34 @@ func TestDeliveryLog_GCDropsIdleLogsOfFinishedRunsOnly(t *testing.T) {
 
 	now = now.Add(2 * time.Minute)
 	l.gc(func(id string) bool { return id == "running" })
-	assert.Equal(t, []string{"running"}, l.unackedRuns())
+	assert.Equal(t, []string{"running"}, l.undeliveredRuns())
+}
+
+// The log keeps only what was written: an event still queued is not replayed (the queue sends it),
+// but its run counts as undelivered until it is written, or given up on.
+func TestDeliveryLog_KeepsWhatWasWritten(t *testing.T) {
+	l := newDeliveryLog()
+	l.setEnabled(true)
+	e1 := stamped(t, l, WSEventOut{RunID: "a"})
+	e2 := stamped(t, l, WSEventOut{RunID: "a"})
+	assert.Empty(t, l.replay(noneActive), "queued, not written")
+	assert.Equal(t, []string{"a"}, l.undeliveredRuns())
+
+	l.written(e1, true)
+	l.written(e1, true) // written again by a replay: kept once
+	assert.Equal(t, []uint64{1}, seqs(l.replay(noneActive)))
+	l.ack("a", e1.Exec, 1)
+	assert.Equal(t, []string{"a"}, l.undeliveredRuns(), "seq 2 is still queued")
+
+	l.written(e2, false) // too large to send: given up on
+	assert.Empty(t, l.replay(noneActive))
+	assert.Empty(t, l.undeliveredRuns())
+
+	// An event of an execution that was replaced is not kept.
+	late := stamped(t, l, WSEventOut{RunID: "a"})
+	l.reset("a")
+	l.written(late, true)
+	assert.Empty(t, l.replay(noneActive))
 }
 
 // A run that finished while its last events (possibly "complete") were lost is still claimed,
@@ -199,11 +233,12 @@ func TestResumeRunIDs_ExecutingRunsFirstThenRunsWithUnackedEvents(t *testing.T) 
 	out := make(chan interface{}, 10)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
 	d.delivery.setEnabled(true)
-	d.writerStarted()
 	d.activeRunners["z-running"] = nil
 	d.SendWSEvent("a-finished", "complete", nil)
 	ev := (<-out).(WSEventOut)
-	assert.Equal(t, []string{"z-running", "a-finished"}, d.ResumeRunIDs())
+	assert.Equal(t, []string{"z-running", "a-finished"}, d.ResumeRunIDs(), "queued")
+	d.delivery.written(ev, true)
+	assert.Equal(t, []string{"z-running", "a-finished"}, d.ResumeRunIDs(), "written, not acknowledged")
 
 	d.Dispatch(context.Background(), WSMessageIn{Type: "ack", RunID: "a-finished", Exec: ev.Exec, Seq: 1})
 	assert.Equal(t, []string{"z-running"}, d.ResumeRunIDs())
@@ -216,7 +251,6 @@ func TestSendWSEvent_QueuesEachRunsEventsInSeqOrder(t *testing.T) {
 	out := make(chan interface{}, senders*perSender)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
 	d.delivery.setEnabled(true)
-	d.writerStarted() // a connection is draining the queue
 	var wg sync.WaitGroup
 	for i := 0; i < senders; i++ {
 		wg.Add(1)
@@ -228,13 +262,14 @@ func TestSendWSEvent_QueuesEachRunsEventsInSeqOrder(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	close(out)
-	var want uint64
-	for msg := range out {
-		want++
-		assert.Equal(t, want, msg.(WSEventOut).Seq)
+	for want := uint64(1); want <= senders*perSender; want++ {
+		select {
+		case msg := <-out:
+			assert.Equal(t, want, msg.(WSEventOut).Seq)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("only %d events arrived", want-1)
+		}
 	}
-	assert.Equal(t, uint64(senders*perSender), want)
 }
 
 // The whole point: events written into a connection that silently died are sent again on the
@@ -285,7 +320,7 @@ func TestAgentSession_ReplaysUnacknowledgedEventsAfterReconnect(t *testing.T) {
 	cancel1()
 	<-done1
 
-	// Produced while disconnected: queued, and in the log.
+	// Produced while disconnected: queued, behind the two the log replays.
 	session.dispatcher.SendWSEvent("run-1", "complete", nil)
 
 	ctx2, cancel2 := context.WithCancel(context.Background())
@@ -471,70 +506,4 @@ func TestAgentSession_AsksPerRunWhileAnotherRunStreams(t *testing.T) {
 	case <-time.After(ackRequestDelay + 2*time.Second):
 		t.Fatal("the quiet run's tail was never offered for acknowledgement")
 	}
-}
-
-// While no connection is up, an event in the delivery log is left to the log's replay once the
-// queue is full: a long outage no longer blocks every run (their events all go through
-// queueEvent, under one lock) until the coordinator comes back.
-func TestQueueEvent_NoWriterAndAcks_FullQueueLeavesEventsToTheLog(t *testing.T) {
-	out := make(chan interface{}, 1)
-	d := NewAgentDispatcher("http://coordinator", "tok", true, out)
-	d.delivery.setEnabled(true)
-
-	done := make(chan struct{})
-	go func() {
-		for range 100 {
-			d.SendWSEvent("run-1", "result", nil)
-		}
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("queueEvent blocked with no connection up")
-	}
-	assert.Len(t, out, 1, "the queue still takes what it has room for")
-	replay := d.delivery.replay(d.isActive)
-	require.Len(t, replay, 100)
-	for i, msg := range replay {
-		assert.Equal(t, uint64(i+1), msg.Seq)
-	}
-}
-
-// sendBlocks reports whether SendWSEvent waits for room in a full queue (released by draining it).
-func sendBlocks(t *testing.T, d *AgentDispatcher, out chan interface{}) bool {
-	t.Helper()
-	done := make(chan struct{})
-	go func() {
-		d.SendWSEvent("run-1", "result", nil)
-		close(done)
-	}()
-	select {
-	case <-done:
-		return false
-	case <-time.After(100 * time.Millisecond):
-	}
-	<-out
-	<-done
-	return true
-}
-
-// A full queue is still backpressure while a connection drains it, and with a coordinator that does
-// not acknowledge events (nothing would replay them).
-func TestQueueEvent_FullQueueBlocksWithAWriterOrWithoutAcks(t *testing.T) {
-	out := make(chan interface{}, 1)
-	d := NewAgentDispatcher("http://coordinator", "tok", true, out)
-
-	d.SendWSEvent("run-1", "result", nil)
-	assert.True(t, sendBlocks(t, d, out), "no acks, no writer")
-
-	d.delivery.setEnabled(true)
-	d.writerStarted()
-	assert.True(t, sendBlocks(t, d, out), "acks, a writer draining the queue")
-
-	d.writerStopped()
-	d.writerStopped() // an extra stop must not leave the count below zero
-	assert.False(t, sendBlocks(t, d, out), "acks, no writer")
-	d.writerStarted()
-	assert.True(t, sendBlocks(t, d, out), "acks, a writer again")
 }

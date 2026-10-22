@@ -37,6 +37,10 @@ var (
 // write goroutine that dies mid-write, so a handful is plenty.
 const carryCapacity = 64
 
+// outChanCapacity is the hand-off between the outbox (the agent's real queue, agent_outbox.go)
+// and the connection's write loop.
+const outChanCapacity = 64
+
 const (
 	heartbeatPing     = `{"type":"ping"}`
 	heartbeatInterval = 30 * time.Second
@@ -60,7 +64,7 @@ type agentSession struct {
 }
 
 func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agentSession {
-	outChan := make(chan interface{}, 50000)
+	outChan := make(chan interface{}, outChanCapacity)
 	s := &agentSession{
 		outChan:    outChan,
 		dispatcher: NewAgentDispatcher(coordinatorURL, token, disableTelemetry, outChan),
@@ -72,7 +76,8 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 	// Still to reach the coordinator: queued, carried over from a failed write, or sent but not
 	// acknowledged (with a coordinator that acknowledges).
 	s.dispatcher.pendingOutput = func() bool {
-		return len(s.outChan) > 0 || len(s.carry) > 0 || len(s.dispatcher.delivery.unackedRuns()) > 0
+		return s.dispatcher.outbox.pending() > 0 || len(s.outChan) > 0 || len(s.carry) > 0 ||
+			len(s.dispatcher.delivery.undeliveredRuns()) > 0
 	}
 	return s
 }
@@ -172,11 +177,9 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 	}
 
 	// Write loop
-	dispatcher.writerStarted()
 	go func() {
-		defer dispatcher.writerStopped()
-		// Highest seq of each run's current execution written on this connection. Replayed events
-		// are still in the queue too (or carried over); those copies are skipped.
+		// Highest seq of each run's current execution written on this connection, for ack requests.
+		// The delivery log keeps only what was written, so no event is both replayed and queued.
 		type sentMark struct {
 			exec string
 			seq  uint64
@@ -193,12 +196,16 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		send := func(msg interface{}) bool {
 			ev, sequenced := msg.(WSEventOut)
 			sequenced = sequenced && ev.Seq > 0
-			if mark, ok := sentUpTo[ev.RunID]; sequenced && ok && mark.exec == ev.Exec && ev.Seq <= mark.seq {
-				return true
+			// A run event that cannot be sent is given up on, so the run does not look undelivered forever.
+			giveUp := func() {
+				if sequenced {
+					s.dispatcher.delivery.written(ev, false)
+				}
 			}
 			b, err := json.Marshal(msg)
 			if err != nil {
 				logError("Failed to marshal WS message: %v", err)
+				giveUp()
 				return true
 			}
 			if len(b) > 1*1024*1024 {
@@ -210,6 +217,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 					}
 				}
 				logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
+				giveUp()
 				return true
 			}
 			if err := c.Write(connCtx, websocket.MessageText, b); err != nil {
@@ -220,12 +228,14 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 					case s.carry <- msg:
 					default:
 						logError("Dropping a message that failed to send: the resend buffer is full")
+						giveUp()
 					}
 				}
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return false
 			}
 			if sequenced {
+				s.dispatcher.delivery.written(ev, true)
 				sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
 				lastWrite[ev.RunID] = time.Now()
 				if !ackTimerArmed {

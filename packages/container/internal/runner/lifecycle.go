@@ -85,6 +85,24 @@ func (r *Runner) Resume() {
 	r.pause.cond.Broadcast()
 }
 
+// Hold stops the main loop from starting new requests (as Pause does) until Release, whatever
+// the user pauses or resumes meanwhile: the agent holds a scan while its events cannot reach the
+// coordinator, so the user's own pause state is left as it is.
+func (r *Runner) Hold() {
+	r.lifecycle.held.Store(true)
+}
+
+// Release ends a Hold.
+func (r *Runner) Release() {
+	r.pause.mu.Lock() // a waiter between its check and its Wait must not miss the broadcast
+	r.lifecycle.held.Store(false)
+	r.pause.mu.Unlock()
+	r.pause.cond.Broadcast()
+}
+
+// Held reports whether the runner is held (Hold).
+func (r *Runner) Held() bool { return r.lifecycle.held.Load() }
+
 // IsRunning reports whether the runner is currently executing a fuzz run.
 func (r *Runner) IsRunning() bool { return r.lifecycle.isRunning.Load() }
 
@@ -92,7 +110,7 @@ func (r *Runner) IsRunning() bool { return r.lifecycle.isRunning.Load() }
 // stopped. It must only be called from the main iteration loop (single writer).
 func (r *Runner) waitIfPaused() {
 	r.pause.mu.Lock()
-	for r.lifecycle.isPaused.Load() && !r.lifecycle.shouldStop.Load() {
+	for (r.lifecycle.isPaused.Load() || r.lifecycle.held.Load()) && !r.lifecycle.shouldStop.Load() {
 		r.pause.cond.Wait()
 	}
 	r.pause.mu.Unlock()

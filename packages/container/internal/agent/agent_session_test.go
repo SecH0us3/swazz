@@ -92,12 +92,13 @@ func TestHandleJobDispatch_IgnoresRunAlreadyRunning(t *testing.T) {
 	assert.Empty(t, out, "nothing may be reported for the duplicate dispatch")
 }
 
-func TestAgentSession_NoResumeWithoutActiveRuns(t *testing.T) {
-	resumeParam := make(chan string, 1)
-	got := make(chan string, 1)
+// Nothing is claimed while nothing runs and nothing is on its way; a finished run whose last
+// events are still queued is claimed, or the coordinator would refuse them on the new connection.
+func TestAgentSession_ClaimsOnlyRunsWithSomethingLeft(t *testing.T) {
+	resumeParam := make(chan string, 2)
+	got := make(chan string, 2)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, has := r.URL.Query()["resume"]
-		resumeParam <- map[bool]string{true: "present", false: "absent"}[has]
+		resumeParam <- r.URL.Query().Get("resume")
 		c, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			return
@@ -109,15 +110,24 @@ func TestAgentSession_NoResumeWithoutActiveRuns(t *testing.T) {
 		}
 	}))
 	defer ts.Close()
+	url := "ws" + strings.TrimPrefix(ts.URL, "http")
 
 	session := newAgentSession(ts.URL, "tok", true)
-	session.dispatcher.SendWSError("run-x", "boom")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	done1 := make(chan struct{})
 	go func() {
-		_ = session.runConnection(ctx, "ws"+strings.TrimPrefix(ts.URL, "http"), nil, false, nil)
+		_ = session.runConnection(ctx1, url, nil, false, nil)
+		close(done1)
 	}()
-	assert.Equal(t, "absent", <-resumeParam)
+	assert.Equal(t, "", <-resumeParam)
+	cancel1()
+	<-done1
+
+	session.dispatcher.SendWSError("run-x", "boom")
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	go func() { _ = session.runConnection(ctx2, url, nil, false, nil) }()
+	assert.Equal(t, "run-x", <-resumeParam)
 	assert.Equal(t, "error", <-got)
 }
 

@@ -136,3 +136,49 @@ func TestLifecycle_Close_CleanShutdown(t *testing.T) {
 		r.Close()
 	})
 }
+
+// A hold keeps the main loop waiting whatever the user's pause does, and only Release (or Stop)
+// lets it go on.
+func TestLifecycle_HoldOutlastsTheUsersResume(t *testing.T) {
+	r := &Runner{config: &swagger.Config{}}
+	r.pause.cond = sync.NewCond(&r.pause.mu)
+	r.lifecycle.isRunning.Store(true)
+
+	r.Hold()
+	require.True(t, r.Held())
+	unblocked := make(chan struct{})
+	go func() {
+		r.waitIfPaused()
+		close(unblocked)
+	}()
+
+	r.Pause()
+	r.Resume() // the user's resume does not end the hold
+	select {
+	case <-unblocked:
+		t.Fatal("a held runner went on after the user's resume")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	r.Release()
+	select {
+	case <-unblocked:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Release did not let the runner go on")
+	}
+	assert.False(t, r.Held())
+
+	// Stop ends a wait under a hold too.
+	r.Hold()
+	stopped := make(chan struct{})
+	go func() {
+		r.waitIfPaused()
+		close(stopped)
+	}()
+	r.Stop()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not end a held wait")
+	}
+}

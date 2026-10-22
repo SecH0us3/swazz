@@ -82,6 +82,9 @@ type runnerLifecycle struct {
 	isRunning  atomic.Bool
 	isPaused   atomic.Bool
 	shouldStop atomic.Bool
+	// held is a pause the embedding program asks for (Hold), apart from the user's: the agent
+	// holds its scans while their events cannot reach the coordinator.
+	held atomic.Bool
 
 	mu     sync.Mutex // guards cancel only
 	cancel context.CancelFunc

@@ -68,6 +68,7 @@ func TestRecycle_ExitsOnceIdleAndDelivered(t *testing.T) {
 	d.maybeRecycle()
 	d.maybeRecycle() // a second scan ending at the same time
 	expectExit(t, exits)
+	d.maybeRecycle() // or just after the exit began
 	expectNoExit(t, exits, 50*time.Millisecond)
 }
 
@@ -124,10 +125,11 @@ func TestRecycle_SessionCountsQueuedAndUnacknowledgedOutput(t *testing.T) {
 	s := newAgentSession("ws://localhost", "tok", true)
 	assert.False(t, s.dispatcher.pendingOutput())
 	s.dispatcher.delivery.setEnabled(true)
-	s.dispatcher.writerStarted() // a connection is draining the queue
 	s.dispatcher.SendWSEvent("run-1", "result", nil)
 	assert.True(t, s.dispatcher.pendingOutput(), "queued")
 	ev := (<-s.outChan).(WSEventOut)
+	assert.True(t, s.dispatcher.pendingOutput(), "taken by the write loop, not written yet")
+	s.dispatcher.delivery.written(ev, true)
 	assert.True(t, s.dispatcher.pendingOutput(), "sent, not acknowledged")
 	s.dispatcher.delivery.ack("run-1", ev.Exec, ev.Seq)
 	assert.False(t, s.dispatcher.pendingOutput())
@@ -150,7 +152,7 @@ func TestRecycle_AfterARealScanEnds(t *testing.T) {
 	defer func() { recyclePollInterval = oldPoll }()
 	exits := make(chan int, 1)
 	d.exit = func(code int) { exits <- code }
-	d.pendingOutput = func() bool { return len(out) > 0 }
+	d.pendingOutput = func() bool { return d.outbox.pending() > 0 || len(out) > 0 }
 	d.EnableRecycleWhenIdle()
 
 	sawComplete := make(chan struct{})
