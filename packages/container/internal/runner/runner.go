@@ -91,6 +91,13 @@ type runnerLifecycle struct {
 	isRunning  atomic.Bool
 	isPaused   atomic.Bool
 	shouldStop atomic.Bool
+	// held is a pause the embedding program asks for (Hold), apart from the user's: the agent
+	// holds its scans while their events cannot reach the coordinator.
+	held atomic.Bool
+	// heldSince is when the current hold began, heldTotal adds up the holds that ended (guarded by
+	// Runner.pause.mu; monotonic). A held scan's time does not count toward MaxScanDurationMin.
+	heldSince time.Time
+	heldTotal time.Duration
 
 	mu     sync.Mutex // guards cancel only
 	cancel context.CancelFunc
@@ -304,14 +311,30 @@ func (r *Runner) Start(ctx context.Context) error {
 	if r.config.Settings.MaxScanDurationMin > 0 {
 		timerCtx, cancelTimer := context.WithCancel(runCtx)
 		defer cancelTimer()
+		maxDuration := time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit
+		started, heldBefore := time.Now(), r.heldFor()
+		heldCheckFloor := scanDurationUnit / 60 // a second
 		go func() {
-			timer := time.NewTimer(time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit)
+			timer := time.NewTimer(maxDuration)
 			defer timer.Stop()
-			select {
-			case <-timer.C:
-				r.logDebug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
-				r.Stop()
-			case <-timerCtx.Done():
+			for {
+				select {
+				case <-timer.C:
+					if left := maxDuration - (time.Since(started) - (r.heldFor() - heldBefore)); left > 0 {
+						// Held meanwhile: that time is not the scan's. While still held, the time
+						// left does not shrink, so check back no more often than once a second.
+						if r.Held() && left < heldCheckFloor {
+							left = heldCheckFloor
+						}
+						timer.Reset(left)
+						continue
+					}
+					r.logDebug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
+					r.Stop()
+					return
+				case <-timerCtx.Done():
+					return
+				}
 			}
 		}()
 	}
@@ -406,7 +429,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		r.progress.currentProfile.Store(string(profile))
 
 		for epIdx, endpoint := range r.config.Endpoints {
-			if r.stopped() {
+			if r.stopped() || runCtx.Err() != nil {
 				break
 			}
 
@@ -471,7 +494,8 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 	var wg sync.WaitGroup
 
 	for _, endpoint := range r.config.Endpoints {
-		if r.stopped() {
+		r.waitIfPaused(ctx)
+		if r.stopped() || ctx.Err() != nil {
 			break
 		}
 
@@ -562,6 +586,9 @@ func (r *Runner) LogError(format string, args ...any) { r.logError(format, args.
 
 func (r *Runner) BroadcastProgress() { r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()}) }
 func (r *Runner) BroadcastResult(res *swagger.FuzzResult) {
+	if res != nil && res.NotSent {
+		return
+	}
 	r.Broadcast(Event{Type: EventResult, Data: res})
 }
 

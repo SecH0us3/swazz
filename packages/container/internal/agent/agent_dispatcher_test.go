@@ -18,6 +18,7 @@ import (
 func TestNewAgentDispatcher(t *testing.T) {
 	outChan := make(chan interface{}, 5)
 	d := NewAgentDispatcher("ws://localhost/connect", "token123", false, outChan)
+	t.Cleanup(d.Close)
 	require.NotNil(t, d)
 	assert.Equal(t, "ws://localhost/connect", d.coordinatorURL)
 	assert.Equal(t, "token123", d.token)
@@ -29,6 +30,7 @@ func TestNewAgentDispatcher(t *testing.T) {
 func TestAgentDispatcher_SendWSMethods(t *testing.T) {
 	outChan := make(chan interface{}, 5)
 	d := NewAgentDispatcher("ws://localhost", "tok", false, outChan)
+	t.Cleanup(d.Close)
 
 	d.SendWSEvent("run-1", "test_event", map[string]string{"foo": "bar"})
 
@@ -66,6 +68,7 @@ func TestAgentDispatcher_SendWSMethods(t *testing.T) {
 func TestAgentDispatcher_Dispatch_JobCommand_UnknownRunner(t *testing.T) {
 	outChan := make(chan interface{}, 5)
 	d := NewAgentDispatcher("ws://localhost", "tok", false, outChan)
+	t.Cleanup(d.Close)
 
 	cmdPayload := JobCommandPayload{
 		Command: "stop",
@@ -86,6 +89,7 @@ func TestAgentDispatcher_Dispatch_JobCommand_UnknownRunner(t *testing.T) {
 func TestAgentDispatcher_Dispatch_ParseRequest_InvalidJSON(t *testing.T) {
 	outChan := make(chan interface{}, 5)
 	d := NewAgentDispatcher("ws://localhost", "tok", false, outChan)
+	t.Cleanup(d.Close)
 
 	msgIn := WSMessageIn{
 		Type:    "parse_request",
@@ -101,6 +105,7 @@ func TestAgentDispatcher_Dispatch_ParseRequest_InvalidJSON(t *testing.T) {
 func TestAgentDispatcher_StopAllRunners_Empty(t *testing.T) {
 	outChan := make(chan interface{}, 5)
 	d := NewAgentDispatcher("ws://localhost", "tok", false, outChan)
+	t.Cleanup(d.Close)
 
 	assert.NotPanics(t, func() {
 		d.StopAllRunners()
@@ -110,6 +115,7 @@ func TestAgentDispatcher_StopAllRunners_Empty(t *testing.T) {
 func TestAgentDispatcher_Dispatch_OOBTrigger_UnknownRunner(t *testing.T) {
 	outChan := make(chan interface{}, 5)
 	d := NewAgentDispatcher("ws://localhost", "tok", false, outChan)
+	t.Cleanup(d.Close)
 
 	payloadBytes := []byte(`{"runId": "run-oob", "uuid": "uuid-123"}`)
 	msgIn := WSMessageIn{

@@ -37,6 +37,10 @@ var (
 // write goroutine that dies mid-write, so a handful is plenty.
 const carryCapacity = 64
 
+// outChanCapacity is the hand-off between the outbox (the agent's real queue, agent_outbox.go)
+// and the connection's write loop.
+const outChanCapacity = 64
+
 const (
 	heartbeatPing     = `{"type":"ping"}`
 	heartbeatInterval = 30 * time.Second
@@ -70,6 +74,8 @@ type agentSession struct {
 	// carry holds messages whose write failed when a connection dropped (possibly only after the
 	// next connection is up); the live connection sends them ahead of the queue.
 	carry chan interface{}
+	// sending counts the messages the write loop has taken and not finished writing.
+	sending atomic.Int32
 
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
@@ -81,7 +87,7 @@ type agentSession struct {
 }
 
 func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agentSession {
-	outChan := make(chan interface{}, 50000)
+	outChan := make(chan interface{}, outChanCapacity)
 	s := &agentSession{
 		outChan:    outChan,
 		dispatcher: NewAgentDispatcher(coordinatorURL, token, disableTelemetry, outChan),
@@ -92,10 +98,16 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 		connectTimeout:    connectTimeout,
 		writeTimeout:      writeTimeout,
 	}
-	// Still to reach the coordinator: queued, carried over from a failed write, or sent but not
-	// acknowledged (with a coordinator that acknowledges).
+	// Not written to a connection yet: queued, in the hand-off, being written, or carried over
+	// from a failed write (run events: anything stamped and not yet written).
+	s.dispatcher.unwrittenOutput = func() bool {
+		return s.dispatcher.outbox.pending() > 0 || len(s.outChan) > 0 || s.sending.Load() > 0 ||
+			len(s.carry) > 0 || s.dispatcher.delivery.anyQueued()
+	}
+	// Still to reach the coordinator: unwritten, or written but not acknowledged (with a
+	// coordinator that acknowledges).
 	s.dispatcher.pendingOutput = func() bool {
-		return len(s.outChan) > 0 || len(s.carry) > 0 || len(s.dispatcher.delivery.unackedRuns()) > 0
+		return s.dispatcher.unwrittenOutput() || len(s.dispatcher.delivery.undeliveredRuns()) > 0
 	}
 	return s
 }
@@ -214,8 +226,8 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 
 	// Write loop
 	go func() {
-		// Highest seq of each run's current execution written on this connection. Replayed events
-		// are still in the queue too (or carried over); those copies are skipped.
+		// Highest seq of each run's current execution written on this connection, for ack requests.
+		// The delivery log keeps only what was written, so no event is both replayed and queued.
 		type sentMark struct {
 			exec string
 			seq  uint64
@@ -230,14 +242,20 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		ackTimerArmed := false
 		defer ackTimer.Stop()
 		send := func(msg interface{}) bool {
+			s.sending.Add(1)
+			defer s.sending.Add(-1)
 			ev, sequenced := msg.(WSEventOut)
 			sequenced = sequenced && ev.Seq > 0
-			if mark, ok := sentUpTo[ev.RunID]; sequenced && ok && mark.exec == ev.Exec && ev.Seq <= mark.seq {
-				return true
+			// A run event that cannot be sent is given up on, so the run does not look undelivered forever.
+			giveUp := func() {
+				if sequenced {
+					s.dispatcher.delivery.written(ev, false)
+				}
 			}
 			b, err := json.Marshal(msg)
 			if err != nil {
 				logError("Failed to marshal WS message: %v", err)
+				giveUp()
 				return true
 			}
 			if len(b) > 1*1024*1024 {
@@ -249,23 +267,30 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 					}
 				}
 				logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
+				giveUp()
 				return true
 			}
 			if err := write(b); err != nil {
 				logError("Failed to write to WS: %v", err)
-				// An ack request speaks only for the connection it was written on.
-				if _, isAckRequest := msg.(ackRequestMsg); !isAckRequest {
+				// An ack request speaks only for the connection it was written on, and a replayed
+				// event is still in the delivery log, which replays it on the next one.
+				_, isAckRequest := msg.(ackRequestMsg)
+				if !isAckRequest && !(sequenced && s.dispatcher.delivery.kept(ev)) {
 					select {
 					case s.carry <- msg:
 					default:
 						logError("Dropping a message that failed to send: the resend buffer is full")
+						giveUp()
 					}
 				}
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return false
 			}
 			if sequenced {
-				sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
+				s.dispatcher.delivery.written(ev, true)
+				if mark, ok := sentUpTo[ev.RunID]; !ok || mark.exec != ev.Exec || ev.Seq > mark.seq {
+					sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
+				}
 				lastWrite[ev.RunID] = time.Now()
 				if !ackTimerArmed {
 					ackTimer.Reset(ackRequestDelay)

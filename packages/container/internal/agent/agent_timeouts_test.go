@@ -195,6 +195,7 @@ func TestRunConnection_HeartbeatTimeoutDuringStuckWrite(t *testing.T) {
 	defer ts.Close()
 
 	s := newAgentSession(ts.URL, "tok", true)
+	t.Cleanup(s.dispatcher.Close)
 	s.heartbeatInterval, s.heartbeatTimeout = 50*time.Millisecond, 300*time.Millisecond
 	s.writeTimeout = 20 * time.Second
 	big := strings.Repeat("x", 512<<10)

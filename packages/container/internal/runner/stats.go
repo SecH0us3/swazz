@@ -117,6 +117,9 @@ func (p *statsPipe) close() {
 // sendStats hands msg to the run's statsAggregator. Once the run has ended it drops msg instead
 // of blocking on an aggregator that is gone, and returns false.
 func (r *Runner) sendStats(msg statsMsg) bool {
+	if msg.result != nil && msg.result.NotSent {
+		return false // never sent: dropped whole, like a late result
+	}
 	return r.stats.Load().send(msg, nil)
 }
 
