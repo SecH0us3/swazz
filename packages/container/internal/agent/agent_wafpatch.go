@@ -9,11 +9,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
 
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/wafcheck"
 )
 
@@ -51,8 +51,7 @@ func sendWAFPatchToEdge(coordinatorURL, token, scanID string, report *wafcheck.P
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Edge API WAF patch error (status %d): %s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("Edge API WAF patch error (status %d): %s", resp.StatusCode, safenet.ReadErrorBody(resp.Body))
 	}
 	return nil
 }

@@ -10,13 +10,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/triage"
 )
 
@@ -169,8 +169,7 @@ func sendTriageBatchToEdge(coordinatorURL, token, scanID string, results []*tria
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Edge API batch triage error (status %d): %s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("Edge API batch triage error (status %d): %s", resp.StatusCode, safenet.ReadErrorBody(resp.Body))
 	}
 
 	return nil
