@@ -24,7 +24,6 @@ import (
 func timeoutSession(url string) *agentSession {
 	s := newAgentSession(url, "tok", true)
 	s.connectTimeout, s.writeTimeout = 200*time.Millisecond, 200*time.Millisecond
-	s.minWriteRate = 1 << 30 // the deadline is the base timeout
 	return s
 }
 
@@ -48,6 +47,11 @@ func runConnectionWithin(t *testing.T, s *agentSession, wsURL string, signatureA
 		return nil
 	}
 }
+
+// holdOpen keeps a test coordinator's handler (and so its connection) alive for longer than any
+// test here runs. The request's context is no help: after websocket.Accept hijacks the connection
+// it ends only when the handler returns.
+func holdOpen() { time.Sleep(3 * time.Second) }
 
 func wsURLOf(ts *httptest.Server) string { return "ws" + strings.TrimPrefix(ts.URL, "http") }
 
@@ -79,7 +83,7 @@ func TestRunConnection_ChallengeTimesOut(t *testing.T) {
 			return
 		}
 		defer c.CloseNow()
-		<-r.Context().Done()
+		holdOpen()
 	}))
 	defer ts.Close()
 
@@ -97,7 +101,7 @@ func TestRunConnection_StuckWriteTimesOut(t *testing.T) {
 			return
 		}
 		defer c.CloseNow()
-		<-r.Context().Done() // never reads
+		holdOpen() // never reads
 	}))
 	defer ts.Close()
 
@@ -139,7 +143,7 @@ func TestRunConnection_ConnectionOutlivesTheSetupDeadline(t *testing.T) {
 				if wsjson.Read(ctx, c, &f) == nil {
 					got <- f["type"].(string)
 				}
-				<-ctx.Done()
+				holdOpen()
 			}))
 			defer ts.Close()
 
@@ -163,8 +167,51 @@ func TestRunConnection_ConnectionOutlivesTheSetupDeadline(t *testing.T) {
 	}
 }
 
-func TestWriteDeadlineGrowsWithTheMessage(t *testing.T) {
-	s := newAgentSession("", "tok", true)
-	assert.Equal(t, writeTimeout, s.writeDeadline(0))
-	assert.Equal(t, writeTimeout+128*time.Second, s.writeDeadline(1<<20))
+// The write timeout is what the heartbeat leaves: a write past it would have the coordinator
+// treat the runner as gone, whatever the message's size.
+func TestWriteTimeoutFitsTheHeartbeat(t *testing.T) {
+	assert.Less(t, writeTimeout+heartbeatInterval, heartbeatTimeout+time.Nanosecond)
+	assert.Greater(t, writeTimeout, 30*time.Second)
+}
+
+// While a write is stuck, pings are skipped rather than queued behind it, so the pong check still
+// runs on time and ends the connection after heartbeatTimeout, not after the write timeout.
+func TestRunConnection_HeartbeatTimeoutDuringStuckWrite(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		// One pong arms the agent's check; then nothing is read or answered.
+		_ = c.Write(context.Background(), websocket.MessageText, []byte(`{"type":"pong"}`))
+		select {
+		case <-release:
+		case <-time.After(10 * time.Second):
+		}
+	}))
+	defer ts.Close()
+
+	s := newAgentSession(ts.URL, "tok", true)
+	s.heartbeatInterval, s.heartbeatTimeout = 50*time.Millisecond, 300*time.Millisecond
+	s.writeTimeout = 20 * time.Second
+	big := strings.Repeat("x", 512<<10)
+	for range 200 {
+		s.dispatcher.SendWSEvent("run-1", "result", big)
+	}
+	start := time.Now()
+	require.Error(t, runConnectionWithin(t, s, wsURLOf(ts), false, 10*time.Second))
+	assert.Less(t, time.Since(start), 5*time.Second)
+}
+
+// The backoff starts over only after a connection that got through its setup and then held up,
+// not after an attempt that spent a long time failing to connect.
+func TestBackoffAfter(t *testing.T) {
+	now := time.Now()
+	const maxBackoff = 30 * time.Second
+	assert.Equal(t, 16*time.Second, backoffAfter(16*time.Second, time.Time{}, now, maxBackoff), "never connected")
+	assert.Equal(t, 16*time.Second, backoffAfter(16*time.Second, now.Add(-time.Second), now, maxBackoff), "dropped right away")
+	assert.Equal(t, 2*time.Second, backoffAfter(16*time.Second, now.Add(-2*maxBackoff-time.Second), now, maxBackoff), "held up")
 }

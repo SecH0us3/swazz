@@ -234,7 +234,7 @@ func StartAgent(args []string) {
 	backoff := 2 * time.Second
 	const maxBackoff = 30 * time.Second
 	for {
-		connected := time.Now()
+		session.connectedAt = time.Time{}
 		runErr := session.runConnection(ctx, urlWithParams, opts, useSignatureAuth, privKey)
 		if runErr == nil {
 			return
@@ -245,15 +245,23 @@ func StartAgent(args []string) {
 		if errors.Is(runErr, errAgentAuthFatal) {
 			os.Exit(1)
 		}
-		if time.Since(connected) > 2*maxBackoff {
-			backoff = 2 * time.Second // the connection had held up: start over
-		}
+		backoff = backoffAfter(backoff, session.connectedAt, time.Now(), maxBackoff)
 		logError("Agent connection lost (%v). Reconnecting in %v...", runErr, backoff)
 		time.Sleep(backoff)
 		if backoff < maxBackoff {
 			backoff *= 2
 		}
 	}
+}
+
+// backoffAfter is the wait before the next connection attempt: it starts over at 2 s once a
+// connection had held up (it was set up at connectedAt and lasted past 2*maxBackoff), and stays at
+// backoff after an attempt that never got through its setup, however long that took.
+func backoffAfter(backoff time.Duration, connectedAt, now time.Time, maxBackoff time.Duration) time.Duration {
+	if !connectedAt.IsZero() && now.Sub(connectedAt) > 2*maxBackoff {
+		return 2 * time.Second
+	}
+	return backoff
 }
 
 // resolveAgentToken resolves the runner authentication token with the following priority:

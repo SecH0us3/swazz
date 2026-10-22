@@ -52,16 +52,12 @@ const (
 	// connectTimeout covers the WebSocket upgrade and, with signature auth, the challenge
 	// handshake, a cold coordinator included.
 	connectTimeout = 60 * time.Second
-	// A write may take writeTimeout plus the time its message needs at minWriteRate, so a large
-	// message on a slow link is not cut off over and over (1 MB: about 3 minutes).
-	writeTimeout = 30 * time.Second
-	minWriteRate = 8 << 10 // bytes per second
+	// writeTimeout bounds one write, however large its message. No ping goes out while a write
+	// holds the connection, and a runner without a ping for heartbeatTimeout is treated as gone
+	// by the coordinator (and the pong check below closes the connection), so a longer write
+	// could not succeed anyway: a link too slow for a message within it cannot carry the scan.
+	writeTimeout = heartbeatTimeout - heartbeatInterval
 )
-
-// writeDeadline is how long a write of n bytes may take.
-func (s *agentSession) writeDeadline(n int) time.Duration {
-	return s.writeTimeout + time.Duration(n)*time.Second/time.Duration(s.minWriteRate)
-}
 
 // agentSession is the part of the agent that outlives a single coordinator connection: the
 // dispatcher with its running scans and the queue of messages they emit. Scans keep running
@@ -79,7 +75,9 @@ type agentSession struct {
 	heartbeatTimeout  time.Duration
 	connectTimeout    time.Duration
 	writeTimeout      time.Duration
-	minWriteRate      int
+
+	// connectedAt is when the current connection finished its setup; zero until it has.
+	connectedAt time.Time
 }
 
 func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agentSession {
@@ -93,7 +91,6 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 		heartbeatTimeout:  heartbeatTimeout,
 		connectTimeout:    connectTimeout,
 		writeTimeout:      writeTimeout,
-		minWriteRate:      minWriteRate,
 	}
 	// Still to reach the coordinator: queued, carried over from a failed write, or sent but not
 	// acknowledged (with a coordinator that acknowledges).
@@ -193,12 +190,21 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 	}
 
 	setupCancel()
+	s.connectedAt = time.Now()
 	logInfo("Successfully connected to coordinator. Awaiting jobs...")
 
-	write := func(b []byte) error {
-		wctx, cancel := context.WithTimeout(connCtx, s.writeDeadline(len(b)))
+	// writing counts the writes in progress other than pings, so the heartbeat can skip a ping
+	// instead of waiting behind a long write (and checking for the pong late).
+	var writing atomic.Int32
+	writeWithin := func(b []byte) error {
+		wctx, cancel := context.WithTimeout(connCtx, s.writeTimeout)
 		defer cancel()
 		return c.Write(wctx, websocket.MessageText, b)
+	}
+	write := func(b []byte) error {
+		writing.Add(1)
+		defer writing.Add(-1)
+		return writeWithin(b)
 	}
 
 	if len(runIDs) > 0 {
@@ -342,13 +348,16 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 				// timeout once it has shown it does.
 				if last := lastPong.Load(); last != 0 && time.Since(time.Unix(0, last)) > s.heartbeatTimeout {
 					logError("No heartbeat reply from coordinator for %v; reconnecting", s.heartbeatTimeout)
-					_ = c.Close(websocket.StatusGoingAway, "heartbeat timeout")
+					// CloseNow: the peer is gone, and a close handshake would wait behind a
+					// stuck write for up to 10 s.
+					_ = c.CloseNow()
 					return
 				}
-				// A ping that cannot go out (the write loop holds the connection with a long
-				// write, or the connection is closing) is skipped: the pong check above keeps
-				// running, and a closed connection ends this loop through connCtx.
-				_ = write([]byte(heartbeatPing))
+				// No ping while another write holds the connection: the pong check above keeps
+				// running on time, and a closed connection ends this loop through connCtx.
+				if writing.Load() == 0 {
+					_ = writeWithin([]byte(heartbeatPing))
+				}
 			case <-connCtx.Done():
 				return
 			}
