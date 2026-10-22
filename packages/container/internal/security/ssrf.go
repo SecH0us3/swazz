@@ -133,7 +133,12 @@ func guardDial(base DialFunc) DialFunc {
 // It resolves hostnames and verifies all returned IPs before initiating a connection.
 func NewSSRFProtectedTransport(allowPrivate bool) http.RoundTripper {
 	if allowPrivate {
-		return http.DefaultTransport
+		// A clone, never http.DefaultTransport itself: callers set TLS options on what they get,
+		// and on the shared one they would apply to every client in the process.
+		if t, ok := http.DefaultTransport.(*http.Transport); ok {
+			return t.Clone()
+		}
+		return &http.Transport{Proxy: http.ProxyFromEnvironment}
 	}
 
 	t := &http.Transport{
