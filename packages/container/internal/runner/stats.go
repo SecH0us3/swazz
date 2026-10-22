@@ -128,7 +128,6 @@ func (r *Runner) sendStatsUntil(ctx context.Context, msg statsMsg) bool {
 	return r.stats.Load().send(msg, ctx.Done())
 }
 
-
 // stopStats ends the run's statsAggregator once it has taken in what was sent, and waits for it.
 func (r *Runner) stopStats() {
 	r.stats.Load().close()
