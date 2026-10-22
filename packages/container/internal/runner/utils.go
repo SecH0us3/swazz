@@ -521,3 +521,14 @@ func containsFoldASCII(haystack []byte, needle string) bool {
 	}
 	return false
 }
+
+// newGenerator returns a generator for one endpoint of this run, registering the OOB tokens and
+// SSTI expressions it sends in this run's stores.
+func (r *Runner) newGenerator(profile swagger.FuzzingProfile, endpoint string) *generator.Generator {
+	gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
+	gen.RunID = r.config.RunID
+	gen.Endpoint = endpoint
+	gen.OOBStore = r.oobStore
+	gen.SSTIStore = r.sstiStore
+	return gen
+}

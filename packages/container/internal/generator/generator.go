@@ -15,6 +15,7 @@ import (
 
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/oob"
+	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 )
 
@@ -47,7 +48,11 @@ type Generator struct {
 	oobServerURL string
 	Endpoint     string
 	RunID        string
-	settings     swagger.Settings
+	// The run's stores for the OOB tokens and SSTI expressions this generator sends. Nil leaves
+	// them unregistered: the payload is still sent, but no callback or evaluation is matched to it.
+	OOBStore  *oob.Store
+	SSTIStore *sstistore.Store
+	settings  swagger.Settings
 }
 
 // New creates a new Generator.
@@ -362,7 +367,7 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 				if g.Endpoint != "" {
 					endpoint = fmt.Sprintf("%s (Header: %s)", g.Endpoint, headerName)
 				}
-				oob.GlobalStore.RegisterUUID(u, &oob.OOBContext{
+				g.OOBStore.RegisterUUID(u, &oob.OOBContext{
 					SessionID: g.RunID,
 					Endpoint:  endpoint,
 					Payload:   val,

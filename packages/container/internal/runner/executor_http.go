@@ -25,7 +25,6 @@ import (
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
-	"swazz-engine/internal/oob"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
@@ -307,7 +306,7 @@ func (r *Runner) executeRequest(
 					reqLog.Body = body
 
 					for _, uuidMatch := range matches {
-						oob.GlobalStore.UpdateRequest(uuidMatch, reqLog)
+						r.oobStore.UpdateRequest(uuidMatch, reqLog)
 					}
 				}
 			}

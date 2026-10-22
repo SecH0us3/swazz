@@ -12,13 +12,13 @@ import (
 )
 
 func TestSSTIAnalyzer(t *testing.T) {
-	a := &SSTIAnalyzer{}
+	store := sstistore.NewStore()
+	a := &SSTIAnalyzer{Store: store}
 
-	// Register some dynamic payloads in the store for test purposes
-	sstistore.GlobalStore.Register("{{23*37}}", sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"})
-	sstistore.GlobalStore.Register("{{23+37}}", sstistore.SSTIContext{RawExpr: "23+37", Expected: "60"})
-	sstistore.GlobalStore.Register("{{23+'37'}}", sstistore.SSTIContext{RawExpr: "23+'37'", Expected: "2337"})
-	defer sstistore.GlobalStore.Clear()
+	// Register some dynamic payloads in the run's store for test purposes
+	store.Register("{{23*37}}", sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"})
+	store.Register("{{23+37}}", sstistore.SSTIContext{RawExpr: "23+37", Expected: "60"})
+	store.Register("{{23+'37'}}", sstistore.SSTIContext{RawExpr: "23+'37'", Expected: "2337"})
 
 	tests := []struct {
 		name          string
@@ -144,4 +144,34 @@ func TestHasStandaloneNumber(t *testing.T) {
 			t.Errorf("hasStandaloneNumber(%q, %q) = %v, want %v", tt.body, tt.val, got, tt.expected)
 		}
 	}
+}
+
+func TestSSTIAnalyzer_OnlyMatchesItsOwnRunsExpressions(t *testing.T) {
+	own := sstistore.NewStore()
+	own.Register("{{23*37}}", sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"})
+	input := &AnalysisInput{
+		SentPayload:  "{{23*37}}",
+		ResponseBody: []byte("Hello 851!"),
+		Profile:      swagger.ProfileMalicious,
+	}
+
+	if got := NewRegistry(own).Analyze(input); !hasRule(got, "swazz/ssti-leak") {
+		t.Fatalf("own run's expression not matched: %+v", got)
+	}
+	// Another run's registry, or one with no store, does not know this run's expressions.
+	if got := NewRegistry(sstistore.NewStore()).Analyze(input); hasRule(got, "swazz/ssti-leak") {
+		t.Fatalf("another run's expression matched: %+v", got)
+	}
+	if got := NewRegistry(nil).Analyze(input); hasRule(got, "swazz/ssti-leak") {
+		t.Fatalf("expression matched without a store: %+v", got)
+	}
+}
+
+func hasRule(findings []swagger.AnalysisFinding, rule string) bool {
+	for _, f := range findings {
+		if f.RuleID == rule {
+			return true
+		}
+	}
+	return false
 }

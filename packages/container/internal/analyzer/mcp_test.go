@@ -123,7 +123,7 @@ func TestMCPStatusAnalyzer_WebMCP(t *testing.T) {
 }
 
 func TestRegistry_MCPAnalyzer(t *testing.T) {
-	reg := NewRegistry()
+	reg := NewRegistry(nil)
 	input := &AnalysisInput{
 		Method:       "CALL",
 		Endpoint:     "mcp://tool/exec_query",

@@ -12,6 +12,9 @@ type SSTIContext struct {
 	Expected string // e.g. "851"
 }
 
+// Store maps the randomized SSTI payloads a run sent to the result they evaluate to. Each run owns
+// its own store (runner.Runner), so concurrent runs cannot clear each other's expressions. A nil
+// *Store holds nothing: it records no expression and matches no payload.
 type Store struct {
 	mu sync.RWMutex
 	m  map[string]SSTIContext
@@ -24,12 +27,18 @@ func NewStore() *Store {
 }
 
 func (s *Store) Register(payload string, ctx SSTIContext) {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.m[payload] = ctx
 }
 
 func (s *Store) Get(payload string) (SSTIContext, bool) {
+	if s == nil {
+		return SSTIContext{}, false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	ctx, ok := s.m[payload]
@@ -37,9 +46,10 @@ func (s *Store) Get(payload string) (SSTIContext, bool) {
 }
 
 func (s *Store) Clear() {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.m = make(map[string]SSTIContext)
 }
-
-var GlobalStore = NewStore()

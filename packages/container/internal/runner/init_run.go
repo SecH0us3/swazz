@@ -18,8 +18,6 @@ import (
 
 	swazzGrpc "swazz-engine/internal/grpc"
 	"swazz-engine/internal/logger"
-	"swazz-engine/internal/oob"
-	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 )
 
@@ -85,8 +83,8 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	r.sizeBaselines = &sync.Map{}
 	r.timeBaselines = &sync.Map{}
 
-	oob.GlobalStore.Clear()
-	sstistore.GlobalStore.Clear()
+	r.oobStore.Clear()
+	r.sstiStore.Clear()
 	r.userLogRepeats.reset()
 	r.workerPanicked.Store(false)
 
@@ -260,8 +258,8 @@ func (r *Runner) finalise(panicked bool) {
 	if r.mcpClient != nil {
 		_ = r.mcpClient.Close()
 	}
-	sstistore.GlobalStore.Clear()
-	oob.GlobalStore.ClearSession(r.config.RunID)
+	r.sstiStore.Clear()
+	r.oobStore.Clear()
 }
 
 // mcpFixHint tells the user what to change when the MCP server cannot be used.

@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewRegistry(t *testing.T) {
-	r := NewRegistry()
+	r := NewRegistry(nil)
 	if r == nil {
 		t.Fatal("expected registry to not be nil")
 	}
@@ -35,7 +35,7 @@ func TestNewRegistry(t *testing.T) {
 }
 
 func TestRegistry_Analyze(t *testing.T) {
-	r := NewRegistry()
+	r := NewRegistry(nil)
 
 	// 1. Disabled by default
 	inputDefault := &AnalysisInput{

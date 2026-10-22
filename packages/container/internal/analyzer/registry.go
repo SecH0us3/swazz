@@ -5,15 +5,20 @@
 
 package analyzer
 
-import "swazz-engine/internal/swagger"
+import (
+	"swazz-engine/internal/sstistore"
+	"swazz-engine/internal/swagger"
+)
 
 // AnalyzerRegistry aggregates multiple response analyzers and executes them in sequence.
 type AnalyzerRegistry struct {
 	analyzers []ResponseAnalyzer
 }
 
-// NewRegistry instantiates the default set of response body analyzers.
-func NewRegistry() *AnalyzerRegistry {
+// NewRegistry instantiates the default set of response body analyzers for one run: the SSTI
+// analyzer recognises the randomized expressions that run registered in sstiStore. With a nil
+// store it recognises only the fixed 7*7 and 7+'7' probes.
+func NewRegistry(sstiStore *sstistore.Store) *AnalyzerRegistry {
 	return &AnalyzerRegistry{
 		analyzers: []ResponseAnalyzer{
 			&XSSAnalyzer{},
@@ -29,7 +34,7 @@ func NewRegistry() *AnalyzerRegistry {
 			&TimingAnalyzer{},
 			&PathTraversalAnalyzer{},
 			&CmdiAnalyzer{},
-			&SSTIAnalyzer{},
+			&SSTIAnalyzer{Store: sstiStore},
 			&XXEAnalyzer{},
 			&PrototypePollutionAnalyzer{},
 			&NoSQLiAnalyzer{},

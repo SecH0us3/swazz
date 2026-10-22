@@ -35,13 +35,13 @@ import (
 
 	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/differential"
-	"swazz-engine/internal/generator"
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/runner/bola"
 	"swazz-engine/internal/security"
+	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 	"swazz-engine/internal/wafcheck"
 )
@@ -186,6 +186,11 @@ type Runner struct {
 	analyzer *analyzer.AnalyzerRegistry
 	detector *bola.Detector
 
+	// This run's OOB tokens and SSTI expressions. Per runner, never process-wide: the agent runs
+	// several scans at once, and each must only ever clear or match its own.
+	oobStore  *oob.Store
+	sstiStore *sstistore.Store
+
 	mcpClient      mcp.Client
 	mcpMutex       sync.Mutex
 	mcpRateLimiter *mcp.RateLimiter
@@ -253,13 +258,15 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		eventQueue:     NewMPSCQueue(),
 		doneCh:         make(chan struct{}),
 		broadcastDone:  make(chan struct{}),
-		analyzer:       analyzer.NewRegistry(),
+		oobStore:       oob.NewStore(),
+		sstiStore:      sstistore.NewStore(),
 		sizeBaselines:  &sync.Map{},
 		timeBaselines:  &sync.Map{},
 		state:          make(map[string]string),
 		regexCache:     make(map[string]*regexp.Regexp),
 		mcpRateLimiter: mcp.NewRateLimiter(100, 50),
 	}
+	r.analyzer = analyzer.NewRegistry(r.sstiStore)
 	if config.MCPServer != nil {
 		client, err := mcp.NewClientFromConfig(
 			config.MCPServer, config.GlobalHeaders, config.Cookies,
@@ -441,13 +448,9 @@ func (r *Runner) Start(ctx context.Context) error {
 				}
 			}
 
-			gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
-			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-			gen.RunID = r.config.RunID
-			safeGen.RunID = r.config.RunID
 			epStr := endpoint.Method + " " + endpoint.Path
-			gen.Endpoint = epStr
-			safeGen.Endpoint = epStr
+			gen := r.newGenerator(profile, epStr)
+			safeGen := r.newGenerator(swagger.ProfileRandom, epStr)
 
 			iterToSkip := 0
 			if resuming {
@@ -472,7 +475,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.rateLimitPhase(runCtx)
 
 	// Wait a brief grace period for any late OOB network interactions to complete
-	if !r.stopped() && oob.GlobalStore.Size() > 0 {
+	if !r.stopped() && r.oobStore.Size() > 0 {
 		logger.Info("Waiting a 5-second grace period for pending OOB interactions...")
 		select {
 		case <-runCtx.Done():
@@ -519,9 +522,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 			r.progress.currentEndpoint.Store(epKey)
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
-			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-			safeGen.RunID = r.config.RunID
-			safeGen.Endpoint = epKey
+			safeGen := r.newGenerator(swagger.ProfileRandom, epKey)
 
 			built := buildSafePayload(ep, safeGen)
 			resolvedPath := fillPathParamsFromMap(ep.Path, built.pathParams)

@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
 
+	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/swagger"
 )
 
@@ -56,7 +57,10 @@ func wsURL(srv *httptest.Server) string {
 
 // newWSRunner returns a runner that may reach the in-process (loopback) targets.
 func newWSRunner() *Runner {
-	return &Runner{config: &swagger.Config{Security: swagger.SecurityConfig{AllowPrivateIPs: true}}}
+	return &Runner{
+		config:   &swagger.Config{Security: swagger.SecurityConfig{AllowPrivateIPs: true}},
+		analyzer: analyzer.NewRegistry(nil),
+	}
 }
 
 func findingRuleIDs(res *swagger.FuzzResult) []string {
@@ -158,7 +162,7 @@ func TestExecuteWebSocketRequest_SendsMergedHeaders(t *testing.T) {
 	r := &Runner{config: &swagger.Config{
 		GlobalHeaders: map[string]string{"X-Global": "g"},
 		Security:      swagger.SecurityConfig{AllowPrivateIPs: true},
-	}}
+	}, analyzer: analyzer.NewRegistry(nil)}
 	res := r.executeWebSocketRequest(
 		context.Background(), wsURL(srv), "/ws", "/ws",
 		map[string]any{"ping": true},
@@ -182,7 +186,7 @@ func TestExecuteWebSocketRequest_BlocksPrivateTarget(t *testing.T) {
 		_ = c.Write(ctx, websocket.MessageText, msg)
 	})
 
-	r := &Runner{config: &swagger.Config{}}
+	r := &Runner{config: &swagger.Config{}, analyzer: analyzer.NewRegistry(nil)}
 	res := r.executeWebSocketRequest(
 		context.Background(), wsURL(srv), "/ws", "/ws",
 		map[string]any{"ping": true}, swagger.ProfileRandom, nil, nil,
