@@ -37,6 +37,7 @@ describe('ScansService Unit Tests', () => {
       getProjectMemberRole: vi.fn(),
       createAuditLog: vi.fn(),
       getScans: vi.fn(),
+      getUnfinishedScans: vi.fn(),
       getScan: vi.fn(),
       updateScan: vi.fn(),
       updateScanStatus: vi.fn(),
@@ -274,13 +275,26 @@ describe('ScansService Unit Tests', () => {
       expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', 1, next);
     });
 
-    it('caps the page size', async () => {
+    it.each(['1000', '99999', '9'.repeat(30)])('caps the page size %s', async (limit) => {
       mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
-      await scansService.getScans('p1', 'u1', { limit: '1000' });
+      await scansService.getScans('p1', 'u1', { limit });
       expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', MAX_SCANS_PAGE, undefined);
     });
 
-    it.each(['0', '-1', 'abc', '1.5', '99999'])('refuses limit %s', async (limit) => {
+    it('lists the scans that have not ended with active=1', async () => {
+      mockScansRepo.getUnfinishedScans.mockResolvedValueOnce([{ id: 'paused-1', status: 'paused' }]);
+      const res = await scansService.getScans('p1', 'u1', { active: '1' });
+      expect(res).toEqual({ scans: [{ id: 'paused-1', status: 'paused' }] });
+      expect(mockScansRepo.getUnfinishedScans).toHaveBeenCalledWith('p1', DEFAULT_SCANS_PAGE);
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it.each([{ active: 'yes' }, { active: '1', cursor: 'abc' }])('refuses active query %o', async (page) => {
+      await expect(scansService.getScans('p1', 'u1', page)).rejects.toThrow('Invalid query parameter: active|400');
+      expect(mockScansRepo.getUnfinishedScans).not.toHaveBeenCalled();
+    });
+
+    it.each(['0', '-1', 'abc', '1.5', '00'])('refuses limit %s', async (limit) => {
       await expect(scansService.getScans('p1', 'u1', { limit })).rejects.toThrow('Invalid query parameter: limit|400');
       expect(mockScansRepo.getScans).not.toHaveBeenCalled();
     });

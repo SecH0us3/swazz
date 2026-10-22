@@ -8,15 +8,15 @@
 import { env as rawEnv } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { Env } from '../../src/env';
-import { ScansRepository, ScansCursor } from '../../src/repositories/scans';
+import { ScansRepository, ScansCursor, scansPageSql } from '../../src/repositories/scans';
 import { applyMigrations } from '../utils/migrations';
 
 const env = rawEnv as unknown as Env;
 
-async function seedScan(projectId: string, id: string, createdAt: string): Promise<void> {
+async function seedScan(projectId: string, id: string, createdAt: string, status = 'completed'): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO scans (id, project_id, target_url, profile, status, created_at, waf_patch_report) VALUES (?, ?, 'http://t', 'default', 'completed', ?, '{\"big\":true}')"
-  ).bind(id, projectId, createdAt).run();
+    "INSERT INTO scans (id, project_id, target_url, profile, status, created_at, waf_patch_report) VALUES (?, ?, 'http://t', 'default', ?, ?, '{\"big\":true}')"
+  ).bind(id, projectId, status, createdAt).run();
 }
 
 describe('scan list', () => {
@@ -63,11 +63,24 @@ describe('scan list', () => {
   });
 
   it('pages by the project index', async () => {
-    const plan = await env.DB.prepare(
-      "EXPLAIN QUERY PLAN SELECT id FROM scans WHERE project_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?"
-    ).bind('list-p', 'x', 'x', 'x', 3).all<any>();
+    // The query the repository runs: a page past the cursor seeks the index to it.
+    const plan = await env.DB.prepare('EXPLAIN QUERY PLAN ' + scansPageSql(true))
+      .bind('list-p', 'x', 'x', 3).all<any>();
     const detail = (plan.results || []).map(r => r.detail).join('\n');
     expect(detail).toContain('idx_scans_project_created');
+    expect(detail).toMatch(/\(created_at,id\)<\(\?,\?\)/);
     expect(detail).not.toContain('TEMP B-TREE');
+  });
+
+  it('finds a scan that has not ended behind any number of newer ones', async () => {
+    await seedScan('active-p', 'old-paused', '2026-09-01 10:00:00', 'paused');
+    for (let i = 0; i < 60; i++) {
+      await seedScan('active-p', `done-${String(i).padStart(2, '0')}`, `2026-09-02 10:${String(i).padStart(2, '0')}:00`);
+    }
+    await seedScan('active-p', 'running', '2026-09-03 10:00:00', 'running');
+    const repo = new ScansRepository(env);
+    const active = await repo.getUnfinishedScans('active-p', 50);
+    expect(active.map(s => s.id)).toEqual(['running', 'old-paused']);
+    expect(active[0]).not.toHaveProperty('waf_patch_report');
   });
 });

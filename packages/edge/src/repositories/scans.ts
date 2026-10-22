@@ -23,6 +23,18 @@ export interface ScansCursor {
 const SCAN_LIST_COLUMNS = 'id, project_id, target_url, profile, status, summary_stats, report_url, is_encrypted, ' +
   'created_at, completed_at, user_id, trigger_type, failure_reason, status_changed_at';
 
+// Statuses of a scan that has not ended yet.
+export const ACTIVE_SCAN_STATUSES = ['queued', 'dispatched', 'running', 'paused'] as const;
+
+// The scan list query, newest first. The row-value comparison lets SQLite seek the
+// (project_id, created_at, id) index to the cursor; the equivalent OR form makes it walk the index
+// from the newest row and filter, so a deep page would cost as much as OFFSET paging.
+export function scansPageSql(withCursor: boolean): string {
+  return `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ?` +
+    (withCursor ? ' AND (created_at, id) < (?, ?)' : '') +
+    ' ORDER BY created_at DESC, id DESC LIMIT ?';
+}
+
 export interface IScansRepository {
   createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null, triggerType?: string): Promise<void>;
   getUserPublicKey(userId: string): Promise<string | null>;
@@ -42,6 +54,7 @@ export interface IScansRepository {
   ): Promise<void>;
   
   getScans(projectId: string, limit: number, before?: ScansCursor): Promise<{ scans: any[]; next: ScansCursor | null }>;
+  getUnfinishedScans(projectId: string, limit: number): Promise<any[]>;
   getScan(scanId: string): Promise<any | null>;
   updateScan(scanId: string, fields: Record<string, any>): Promise<any>;
   updateScanReportUrl(scanId: string, reportUrl: string): Promise<void>;
@@ -203,19 +216,24 @@ export class ScansRepository extends BaseService implements IScansRepository {
   async getScans(projectId: string, limit: number, before?: ScansCursor): Promise<{ scans: any[]; next: ScansCursor | null }> {
     // One more than the page, to tell whether another one follows.
     const stmt = before
-      ? this.db.prepare(
-        `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ` +
-        'ORDER BY created_at DESC, id DESC LIMIT ?'
-      ).bind(projectId, before.createdAt, before.createdAt, before.id, limit + 1)
-      : this.db.prepare(
-        `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`
-      ).bind(projectId, limit + 1);
+      ? this.db.prepare(scansPageSql(true)).bind(projectId, before.createdAt, before.id, limit + 1)
+      : this.db.prepare(scansPageSql(false)).bind(projectId, limit + 1);
     const { results } = await stmt.all<any>();
     const scans = results || [];
     if (scans.length <= limit) return { scans, next: null };
     scans.length = limit;
     const last = scans[limit - 1];
     return { scans, next: { createdAt: last.created_at, id: last.id } };
+  }
+
+  // The project's scans that have not ended, newest first, however many newer ones there are.
+  async getUnfinishedScans(projectId: string, limit: number): Promise<any[]> {
+    const marks = ACTIVE_SCAN_STATUSES.map(() => '?').join(', ');
+    const { results } = await this.db.prepare(
+      `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ? AND status IN (${marks}) ` +
+      'ORDER BY created_at DESC, id DESC LIMIT ?'
+    ).bind(projectId, ...ACTIVE_SCAN_STATUSES, limit).all<any>();
+    return results || [];
   }
 
   async getScan(scanId: string): Promise<any | null> {

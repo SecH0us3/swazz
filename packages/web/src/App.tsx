@@ -41,7 +41,7 @@ import { matchesFinding } from './utils/findings.js';
 import { useWebMcp } from './hooks/useWebMcp.js';
 import { scheduledFailureIssue } from './utils/scheduledFailures.js';
 import { UNKNOWN_FAILURE } from './services/runStream.js';
-import { fetchProjectScans } from './services/scansService.js';
+import { fetchScansPage, fetchOlderScans } from './services/scansService.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -208,11 +208,14 @@ export default function App() {
     const [triageScope, setTriageScope] = useState<'finding' | 'endpoint' | 'all'>('finding');
 
     const attemptedReconnections = useRef<Set<string>>(new Set());
-    // Projects whose scan history has been read in full since the page loaded (checkActiveScan).
+    // Projects whose older scans have been (or are being) read since the page loaded
+    // (checkActiveScan).
     const historySynced = useRef<Set<string>>(new Set());
     const { start, stop, pause, resume, sendRequest, connectToExisting } = useRunner(PROXY_URL);
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
+    const runsRef = useRef(runs);
+    runsRef.current = runs;
 
     const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD, getRunExecutiveSummary } = useRunHistory({
         runs,
@@ -302,39 +305,68 @@ export default function App() {
 
         let active = true;
 
+        // Saves the server's scans that the local history lacks or has stale. It reads runsRef, not
+        // runs: each save updates runs, which must not restart this effect (and its fetches).
+        const syncScans = async (scans: any[]) => {
+            for (const s of scans) {
+                if (!active) return;
+                const localRun = runsRef.current.find((r: any) => r.id === s.id);
+                const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
+                const serverCompletedAt = s.completed_at ? new Date(s.completed_at).getTime() : 0;
+
+                const failureReason = s.status === 'failed' ? (s.failure_reason || UNKNOWN_FAILURE) : undefined;
+                const lacksReason = !!failureReason && localRun?.failureReason !== failureReason;
+                if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer) || lacksReason) {
+                    const stats = s.summary_stats ? JSON.parse(s.summary_stats) : null;
+                    const startedAt = s.created_at ? new Date(s.created_at).getTime() : Date.now();
+                    const scanRun: ScanRun = {
+                        id: s.id,
+                        startedAt,
+                        completedAt: isCompletedOnServer ? (serverCompletedAt || Date.now()) : 0,
+                        baseUrl: s.target_url || '',
+                        stats,
+                        projectId: s.project_id,
+                        triggerType: s.trigger_type || 'manual',
+                        ...(failureReason ? { failureReason } : {}),
+                    };
+                    await saveRun(localRun && localRun.completedAt > 0 ? { ...localRun, failureReason } : scanRun);
+                }
+            }
+        };
+
+        // Once per project, the scans older than the newest page, in the background: a new browser
+        // gets its history without holding up the reconnect to a live scan.
+        const syncOlderScans = (projectId: string, cursor: string) => {
+            historySynced.current.add(projectId);
+            fetchOlderScans(token, projectId, cursor)
+                .then(async ({ scans, truncated }) => {
+                    await syncScans(scans);
+                    if (truncated) console.warn(`[swazz] Synced the newest ${scans.length} older scans of the project; earlier ones stay on the server only`);
+                })
+                .catch(err => {
+                    historySynced.current.delete(projectId); // tried again on the next check
+                    console.warn('[swazz] Failed to sync older scans:', err);
+                });
+        };
+
         const checkActiveScan = async () => {
             try {
-                // The first check of a project reads its whole history; later ones its newest page.
-                const allPages = !historySynced.current.has(activeProject.id);
-                const scans = await fetchProjectScans(token, activeProject.id, { allPages });
+                const projectId = activeProject.id;
+                // The newest page catches background and scheduled runs; the scans that have not
+                // ended are asked for apart, since a paused one can be behind any number of newer.
+                const [page, unfinished] = await Promise.all([
+                    fetchScansPage(token, projectId),
+                    fetchScansPage(token, projectId, { active: true }),
+                ]);
                 if (active) {
-
-                    // Sync all scans to local IndexedDB to catch background/scheduled runs
-                    for (const s of scans) {
-                        const localRun = runs.find((r: any) => r.id === s.id);
-                        const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
-                        const serverCompletedAt = s.completed_at ? new Date(s.completed_at).getTime() : 0;
-
-                        const failureReason = s.status === 'failed' ? (s.failure_reason || UNKNOWN_FAILURE) : undefined;
-                        const lacksReason = !!failureReason && localRun?.failureReason !== failureReason;
-                        if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer) || lacksReason) {
-                            const stats = s.summary_stats ? JSON.parse(s.summary_stats) : null;
-                            const startedAt = s.created_at ? new Date(s.created_at).getTime() : Date.now();
-                            const scanRun: ScanRun = {
-                                id: s.id,
-                                startedAt,
-                                completedAt: isCompletedOnServer ? (serverCompletedAt || Date.now()) : 0,
-                                baseUrl: s.target_url || '',
-                                stats,
-                                projectId: s.project_id,
-                                triggerType: s.trigger_type || 'manual',
-                                ...(failureReason ? { failureReason } : {}),
-                            };
-                            await saveRun(localRun && localRun.completedAt > 0 ? { ...localRun, failureReason } : scanRun);
-                        }
+                    const scans = page.scans;
+                    if (!historySynced.current.has(projectId)) {
+                        if (page.nextCursor) syncOlderScans(projectId, page.nextCursor);
+                        else historySynced.current.add(projectId);
                     }
 
-                    if (allPages) historySynced.current.add(activeProject.id);
+                    // Sync scans to local IndexedDB to catch background/scheduled runs
+                    await syncScans([...scans, ...unfinished.scans.filter(u => !scans.some(s => s.id === u.id))]);
 
                     // Scheduled scans run while nobody watches: say so when the latest ones failed.
                     const scheduledIssue = scheduledFailureIssue(scans);
@@ -342,11 +374,11 @@ export default function App() {
                         useAppStore.setState({ scanIssue: scheduledIssue });
                     }
 
-                    const activeScan = scans.find(
+                    const activeScan = [...unfinished.scans, ...scans].find(
                         (s: any) => s.status === 'queued' || s.status === 'dispatched' || s.status === 'running' || s.status === 'paused'
                     );
                     const state = useAppStore.getState();
-                    if (activeScan && !state.isRunning && activeScan.id !== state.liveRunId && !attemptedReconnections.current.has(activeScan.id)) {
+                    if (active && activeScan && !state.isRunning && activeScan.id !== state.liveRunId && !attemptedReconnections.current.has(activeScan.id)) {
                         attemptedReconnections.current.add(activeScan.id);
                         const startedAt = activeScan.created_at ? new Date(activeScan.created_at).getTime() : Date.now();
                         await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url, activeScan.trigger_type, activeScan.status);
@@ -365,7 +397,7 @@ export default function App() {
             active = false;
             clearInterval(timer);
         };
-    }, [activeProject, handleConnectToExisting, runs, saveRun]);
+    }, [activeProject, handleConnectToExisting, saveRun]);
 
     const handleImportConfig = useCallback((jsonString: string) => {
         let parsed: any;

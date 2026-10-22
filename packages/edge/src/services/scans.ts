@@ -16,6 +16,13 @@ import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE, SCAN_NOT_QUEUED }
 import { bytesToBase64Url, base64UrlToBytes } from '../utils/base64url';
 import { isValidId } from '../utils/validation';
 
+// The query of GET /api/scans: a page of the list, or (active=1) the scans that have not ended.
+export interface ScansPageQuery {
+  limit?: string;
+  cursor?: string;
+  active?: string;
+}
+
 export interface TriageUpdatePayload {
   finding_id: string;
   ai_status: string;
@@ -32,7 +39,7 @@ export interface IScansService {
     clientIp: string,
     waitUntil?: (p: Promise<any>) => void
   ): Promise<{ id: string; status: string }>;
-  getScans(projectId: string, userId: string | null, page?: { limit?: string; cursor?: string }): Promise<{ scans: any[]; next_cursor?: string }>;
+  getScans(projectId: string, userId: string | null, page?: ScansPageQuery): Promise<{ scans: any[]; next_cursor?: string }>;
   getScan(scanId: string, userId: string | null): Promise<{ scan: any }>;
   updateScan(scanId: string, body: any, userId: string | null): Promise<{ scan: any }>;
   generateUploadUrl(scanId: string, userId: string | null): Promise<any>;
@@ -218,7 +225,7 @@ export class ScansService implements IScansService {
     return { id, status: 'queued' };
   }
 
-  async getScans(projectId: string, userId: string | null, page: { limit?: string; cursor?: string } = {}) {
+  async getScans(projectId: string, userId: string | null, page: ScansPageQuery = {}) {
     if (!projectId) {
       throw new Error('Missing query parameter: project_id|400');
     }
@@ -233,6 +240,12 @@ export class ScansService implements IScansService {
     }
 
     const limit = parseScansLimit(page.limit);
+    if (page.active !== undefined && page.active !== '') {
+      if (page.active !== '1' || page.cursor) throw new Error('Invalid query parameter: active|400');
+      const scans = await this.scansRepo.getUnfinishedScans(projectId, limit);
+      await this.attachFailureReasons(scans);
+      return { scans };
+    }
     const before = page.cursor === undefined || page.cursor === '' ? undefined : decodeScansCursor(page.cursor);
     const { scans, next } = await this.scansRepo.getScans(projectId, limit, before);
     await this.attachFailureReasons(scans);
@@ -521,8 +534,9 @@ export const MAX_SCANS_PAGE = 200;
 
 function parseScansLimit(raw: string | undefined): number {
   if (raw === undefined || raw === '') return DEFAULT_SCANS_PAGE;
-  if (!/^\d{1,4}$/.test(raw)) throw new Error('Invalid query parameter: limit|400');
-  const n = Number(raw);
+  if (!/^\d+$/.test(raw)) throw new Error('Invalid query parameter: limit|400');
+  // Any larger number is clamped, however many digits it has.
+  const n = raw.length > 6 ? MAX_SCANS_PAGE : Number(raw);
   if (n < 1) throw new Error('Invalid query parameter: limit|400');
   return Math.min(n, MAX_SCANS_PAGE);
 }
