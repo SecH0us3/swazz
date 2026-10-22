@@ -6,7 +6,6 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -818,10 +817,9 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 				} else {
 					defer resp.Body.Close()
 					if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-						limitReader := io.LimitReader(resp.Body, 4096)
-						bodyBytes, _ := io.ReadAll(limitReader)
-						err = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, string(bytes.TrimSpace(bodyBytes)))
-						data = bodyBytes
+						body := safenet.ReadErrorBody(resp.Body)
+						err = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, body)
+						data = []byte(body)
 					} else {
 						limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
 						data, err = io.ReadAll(limitReader)

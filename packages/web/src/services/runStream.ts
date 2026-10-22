@@ -120,6 +120,34 @@ export async function fetchScanStatus(runId: string, baseUrl = ''): Promise<Scan
 }
 
 /**
+ * The query that opens the scan's event stream: a one-time ticket (`?ticket=...`), or '' without
+ * a session or when the API turns the session away (sign-in may be off there), so the stream is
+ * tried without credentials as it always was. null if no answer could be had: try again later.
+ * Browsers cannot set headers on a WebSocket, and the session token must not go in its URL:
+ * URLs end up in proxy and Cloudflare logs. The ticket opens this scan's stream once, within 30s.
+ * The request is bounded (STREAM_TICKET_TIMEOUT_MS): one that hangs is a drop, retried like one.
+ */
+export const STREAM_TICKET_TIMEOUT_MS = 10_000;
+
+export async function fetchStreamQuery(runId: string, baseUrl = '', timeoutMs = STREAM_TICKET_TIMEOUT_MS): Promise<string | null> {
+    try {
+        const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+        if (!token) return '';
+        const res = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/stream-ticket`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (res.status === 401) return '';
+        if (!res.ok) return null;
+        const ticket = (await res.json())?.ticket;
+        return typeof ticket === 'string' && ticket ? `?ticket=${encodeURIComponent(ticket)}` : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * The warnings and errors in the scan's stored runner log: the live stream misses what the
  * runner said before the dashboard connected (an MCP server rejected at the very start).
  */
