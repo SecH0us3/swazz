@@ -12,7 +12,7 @@ import { Env } from '../../src/env';
 import { RunnersRepository } from '../../src/repositories/runners';
 import { CleanupRepository } from '../../src/repositories/cleanup';
 import { RunnersService, STREAM_TICKET_TTL_SECONDS, MAX_LIVE_STREAM_TICKETS } from '../../src/services/runners';
-import { hashApiKey } from '../../src/utils/auth';
+import { hashApiKey, deletionCache } from '../../src/utils/auth';
 import { sign } from 'hono/jwt';
 import { applyMigrations } from '../utils/migrations';
 
@@ -21,19 +21,23 @@ const baseEnv = rawEnv as unknown as Env;
 describe('event stream tickets', () => {
   let forwarded: string[];
   let service: RunnersService;
+  let env: Env;
+  let app: { fetch: (req: Request, env: Env) => Promise<Response> };
   let runA: string;
   let runB: string;
   const owner = 'stream-owner';
 
   beforeAll(async () => {
     await applyMigrations(baseEnv);
+    app = (await import('../../src/index')).default as any;
   });
 
   beforeEach(async () => {
     forwarded = [];
-    const env = {
+    env = {
       ...baseEnv,
       AUTH_ENABLED: 'true',
+      SESSION_CACHE: undefined,
       COORDINATOR_DO: {
         idFromName: () => 'id',
         get: () => ({
@@ -55,8 +59,9 @@ describe('event stream tickets', () => {
     }
   });
 
+  // Through the worker: the auth middleware redeems the ticket, the route opens the stream.
   const open = (runId: string, ticket?: string, upgrade = 'websocket') =>
-    service.connectClient(runId, null, upgrade, `http://localhost/api/runs/${runId}/events?ticket=${ticket}&token=leaked`, {}, ticket);
+    app.fetch(new Request(`http://localhost/api/runs/${runId}/events?ticket=${ticket}&token=leaked`, { headers: { Upgrade: upgrade } }), env);
 
   it('opens the stream as the user it was issued to, once', async () => {
     const { ticket, expiresIn } = await service.issueStreamTicket(runA, owner);
@@ -64,7 +69,7 @@ describe('event stream tickets', () => {
     expect(expiresIn).toBe(STREAM_TICKET_TTL_SECONDS);
 
     expect(await (await open(runA, ticket)).text()).toBe('connected');
-    await expect(open(runA, ticket)).rejects.toThrow('Unauthorized|401');
+    expect((await open(runA, ticket)).status).toBe(401);
   });
 
   it('stores only the hash of a ticket', async () => {
@@ -87,8 +92,8 @@ describe('event stream tickets', () => {
 
   it('opens only the run it was issued for, and is spent by trying another', async () => {
     const { ticket } = await service.issueStreamTicket(runA, owner);
-    await expect(open(runB, ticket)).rejects.toThrow('Unauthorized|401');
-    await expect(open(runA, ticket)).rejects.toThrow('Unauthorized|401');
+    expect((await open(runB, ticket)).status).toBe(401);
+    expect((await open(runA, ticket)).status).toBe(401);
     expect(forwarded).toEqual([]);
   });
 
@@ -96,13 +101,13 @@ describe('event stream tickets', () => {
     const { ticket } = await service.issueStreamTicket(runA, owner);
     await baseEnv.DB.prepare('UPDATE ws_tickets SET expires_at = ? WHERE ticket_hash = ?')
       .bind(Math.floor(Date.now() / 1000) - 1, await hashApiKey(ticket)).run();
-    await expect(open(runA, ticket)).rejects.toThrow('Unauthorized|401');
+    expect((await open(runA, ticket)).status).toBe(401);
   });
 
   it('refuses a ticket it never issued, and an empty one', async () => {
-    await expect(open(runA, 'f'.repeat(64))).rejects.toThrow('Unauthorized|401');
-    await expect(open(runA, 'not-a-ticket')).rejects.toThrow('Unauthorized|401');
-    await expect(open(runA, '')).rejects.toThrow('Unauthorized|401');
+    expect((await open(runA, 'f'.repeat(64))).status).toBe(401);
+    expect((await open(runA, 'not-a-ticket')).status).toBe(401);
+    expect((await open(runA, '')).status).toBe(401);
     expect(forwarded).toEqual([]);
   });
 
@@ -215,9 +220,19 @@ describe('event stream tickets through the API', () => {
     expect(res.status).toBe(401);
   });
 
+  // A ticket opens one thing: on any other route it is refused, even next to a valid session.
+  it('refuses a ticket anywhere but the event stream', async () => {
+    const { ticket } = await (await ticketFor(runId)).json() as { ticket: string };
+    const res = await app.fetch(new Request(`http://localhost/api/projects?ticket=${ticket}`, {
+      headers: { Upgrade: 'websocket', Authorization: `Bearer ${jwt}` },
+    }), env);
+    expect(res.status).toBe(401);
+  });
+
   it('does not open the stream for an account scheduled for deletion', async () => {
     const { ticket } = await (await ticketFor(runId)).json() as { ticket: string };
     await baseEnv.DB.prepare("UPDATE users SET delete_requested_at = datetime('now') WHERE id = ?").bind(userId).run();
+    deletionCache.delete(userId); // as requesting the deletion does: the check is the middleware's, cache included
     expect((await events(`?ticket=${ticket}`)).status).toBe(403);
   });
 });

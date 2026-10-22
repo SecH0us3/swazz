@@ -310,6 +310,7 @@ export function followRun(runId: string, proxyUrl: string, handlers: RunHandlers
     };
 
     // Signed in, the stream opens with a one-time ticket: the session token never goes in a URL.
+    // Signed out there is no ticket to wait for, so the socket opens at once.
     const connect = () => {
         const signedIn = typeof localStorage !== 'undefined' && localStorage ? !!localStorage.getItem('swazz_token') : false;
         if (!signedIn) {

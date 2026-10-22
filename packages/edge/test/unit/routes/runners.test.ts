@@ -89,12 +89,12 @@ describe('Runners Routes Unit Tests', () => {
       expect(await res.text()).toBe('fail');
     });
 
-    it('passes the ticket in the URL to connectClient', async () => {
+    // The ticket is redeemed by the auth middleware, which hands the route its user; the
+    // route itself passes no ticket on.
+    it('does not pass a ticket to connectClient', async () => {
       (mockServices.connectClient as any).mockResolvedValue(new Response('connected'));
       await app.request('/api/runs/r1/events?ticket=abc');
-      expect((mockServices.connectClient as any).mock.calls[0][5]).toBe('abc');
-      await app.request('/api/runs/r1/events');
-      expect((mockServices.connectClient as any).mock.calls[1][5]).toBeUndefined();
+      expect((mockServices.connectClient as any).mock.calls[0]).toHaveLength(5);
     });
   });
 

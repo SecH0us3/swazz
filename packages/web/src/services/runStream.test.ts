@@ -103,7 +103,17 @@ describe('fetchStreamQuery', () => {
         localStorage.setItem('swazz_token', 'jwt');
         const fetchMock = respond(201, { ticket: 'abc', expiresIn: 30 });
         expect(await fetchStreamQuery('r 1', 'https://api.example')).toBe('?ticket=abc');
-        expect(fetchMock).toHaveBeenCalledWith('https://api.example/api/runs/r%201/stream-ticket', { method: 'POST', headers: { Authorization: 'Bearer jwt' } });
+        expect(fetchMock).toHaveBeenCalledWith('https://api.example/api/runs/r%201/stream-ticket',
+            expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer jwt' }, signal: expect.any(AbortSignal) }));
+    });
+
+    // A ticket request that hangs (half-open connection, stalled proxy) is a drop, not a wait.
+    it('gives up on a ticket request that does not answer', async () => {
+        localStorage.setItem('swazz_token', 'jwt');
+        vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise((_, reject) => {
+            init.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+        })));
+        expect(await fetchStreamQuery('r1', '', 20)).toBeNull();
     });
 
     // As the stream always worked without a session: the server decides whether that is allowed.

@@ -9,6 +9,8 @@ import { Env, AppEnv } from './env';
 import { logInfo, logWarn, logError } from '../../common/logging/logger';
 import { getUserIdFromRequest, getDeleteRequestedAt, safeCompare } from './utils/auth';
 import { AuthRepository } from './repositories/auth';
+import { RunnersRepository } from './repositories/runners';
+import { redeemStreamTicket } from './services/runners';
 import { getDB } from './utils/db';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
@@ -109,12 +111,25 @@ app.use('/api/*', async (c, next) => {
     path === '/api/runners/connect' ||
     path.startsWith('/api/oob/') ||
     path.startsWith('/api/telemetry/') ||
-    (path.startsWith('/api/scans/') && path.endsWith('/upload')) ||
-    // A browser's WebSocket carries a one-time ticket, not a session: connectClient redeems it
-    // and runs the checks below for the user it was issued to.
-    (c.req.method === 'GET' && /^\/api\/runs\/[^/]+\/events$/.test(path) && c.req.query('ticket') !== undefined)
+    (path.startsWith('/api/scans/') && path.endsWith('/upload'))
   ) {
     return await next();
+  }
+
+  // A browser's WebSocket carries a one-time ticket instead of a session: it is redeemed here, and
+  // the request then goes through the same checks as any other, as the user it was issued to.
+  const ticket = c.req.query('ticket');
+  if (ticket !== undefined) {
+    // Only a WebSocket upgrade spends a ticket: any other request with one is refused untouched.
+    if (c.req.header('Upgrade') !== 'websocket') {
+      return new Response('Expected Upgrade: websocket', { status: 426 });
+    }
+    const streamRunId = c.req.method === 'GET' ? /^\/api\/runs\/([^/]+)\/events$/.exec(path)?.[1] : undefined;
+    const ticketUser = streamRunId ? await redeemStreamTicket(new RunnersRepository(c.env), ticket, streamRunId) : null;
+    if (!ticketUser) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    c.set('streamTicketUser', ticketUser);
   }
 
   if (c.env.AUTH_ENABLED === 'true') {

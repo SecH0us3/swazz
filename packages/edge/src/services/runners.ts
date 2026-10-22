@@ -25,8 +25,7 @@ export interface IRunnersService {
     userId: string | null,
     upgradeHeader: string | undefined,
     originalUrl: string,
-    rawRequest: any,
-    ticket?: string
+    rawRequest: any
   ): Promise<Response>;
   issueStreamTicket(runId: string, userId: string | null): Promise<{ ticket: string; expiresIn: number }>;
   queueRun(body: any, userId: string | null, isWebRequest: boolean, isAnon: boolean): Promise<{ id: string; status: string }>;
@@ -43,6 +42,20 @@ export const STREAM_TICKET_TTL_SECONDS = 30;
 /** Unused tickets one user may hold at once: a few tabs reconnecting, not a loop filling D1. */
 export const MAX_LIVE_STREAM_TICKETS = 20;
 const STREAM_TICKET_PATTERN = /^[0-9a-f]{64}$/;
+
+/**
+ * The user a ticket for this run's event stream was issued to, or null. It is spent even when it
+ * is refused (wrong run, expired). The auth middleware redeems it, so the request is then checked
+ * like any other as that user.
+ */
+export async function redeemStreamTicket(
+  repo: Pick<IRunnersRepository, 'consumeStreamTicket'>, ticket: string, runId: string,
+): Promise<string | null> {
+  if (!STREAM_TICKET_PATTERN.test(ticket)) return null;
+  const stored = await repo.consumeStreamTicket(await hashApiKey(ticket));
+  if (!stored || stored.runId !== runId || stored.expiresAt <= Math.floor(Date.now() / 1000)) return null;
+  return stored.userId;
+}
 
 /** Constant-time check of a runner token against the operator's SHARED_RUNNER_TOKEN. */
 export async function isSharedRunnerToken(token: string, expected: string | undefined): Promise<boolean> {
@@ -190,20 +203,10 @@ export class RunnersService implements IRunnersService {
     userId: string | null,
     upgradeHeader: string | undefined,
     originalUrl: string,
-    rawRequest: any,
-    ticket?: string
+    rawRequest: any
   ): Promise<Response> {
     if (!upgradeHeader || upgradeHeader !== 'websocket') {
       return new Response('Expected Upgrade: websocket', { status: 426 });
-    }
-
-    // A ticket stands for the user it was issued to, whatever else the request carries: the
-    // global auth middleware lets a ticket through unchecked, so its user is checked here.
-    if (ticket !== undefined) {
-      userId = await this.redeemStreamTicket(ticket, runId);
-      if (await this.runnersRepo.getDeleteRequestedAt(userId) !== null) {
-        throw new Error('Forbidden: Account is scheduled for deletion|403');
-      }
     }
 
     if (this.env.AUTH_ENABLED === 'true' && !userId) {
@@ -240,16 +243,6 @@ export class RunnersService implements IRunnersService {
     const stored = await this.runnersRepo.createStreamTicket(await hashApiKey(ticket), userId, runId, expiresAt, MAX_LIVE_STREAM_TICKETS);
     if (!stored) throw new Error('Too many requests. Please try again later.|429');
     return { ticket, expiresIn: STREAM_TICKET_TTL_SECONDS };
-  }
-
-  /** The user a ticket was issued to; it is spent even when it is refused. */
-  private async redeemStreamTicket(ticket: string, runId: string): Promise<string> {
-    if (!STREAM_TICKET_PATTERN.test(ticket)) throw new Error('Unauthorized|401');
-    const stored = await this.runnersRepo.consumeStreamTicket(await hashApiKey(ticket));
-    if (!stored || stored.runId !== runId || stored.expiresAt <= Math.floor(Date.now() / 1000)) {
-      throw new Error('Unauthorized|401');
-    }
-    return stored.userId;
   }
 
   async queueRun(body: any, userId: string | null, isWebRequest: boolean, isAnon: boolean) {

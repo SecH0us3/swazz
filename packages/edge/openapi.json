@@ -3605,6 +3605,9 @@
           },
           "404": {
             "description": "Run not found"
+          },
+          "429": {
+            "description": "The caller already holds the most unused tickets allowed; try again once they expire (30 seconds)"
           }
         },
         "tags": [

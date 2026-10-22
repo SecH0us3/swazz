@@ -12,6 +12,8 @@ import type { AuthRepository } from '../repositories/auth';
 declare module 'hono' {
   interface ContextVariableMap {
     jwtPayload: Record<string, unknown>;
+    // The user a one-time event stream ticket was issued to, once the auth middleware redeemed it.
+    streamTicketUser: string;
   }
 }
 
@@ -50,6 +52,9 @@ export function requestToken<E extends { Bindings: Env }>(c: Context<E>): string
 }
 
 export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Context<E>): Promise<string | null> {
+  // A redeemed stream ticket stands for its user, whatever else the request carries.
+  const ticketUser = c.get('streamTicketUser');
+  if (ticketUser) return ticketUser;
   const token = requestToken(c);
   if (!token) {
     return null;

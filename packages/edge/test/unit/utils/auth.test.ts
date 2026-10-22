@@ -221,10 +221,18 @@ describe('Auth Utils - Additional functions', () => {
     it('uses cached jwtPayload from context', async () => {
       const mockContext = createMockContext() as any;
       mockContext.headers['authorization'] = 'Bearer token';
-      mockContext.get.mockReturnValueOnce({ sub: 'cached-jwt-user' });
+      mockContext.get.mockImplementation((key: string) => (key === 'jwtPayload' ? { sub: 'cached-jwt-user' } : undefined));
 
       const res = await getUserIdFromRequest(mockContext);
       expect(res).toBe('cached-jwt-user');
+    });
+
+    // The auth middleware redeemed a stream ticket: its user wins over anything else sent along.
+    it('returns the user of a redeemed stream ticket first', async () => {
+      const mockContext = createMockContext() as any;
+      mockContext.headers['authorization'] = 'Bearer invalid-jwt';
+      mockContext.get.mockImplementation((key: string) => (key === 'streamTicketUser' ? 'ticket-user' : undefined));
+      expect(await getUserIdFromRequest(mockContext)).toBe('ticket-user');
     });
 
     it('returns null if JWT token is invalid', async () => {

@@ -66,11 +66,13 @@ export function registerRunnersRoutes(
     const upgradeHeader = c.req.header('Upgrade');
 
     try {
-      return await services.connectClient(runId, userId, upgradeHeader, c.req.raw.url, c.req.raw, c.req.query('ticket'));
+      return await services.connectClient(runId, userId, upgradeHeader, c.req.raw.url, c.req.raw);
     } catch (err: any) {
-      console.error(`WS Connect Client Error: ${err.message}`);
       const parts = err.message.split('|');
       const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      // A refused client (no access, a run that is gone) is routine; only failures are errors.
+      if (statusCode >= 500) console.error(`WS Connect Client Error: ${err.message}`);
+      else console.info(`WS Connect Client refused: ${parts[0]} (${statusCode})`);
       return new Response(parts[0], { status: statusCode });
     }
   });
