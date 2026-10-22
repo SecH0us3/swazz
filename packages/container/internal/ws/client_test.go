@@ -7,9 +7,11 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -70,10 +72,6 @@ func TestClient_SendMessage(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 
 	client := NewClient(true)
-
-	t.Run("close nil", func(t *testing.T) {
-		assert.NoError(t, client.Close())
-	})
 
 	t.Run("success", func(t *testing.T) {
 		msg, status, err := client.SendMessage(context.Background(), wsURL, []byte("hello"), nil)
@@ -165,4 +163,109 @@ func TestClient_BlocksPrivateAddress(t *testing.T) {
 	assert.Equal(t, http.StatusOK, status)
 	assert.Equal(t, "hello", string(msg))
 	assert.Equal(t, int32(1), hits.Load())
+}
+
+// newBarrierWSServer echoes each message only once n connections are open at the same time, so
+// it answers only clients that send in parallel.
+func newBarrierWSServer(t *testing.T, n int32) *httptest.Server {
+	t.Helper()
+	var open atomic.Int32
+	all := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		if open.Add(1) == n {
+			close(all)
+		}
+		typ, msg, err := c.Read(r.Context())
+		if err != nil {
+			return
+		}
+		select {
+		case <-all:
+		case <-time.After(10 * time.Second): // a hijacked request's context never ends
+			return
+		}
+		_ = c.Write(r.Context(), typ, msg)
+		c.Close(websocket.StatusNormalClosure, "")
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// One client sends to the same endpoint from several goroutines at once; nothing serializes them.
+func TestClient_SendMessage_Concurrent(t *testing.T) {
+	const n = 4
+	srv := newBarrierWSServer(t, n)
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	client := NewClient(true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			msg, status, err := client.SendMessage(ctx, wsURL, []byte(fmt.Sprint(i)), nil)
+			if err == nil && (status != http.StatusOK || string(msg) != fmt.Sprint(i)) {
+				err = fmt.Errorf("got %d %q", status, msg)
+			}
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		assert.NoError(t, err)
+	}
+}
+
+// A target that answers and then ignores the close frame does not hold the exchange past its
+// context: the library alone would wait seconds for the peer's close frame.
+func TestClient_SendMessage_CloseIsBoundedByTheContext(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		_, msg, err := c.Read(context.Background())
+		if err != nil {
+			return
+		}
+		_ = c.Write(context.Background(), websocket.MessageText, msg)
+		<-release // never reads the client's close frame
+	}))
+	t.Cleanup(func() {
+		close(release)
+		srv.Close()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	msg, status, err := NewClient(true).SendMessage(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), []byte("hi"), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 200, status)
+	assert.Equal(t, "hi", string(msg))
+	assert.Less(t, time.Since(start), 2*time.Second)
+}
+
+// Nothing answered the handshake: a network error (status 0), not a 5xx of the target.
+func TestClient_SendMessage_RefusedIsNotA5xx(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, status, err := NewClient(true).SendMessage(ctx, url, []byte("hi"), nil)
+	require.Error(t, err)
+	assert.Zero(t, status)
 }

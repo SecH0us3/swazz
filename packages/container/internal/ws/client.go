@@ -9,16 +9,15 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"sync"
 
 	"nhooyr.io/websocket"
 
 	"swazz-engine/internal/security"
 )
 
+// Client sends one message per connection (see SendMessage). It keeps no connection, so it is
+// safe for concurrent use and has nothing to close.
 type Client struct {
-	mu   sync.Mutex
-	conn *websocket.Conn
 	// The HTTP client of the handshake; nil is the library's default (http.DefaultClient).
 	httpClient *http.Client
 }
@@ -40,17 +39,6 @@ func NewClient(allowPrivate bool) *Client {
 // Timeout, which the WebSocket library refuses: the caller's context bounds the handshake.
 var protectedHTTPClient = &http.Client{Transport: security.NewSSRFProtectedTransport(false)}
 
-func (c *Client) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn != nil {
-		err := c.conn.Close(websocket.StatusNormalClosure, "")
-		c.conn = nil
-		return err
-	}
-	return nil
-}
-
 // MapWSCloseCodeToHTTPStatus maps RFC 6455 WebSocket close codes to HTTP status codes.
 func MapWSCloseCodeToHTTPStatus(code websocket.StatusCode) int {
 	switch code {
@@ -69,10 +57,9 @@ func MapWSCloseCodeToHTTPStatus(code websocket.StatusCode) int {
 	}
 }
 
+// SendMessage opens a connection to endpoint, writes payload, reads one message back and closes
+// the connection.
 func (c *Client) SendMessage(ctx context.Context, endpoint string, payload []byte, headers map[string]string) ([]byte, int, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	httpHeader := http.Header{}
 	for k, v := range headers {
 		httpHeader.Set(k, v)
@@ -93,11 +80,12 @@ func (c *Client) SendMessage(ctx context.Context, endpoint string, payload []byt
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, http.StatusGatewayTimeout, err
 		}
-		return nil, http.StatusInternalServerError, err
+		// No answer at all (refused, reset, DNS): a network error, not a 5xx of the target.
+		return nil, 0, err
 	}
-
-	// Close when done
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	// No close handshake: the library gives a peer that ignores the close frame seconds of its
+	// own (beyond ctx), which would hold every exchange with such a target past its timeout.
+	defer conn.CloseNow()
 
 	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {

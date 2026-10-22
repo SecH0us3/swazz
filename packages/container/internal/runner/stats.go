@@ -12,10 +12,13 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"strings"
-	"swazz-engine/internal/swagger"
+	"sync"
 	"time"
+
+	"swazz-engine/internal/swagger"
 )
 
 // statsMsg is sent from worker goroutines to the stats aggregator.
@@ -45,11 +48,93 @@ type CheckpointData struct {
 	Iteration int    `json:"iteration"`
 }
 
+// statsPipe connects one run's workers to its statsAggregator. The run ends it with close, never
+// by closing ch: a worker that outlived the run (finalise gives up waiting for it) may still send,
+// and a send on a closed channel would panic it.
+type statsPipe struct {
+	ch chan statsMsg
+	// mu is held for reading by every send in progress; close takes it for writing, so once
+	// sealed is closed no send is in progress or can start, and the aggregator's final drain of
+	// ch takes in every message a send reported as delivered.
+	mu      sync.RWMutex
+	stopped bool
+	stop    chan struct{} // closed first: a send blocked on a full ch gives up
+	sealed  chan struct{} // closed once stopped is set; the aggregator drains ch and returns
+	done    chan struct{} // closed by the aggregator when it has returned
+	once    sync.Once
+}
+
+func newStatsPipe() *statsPipe {
+	return &statsPipe{
+		ch:     make(chan statsMsg, 4096),
+		stop:   make(chan struct{}),
+		sealed: make(chan struct{}),
+		done:   make(chan struct{}),
+	}
+}
+
+// stoppedStatsPipe is the pipe of a runner with no run: sends are dropped, and close returns.
+func stoppedStatsPipe() *statsPipe {
+	p := &statsPipe{stopped: true, stop: make(chan struct{}), sealed: make(chan struct{}), done: make(chan struct{})}
+	close(p.stop)
+	close(p.sealed)
+	close(p.done)
+	p.once.Do(func() {})
+	return p
+}
+
+// send hands msg to the aggregator and reports whether it did. It gives up (false) once the run
+// has ended, or when cancel is closed while ch is full; a nil cancel never fires.
+func (p *statsPipe) send(msg statsMsg, cancel <-chan struct{}) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.stopped {
+		return false
+	}
+	select {
+	case p.ch <- msg:
+		return true
+	case <-p.stop:
+		return false
+	case <-cancel:
+		return false
+	}
+}
+
+// close ends the pipe once its aggregator has taken in every delivered message, and waits for
+// that. Calling it again only waits.
+func (p *statsPipe) close() {
+	p.once.Do(func() {
+		close(p.stop)
+		p.mu.Lock()
+		p.stopped = true
+		p.mu.Unlock()
+		close(p.sealed)
+	})
+	<-p.done
+}
+
+// sendStats hands msg to the run's statsAggregator. Once the run has ended it drops msg instead
+// of blocking on an aggregator that is gone, and returns false.
+func (r *Runner) sendStats(msg statsMsg) bool {
+	return r.stats.Load().send(msg, nil)
+}
+
+// sendStatsUntil is sendStats that also gives up when ctx ends while the pipe is full.
+func (r *Runner) sendStatsUntil(ctx context.Context, msg statsMsg) bool {
+	return r.stats.Load().send(msg, ctx.Done())
+}
+
+// stopStats ends the run's statsAggregator once it has taken in what was sent, and waits for it.
+func (r *Runner) stopStats() {
+	r.stats.Load().close()
+}
+
 // statsAggregator runs as a single background goroutine that owns all
-// mutable stats data. It consumes results from statsChan, accumulates
+// mutable stats data. It consumes results from the run's statsPipe, accumulates
 // them without any locks, and publishes snapshots at a fixed interval.
-func (r *Runner) statsAggregator() {
-	defer close(r.statsDone)
+func (r *Runner) statsAggregator(p *statsPipe) {
+	defer close(p.done)
 
 	ticker := time.NewTicker(150 * time.Millisecond)
 	defer ticker.Stop()
@@ -65,44 +150,56 @@ func (r *Runner) statsAggregator() {
 	completedIters := make(map[int]bool)
 	var activeEp, activePr string
 
+	handle := func(msg statsMsg) {
+		if !initializedTotalRequests {
+			stats.TotalRequests = r.progress.totalRequests.Load()
+			lastCheckpointRequests = stats.TotalRequests
+			initializedTotalRequests = true
+		}
+		accumulateResult(&stats, msg.result)
+
+		// If we switched to a new endpoint/profile, reset the completed iterations tracking
+		if msg.endpoint != activeEp || msg.profile != activePr {
+			activeEp = msg.endpoint
+			activePr = msg.profile
+			clear(completedIters)
+		}
+		completedIters[msg.currentIteration] = true
+
+		// Compute the contiguous watermark (highest iteration N where 1..N are all complete)
+		watermark := 0
+		for i := 1; i <= msg.totalIterations; i++ {
+			if completedIters[i] {
+				watermark = i
+			} else {
+				break
+			}
+		}
+
+		latestIteration = watermark
+		if msg.totalIterations > latestTotalIterations {
+			latestTotalIterations = msg.totalIterations
+		}
+		dirty = true
+	}
+
 	for {
 		select {
-		case msg, ok := <-r.statsChan:
-			if !ok {
-				// Channel closed — publish final snapshot and exit
-				r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
-				return
-			}
-			if !initializedTotalRequests {
-				stats.TotalRequests = r.progress.totalRequests.Load()
-				lastCheckpointRequests = stats.TotalRequests
-				initializedTotalRequests = true
-			}
-			accumulateResult(&stats, msg.result)
+		case msg := <-p.ch:
+			handle(msg)
 
-			// If we switched to a new endpoint/profile, reset the completed iterations tracking
-			if msg.endpoint != activeEp || msg.profile != activePr {
-				activeEp = msg.endpoint
-				activePr = msg.profile
-				clear(completedIters)
-			}
-			completedIters[msg.currentIteration] = true
-
-			// Compute the contiguous watermark (highest iteration N where 1..N are all complete)
-			watermark := 0
-			for i := 1; i <= msg.totalIterations; i++ {
-				if completedIters[i] {
-					watermark = i
-				} else {
-					break
+		case <-p.sealed:
+			// No send is in progress or can start, and every delivered message is buffered in
+			// ch: take them in, publish the final snapshot and exit.
+			for {
+				select {
+				case msg := <-p.ch:
+					handle(msg)
+				default:
+					r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
+					return
 				}
 			}
-
-			latestIteration = watermark
-			if msg.totalIterations > latestTotalIterations {
-				latestTotalIterations = msg.totalIterations
-			}
-			dirty = true
 
 		case <-ticker.C:
 			if dirty {

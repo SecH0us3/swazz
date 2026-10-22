@@ -124,20 +124,23 @@ type Runner struct {
 
 	lifecycle runnerLifecycle
 	progress  runnerProgress
-	// The run's workers (goWorker), so a run that ends abnormally can wait for them.
-	workers        sync.WaitGroup
+	// The run's workers (goWorker), so a run that ends abnormally can wait for them and no run
+	// starts while one of the last run's is still running.
+	workers        workerGroup
 	workerPanicked atomic.Bool
+	// How long finalise waits for the workers of a run that ended abnormally; 0 means
+	// defaultWorkerStopTimeout.
+	workerStopTimeout time.Duration
 	// Runs in Start once the run is initialised; tests only.
 	afterInitHook func(context.Context)
 	// Repeats of the same warning or error in one run's user-facing log (see logging.go).
 	userLogRepeats logRepeats
 	pause          runnerPause
 
-	// Stats aggregation — channel-based, owned by statsAggregator goroutine.
-	statsChan      chan statsMsg
+	// Stats aggregation — the current run's statsPipe, owned by its statsAggregator goroutine.
+	stats          atomic.Pointer[statsPipe]
 	latestStats    atomic.Pointer[swagger.RunStats]
 	wafCheckResult atomic.Pointer[wafcheck.Result]
-	statsDone      chan struct{}
 
 	subsMu        sync.RWMutex
 	subs          map[chan Event]struct{}
@@ -148,9 +151,6 @@ type Runner struct {
 	// Config variable substitution — written once per config reload.
 	configMu    sync.RWMutex
 	varReplacer *strings.Replacer
-
-	// WebSocket clients map (key: string address/endpoint, value: *ws.Client)
-	wsClients sync.Map
 
 	// Domain state & regex cache — used by chaining rules.
 	stateMu       sync.RWMutex
@@ -184,6 +184,10 @@ type Runner struct {
 	mcpRateLimiter *mcp.RateLimiter
 
 	grpcClients sync.Map // map[string]*swazzGrpc.Client
+
+	proxyOnce   sync.Once
+	proxyClient atomic.Pointer[http.Client] // see proxiedClient
+	proxyTurn   atomic.Uint32               // rotation through Settings.ProxyList
 }
 
 // New creates a new Runner with sensible defaults.
@@ -242,8 +246,6 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		eventQueue:     NewMPSCQueue(),
 		doneCh:         make(chan struct{}),
 		broadcastDone:  make(chan struct{}),
-		statsChan:      make(chan statsMsg, 4096),
-		statsDone:      make(chan struct{}),
 		analyzer:       analyzer.NewRegistry(),
 		sizeBaselines:  &sync.Map{},
 		timeBaselines:  &sync.Map{},
@@ -266,6 +268,7 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 	r.updateReplacer()
 	r.detector = bola.NewDetector(r)
 
+	r.stats.Store(stoppedStatsPipe()) // until a run starts, stats have nowhere to go
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
 	go r.broadcastLoop()
@@ -518,12 +521,16 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 				r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
 			}
 
-			r.statsChan <- statsMsg{
+			// A result of a run that has ended (a worker finalise gave up waiting for) is dropped
+			// whole: not counted, streamed or kept.
+			if !r.sendStats(statsMsg{
 				result:           result,
 				currentIteration: 1,
 				totalIterations:  1,
 				endpoint:         epKey,
 				profile:          "BASELINE",
+			}) {
+				return
 			}
 			r.Broadcast(Event{Type: EventResult, Data: result})
 
@@ -565,11 +572,11 @@ func (r *Runner) AddCompletedEndpoints(n int32)        { r.progress.completedEnd
 func (r *Runner) AddTotalPlanned(n int64)              { r.progress.totalPlanned.Add(n) }
 
 func (r *Runner) SendStat(res *swagger.FuzzResult, currentIteration, totalIterations int) {
-	r.statsChan <- statsMsg{
+	r.sendStats(statsMsg{
 		result:           res,
 		currentIteration: currentIteration,
 		totalIterations:  totalIterations,
-	}
+	})
 }
 
 func (r *Runner) ExecuteRequest(ctx context.Context, baseURL, resolvedPath, epPath, method string,

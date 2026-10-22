@@ -128,12 +128,21 @@ async function dbGetRuns(db: IDBDatabase): Promise<ScanRun[]> {
 }
 
 /**
- * Write a single result row to IDB. Intended to be called per-SSE-event.
- * Opens a single-item transaction — fast and non-blocking.
+ * Batch write results — used for history import and final flush.
  */
-export async function dbStreamResult(db: IDBDatabase, runId: string, row: ResultSummary): Promise<void> {
+export async function dbAppendResults(db: IDBDatabase, runId: string, rows: ResultSummary[]): Promise<void> {
+    if (rows.length === 0) return;
     const tx = db.transaction('results', 'readwrite');
-    tx.objectStore('results').put({ ...row, runId });
+    const store = tx.objectStore('results');
+    try {
+        for (const r of rows) {
+            store.put({ ...r, runId });
+        }
+    } catch (err) {
+        // A row that cannot be stored (DataCloneError): the batch is all or nothing.
+        tx.abort();
+        throw err;
+    }
     return new Promise<void>((resolve, reject) => {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
@@ -141,20 +150,106 @@ export async function dbStreamResult(db: IDBDatabase, runId: string, row: Result
     });
 }
 
+// A live scan streams hundreds of results a second. One readwrite transaction per result queued
+// up behind each other (and behind the Inspector's reads), so the rows are batched: written once
+// RESULT_BATCH_ROWS are waiting or RESULT_BATCH_DELAY_MS after the first of them, whichever first.
+export const RESULT_BATCH_ROWS = 500;
+export const RESULT_BATCH_DELAY_MS = 100;
+
+export interface ResultWriter {
+    add(row: ResultSummary): void;
+    /** Writes what is waiting; resolves once every row added so far is written (or dropped). */
+    flush(): Promise<void>;
+}
+
+export interface ResultWriterOptions {
+    maxRows?: number;
+    maxDelayMs?: number;
+    /** Called after each batch is committed, with the number of rows written so far. */
+    onWritten?: (written: number) => void;
+}
+
 /**
- * Batch write results — used for history import and final flush.
+ * Batches a live scan's result rows into IndexedDB, in order. While rows wait for their batch, a
+ * pagehide writes them at once in their own transaction (not behind a batch still being written,
+ * which a closing page would not wait for).
+ *
+ * A batch that cannot be stored is all or nothing: for a row that cannot be cloned (thrown by put)
+ * the other rows are written one by one; any other failure (quota, a closing database) drops the
+ * batch, since retrying its rows one by one would fail the same way, and the drop is logged with
+ * its size.
  */
-async function dbAppendResults(db: IDBDatabase, runId: string, rows: ResultSummary[]): Promise<void> {
-    if (rows.length === 0) return;
-    const tx = db.transaction('results', 'readwrite');
-    const store = tx.objectStore('results');
-    for (const r of rows) {
-        store.put({ ...r, runId });
+export function createResultWriter(
+    getDb: () => IDBDatabase | null,
+    runId: string,
+    { maxRows = RESULT_BATCH_ROWS, maxDelayMs = RESULT_BATCH_DELAY_MS, onWritten }: ResultWriterOptions = {},
+): ResultWriter {
+    let pending: ResultSummary[] = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Batches are written in order, one after the other.
+    let written: Promise<void> = Promise.resolve();
+    let writtenRows = 0;
+
+    const take = (): ResultSummary[] => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+        const rows = pending;
+        pending = [];
+        if (typeof window !== 'undefined') window.removeEventListener('pagehide', onPageHide);
+        return rows;
+    };
+
+    const write = async (rows: ResultSummary[]) => {
+        const db = getDb();
+        if (!db) return;
+        try {
+            await dbAppendResults(db, runId, rows);
+            writtenRows += rows.length;
+        } catch (err) {
+            if (rows.length > 1 && (err as { name?: string } | null)?.name === 'DataCloneError') {
+                let dropped = 0;
+                for (const row of rows) {
+                    try {
+                        await dbAppendResults(db, runId, [row]);
+                        writtenRows++;
+                    } catch {
+                        dropped++;
+                    }
+                }
+                console.warn(`[swazz] IDB write error: ${dropped} of ${rows.length} result row(s) could not be stored:`, err);
+            } else {
+                console.warn(`[swazz] IDB write error: ${rows.length} result row(s) dropped:`, err);
+            }
+        }
+        onWritten?.(writtenRows);
+    };
+
+    function onPageHide() {
+        const rows = take();
+        if (rows.length > 0) void write(rows);
     }
-    return new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-    });
+
+    const flush = (): Promise<void> => {
+        const rows = take();
+        if (rows.length === 0) return written;
+        written = written.then(() => write(rows));
+        return written;
+    };
+
+    return {
+        add(row) {
+            if (pending.length === 0 && typeof window !== 'undefined') window.addEventListener('pagehide', onPageHide);
+            pending.push(row);
+            if (pending.length >= maxRows) {
+                void flush();
+            } else if (!timer) {
+                timer = setTimeout(() => { void flush(); }, maxDelayMs);
+            }
+        },
+        flush,
+    };
 }
 
 /**
