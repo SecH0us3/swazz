@@ -338,6 +338,11 @@ func TestAgentSession_NoReplayWithoutDeliverySupport(t *testing.T) {
 	}()
 	first := <-conns
 	session.dispatcher.SendWSEvent("run-1", "result", nil)
+	session.dispatcher.SendWSEvent("run-1", "result", nil)
+	<-first
+	// Seq 2 is written only once the write of seq 1 has returned, so seq 1 is now fully sent.
+	// Seq 2's write may still be in flight when the connection is cancelled: a write that fails
+	// that way is carried to the next connection (at least once), which is not a replay.
 	<-first
 	cancel1()
 	<-done1
@@ -346,10 +351,16 @@ func TestAgentSession_NoReplayWithoutDeliverySupport(t *testing.T) {
 	defer cancel2()
 	go func() { _ = session.runConnection(ctx2, url, nil, false, nil) }()
 	second := <-conns
-	select {
-	case seq := <-second:
-		t.Fatalf("seq %d was replayed to a coordinator that does not acknowledge", seq)
-	case <-time.After(300 * time.Millisecond):
+	deadline := time.After(300 * time.Millisecond)
+	for {
+		select {
+		case seq := <-second:
+			if seq == 1 {
+				t.Fatalf("seq %d was replayed to a coordinator that does not acknowledge", seq)
+			}
+		case <-deadline:
+			return
+		}
 	}
 }
 
