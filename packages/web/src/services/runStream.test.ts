@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { interpretRunMessage, fetchScanStatus, UNKNOWN_FAILURE } from './runStream.js';
+import { interpretRunMessage, fetchScanStatus, fetchStreamQuery, UNKNOWN_FAILURE } from './runStream.js';
 
 describe('interpretRunMessage', () => {
     it('classifies the stream events', () => {
@@ -84,5 +84,48 @@ describe('fetchScanStatus', () => {
         respond(200, { scan: { status: 'completed' } });
         await fetchScanStatus('a/b', 'https://edge');
         expect((globalThis.fetch as any).mock.calls[0][0]).toBe('https://edge/api/scans/a%2Fb');
+    });
+});
+
+describe('fetchStreamQuery', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        localStorage.removeItem('swazz_token');
+    });
+
+    const respond = (status: number, body: unknown) => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: status < 400, status, json: async () => body });
+        vi.stubGlobal('fetch', fetchMock);
+        return fetchMock;
+    };
+
+    it('trades the session for a ticket', async () => {
+        localStorage.setItem('swazz_token', 'jwt');
+        const fetchMock = respond(201, { ticket: 'abc', expiresIn: 30 });
+        expect(await fetchStreamQuery('r 1', 'https://api.example')).toBe('?ticket=abc');
+        expect(fetchMock).toHaveBeenCalledWith('https://api.example/api/runs/r%201/stream-ticket', { method: 'POST', headers: { Authorization: 'Bearer jwt' } });
+    });
+
+    // As the stream always worked without a session: the server decides whether that is allowed.
+    it('opens without credentials when signed out or when the session is turned away', async () => {
+        const fetchMock = respond(201, { ticket: 'abc' });
+        expect(await fetchStreamQuery('r1')).toBe('');
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        localStorage.setItem('swazz_token', 'stale');
+        respond(401, { error: 'Unauthorized' });
+        expect(await fetchStreamQuery('r1')).toBe('');
+    });
+
+    it('gives null when it has no answer', async () => {
+        localStorage.setItem('swazz_token', 'jwt');
+        respond(403, { error: 'Forbidden' });
+        expect(await fetchStreamQuery('r1')).toBeNull();
+        respond(429, { error: 'Too many requests' });
+        expect(await fetchStreamQuery('r1')).toBeNull();
+        respond(201, {});
+        expect(await fetchStreamQuery('r1')).toBeNull();
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+        expect(await fetchStreamQuery('r1')).toBeNull();
     });
 });

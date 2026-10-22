@@ -109,7 +109,10 @@ app.use('/api/*', async (c, next) => {
     path === '/api/runners/connect' ||
     path.startsWith('/api/oob/') ||
     path.startsWith('/api/telemetry/') ||
-    (path.startsWith('/api/scans/') && path.endsWith('/upload'))
+    (path.startsWith('/api/scans/') && path.endsWith('/upload')) ||
+    // A browser's WebSocket carries a one-time ticket, not a session: connectClient redeems it
+    // and runs the checks below for the user it was issued to.
+    (c.req.method === 'GET' && /^\/api\/runs\/[^/]+\/events$/.test(path) && c.req.query('ticket') !== undefined)
   ) {
     return await next();
   }

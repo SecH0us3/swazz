@@ -3573,6 +3573,60 @@
         }
       }
     },
+    "/api/runs/{id}/stream-ticket": {
+      "post": {
+        "summary": "Get a ticket for the run's event stream",
+        "description": "Returns a one-time ticket that opens GET /api/runs/{id}/events as the caller: pass it as ?ticket=. Browsers cannot set headers on a WebSocket, and a session token in a URL ends up in proxy logs; the ticket is valid for one connection to this run only, for 30 seconds. Query-string ?token= accepts API keys (swazz_live_...) only.",
+        "responses": {
+          "201": {
+            "description": "Ticket issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "type": "string"
+                    },
+                    "expiresIn": {
+                      "type": "integer",
+                      "description": "Seconds the ticket stays valid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Run not found"
+          }
+        },
+        "tags": [
+          "Runners"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/api/runs/{id}/stop": {
       "post": {
         "summary": "Stop active run",

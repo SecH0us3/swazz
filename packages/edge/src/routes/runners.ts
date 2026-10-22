@@ -66,7 +66,7 @@ export function registerRunnersRoutes(
     const upgradeHeader = c.req.header('Upgrade');
 
     try {
-      return await services.connectClient(runId, userId, upgradeHeader, c.req.raw.url, c.req.raw);
+      return await services.connectClient(runId, userId, upgradeHeader, c.req.raw.url, c.req.raw, c.req.query('ticket'));
     } catch (err: any) {
       console.error(`WS Connect Client Error: ${err.message}`);
       const parts = err.message.split('|');
@@ -75,6 +75,31 @@ export function registerRunnersRoutes(
     }
   });
   
+  // Browsers cannot set headers on a WebSocket: the dashboard trades its session for a one-time
+  // ticket here and puts that, not the session token, in the event stream's URL.
+  app.post('/api/runs/:id/stream-ticket', async (c) => {
+    const services = runnersServicesFactory(c.env);
+    const runId = c.req.param('id');
+    if (!isValidId(runId)) {
+      return c.json({ error: 'Run not found' }, 404);
+    }
+    const userId = await getUserIdFromRequest(c);
+
+    try {
+      const ticket = await services.issueStreamTicket(runId, userId);
+      c.header('Cache-Control', 'no-store');
+      return c.json(ticket, 201);
+    } catch (err: any) {
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      const status = errorStatus(parts[1]);
+      if (status >= 500) {
+        console.error(err);
+        return c.json({ error: 'Internal Server Error' }, 500);
+      }
+      return c.json({ error: parts[0] }, status);
+    }
+  });
+
   app.post('/api/runs', async (c) => {
     const services = runnersServicesFactory(c.env);
     const body = await readJsonBody(c, { maxBytes: LIMITS.LARGE_BODY_BYTES });

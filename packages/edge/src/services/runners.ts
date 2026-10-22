@@ -6,7 +6,7 @@
 import { Env } from '../env';
 import { IRunnersRepository } from '../repositories/runners';
 import { IRbacRepository } from '../repositories/rbac';
-import { hashApiKey } from '../utils/auth';
+import { hashApiKey, randomHex } from '../utils/auth';
 import { ScansRepository } from '../repositories/scans';
 import { isValidRunId, serializeScanConfig, writeScanConfig } from './scanConfigStore';
 import { SCAN_NOT_QUEUED } from '../utils/runnerMessages';
@@ -25,8 +25,10 @@ export interface IRunnersService {
     userId: string | null,
     upgradeHeader: string | undefined,
     originalUrl: string,
-    rawRequest: any
+    rawRequest: any,
+    ticket?: string
   ): Promise<Response>;
+  issueStreamTicket(runId: string, userId: string | null): Promise<{ ticket: string; expiresIn: number }>;
   queueRun(body: any, userId: string | null, isWebRequest: boolean, isAnon: boolean): Promise<{ id: string; status: string }>;
   stopRun(runId: string, userId: string | null): Promise<{ status: string }>;
   pauseRun(runId: string, userId: string | null): Promise<{ status: string }>;
@@ -35,6 +37,12 @@ export interface IRunnersService {
 }
 
 const MIN_SHARED_RUNNER_TOKEN_LENGTH = 32;
+
+/** How long a ticket for a scan's event stream can wait to be used: the dashboard uses it at once. */
+export const STREAM_TICKET_TTL_SECONDS = 30;
+/** Unused tickets one user may hold at once: a few tabs reconnecting, not a loop filling D1. */
+export const MAX_LIVE_STREAM_TICKETS = 20;
+const STREAM_TICKET_PATTERN = /^[0-9a-f]{64}$/;
 
 /** Constant-time check of a runner token against the operator's SHARED_RUNNER_TOKEN. */
 export async function isSharedRunnerToken(token: string, expected: string | undefined): Promise<boolean> {
@@ -182,10 +190,20 @@ export class RunnersService implements IRunnersService {
     userId: string | null,
     upgradeHeader: string | undefined,
     originalUrl: string,
-    rawRequest: any
+    rawRequest: any,
+    ticket?: string
   ): Promise<Response> {
     if (!upgradeHeader || upgradeHeader !== 'websocket') {
       return new Response('Expected Upgrade: websocket', { status: 426 });
+    }
+
+    // A ticket stands for the user it was issued to, whatever else the request carries: the
+    // global auth middleware lets a ticket through unchecked, so its user is checked here.
+    if (ticket !== undefined) {
+      userId = await this.redeemStreamTicket(ticket, runId);
+      if (await this.runnersRepo.getDeleteRequestedAt(userId) !== null) {
+        throw new Error('Forbidden: Account is scheduled for deletion|403');
+      }
     }
 
     if (this.env.AUTH_ENABLED === 'true' && !userId) {
@@ -200,8 +218,38 @@ export class RunnersService implements IRunnersService {
     const req = new Request(originalUrl, rawRequest);
     const url = new URL(req.url);
     url.pathname = '/connect-client';
+    // The coordinator authenticates nothing itself; credentials stop here.
+    url.searchParams.delete('ticket');
+    url.searchParams.delete('token');
     url.searchParams.set('runId', runId);
     return stub.fetch(new Request(url.toString(), req));
+  }
+
+  /**
+   * A one-time ticket that opens this run's event stream as this user. Browsers cannot set headers
+   * on a WebSocket, and a session JWT in its URL ends up in proxy and Cloudflare logs; a ticket
+   * there is worth nothing once used or 30 seconds old. Issued only to a caller who could open the
+   * stream with their own credentials, and access is checked again when it is used.
+   */
+  async issueStreamTicket(runId: string, userId: string | null): Promise<{ ticket: string; expiresIn: number }> {
+    if (!userId) throw new Error('Unauthorized|401');
+    await this.checkScanAccess(runId, userId, 'get:/api/projects/:id/scans');
+
+    const ticket = randomHex(32);
+    const expiresAt = Math.floor(Date.now() / 1000) + STREAM_TICKET_TTL_SECONDS;
+    const stored = await this.runnersRepo.createStreamTicket(await hashApiKey(ticket), userId, runId, expiresAt, MAX_LIVE_STREAM_TICKETS);
+    if (!stored) throw new Error('Too many requests. Please try again later.|429');
+    return { ticket, expiresIn: STREAM_TICKET_TTL_SECONDS };
+  }
+
+  /** The user a ticket was issued to; it is spent even when it is refused. */
+  private async redeemStreamTicket(ticket: string, runId: string): Promise<string> {
+    if (!STREAM_TICKET_PATTERN.test(ticket)) throw new Error('Unauthorized|401');
+    const stored = await this.runnersRepo.consumeStreamTicket(await hashApiKey(ticket));
+    if (!stored || stored.runId !== runId || stored.expiresAt <= Math.floor(Date.now() / 1000)) {
+      throw new Error('Unauthorized|401');
+    }
+    return stored.userId;
   }
 
   async queueRun(body: any, userId: string | null, isWebRequest: boolean, isAnon: boolean) {

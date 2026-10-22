@@ -241,4 +241,69 @@ describe('followRun', () => {
         expect(handlers.onError).not.toHaveBeenCalled();
         expect(FakeSocket.instances).toHaveLength(1);
     });
+
+    describe('signed in', () => {
+        const SESSION = 'eyJhbGciOiJIUzI1NiJ9.session.sig';
+        let tickets: string[];
+
+        beforeEach(() => {
+            localStorage.setItem('swazz_token', SESSION);
+            tickets = ['a'.repeat(64), 'b'.repeat(64)];
+            vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+                if (url.endsWith('/stream-ticket')) {
+                    const ticket = tickets.shift();
+                    return { ok: !!ticket, status: ticket ? 201 : 403, json: async () => (ticket ? { ticket, expiresIn: 30 } : { error: 'Forbidden' }) };
+                }
+                return { ok: true, status: 200, json: async () => ({ scan: { status: 'dispatched' } }), init };
+            }));
+        });
+
+        afterEach(() => localStorage.removeItem('swazz_token'));
+
+        // URLs end up in proxy and Cloudflare logs: the session token must never be in one.
+        it('opens the stream with a one-time ticket, not the session token', async () => {
+            followRun('r1', 'https://api.example', handlers, wsRef);
+            expect(FakeSocket.instances).toHaveLength(0);
+            await vi.advanceTimersByTimeAsync(0);
+
+            const call = (fetch as any).mock.calls.find((c: any[]) => c[0].endsWith('/stream-ticket'));
+            expect(call[0]).toBe('https://api.example/api/runs/r1/stream-ticket');
+            expect(call[1]).toMatchObject({ method: 'POST', headers: { Authorization: `Bearer ${SESSION}` } });
+            expect(socket().url).toBe(`wss://api.example/api/runs/r1/events?ticket=${'a'.repeat(64)}`);
+            expect(socket().url).not.toContain(SESSION);
+        });
+
+        it('gets a new ticket for each reconnect', async () => {
+            followRun('r1', '', handlers, wsRef);
+            await vi.advanceTimersByTimeAsync(0);
+            socket().drop();
+            await vi.advanceTimersByTimeAsync(1000);
+            expect(FakeSocket.instances.map(s => new URL(s.url).searchParams.get('ticket'))).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
+        });
+
+        it('retries without opening a socket when no ticket is given', async () => {
+            tickets = [];
+            followRun('r1', '', handlers, wsRef);
+            await vi.advanceTimersByTimeAsync(1000 * (RUN_MAX_RECONNECTS + 1) * RUN_MAX_RECONNECTS);
+            expect(FakeSocket.instances).toHaveLength(0);
+            expect(useAppStore.getState().runStalled).toBe(true);
+            expect(useAppStore.getState().isRunning).toBe(true);
+        });
+
+        it('opens without credentials when the session is turned away', async () => {
+            vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.endsWith('/stream-ticket')
+                ? { ok: false, status: 401, json: async () => ({ error: 'Unauthorized' }) }
+                : { ok: true, status: 200, json: async () => ({ scan: { status: 'dispatched' } }) })));
+            followRun('r1', '', handlers, wsRef);
+            await vi.advanceTimersByTimeAsync(0);
+            expect(socket().url).toMatch(/\/api\/runs\/r1\/events$/);
+        });
+
+        it('opens nothing if stopped while the ticket is on its way', async () => {
+            const stop = followRun('r1', '', handlers, wsRef);
+            stop();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(FakeSocket.instances).toHaveLength(0);
+        });
+    });
 });

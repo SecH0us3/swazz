@@ -10,10 +10,15 @@ import { getUserIdFromRequest } from '../../../src/utils/auth';
 
 const mockGetUserIdFromRequest = vi.fn().mockResolvedValue('user-123');
 
-vi.mock('../../../src/utils/auth', () => ({
-  getUserIdFromRequest: (c: any) => mockGetUserIdFromRequest(c),
-  getClientIp: vi.fn().mockReturnValue('1.1.1.1')
-}));
+vi.mock('../../../src/utils/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/utils/auth')>();
+  return {
+    getUserIdFromRequest: (c: any) => mockGetUserIdFromRequest(c),
+    getClientIp: vi.fn().mockReturnValue('1.1.1.1'),
+    queryApiKey: actual.queryApiKey,
+    requestToken: actual.requestToken,
+  };
+});
 
 describe('MCP Routes', () => {
   let app: Hono<any>;
@@ -250,7 +255,7 @@ describe('MCP Routes', () => {
         return originalFetch(req, env);
       });
 
-      const res = await app.request('/api/mcp/sse?token=my-query-token', {
+      const res = await app.request('/api/mcp/sse?token=swazz_live_query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -259,7 +264,7 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(capturedAuthorizationHeader).toBe('Bearer my-query-token');
+      expect(capturedAuthorizationHeader).toBe('Bearer swazz_live_query');
     });
 
     it('should read non-JSON internal response as text on tools/call failure', async () => {
@@ -502,7 +507,7 @@ describe('MCP Routes', () => {
         return originalFetch(req, env);
       });
 
-      const res = await app.request('/api/mcp/call?token=my-special-token', {
+      const res = await app.request('/api/mcp/call?token=swazz_live_special', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -512,7 +517,37 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(capturedAuth).toBe('Bearer my-special-token');
+      expect(capturedAuth).toBe('Bearer swazz_live_special');
+    });
+
+    // Only an API key is taken from a URL; a session token there is not passed on.
+    it('does not pass on a session token from the query parameter', async () => {
+      const originalFetch = app.fetch.bind(app);
+      const captured: (string | null)[] = [];
+      vi.spyOn(app, 'fetch').mockImplementation((req, env) => {
+        const url = new URL(req.url);
+        if (url.pathname === '/api/projects' || url.pathname === '/api/mcp/call') {
+          captured.push(req.headers.get('Authorization'));
+          return Promise.resolve(new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          }));
+        }
+        return originalFetch(req, env);
+      });
+
+      await app.request('/api/mcp/call?token=eyJhbGciOiJIUzI1NiJ9.e30.sig', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'swazz_list_projects', arguments: {} })
+      });
+      await app.request('/api/mcp/sse?token=eyJhbGciOiJIUzI1NiJ9.e30.sig', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'swazz_list_projects', arguments: {} } })
+      });
+
+      expect(captured).toEqual([null, null]);
     });
 
     it('should support text/plain response parsing for call target API returning non-JSON', async () => {

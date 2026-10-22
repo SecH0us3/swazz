@@ -6,7 +6,7 @@
 import { Hono } from 'hono';
 import { Env, AppEnv } from '../env';
 import { mcpTools } from '../utils/mcp';
-import { getUserIdFromRequest } from '../utils/auth';
+import { getUserIdFromRequest, queryApiKey, requestToken } from '../utils/auth';
 import { errorStatus } from '../utils/http';
 import { ValidationError, isValidId, LIMITS, readJsonBody, reqString } from '../utils/validation';
 
@@ -67,7 +67,7 @@ async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promis
     if (authHeader) {
       headers.set('Authorization', authHeader);
     } else {
-      const token = c.req.query('token');
+      const token = queryApiKey(c);
       if (token) headers.set('Authorization', `Bearer ${token}`);
     }
     headers.set('Content-Type', 'application/json');
@@ -266,13 +266,7 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
     }
 
     const headers = new Headers();
-    let token = null;
-    const authHeader = c.req.header('Authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-    } else {
-      token = c.req.query('token');
-    }
+    const token = requestToken(c);
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }

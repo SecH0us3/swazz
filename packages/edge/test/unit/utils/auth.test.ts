@@ -140,6 +140,27 @@ describe('Auth Utils - Additional functions', () => {
       expect(res).toBeNull();
     });
 
+    it('accepts an API key from the query string', async () => {
+      const mockContext = createMockContext() as any;
+      mockContext.queries['token'] = 'swazz_live_token';
+      mockContext.env.SESSION_CACHE.get.mockResolvedValueOnce(JSON.stringify({ userId: 'key-user' }));
+
+      expect(await getUserIdFromRequest(mockContext)).toBe('key-user');
+    });
+
+    // URLs end up in proxy and Cloudflare logs: a session token there must not work.
+    it('ignores a session JWT in the query string', async () => {
+      const jwt = await sign({ sub: 'jwt-user', iat: Math.floor(Date.now() / 1000) }, 'jwt-secret-123', 'HS256');
+      const inQuery = createMockContext() as any;
+      inQuery.queries['token'] = jwt;
+      expect(await getUserIdFromRequest(inQuery)).toBeNull();
+      expect(await getSessionIat(inQuery)).toBeNull();
+
+      const inHeader = createMockContext() as any;
+      inHeader.headers['authorization'] = `Bearer ${jwt}`;
+      expect(await getUserIdFromRequest(inHeader)).toBe('jwt-user');
+    });
+
     it('uses KV cache positive match', async () => {
       const mockContext = createMockContext() as any;
       mockContext.headers['authorization'] = 'Bearer swazz_live_token';

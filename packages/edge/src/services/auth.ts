@@ -12,7 +12,7 @@ import { IAuthRepository, LoginHistoryMeta } from '../repositories/auth';
 import {
   hashPassword, verifyPassword, hashApiKey, getClientIp,
   hashUsername, verifyDummyPassword, verifyTurnstile, deletionCache,
-  safeCompare
+  safeCompare, randomHex
 } from '../utils/auth';
 import { generateTOTPSecret, matchTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../utils/totp';
 import {
@@ -100,10 +100,6 @@ export interface OAuthCallbackResult {
   redirectUrl: string;
   /** Set only when a session was issued: the route must put `secret` in the browser's cookie. */
   exchangeBinding?: { code: string; secret: string };
-}
-
-function randomHex(bytes: number): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function constantTimeEquals(a: string, b: string): Promise<boolean> {
