@@ -9,8 +9,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
 
@@ -66,22 +68,27 @@ func (p *SemanticPlanner) GeneratePreScanPayloads(ctx context.Context, schemaSum
 }
 
 func parseGatewayError(statusCode int, body []byte) error {
+	return fmt.Errorf("AI Gateway error %d: %s", statusCode, safenet.ReadErrorBody(strings.NewReader(gatewayErrorMessage(body))))
+}
+
+// gatewayErrorMessage returns the message of a gateway error body, or the body itself.
+func gatewayErrorMessage(body []byte) string {
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err == nil {
 		if errArray, ok := data["error"].([]interface{}); ok && len(errArray) > 0 {
 			if firstErr, ok := errArray[0].(map[string]interface{}); ok {
 				if msg, ok := firstErr["message"].(string); ok && msg != "" {
-					return fmt.Errorf("AI Gateway error %d: %s", statusCode, msg)
+					return msg
 				}
 			}
 		}
 		if errObj, ok := data["error"].(map[string]interface{}); ok {
 			if msg, ok := errObj["message"].(string); ok && msg != "" {
-				return fmt.Errorf("AI Gateway error %d: %s", statusCode, msg)
+				return msg
 			}
 		}
 	}
-	return fmt.Errorf("AI Gateway error %d: %s", statusCode, string(body))
+	return string(body)
 }
 
 func parseGatewayResponse(body []byte, isGemini bool) ([]string, error) {

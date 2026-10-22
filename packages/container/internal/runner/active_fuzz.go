@@ -279,8 +279,8 @@ func (r *Runner) runActiveParameterFuzzing(
 				}
 			}
 
-			r.waitIfPaused()
-			if r.stopped() {
+			r.waitIfPaused(ctx)
+			if r.stopped() || ctx.Err() != nil {
 				break
 			}
 
@@ -308,19 +308,21 @@ func (r *Runner) runActiveParameterFuzzing(
 					r.recordTimeBaseline(endpoint.Method, endpoint.Path, result.Duration)
 				}
 
-				r.statsChan <- statsMsg{
+				// A result of a run that has ended (a worker finalise gave up waiting for) is dropped
+				// whole: not counted, streamed or kept.
+				if !r.sendStats(statsMsg{
 					result:           result,
 					currentIteration: it + 1,
 					totalIterations:  totalPlanned,
 					endpoint:         endpoint.Method + " " + endpoint.Path,
 					profile:          string(profile),
+				}) {
+					return
 				}
 				r.Broadcast(Event{Type: EventResult, Data: result})
 
 				if result.Status >= 200 && result.Status < 300 {
-					r.resultsMu.Lock()
-					r.allResults = append(r.allResults, result)
-					r.resultsMu.Unlock()
+					r.retainActiveResult(result)
 				}
 			})
 

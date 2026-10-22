@@ -75,8 +75,8 @@ func TestConfigureTransport(t *testing.T) {
 }
 
 func TestNewSSRFProtectedTransport(t *testing.T) {
-	trAllowed := NewSSRFProtectedTransport(true)
-	assert.Equal(t, http.DefaultTransport, trAllowed)
+	trAllowed := NewSSRFProtectedTransport(true).(*http.Transport)
+	assert.NotSame(t, http.DefaultTransport, trAllowed, "a clone: callers may set TLS options on it")
 
 	tr := NewSSRFProtectedTransport(false).(*http.Transport)
 	assert.NotNil(t, tr.DialContext)
@@ -191,7 +191,7 @@ func TestNewSSRFProtectedClient(t *testing.T) {
 	cAllowed := NewSSRFProtectedClient(10*time.Second, true)
 	assert.NotNil(t, cAllowed)
 	assert.Equal(t, 10*time.Second, cAllowed.Timeout)
-	assert.Equal(t, http.DefaultTransport, cAllowed.Transport)
+	assert.NotSame(t, http.DefaultTransport, cAllowed.Transport)
 }
 
 // GuardedDialContext is the dial function the WebSocket and gRPC executors connect through; it

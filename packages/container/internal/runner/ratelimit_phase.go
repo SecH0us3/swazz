@@ -108,9 +108,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 				totalIterations:  len(statusCodes),
 			}
 
-			select {
-			case r.statsChan <- msg:
-			case <-ctx.Done():
+			if ctx.Err() != nil || !r.sendStatsUntil(ctx, msg) {
 				return
 			}
 		}

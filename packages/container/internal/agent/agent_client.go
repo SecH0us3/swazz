@@ -37,10 +37,30 @@ var (
 // write goroutine that dies mid-write, so a handful is plenty.
 const carryCapacity = 64
 
+// outChanCapacity is the hand-off between the outbox (the agent's real queue, agent_outbox.go)
+// and the connection's write loop.
+const outChanCapacity = 64
+
 const (
 	heartbeatPing     = `{"type":"ping"}`
 	heartbeatInterval = 30 * time.Second
 	heartbeatTimeout  = 90 * time.Second
+)
+
+// Bounds on talking to the coordinator. A coordinator (or a proxy in front of it) that accepts the
+// TCP connection and then stops answering would otherwise hold the agent for good: in the upgrade
+// or the challenge handshake it never reaches the reconnect loop, and a write into a connection
+// nobody reads blocks the write loop for good. When a write loop write fails, timed out or not,
+// the loop closes the connection and the message goes to the next one (carry).
+const (
+	// connectTimeout covers the WebSocket upgrade and, with signature auth, the challenge
+	// handshake, a cold coordinator included.
+	connectTimeout = 60 * time.Second
+	// writeTimeout bounds one write, however large its message. No ping goes out while a write
+	// holds the connection, and a runner without a ping for heartbeatTimeout is treated as gone
+	// by the coordinator (and the pong check below closes the connection), so a longer write
+	// could not succeed anyway: a link too slow for a message within it cannot carry the scan.
+	writeTimeout = heartbeatTimeout - heartbeatInterval
 )
 
 // agentSession is the part of the agent that outlives a single coordinator connection: the
@@ -54,13 +74,20 @@ type agentSession struct {
 	// carry holds messages whose write failed when a connection dropped (possibly only after the
 	// next connection is up); the live connection sends them ahead of the queue.
 	carry chan interface{}
+	// sending counts the messages the write loop has taken and not finished writing.
+	sending atomic.Int32
 
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
+	connectTimeout    time.Duration
+	writeTimeout      time.Duration
+
+	// connectedAt is when the current connection finished its setup; zero until it has.
+	connectedAt time.Time
 }
 
 func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agentSession {
-	outChan := make(chan interface{}, 50000)
+	outChan := make(chan interface{}, outChanCapacity)
 	s := &agentSession{
 		outChan:    outChan,
 		dispatcher: NewAgentDispatcher(coordinatorURL, token, disableTelemetry, outChan),
@@ -68,11 +95,19 @@ func newAgentSession(coordinatorURL, token string, disableTelemetry bool) *agent
 
 		heartbeatInterval: heartbeatInterval,
 		heartbeatTimeout:  heartbeatTimeout,
+		connectTimeout:    connectTimeout,
+		writeTimeout:      writeTimeout,
 	}
-	// Still to reach the coordinator: queued, carried over from a failed write, or sent but not
-	// acknowledged (with a coordinator that acknowledges).
+	// Not written to a connection yet: queued, in the hand-off, being written, or carried over
+	// from a failed write (run events: anything stamped and not yet written).
+	s.dispatcher.unwrittenOutput = func() bool {
+		return s.dispatcher.outbox.pending() > 0 || len(s.outChan) > 0 || s.sending.Load() > 0 ||
+			len(s.carry) > 0 || s.dispatcher.delivery.anyQueued()
+	}
+	// Still to reach the coordinator: unwritten, or written but not acknowledged (with a
+	// coordinator that acknowledges).
 	s.dispatcher.pendingOutput = func() bool {
-		return len(s.outChan) > 0 || len(s.carry) > 0 || len(s.dispatcher.delivery.unackedRuns()) > 0
+		return s.dispatcher.unwrittenOutput() || len(s.dispatcher.delivery.undeliveredRuns()) > 0
 	}
 	return s
 }
@@ -83,7 +118,9 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 	if err != nil {
 		return err
 	}
-	c, resp, err := websocket.Dial(ctx, dialURL, opts)
+	setupCtx, setupCancel := context.WithTimeout(ctx, s.connectTimeout)
+	defer setupCancel()
+	c, resp, err := websocket.Dial(setupCtx, dialURL, opts)
 	if err != nil {
 		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			logError("Critical Authentication Error: Unauthorized/Forbidden (Status Code: %d). Revoked or invalid credentials. Terminating agent process.", resp.StatusCode)
@@ -126,7 +163,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			Type  string `json:"type"`
 			Nonce string `json:"nonce"`
 		}
-		if err := wsjson.Read(ctx, c, &challengeMsg); err != nil {
+		if err := wsjson.Read(setupCtx, c, &challengeMsg); err != nil {
 			return fmt.Errorf("failed to read challenge message from coordinator: %w", err)
 		}
 
@@ -144,7 +181,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			"type":      "challenge_response",
 			"signature": signatureHex,
 		}
-		if err := wsjson.Write(ctx, c, responseMsg); err != nil {
+		if err := wsjson.Write(setupCtx, c, responseMsg); err != nil {
 			return fmt.Errorf("failed to send challenge response: %w", err)
 		}
 
@@ -152,7 +189,7 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 			Type  string `json:"type"`
 			Error string `json:"error"`
 		}
-		if err := wsjson.Read(ctx, c, &authResult); err != nil {
+		if err := wsjson.Read(setupCtx, c, &authResult); err != nil {
 			return fmt.Errorf("failed to read authentication result: %w", err)
 		}
 
@@ -164,7 +201,23 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		}
 	}
 
+	setupCancel()
+	s.connectedAt = time.Now()
 	logInfo("Successfully connected to coordinator. Awaiting jobs...")
+
+	// writing counts the writes in progress other than pings, so the heartbeat can skip a ping
+	// instead of waiting behind a long write (and checking for the pong late).
+	var writing atomic.Int32
+	writeWithin := func(b []byte) error {
+		wctx, cancel := context.WithTimeout(connCtx, s.writeTimeout)
+		defer cancel()
+		return c.Write(wctx, websocket.MessageText, b)
+	}
+	write := func(b []byte) error {
+		writing.Add(1)
+		defer writing.Add(-1)
+		return writeWithin(b)
+	}
 
 	if len(runIDs) > 0 {
 		// The coordinator decides which claims it honours; events of a refused run are dropped there.
@@ -173,8 +226,8 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 
 	// Write loop
 	go func() {
-		// Highest seq of each run's current execution written on this connection. Replayed events
-		// are still in the queue too (or carried over); those copies are skipped.
+		// Highest seq of each run's current execution written on this connection, for ack requests.
+		// The delivery log keeps only what was written, so no event is both replayed and queued.
 		type sentMark struct {
 			exec string
 			seq  uint64
@@ -189,14 +242,20 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 		ackTimerArmed := false
 		defer ackTimer.Stop()
 		send := func(msg interface{}) bool {
+			s.sending.Add(1)
+			defer s.sending.Add(-1)
 			ev, sequenced := msg.(WSEventOut)
 			sequenced = sequenced && ev.Seq > 0
-			if mark, ok := sentUpTo[ev.RunID]; sequenced && ok && mark.exec == ev.Exec && ev.Seq <= mark.seq {
-				return true
+			// A run event that cannot be sent is given up on, so the run does not look undelivered forever.
+			giveUp := func() {
+				if sequenced {
+					s.dispatcher.delivery.written(ev, false)
+				}
 			}
 			b, err := json.Marshal(msg)
 			if err != nil {
 				logError("Failed to marshal WS message: %v", err)
+				giveUp()
 				return true
 			}
 			if len(b) > 1*1024*1024 {
@@ -208,23 +267,30 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 					}
 				}
 				logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
+				giveUp()
 				return true
 			}
-			if err := c.Write(connCtx, websocket.MessageText, b); err != nil {
+			if err := write(b); err != nil {
 				logError("Failed to write to WS: %v", err)
-				// An ack request speaks only for the connection it was written on.
-				if _, isAckRequest := msg.(ackRequestMsg); !isAckRequest {
+				// An ack request speaks only for the connection it was written on, and a replayed
+				// event is still in the delivery log, which replays it on the next one.
+				_, isAckRequest := msg.(ackRequestMsg)
+				if !isAckRequest && !(sequenced && s.dispatcher.delivery.kept(ev)) {
 					select {
 					case s.carry <- msg:
 					default:
 						logError("Dropping a message that failed to send: the resend buffer is full")
+						giveUp()
 					}
 				}
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return false
 			}
 			if sequenced {
-				sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
+				s.dispatcher.delivery.written(ev, true)
+				if mark, ok := sentUpTo[ev.RunID]; !ok || mark.exec != ev.Exec || ev.Seq > mark.seq {
+					sentUpTo[ev.RunID] = sentMark{exec: ev.Exec, seq: ev.Seq}
+				}
 				lastWrite[ev.RunID] = time.Now()
 				if !ackTimerArmed {
 					ackTimer.Reset(ackRequestDelay)
@@ -307,11 +373,15 @@ func (s *agentSession) runConnection(ctx context.Context, urlWithParams string, 
 				// timeout once it has shown it does.
 				if last := lastPong.Load(); last != 0 && time.Since(time.Unix(0, last)) > s.heartbeatTimeout {
 					logError("No heartbeat reply from coordinator for %v; reconnecting", s.heartbeatTimeout)
-					_ = c.Close(websocket.StatusGoingAway, "heartbeat timeout")
+					// CloseNow: the peer is gone, and a close handshake would wait behind a
+					// stuck write for up to 10 s.
+					_ = c.CloseNow()
 					return
 				}
-				if err := c.Write(connCtx, websocket.MessageText, []byte(heartbeatPing)); err != nil {
-					return
+				// No ping while another write holds the connection: the pong check above keeps
+				// running on time, and a closed connection ends this loop through connCtx.
+				if writing.Load() == 0 {
+					_ = writeWithin([]byte(heartbeatPing))
 				}
 			case <-connCtx.Done():
 				return

@@ -39,7 +39,7 @@ These tools run locally using SQLite/Embeddings to help the AI assistant navigat
 ### 2. Remote Project & Scan Tools
 These tools are dynamically exposed by the Cloud Coordinator and verify user-specific project access rights:
 - `swazz_list_projects`: Lists all projects the authenticated user has access to.
-- `swazz_list_scans`: Lists fuzzer scans for a specific project.
+- `swazz_list_scans`: Lists fuzzer scans for a specific project, newest first, 50 per page by default (`limit`, at most 200). When the response has `next_cursor`, pass it as `cursor` for the next page.
 - `swazz_get_scan_status`: Retrieves the detailed metadata and progress status of a scan.
 - `swazz_get_scan_findings`: Fetches all vulnerability findings (crashes, logic flaws, boundaries) for a fuzzer scan.
 - `swazz_trigger_scan`: Configures and triggers/queues a new Swazz API fuzzer scan.

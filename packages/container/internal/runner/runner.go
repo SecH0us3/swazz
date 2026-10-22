@@ -59,13 +59,22 @@ func (r *Runner) Config() *swagger.Config {
 	return r.config
 }
 
-// Results returns a copy of all accumulated FuzzResults.
+// Results returns the successful results kept for the post-scan phases (see retainResult): a
+// bounded sample, in which results marked Slim carry their findings but no payload, body or
+// headers. Use WholeResults where those are needed.
 func (r *Runner) Results() []*swagger.FuzzResult {
 	r.resultsMu.Lock()
 	defer r.resultsMu.Unlock()
 	res := make([]*swagger.FuzzResult, len(r.allResults))
 	copy(res, r.allResults)
 	return res
+}
+
+// WholeResults returns the kept results that still carry their payload, body and headers.
+func (r *Runner) WholeResults() []*swagger.FuzzResult {
+	r.resultsMu.Lock()
+	defer r.resultsMu.Unlock()
+	return replayCandidates(r.allResults)
 }
 
 // GetWAFCheckResult returns the result of the pre-scan WAF check, if any.
@@ -82,6 +91,13 @@ type runnerLifecycle struct {
 	isRunning  atomic.Bool
 	isPaused   atomic.Bool
 	shouldStop atomic.Bool
+	// held is a pause the embedding program asks for (Hold), apart from the user's: the agent
+	// holds its scans while their events cannot reach the coordinator.
+	held atomic.Bool
+	// heldSince is when the current hold began, heldTotal adds up the holds that ended (guarded by
+	// Runner.pause.mu; monotonic). A held scan's time does not count toward MaxScanDurationMin.
+	heldSince time.Time
+	heldTotal time.Duration
 
 	mu     sync.Mutex // guards cancel only
 	cancel context.CancelFunc
@@ -115,20 +131,23 @@ type Runner struct {
 
 	lifecycle runnerLifecycle
 	progress  runnerProgress
-	// The run's workers (goWorker), so a run that ends abnormally can wait for them.
-	workers        sync.WaitGroup
+	// The run's workers (goWorker), so a run that ends abnormally can wait for them and no run
+	// starts while one of the last run's is still running.
+	workers        workerGroup
 	workerPanicked atomic.Bool
+	// How long finalise waits for the workers of a run that ended abnormally; 0 means
+	// defaultWorkerStopTimeout.
+	workerStopTimeout time.Duration
 	// Runs in Start once the run is initialised; tests only.
 	afterInitHook func(context.Context)
 	// Repeats of the same warning or error in one run's user-facing log (see logging.go).
 	userLogRepeats logRepeats
 	pause          runnerPause
 
-	// Stats aggregation — channel-based, owned by statsAggregator goroutine.
-	statsChan      chan statsMsg
+	// Stats aggregation — the current run's statsPipe, owned by its statsAggregator goroutine.
+	stats          atomic.Pointer[statsPipe]
 	latestStats    atomic.Pointer[swagger.RunStats]
 	wafCheckResult atomic.Pointer[wafcheck.Result]
-	statsDone      chan struct{}
 
 	subsMu        sync.RWMutex
 	subs          map[chan Event]struct{}
@@ -139,9 +158,6 @@ type Runner struct {
 	// Config variable substitution — written once per config reload.
 	configMu    sync.RWMutex
 	varReplacer *strings.Replacer
-
-	// WebSocket clients map (key: string address/endpoint, value: *ws.Client)
-	wsClients sync.Map
 
 	// Domain state & regex cache — used by chaining rules.
 	stateMu       sync.RWMutex
@@ -162,7 +178,8 @@ type Runner struct {
 	harvestedIDs  sync.Map // path prefix → []string
 	idSources     sync.Map // ID string → source string
 	resultsMu     sync.Mutex
-	allResults    []*swagger.FuzzResult
+	allResults    []*swagger.FuzzResult // see retainResult
+	retained      retainedResults
 	limiter       *ConcurrencyLimiter
 	gate          license.Gate
 
@@ -179,6 +196,10 @@ type Runner struct {
 	mcpRateLimiter *mcp.RateLimiter
 
 	grpcClients sync.Map // map[string]*swazzGrpc.Client
+
+	proxyOnce   sync.Once
+	proxyClient atomic.Pointer[http.Client] // see proxiedClient
+	proxyTurn   atomic.Uint32               // rotation through Settings.ProxyList
 }
 
 // New creates a new Runner with sensible defaults.
@@ -237,8 +258,6 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		eventQueue:     NewMPSCQueue(),
 		doneCh:         make(chan struct{}),
 		broadcastDone:  make(chan struct{}),
-		statsChan:      make(chan statsMsg, 4096),
-		statsDone:      make(chan struct{}),
 		oobStore:       oob.NewStore(),
 		sstiStore:      sstistore.NewStore(),
 		sizeBaselines:  &sync.Map{},
@@ -263,6 +282,7 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 	r.updateReplacer()
 	r.detector = bola.NewDetector(r)
 
+	r.stats.Store(stoppedStatsPipe()) // until a run starts, stats have nowhere to go
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
 	go r.broadcastLoop()
@@ -298,14 +318,30 @@ func (r *Runner) Start(ctx context.Context) error {
 	if r.config.Settings.MaxScanDurationMin > 0 {
 		timerCtx, cancelTimer := context.WithCancel(runCtx)
 		defer cancelTimer()
+		maxDuration := time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit
+		started, heldBefore := time.Now(), r.heldFor()
+		heldCheckFloor := scanDurationUnit / 60 // a second
 		go func() {
-			timer := time.NewTimer(time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit)
+			timer := time.NewTimer(maxDuration)
 			defer timer.Stop()
-			select {
-			case <-timer.C:
-				r.logDebug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
-				r.Stop()
-			case <-timerCtx.Done():
+			for {
+				select {
+				case <-timer.C:
+					if left := maxDuration - (time.Since(started) - (r.heldFor() - heldBefore)); left > 0 {
+						// Held meanwhile: that time is not the scan's. While still held, the time
+						// left does not shrink, so check back no more often than once a second.
+						if r.Held() && left < heldCheckFloor {
+							left = heldCheckFloor
+						}
+						timer.Reset(left)
+						continue
+					}
+					r.logDebug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
+					r.Stop()
+					return
+				case <-timerCtx.Done():
+					return
+				}
 			}
 		}()
 	}
@@ -400,7 +436,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		r.progress.currentProfile.Store(string(profile))
 
 		for epIdx, endpoint := range r.config.Endpoints {
-			if r.stopped() {
+			if r.stopped() || runCtx.Err() != nil {
 				break
 			}
 
@@ -427,8 +463,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 
 	r.resultsMu.Lock()
-	candidates := make([]*swagger.FuzzResult, len(r.allResults))
-	copy(candidates, r.allResults)
+	candidates := replayCandidates(r.allResults)
 	r.resultsMu.Unlock()
 
 	detector := bola.NewDetector(r)
@@ -462,7 +497,8 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 	var wg sync.WaitGroup
 
 	for _, endpoint := range r.config.Endpoints {
-		if r.stopped() {
+		r.waitIfPaused(ctx)
+		if r.stopped() || ctx.Err() != nil {
 			break
 		}
 
@@ -510,12 +546,16 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 				r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
 			}
 
-			r.statsChan <- statsMsg{
+			// A result of a run that has ended (a worker finalise gave up waiting for) is dropped
+			// whole: not counted, streamed or kept.
+			if !r.sendStats(statsMsg{
 				result:           result,
 				currentIteration: 1,
 				totalIterations:  1,
 				endpoint:         epKey,
 				profile:          "BASELINE",
+			}) {
+				return
 			}
 			r.Broadcast(Event{Type: EventResult, Data: result})
 
@@ -547,6 +587,9 @@ func (r *Runner) LogError(format string, args ...any) { r.logError(format, args.
 
 func (r *Runner) BroadcastProgress() { r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()}) }
 func (r *Runner) BroadcastResult(res *swagger.FuzzResult) {
+	if res != nil && res.NotSent {
+		return
+	}
 	r.Broadcast(Event{Type: EventResult, Data: res})
 }
 
@@ -557,11 +600,11 @@ func (r *Runner) AddCompletedEndpoints(n int32)        { r.progress.completedEnd
 func (r *Runner) AddTotalPlanned(n int64)              { r.progress.totalPlanned.Add(n) }
 
 func (r *Runner) SendStat(res *swagger.FuzzResult, currentIteration, totalIterations int) {
-	r.statsChan <- statsMsg{
+	r.sendStats(statsMsg{
 		result:           res,
 		currentIteration: currentIteration,
 		totalIterations:  totalIterations,
-	}
+	})
 }
 
 func (r *Runner) ExecuteRequest(ctx context.Context, baseURL, resolvedPath, epPath, method string,

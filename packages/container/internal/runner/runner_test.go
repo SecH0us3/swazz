@@ -305,16 +305,16 @@ func TestStatsAggregatorShutdown(t *testing.T) {
 	defer r.Close()
 
 	// Manually start the aggregator by mimicking Start's setup
-	r.statsChan = make(chan statsMsg, 4096)
-	r.statsDone = make(chan struct{})
+	p := newStatsPipe()
+	r.stats.Store(p)
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
-	go r.statsAggregator()
+	go r.statsAggregator(p)
 
 	// Send 100 results
 	const numResults = 100
 	for i := 0; i < numResults; i++ {
-		r.statsChan <- statsMsg{
+		p.ch <- statsMsg{
 			result: &swagger.FuzzResult{
 				Method:   "GET",
 				Endpoint: "/test",
@@ -326,10 +326,10 @@ func TestStatsAggregatorShutdown(t *testing.T) {
 		}
 	}
 
-	// Close the channel and wait for aggregator to finish
-	close(r.statsChan)
+	// Stop the aggregator and wait for it to finish
+	go p.close()
 	select {
-	case <-r.statsDone:
+	case <-p.done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("aggregator did not shut down in time")
 	}
@@ -961,8 +961,6 @@ func TestCheckpointResuming(t *testing.T) {
 
 func TestCheckpointWatermark(t *testing.T) {
 	r := &Runner{
-		statsChan:  make(chan statsMsg, 100),
-		statsDone:  make(chan struct{}),
 		doneCh:     make(chan struct{}),
 		subs:       make(map[chan Event]struct{}),
 		eventQueue: NewMPSCQueue(),
@@ -971,23 +969,25 @@ func TestCheckpointWatermark(t *testing.T) {
 	r.progress.totalRequests.Store(0)
 
 	// Start the stats aggregator
-	go r.statsAggregator()
+	p := newStatsPipe()
+	r.stats.Store(p)
+	go r.statsAggregator(p)
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 3,
 		totalIterations:  10,
 		endpoint:         "GET /test",
 		profile:          "RANDOM",
 	}
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 1,
 		totalIterations:  10,
 		endpoint:         "GET /test",
 		profile:          "RANDOM",
 	}
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 2,
 		totalIterations:  10,
@@ -1001,7 +1001,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to be 3, got %d", stats.Progress.CurrentIteration)
 	}
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 5,
 		totalIterations:  10,
@@ -1014,7 +1014,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to remain 3 because 4 is missing, got %d", stats.Progress.CurrentIteration)
 	}
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 4,
 		totalIterations:  10,
@@ -1027,8 +1027,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to jump to 5 once 4 completed, got %d", stats.Progress.CurrentIteration)
 	}
 
-	close(r.statsChan)
-	<-r.statsDone
+	r.stopStats()
 }
 
 func TestInitRun_MCPMethodFuzzing(t *testing.T) {
@@ -1252,4 +1251,43 @@ func hasFinding(findings []swagger.AnalysisFinding, rule string) bool {
 		}
 	}
 	return false
+}
+
+// Time a scan spends held (the agent's coordinator is away) is not counted against its maximum
+// duration: a hold pauses the scan, it must not end it.
+func TestRunner_MaxScanDurationExcludesHeldTime(t *testing.T) {
+	scanDurationUnit = time.Millisecond
+	defer func() { scanDurationUnit = time.Minute }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	r := New(&swagger.Config{
+		BaseURL:   server.URL,
+		Security:  swagger.SecurityConfig{AllowPrivateIPs: true},
+		Endpoints: []swagger.EndpointConfig{{Path: "/fast", Method: "GET"}},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 5,
+			Concurrency:          1,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
+			MaxScanDurationMin:   1000, // 1s here: the scan itself needs far less, even under -race
+		},
+	}, nil)
+	defer r.Close()
+
+	r.Hold()
+	done := make(chan error, 1)
+	go func() { done <- r.Start(context.Background()) }()
+	time.Sleep(1300 * time.Millisecond) // held past the maximum
+	assert.False(t, r.stopped(), "stopped while held")
+	r.Release()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the released scan did not finish")
+	}
+	assert.False(t, r.stopped(), "the held time was charged to the scan")
+	assert.GreaterOrEqual(t, r.heldFor(), 1300*time.Millisecond)
 }

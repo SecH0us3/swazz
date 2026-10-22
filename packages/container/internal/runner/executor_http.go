@@ -25,8 +25,15 @@ import (
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
+
+// maxResponseRead is how much of a response body is read in all: the analyzers' prefix and then
+// the drain that keeps the connection reusable and measures a body sent without a Content-Length.
+// The target controls the body; past this much it is dropped with its connection. It sits well
+// above the size baselines the response-size-anomaly analyzer compares against.
+const maxResponseRead = 8 << 20
 
 func (r *Runner) executeRequest(
 	ctx context.Context,
@@ -38,6 +45,19 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
+	if r.waitWhileHeld(ctx) {
+		// Stopped while held: the request was never sent, and must not pass for a timeout.
+		return &swagger.FuzzResult{
+			ID:           uuid.New().String(),
+			Endpoint:     originalPath,
+			ResolvedPath: resolvedPath,
+			Method:       method,
+			Profile:      profile,
+			Error:        "not sent: the scan stopped while it was held",
+			NotSent:      true,
+			Timestamp:    time.Now().UnixMilli(),
+		}
+	}
 	if strings.HasPrefix(originalPath, "mcp://") {
 		return r.executeMCPRequest(ctx, originalPath, payload, profile, headers, cookies)
 	}
@@ -292,34 +312,9 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		var clientToUse = r.client
-		proxyStr := getNextProxy(proxyList)
-		var customTransport *http.Transport
-		if proxyStr != "" {
-			if proxyURL, err := url.Parse(proxyStr); err == nil {
-				var baseTransport *http.Transport
-				if r.client.Transport != nil {
-					if t, ok := r.client.Transport.(*http.Transport); ok {
-						baseTransport = t
-					}
-				} else {
-					if t, ok := http.DefaultTransport.(*http.Transport); ok {
-						baseTransport = t
-					}
-				}
-				if baseTransport != nil {
-					customTransport = baseTransport.Clone()
-					customTransport.Proxy = http.ProxyURL(proxyURL)
-					clientToUse = &http.Client{
-						Transport:     customTransport,
-						CheckRedirect: r.client.CheckRedirect,
-						Timeout:       r.client.Timeout,
-					}
-				}
-			}
-		}
-		if customTransport != nil {
-			defer customTransport.CloseIdleConnections()
+		clientToUse := r.client
+		if len(proxyList) > 0 {
+			clientToUse = r.proxiedClient()
 		}
 
 		start := time.Now()
@@ -408,8 +403,8 @@ func (r *Runner) executeRequest(
 			}
 			PutBuffer(buf)
 		}
-		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
-		resp.Body.Close()                              // #nosec G104 -- close error irrelevant after body fully consumed
+		discarded := safenet.DrainBody(resp.Body, maxResponseRead-int64(len(rawBodyBytes)))
+		resp.Body.Close() // #nosec G104 -- close error irrelevant once the body is no longer read
 		reqCancel()
 
 		// Extract and save CSRF token if present
@@ -467,6 +462,8 @@ func (r *Runner) executeRequest(
 			}
 		}
 
+		// Without a Content-Length this is what was read: for a body cut off past maxResponseRead,
+		// a lower bound.
 		responseSize := resp.ContentLength
 		if responseSize < 0 {
 			responseSize = int64(len(rawBodyBytes)) + discarded

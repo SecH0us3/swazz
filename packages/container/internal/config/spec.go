@@ -22,5 +22,6 @@ func fetchSpec(urlStr string, headers map[string]string, allowPrivate bool) (jso
 	}
 
 	client := security.NewSSRFProtectedClient(30*time.Second, allowPrivate)
+	defer client.CloseIdleConnections() // a client per fetch: do not leave its pool behind
 	return swagger.FetchRemoteSpec(context.Background(), client, urlStr, headers, graphql.IntrospectionQuery)
 }

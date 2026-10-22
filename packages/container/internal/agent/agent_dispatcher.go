@@ -6,7 +6,6 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -78,34 +77,53 @@ type AgentDispatcher struct {
 	coordinatorURL   string
 	token            string
 	disableTelemetry bool
-	outChan          chan<- interface{}
-	activeRunners    map[string]*runner.Runner
-	activeRunnersMu  sync.Mutex
-	parseReqSem      chan struct{}
-	delivery         *deliveryLog
-	sendMu           sync.Mutex
+
+	// outbox queues everything for the coordinator; its pump feeds outChan (agent_outbox.go).
+	outbox          *outbox
+	activeRunners   map[string]*runner.Runner
+	activeRunnersMu sync.Mutex
+	// held: every scan is held (runner.Hold) until the outbox drains. Changed, and runners held or
+	// released, only under activeRunnersMu.
+	held         atomic.Bool
+	holdingSince time.Time
+	stopPump     chan struct{}
+	closeOnce    sync.Once
+	parseReqSem  chan struct{}
+	delivery     *deliveryLog
+	sendMu       sync.Mutex
 
 	// Recycling (--recycle-when-idle): once no scan runs and everything sent was delivered, the
 	// agent exits, for its supervisor (Docker's restart policy) to start a clean process.
 	recycleWhenIdle bool
 	recycling       atomic.Bool
-	// Whether anything is still waiting to reach the coordinator; set by the session.
-	pendingOutput func() bool
-	exit          func(code int)
+	// Whether anything is still waiting to reach the coordinator (pendingOutput) or has not even
+	// been written yet (unwrittenOutput); set by the session.
+	pendingOutput   func() bool
+	unwrittenOutput func() bool
+	exit            func(code int)
 }
 
 // NewAgentDispatcher creates a new dispatcher instance.
 func NewAgentDispatcher(coordinatorURL, token string, disableTelemetry bool, outChan chan<- interface{}) *AgentDispatcher {
-	return &AgentDispatcher{
+	d := &AgentDispatcher{
 		coordinatorURL:   coordinatorURL,
 		token:            token,
 		disableTelemetry: disableTelemetry,
-		outChan:          outChan,
+		outbox:           newOutbox(),
 		activeRunners:    make(map[string]*runner.Runner),
 		parseReqSem:      make(chan struct{}, 10),
 		delivery:         newDeliveryLog(),
 		exit:             os.Exit,
+		stopPump:         make(chan struct{}),
 	}
+	go d.outbox.pump(outChan, d.stopPump, d.releaseScans)
+	return d
+}
+
+// Close stops moving queued messages on. The agent's dispatcher lives as long as the process;
+// tests close theirs.
+func (d *AgentDispatcher) Close() {
+	d.closeOnce.Do(func() { close(d.stopPump) })
 }
 
 // StopAllRunners stops all running jobs cleanly.
@@ -139,7 +157,7 @@ func (d *AgentDispatcher) ResumeRunIDs() []string {
 	for _, id := range ids {
 		seen[id] = true
 	}
-	for _, id := range d.delivery.unackedRuns() {
+	for _, id := range d.delivery.undeliveredRuns() {
 		if !seen[id] {
 			ids = append(ids, id)
 		}
@@ -156,15 +174,72 @@ func (d *AgentDispatcher) isActive(runID string) bool {
 
 // queueEvent numbers a run event and queues it for sending. sendMu makes the two one step: runs
 // send events from several goroutines, and a higher seq queued before a lower one would be lost.
+// Queueing never blocks under sendMu; past the outbox's high mark every scan is held until the
+// queue drains (see agent_outbox.go). At the outbox's hard limit it waits, so it must not be
+// called from the connection's read loop (Dispatch), which is what drains the outbox in the end.
 func (d *AgentDispatcher) queueEvent(msg WSEventOut) {
+	d.outbox.waitRoom()
 	d.sendMu.Lock()
-	defer d.sendMu.Unlock()
 	stamped, ok := d.delivery.stamp(msg)
+	full := ok && d.outbox.push(stamped)
+	d.sendMu.Unlock()
 	if !ok {
 		logWarn("Dropping a late %s event of an earlier execution of run %s", msg.Type, msg.RunID)
 		return
 	}
-	d.outChan <- stamped
+	if full {
+		d.holdScans()
+	}
+}
+
+// queueReply queues a reply to a coordinator request (a parse result) ahead of the run events:
+// someone is waiting for it, and it must not wait out a backlog of scan events.
+func (d *AgentDispatcher) queueReply(msg interface{}) {
+	d.outbox.pushReply(msg)
+}
+
+// holdScans holds every scan, and those that start meanwhile, until the outbox drains to its low
+// mark (releaseScans): the coordinator is not taking events as fast as the scans make them.
+func (d *AgentDispatcher) holdScans() {
+	if d.held.Load() {
+		return
+	}
+	d.activeRunnersMu.Lock()
+	if !d.held.Load() {
+		d.held.Store(true)
+		d.holdingSince = time.Now()
+		logWarn("%d messages are waiting for the coordinator; holding every scan until they are sent", d.outbox.pending())
+		for _, r := range d.activeRunners {
+			if r != nil {
+				r.Hold()
+			}
+		}
+	}
+	d.activeRunnersMu.Unlock()
+	// The pump releases the scans when a hand-off leaves the queue at its low mark. If it drained
+	// before holding was set, no hand-off is left to see that.
+	if d.outbox.queued() <= d.outbox.low {
+		d.releaseScans()
+	}
+}
+
+// releaseScans ends holdScans.
+func (d *AgentDispatcher) releaseScans() {
+	if !d.held.Load() {
+		return
+	}
+	d.activeRunnersMu.Lock()
+	defer d.activeRunnersMu.Unlock()
+	if !d.held.Load() {
+		return
+	}
+	d.held.Store(false)
+	logInfo("The coordinator caught up; resuming the scans held for %v", time.Since(d.holdingSince).Round(time.Second))
+	for _, r := range d.activeRunners {
+		if r != nil {
+			r.Release()
+		}
+	}
 }
 
 func eventOut(runID, exec, typ string, payload interface{}) WSEventOut {
@@ -257,9 +332,24 @@ func (d *AgentDispatcher) maybeRecycle() {
 		return
 	}
 	go func() {
-		defer d.recycling.Store(false)
+		// Once it exits, it stays recycling: exit does not return in the agent, and in a test a
+		// second maybeRecycle must not exit again.
+		exited := false
+		defer func() {
+			if !exited {
+				d.recycling.Store(false)
+			}
+		}()
+		// The deadline bounds only the wait for acknowledgements, from the last write on: what was
+		// never written would be lost with the process, so the agent waits for it however long the
+		// coordinator is away.
 		deadline := time.Now().Add(recycleDrainTimeout)
-		for d.pendingOutput != nil && d.pendingOutput() && time.Now().Before(deadline) {
+		for d.pendingOutput != nil && d.pendingOutput() {
+			if d.unwritten() {
+				deadline = time.Now().Add(recycleDrainTimeout)
+			} else if !time.Now().Before(deadline) {
+				break
+			}
 			if len(d.ActiveRunIDs()) > 0 {
 				return
 			}
@@ -270,9 +360,19 @@ func (d *AgentDispatcher) maybeRecycle() {
 			return
 		}
 		logInfo("No scan is running: exiting so the runner restarts as a clean process (--recycle-when-idle)")
+		exited = true
 		d.exit(0)
 	}()
 }
+
+// unwritten reports whether some message has not been written to a connection yet.
+func (d *AgentDispatcher) unwritten() bool {
+	if d.unwrittenOutput != nil {
+		return d.unwrittenOutput()
+	}
+	return d.outbox.pending() > 0 || d.delivery.anyQueued()
+}
+
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.
 func (d *AgentDispatcher) Dispatch(ctx context.Context, wsMsg WSMessageIn) {
 	switch wsMsg.Type {
@@ -411,12 +511,14 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	if err != nil {
 		logError("Failed to build runner config: %v", err)
 		errMsg := fmt.Sprintf("[Runner] Cannot start scan: %v. Please import an OpenAPI/Swagger schema, capture endpoints, or set a target URL with spec.", err)
-		sendEvent("runner_log", map[string]interface{}{
-			"level":     "ERROR",
-			"message":   errMsg,
-			"timestamp": time.Now().Format(time.RFC3339),
-		})
-		sendError(err.Error())
+		go func() { // off the read loop: queueing may wait for room (queueEvent)
+			sendEvent("runner_log", map[string]interface{}{
+				"level":     "ERROR",
+				"message":   errMsg,
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+			sendError(err.Error())
+		}()
 		return
 	}
 	runCfg.RunID = dispatch.RunID
@@ -433,6 +535,9 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	r := runner.New(runCfg, client)
 
 	d.activeRunnersMu.Lock()
+	if d.held.Load() {
+		r.Hold()
+	}
 	d.activeRunners[dispatch.RunID] = r
 	d.activeRunnersMu.Unlock()
 
@@ -611,7 +716,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 
 		// Post-scan WAF Mitigation (Virtual Patch Generation)
 		if wafResult := r.GetWAFCheckResult(); wafResult != nil && wafResult.Detection.Detected {
-			findings := liveCls.ClassifyAll(r.Results())
+			findings := liveCls.ClassifyAll(r.WholeResults()) // patches are built from payloads
 			items := classifier.ToAuditResultItems(findings)
 			if len(items) > 0 {
 				client := wafcheck.NewClient(r.Config().Settings.WAFCheckEndpoint)
@@ -727,10 +832,9 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 				} else {
 					defer resp.Body.Close()
 					if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-						limitReader := io.LimitReader(resp.Body, 4096)
-						bodyBytes, _ := io.ReadAll(limitReader)
-						err = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, string(bytes.TrimSpace(bodyBytes)))
-						data = bodyBytes
+						body := safenet.ReadErrorBody(resp.Body)
+						err = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, body)
+						data = []byte(body)
 					} else {
 						limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
 						data, err = io.ReadAll(limitReader)
@@ -1008,6 +1112,6 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 				}
 			}
 		}
-		d.outChan <- msgPayload
+		d.queueReply(msgPayload)
 	}()
 }
