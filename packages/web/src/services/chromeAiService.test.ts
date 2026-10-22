@@ -6,6 +6,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   isChromeAIAvailable,
+  createChromeAISession,
+  getChromeAIStatus,
+  openChromeAISession,
   explainFindingWithChromeAI,
   getAlgorithmicFindingAnalysis,
   wrapUntrusted,
@@ -17,10 +20,75 @@ describe('Chrome AI & Algorithmic Fallback Service', () => {
 
   beforeEach(() => {
     delete (window as any).ai;
+    delete (globalThis as any).LanguageModel;
   });
 
   afterEach(() => {
     (window as any).ai = originalAi;
+    delete (globalThis as any).LanguageModel;
+  });
+
+  describe('current Prompt API (global LanguageModel)', () => {
+    it('reports available when LanguageModel.availability() returns available', async () => {
+      (globalThis as any).LanguageModel = {
+        availability: vi.fn().mockResolvedValue('available'),
+        create: vi.fn(),
+      };
+      expect(await isChromeAIAvailable()).toBe(true);
+    });
+
+    it('reports unavailable while the model still has to be downloaded', async () => {
+      (globalThis as any).LanguageModel = {
+        availability: vi.fn().mockResolvedValue('downloadable'),
+        create: vi.fn(),
+      };
+      expect(await isChromeAIAvailable()).toBe(false);
+      expect(await getChromeAIStatus()).toBe('downloadable');
+      expect(await openChromeAISession('sys')).toEqual({ session: null, status: 'downloadable' });
+      expect((globalThis as any).LanguageModel.create).not.toHaveBeenCalled();
+    });
+
+    it('passes the system prompt as initialPrompts', async () => {
+      const session = { prompt: vi.fn(), destroy: vi.fn() };
+      (globalThis as any).LanguageModel = {
+        availability: vi.fn().mockResolvedValue('available'),
+        create: vi.fn().mockResolvedValue(session),
+      };
+      expect(await createChromeAISession('be helpful')).toBe(session);
+      const opts = (globalThis as any).LanguageModel.create.mock.calls[0][0];
+      expect(opts.initialPrompts).toEqual([{ role: 'system', content: 'be helpful' }]);
+      expect(opts.expectedOutputs).toEqual([{ type: 'text', languages: ['en'] }]);
+      expect((globalThis as any).LanguageModel.availability).toHaveBeenCalledWith(
+        expect.objectContaining({ expectedOutputs: opts.expectedOutputs }),
+      );
+    });
+
+    it('prefers LanguageModel over the legacy window.ai.languageModel', async () => {
+      const legacyCreate = vi.fn();
+      (window as any).ai = {
+        languageModel: { availability: vi.fn().mockResolvedValue('readily'), create: legacyCreate },
+      };
+      (globalThis as any).LanguageModel = {
+        availability: vi.fn().mockResolvedValue('available'),
+        create: vi.fn().mockResolvedValue({}),
+      };
+      await createChromeAISession('sys');
+      expect((globalThis as any).LanguageModel.create).toHaveBeenCalled();
+      expect(legacyCreate).not.toHaveBeenCalled();
+    });
+
+    it('passes systemPrompt to the legacy API', async () => {
+      const create = vi.fn().mockResolvedValue({});
+      (window as any).ai = {
+        languageModel: { availability: vi.fn().mockResolvedValue('readily'), create },
+      };
+      await createChromeAISession('sys');
+      expect(create).toHaveBeenCalledWith({ systemPrompt: 'sys' });
+    });
+
+    it('returns no session when no Prompt API is exposed', async () => {
+      expect(await createChromeAISession('sys')).toBeNull();
+    });
   });
 
   describe('wrapUntrusted and parseJsonFromLlmResponse', () => {

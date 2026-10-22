@@ -4,12 +4,73 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { generateAdaptivePoc, generateAlgorithmicAdaptivePoc } from './adaptivePocService';
+import { generateAdaptivePoc, generateAlgorithmicAdaptivePoc, ruleKind } from './adaptivePocService';
 import * as chromeAiModule from './chromeAiService';
 
 describe('adaptivePocService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    delete (globalThis as any).ai;
+    delete (globalThis as any).LanguageModel;
+  });
+
+  it('maps real rule IDs to the check the template asserts', () => {
+    expect(ruleKind('swazz/sql-error-leak')).toBe('sql');
+    expect(ruleKind('swazz/time-based-sqli')).toBe('sql');
+    expect(ruleKind('swazz/sqli')).toBe('sql');
+    expect(ruleKind('swazz/nosql-injection')).toBe('other');
+    expect(ruleKind('swazz/reflected-xss')).toBe('xss');
+    expect(ruleKind('swazz/ssrf-cloud-metadata')).toBe('ssrf');
+    expect(ruleKind('swazz/oob-interaction')).toBe('ssrf');
+    expect(ruleKind('swazz/cors-misconfig')).toBe('cors');
+    expect(ruleKind('swazz/stack-trace-leak')).toBe('other');
+    expect(ruleKind(undefined)).toBe('other');
+  });
+
+  it('asserts on SQL errors for swazz/sql-error-leak in every language', () => {
+    const input = { ...sampleInput, ruleId: 'swazz/sql-error-leak' };
+    expect(generateAlgorithmicAdaptivePoc({ ...input, language: 'python' }).code).toContain('SQL syntax leakage');
+    expect(generateAlgorithmicAdaptivePoc({ ...input, language: 'typescript' }).code).toContain('Database syntax error');
+    expect(generateAlgorithmicAdaptivePoc({ ...input, language: 'curl' }).code).toContain('SQL syntax error leaked');
+    expect(generateAlgorithmicAdaptivePoc({ ...input, language: 'go' }).code).toContain('SQL syntax error detected');
+    expect(generateAlgorithmicAdaptivePoc({ ...input, ruleId: 'swazz/nosql-injection' }).code).not.toContain('SQL syntax leakage');
+  });
+
+  it('uses the current global LanguageModel Prompt API with initialPrompts', async () => {
+    const session = { prompt: vi.fn().mockResolvedValue('```python\nprint("verification script ok")\n```'), destroy: vi.fn() };
+    const create = vi.fn().mockResolvedValue(session);
+    (globalThis as any).LanguageModel = { availability: vi.fn().mockResolvedValue('available'), create };
+
+    const result = await generateAdaptivePoc(sampleInput);
+
+    expect(result.simulated).toBe(false);
+    expect(result.fallbackReason).toBeUndefined();
+    expect(create.mock.calls[0][0].initialPrompts[0].role).toBe('system');
+    expect(session.destroy).toHaveBeenCalled();
+  });
+
+  it('says the template was used because the on-device model is not downloaded yet', async () => {
+    const create = vi.fn();
+    (globalThis as any).LanguageModel = { availability: vi.fn().mockResolvedValue('downloadable'), create };
+    const result = await generateAdaptivePoc(sampleInput);
+    expect(result.fallbackReason).toBe('downloadable');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('checks SQL error signatures, not any mention of SQL', () => {
+    const input = { ...sampleInput, ruleId: 'swazz/sql-error-leak' };
+    const py = generateAlgorithmicAdaptivePoc({ ...input, language: 'python' }).code;
+    expect(py).not.toContain('"sql" not in body_text');
+    expect(py).toContain('"sqlstate"');
+    const curl = generateAlgorithmicAdaptivePoc({ ...input, language: 'curl' }).code;
+    expect(curl).toContain('grep -qiE "syntax error|sqlstate|');
+    expect(curl).not.toContain('\\|sql"');
+  });
+
+  it('says the template was used because no on-device model is available', async () => {
+    const result = await generateAdaptivePoc(sampleInput);
+    expect(result.simulated).toBe(true);
+    expect(result.fallbackReason).toBe('unavailable');
   });
 
   const sampleInput = {
@@ -111,6 +172,7 @@ if __name__ == "__main__":
     const result = await generateAdaptivePoc(sampleInput);
 
     expect(result.simulated).toBe(true);
+    expect(result.fallbackReason).toBe('failed');
     expect(result.model).toContain('algorithmic-rules');
     expect(result.code).toContain('assert');
   });

@@ -833,7 +833,16 @@ export function RequestDetail({
                                 </span>
                                 {generatingAdaptive && (
                                     <span className="poc-generating-indicator">
-                                        <span className="spinner-sm" /> Generating script with on-device AI...
+                                        <span className="spinner-sm" /> Generating script...
+                                    </span>
+                                )}
+                                {!generatingAdaptive && adaptiveCache[pocLang]?.fallbackReason && (
+                                    <span className="poc-fallback-note">
+                                        {{
+                                            unavailable: 'On-device AI (Chrome Prompt API) is not available in this browser, so a rule-based template was used.',
+                                            downloadable: 'Chrome has not downloaded its on-device model (Gemini Nano) yet, so a rule-based template was used.',
+                                            failed: 'On-device AI failed or did not return a usable script, so a rule-based template was used.',
+                                        }[adaptiveCache[pocLang].fallbackReason!]}
                                     </span>
                                 )}
                             </div>
@@ -843,7 +852,7 @@ export function RequestDetail({
                             {generatingAdaptive && !adaptiveCache[pocLang] ? (
                                 <div className="poc-loading-state">
                                     <span className="spinner-sm" />
-                                    <span>Generating adaptive regression test script with on-device AI...</span>
+                                    <span>Generating adaptive regression test script (on-device AI when available)...</span>
                                 </div>
                             ) : (
                                 <pre className="poc-code-pre">
