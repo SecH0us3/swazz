@@ -254,23 +254,32 @@ func appendUniqueCapped(existing, add []string, limit int) (merged, added []stri
 }
 
 // harvestedIDsFor returns up to limit harvested IDs (0: all), those harvested under prefix first,
-// then the others by prefix order, without duplicates. An ID from the endpoint's own resource is
-// the one most likely to exist there, so it is never crowded out by IDs of other resources.
+// then under related prefixes (sharing at least the first two segments), then the others by
+// prefix order, without duplicates. An ID from the endpoint's own resource or sibling resource is
+// the one most likely to exist there, so it is never crowded out by IDs of unrelated resources.
 func (d *Detector) harvestedIDsFor(prefix string, limit int) []string {
 	byPrefix := make(map[string][]string)
-	var prefixes []string
+	var related, other []string
 	d.harvestedIDs.Range(func(key, value any) bool {
 		p := key.(string)
 		byPrefix[p] = value.([]string)
 		if p != prefix {
-			prefixes = append(prefixes, p)
+			if arePrefixesRelated(prefix, p) {
+				related = append(related, p)
+			} else {
+				other = append(other, p)
+			}
 		}
 		return true
 	})
-	sort.Strings(prefixes)
+	sort.Strings(related)
+	sort.Strings(other)
+	prefixes := make([]string, 0, 1+len(related)+len(other))
 	if _, ok := byPrefix[prefix]; ok {
-		prefixes = append([]string{prefix}, prefixes...)
+		prefixes = append(prefixes, prefix)
 	}
+	prefixes = append(prefixes, related...)
+	prefixes = append(prefixes, other...)
 
 	seen := make(map[string]bool)
 	var out []string

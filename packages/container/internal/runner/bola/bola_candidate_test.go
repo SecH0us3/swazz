@@ -184,9 +184,10 @@ func TestCandidate_BuildPayload(t *testing.T) {
 	assert.Equal(t, map[string]any{"key": "val"}, qpExGET)
 }
 
-// A missing candidate goes out as User A: harvested IDs (real objects) are tried only with a
-// read-only method, so the phase never deletes or overwrites the object it is about to test.
-func TestGenerateCandidateForEndpoint_HarvestedIDsOnlyForReadOnly(t *testing.T) {
+// A missing candidate goes out as User A: harvested IDs (real objects) are tried for non-DELETE
+// methods (including PUT/PATCH/POST), while DELETE uses a placeholder so User A never deletes its
+// own object before User B can test it.
+func TestGenerateCandidateForEndpoint_HarvestedIDsSkipDeleteOnly(t *testing.T) {
 	var mu sync.Mutex
 	var paths []string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -204,6 +205,7 @@ func TestGenerateCandidateForEndpoint_HarvestedIDsOnlyForReadOnly(t *testing.T) 
 
 	d.generateCandidateForEndpoint(context.Background(), swagger.EndpointConfig{Path: "/items/{itemId}", Method: "DELETE"}, gen)
 	d.generateCandidateForEndpoint(context.Background(), swagger.EndpointConfig{Path: "/items/{itemId}", Method: "GET"}, gen)
+	d.generateCandidateForEndpoint(context.Background(), swagger.EndpointConfig{Path: "/items/{itemId}", Method: "PUT"}, gen)
 	d.generateCandidateForEndpoint(context.Background(), swagger.EndpointConfig{Path: "/items/{name}", Method: "GET"}, gen)
 
 	mu.Lock()
@@ -212,6 +214,8 @@ func TestGenerateCandidateForEndpoint_HarvestedIDsOnlyForReadOnly(t *testing.T) 
 		"DELETE /items/00000000-0000-4000-8000-000000000000",
 		"GET /items/h1",
 		"GET /items/h2",
+		"PUT /items/h1",
+		"PUT /items/h2",
 		"GET /items/%7Bname%7D",
-	}, paths, "one placeholder DELETE; the IDs only on GET; one request where no ID can be placed")
+	}, paths, "one placeholder DELETE; harvested IDs on GET and PUT; one request where no ID can be placed")
 }

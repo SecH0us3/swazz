@@ -214,16 +214,19 @@ func TestHarvestFromResponse_DropsUnsafeAndCaps(t *testing.T) {
 	assert.Equal(t, "ok-1", ids[0], "IDs already kept stay; later ones past the cap are ignored")
 }
 
-// The endpoint's own resource IDs come first, so IDs of other resources never crowd them out.
-func TestHarvestedIDsFor_OwnPrefixFirst(t *testing.T) {
+// The endpoint's own resource IDs come first, then related prefixes, then unrelated ones, so IDs
+// of unrelated resources never crowd them out.
+func TestHarvestedIDsFor_OwnAndRelatedPrefixesFirst(t *testing.T) {
 	d := &Detector{}
 	d.harvestedIDs.Store("/a", []string{"a1", "shared"})
-	d.harvestedIDs.Store("/orders", []string{"o1", "o2", "shared"})
+	d.harvestedIDs.Store("/api/v1/orders", []string{"o1", "o2", "shared"})
+	d.harvestedIDs.Store("/api/v1/users", []string{"u1"})
 	d.harvestedIDs.Store("/z", []string{"z1"})
 
-	assert.Equal(t, []string{"o1", "o2", "shared", "a1", "z1"}, d.harvestedIDsFor("/orders", 0))
-	assert.Equal(t, []string{"o1", "o2"}, d.harvestedIDsFor("/orders", 2))
-	assert.Equal(t, []string{"a1", "shared", "o1", "o2", "z1"}, d.harvestedIDsFor("/missing", 0))
+	assert.Equal(t, []string{"o1", "o2", "shared", "u1", "a1", "z1"}, d.harvestedIDsFor("/api/v1/orders", 0))
+	assert.Equal(t, []string{"o1", "o2"}, d.harvestedIDsFor("/api/v1/orders", 2))
+	assert.Equal(t, []string{"o1", "o2", "shared", "u1", "a1", "z1"}, d.harvestedIDsFor("/api/v1/invoices", 0))
+	assert.Equal(t, []string{"a1", "shared", "o1", "o2", "u1", "z1"}, d.harvestedIDsFor("/missing", 0))
 }
 
 func TestAppendUniqueCapped(t *testing.T) {

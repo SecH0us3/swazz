@@ -37,7 +37,10 @@ func (d *Detector) globalHeadersWithGenerated(extra map[string]string) map[strin
 }
 
 // replayCandidates dispatches one goroutine per candidate and collects BOLA
-// findings from all identity + anonymous probes.
+// findings from all identity + anonymous probes. Non-DELETE candidates run
+// first and wait to finish before DELETE candidates run, so destructive
+// probes never delete a target object while read/update probes are still
+// testing it.
 func (d *Detector) replayCandidates(
 	ctx context.Context,
 	candidates []*swagger.FuzzResult,
@@ -46,49 +49,63 @@ func (d *Detector) replayCandidates(
 	var (
 		bolaResults []*swagger.FuzzResult
 		bolaMu      sync.Mutex
-		bolaWg      sync.WaitGroup
 	)
 
 	expandIDs := d.pickIDExpansionCandidates(candidates)
 
+	var nonDelete, deleteCands []*swagger.FuzzResult
 	for _, cand := range candidates {
-		if err := d.ctx.LimiterAcquire(ctx); err != nil {
-			break
+		if strings.EqualFold(cand.Method, "DELETE") {
+			deleteCands = append(deleteCands, cand)
+		} else {
+			nonDelete = append(nonDelete, cand)
 		}
-		bolaWg.Add(1)
+	}
 
-		go func(cand *swagger.FuzzResult) {
-			defer d.ctx.LimiterRelease()
-			defer bolaWg.Done()
+	runBatch := func(batch []*swagger.FuzzResult) {
+		var bolaWg sync.WaitGroup
+		for _, cand := range batch {
+			if err := d.ctx.LimiterAcquire(ctx); err != nil {
+				break
+			}
+			bolaWg.Add(1)
 
-			d.ctx.UpdateProgressEndpoint(cand.Method + " " + cand.Endpoint)
-			d.ctx.BroadcastProgress()
+			go func(cand *swagger.FuzzResult) {
+				defer d.ctx.LimiterRelease()
+				defer bolaWg.Done()
 
-			ep, found := d.findEndpointConfig(cand.Endpoint, cand.Method)
-			if !found {
+				d.ctx.UpdateProgressEndpoint(cand.Method + " " + cand.Endpoint)
+				d.ctx.BroadcastProgress()
+
+				ep, found := d.findEndpointConfig(cand.Endpoint, cand.Method)
+				if !found {
+					d.ctx.AddCompletedEndpoints(1)
+					d.ctx.BroadcastProgress()
+					return
+				}
+
+				d.replayCandidate(ctx, cand, ep, expandIDs[cand], identityHeaders, identityCookies, &bolaMu, &bolaResults)
+
 				d.ctx.AddCompletedEndpoints(1)
 				d.ctx.BroadcastProgress()
-				return
-			}
-
-			d.replayCandidate(ctx, cand, ep, expandIDs[cand], identityHeaders, identityCookies, &bolaMu, &bolaResults)
-
-			d.ctx.AddCompletedEndpoints(1)
-			d.ctx.BroadcastProgress()
-		}(cand)
+			}(cand)
+		}
+		bolaWg.Wait()
 	}
-	bolaWg.Wait()
+
+	runBatch(nonDelete)
+	runBatch(deleteCands)
+
 	return bolaResults
 }
 
 // pickIDExpansionCandidates picks, for each endpoint, the one candidate whose replay also tries
 // the harvested IDs: a run has a candidate for every 2xx result, and each ID target is probed
-// under every identity, so expanding all of them multiplied the phase's requests. Only a
-// read-only (safe, bodiless) method is picked: the IDs name real objects on the target, and replaying a DELETE,
-// PUT or PATCH with them would change those objects. The pick is the first candidate in order
-// that is replayed at all (its baseline carried auth) and has somewhere to put an ID (an ID
-// param, a path that lines up with its template), preferring one not from an echo-prone profile
-// (malicious, boundary), whose payload and response make a poor baseline.
+// under every identity, so expanding all of them multiplied the phase's requests. The pick is
+// the first candidate in order that is replayed at all (its baseline carried auth) and has
+// somewhere to put an ID (an ID param, a path that lines up with its template), preferring one
+// not from an echo-prone profile (malicious, boundary), whose payload and response make a poor
+// baseline.
 func (d *Detector) pickIDExpansionCandidates(candidates []*swagger.FuzzResult) map[*swagger.FuzzResult]bool {
 	picked := make(map[*swagger.FuzzResult]bool)
 	done := make(map[string]bool)
@@ -96,7 +113,7 @@ func (d *Detector) pickIDExpansionCandidates(candidates []*swagger.FuzzResult) m
 		for _, cand := range candidates {
 			key := strings.ToUpper(cand.Method) + " " + cand.Endpoint
 			if done[key] || (!allowEchoProne && isEchoProneProfile(cand.Profile)) ||
-				!isNoBodyMethod(cand.Method) || replayParamName(cand) == "" {
+				replayParamName(cand) == "" {
 				continue
 			}
 			if strings.Contains(cand.Endpoint, "{") {
@@ -321,6 +338,19 @@ func resolveReplayPayload(
 	return cand.Payload, nil
 }
 
+// probeSimilarity computes the similarity score between the baseline User A
+// candidate and the probe response. If the baseline candidate itself did not
+// succeed with 2xx (e.g. a DELETE candidate generated with a dummy UUID to
+// avoid deleting User A's resource beforehand) and the probe succeeded with
+// 2xx on a harvested ID (targetID != ""), the probe is treated as a confirmed
+// match (similarity 1.0).
+func probeSimilarity(cand, res *swagger.FuzzResult, targetID string) float64 {
+	if (cand.Status < 200 || cand.Status >= 300) && targetID != "" {
+		return 1.0
+	}
+	return bola.CheckSimilarity(responseBodyToBytes(cand.ResponseBody), responseBodyToBytes(res.ResponseBody))
+}
+
 // probeIdentity fires one request under a named identity's credentials and
 // records a BOLA/IDOR or tenant-isolation finding if the response body is
 // sufficiently similar to the User A candidate.
@@ -353,7 +383,7 @@ func (d *Detector) probeIdentity(
 	d.ctx.SendStat(res, 1, 1)
 
 	if res.Status >= 200 && res.Status < 300 {
-		sim := bola.CheckSimilarity(responseBodyToBytes(cand.ResponseBody), responseBodyToBytes(res.ResponseBody))
+		sim := probeSimilarity(cand, res, targetID)
 		if sim >= bolaThreshold(d.ctx.Config().Settings) {
 			displayName := formatIdentityName(idName)
 			res.Identity = displayName
@@ -400,7 +430,7 @@ func (d *Detector) probeAnonymous(
 	d.ctx.SendStat(res, 1, 1)
 
 	if res.Status >= 200 && res.Status < 300 {
-		sim := bola.CheckSimilarity(responseBodyToBytes(cand.ResponseBody), responseBodyToBytes(res.ResponseBody))
+		sim := probeSimilarity(cand, res, targetID)
 		if sim >= bolaThreshold(d.ctx.Config().Settings) {
 			res.Identity = "Anonymous"
 			confirmed["Anonymous"] = true

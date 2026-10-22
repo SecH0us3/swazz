@@ -193,14 +193,14 @@ func (d *Detector) generateCandidateForEndpoint(
 	paramName := CandidateParamName(ep, hasPathParams, baseBody)
 
 	// Harvested IDs name real objects on the target, and this request goes out as User A: try
-	// them only with a safe, bodiless method (a DELETE would remove the object it is about to test),
-	// and only where there is somewhere to put them. Otherwise one request with the placeholder.
+	// them for every method except DELETE (which would remove the object before User B can probe
+	// it), and only where there is somewhere to put them. Otherwise one request with the placeholder.
 	var harvested []string
 	placesID := paramName != ""
 	if hasPathParams {
 		placesID = templateHasIDParam(ep.Path)
 	}
-	if placesID && isNoBodyMethod(ep.Method) {
+	if placesID && !strings.EqualFold(ep.Method, "DELETE") {
 		harvested = d.harvestedIDsFor(getPathPrefix(ep.Path), maxHarvestedIDsToTest)
 	}
 
