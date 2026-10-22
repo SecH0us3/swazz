@@ -10,13 +10,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
 
+	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/swagger"
 )
 
@@ -54,7 +57,10 @@ func wsURL(srv *httptest.Server) string {
 
 // newWSRunner returns a runner that may reach the in-process (loopback) targets.
 func newWSRunner() *Runner {
-	return &Runner{config: &swagger.Config{Security: swagger.SecurityConfig{AllowPrivateIPs: true}}}
+	return &Runner{
+		config:   &swagger.Config{Security: swagger.SecurityConfig{AllowPrivateIPs: true}},
+		analyzer: analyzer.NewRegistry(nil),
+	}
 }
 
 func findingRuleIDs(res *swagger.FuzzResult) []string {
@@ -156,7 +162,7 @@ func TestExecuteWebSocketRequest_SendsMergedHeaders(t *testing.T) {
 	r := &Runner{config: &swagger.Config{
 		GlobalHeaders: map[string]string{"X-Global": "g"},
 		Security:      swagger.SecurityConfig{AllowPrivateIPs: true},
-	}}
+	}, analyzer: analyzer.NewRegistry(nil)}
 	res := r.executeWebSocketRequest(
 		context.Background(), wsURL(srv), "/ws", "/ws",
 		map[string]any{"ping": true},
@@ -180,7 +186,7 @@ func TestExecuteWebSocketRequest_BlocksPrivateTarget(t *testing.T) {
 		_ = c.Write(ctx, websocket.MessageText, msg)
 	})
 
-	r := &Runner{config: &swagger.Config{}}
+	r := &Runner{config: &swagger.Config{}, analyzer: analyzer.NewRegistry(nil)}
 	res := r.executeWebSocketRequest(
 		context.Background(), wsURL(srv), "/ws", "/ws",
 		map[string]any{"ping": true}, swagger.ProfileRandom, nil, nil,
@@ -189,4 +195,43 @@ func TestExecuteWebSocketRequest_BlocksPrivateTarget(t *testing.T) {
 	assert.Contains(t, res.Error, "SSRF policy")
 	assert.Zero(t, res.Status, "a blocked target never answered: no status, not a 5xx finding")
 	assert.Zero(t, hits.Load(), "the blocked target must not be contacted")
+}
+
+// Exchanges with the same endpoint run in parallel: the target below answers only once all of
+// them are connected at the same time.
+func TestExecuteWebSocketRequest_SameEndpointRunsInParallel(t *testing.T) {
+	const n = 4
+	var open atomic.Int32
+	all := make(chan struct{})
+	srv := newWSTarget(t, func(ctx context.Context, c *websocket.Conn, msg []byte) {
+		if open.Add(1) == n {
+			close(all)
+		}
+		select {
+		case <-all:
+		case <-time.After(10 * time.Second): // a hijacked request's context never ends
+			return
+		}
+		_ = c.Write(ctx, websocket.MessageText, msg)
+		c.Close(websocket.StatusNormalClosure, "")
+	})
+
+	r := newWSRunner()
+	r.config.Settings.TimeoutMs = 5000
+	var wg sync.WaitGroup
+	results := make([]*swagger.FuzzResult, n)
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = r.executeWebSocketRequest(context.Background(), wsURL(srv), "/ws", "/ws",
+				map[string]any{"i": i}, swagger.ProfileRandom, nil, nil)
+		}()
+	}
+	wg.Wait()
+	for _, res := range results {
+		require.NotNil(t, res)
+		assert.Empty(t, res.Error)
+		assert.Equal(t, http.StatusOK, res.Status)
+	}
 }

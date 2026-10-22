@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { isChromeAIAvailable } from './chromeAiService.js';
+import { createChromeAISession } from './chromeAiService.js';
 
 export interface FindingOverviewItem {
   ruleId: string;
@@ -92,26 +92,17 @@ ${input.topFindings.slice(0, 4).map(f => `- **${f.ruleId}** (\`${f.endpoint}\`):
 export async function generateExecutiveSummary(input: ReportStatsInput): Promise<ExecutiveSummaryResult> {
   const fallback = generateAlgorithmicExecutiveSummary(input);
 
-  const isChromeAi = await isChromeAIAvailable();
-  if (!isChromeAi) {
-    return fallback;
-  }
-
-  const ai = (typeof window !== 'undefined' && (window as any).ai) || (globalThis as any).ai;
-  if (!ai || !ai.languageModel) {
-    return fallback;
-  }
-
   let session: any = null;
   try {
-    session = await ai.languageModel.create({
-      systemPrompt: `You are a Principal Application Security Auditor drafting an Executive Summary for an API Security & Fuzzing Audit Report.
+    session = await createChromeAISession(`You are a Principal Application Security Auditor drafting an Executive Summary for an API Security & Fuzzing Audit Report.
 Review the concise statistical scan digest and provide a clear, professional 2-3 paragraph Executive Summary in Markdown:
 1. Overall Security Posture & Risk Level (Critical, Elevated, or Low).
 2. Primary Attack Surface & Key Vulnerability Highlights.
 3. Prioritized Strategic Recommendations for engineering leadership.
-Be direct, factual, and concise. Avoid fluffy preamble.`,
-    });
+Be direct, factual, and concise. Avoid fluffy preamble.`);
+    if (!session) {
+      return fallback;
+    }
 
     // Create a compact digest to easily fit inside Gemini Nano's 4K context window
     const compactDigest = {

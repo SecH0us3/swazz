@@ -11461,8 +11461,10 @@ kbd {
 
 .poc-adaptive-banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   background: rgba(99, 102, 241, 0.08);
   border: 1px solid rgba(99, 102, 241, 0.2);
@@ -11483,6 +11485,13 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+  color: var(--text-muted);
+}
+
+.poc-fallback-note {
+  flex: 1 1 16rem;
+  min-width: 0;
+  text-align: right;
   color: var(--text-muted);
 }
 

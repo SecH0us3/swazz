@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ScansService } from '../../../src/services/scans';
+import { ScansService, DEFAULT_SCANS_PAGE, MAX_SCANS_PAGE, encodeScansCursor } from '../../../src/services/scans';
 import { Env } from '../../../src/env';
 import * as jwt from 'hono/jwt';
 
@@ -37,6 +37,7 @@ describe('ScansService Unit Tests', () => {
       getProjectMemberRole: vi.fn(),
       createAuditLog: vi.fn(),
       getScans: vi.fn(),
+      getUnfinishedScans: vi.fn(),
       getScan: vi.fn(),
       updateScan: vi.fn(),
       updateScanStatus: vi.fn(),
@@ -256,20 +257,81 @@ describe('ScansService Unit Tests', () => {
     });
 
     it('returns scans', async () => {
-      mockScansRepo.getScans.mockResolvedValueOnce([{ id: 's1' }]);
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [{ id: 's1' }], next: null });
       const res = await scansService.getScans('p1', 'u1');
-      expect(res.scans).toEqual([{ id: 's1' }]);
+      expect(res).toEqual({ scans: [{ id: 's1' }] });
+      expect(mockScansRepo.getScans).toHaveBeenCalledWith('p1', DEFAULT_SCANS_PAGE, undefined);
+    });
+
+    it('pages with a cursor that leads back to where the page ended', async () => {
+      const next = { createdAt: '2026-10-21 10:00:00', id: '01JABCDEF' };
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [{ id: 's1' }], next });
+      const first = await scansService.getScans('p1', 'u1', { limit: '1' });
+      expect(first.next_cursor).toBe(encodeScansCursor(next));
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', 1, undefined);
+
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', { limit: '1', cursor: first.next_cursor });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', 1, next);
+    });
+
+    it.each(['1000', '99999', '9'.repeat(30)])('caps the page size %s', async (limit) => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', { limit });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', MAX_SCANS_PAGE, undefined);
+    });
+
+    it('lists the scans that have not ended with active=1', async () => {
+      mockScansRepo.getUnfinishedScans.mockResolvedValueOnce([{ id: 'paused-1', status: 'paused' }]);
+      const res = await scansService.getScans('p1', 'u1', { active: '1' });
+      expect(res).toEqual({ scans: [{ id: 'paused-1', status: 'paused' }] });
+      expect(mockScansRepo.getUnfinishedScans).toHaveBeenCalledWith('p1', DEFAULT_SCANS_PAGE);
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it.each([{ active: 'yes' }, { active: '1', cursor: 'abc' }])('refuses active query %o', async (page) => {
+      await expect(scansService.getScans('p1', 'u1', page)).rejects.toThrow('Invalid query parameter: active|400');
+      expect(mockScansRepo.getUnfinishedScans).not.toHaveBeenCalled();
+    });
+
+    it.each(['0', '-1', 'abc', '1.5', '00'])('refuses limit %s', async (limit) => {
+      await expect(scansService.getScans('p1', 'u1', { limit })).rejects.toThrow('Invalid query parameter: limit|400');
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'not base64!',
+      btoa('not json'),
+      btoa(JSON.stringify({ createdAt: '2026-10-21', id: 'x' })),
+      btoa(JSON.stringify(['2026-10-21', "x' OR 1=1"])),
+      btoa(JSON.stringify(["2026' OR 1=1", 'x'])),
+      btoa(JSON.stringify(['2026-10-21', 'x'.repeat(65)])),
+      'A'.repeat(300),
+    ])('refuses cursor %s', async (cursor) => {
+      await expect(scansService.getScans('p1', 'u1', { cursor })).rejects.toThrow('Invalid query parameter: cursor|400');
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it('reads an empty cursor as the first page', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', { cursor: '', limit: '' });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', DEFAULT_SCANS_PAGE, undefined);
+    });
+
+    it('checks access before the page parameters', async () => {
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.getScans('p1', 'u1', { limit: 'abc' })).rejects.toThrow('Forbidden|403');
     });
 
     it('takes the failure reason from the scan row when it has one', async () => {
-      mockScansRepo.getScans.mockResolvedValueOnce([{ id: 'kept', status: 'failed', failure_reason: 'Runner lost\nsecond line' }]);
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [{ id: 'kept', status: 'failed', failure_reason: 'Runner lost\nsecond line' }], next: null });
       const res = await scansService.getScans('p1', 'u1');
       expect(res.scans[0].failure_reason).toBe('Runner lost second line');
       expect(mockScansRepo.getFailureReasons).not.toHaveBeenCalled();
     });
 
     it('gives failed scans, and only those, their failure reason', async () => {
-      mockScansRepo.getScans.mockResolvedValueOnce([{ id: 'ok', status: 'completed' }, { id: 'bad', status: 'failed' }]);
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [{ id: 'ok', status: 'completed' }, { id: 'bad', status: 'failed' }], next: null });
       mockScansRepo.getFailureReasons.mockResolvedValueOnce(new Map([['bad', 'Runner lost']]));
       const res = await scansService.getScans('p1', 'u1');
       expect(mockScansRepo.getFailureReasons).toHaveBeenCalledWith(['bad']);

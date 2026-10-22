@@ -17,6 +17,10 @@ type OOBContext struct {
 	Request   *swagger.RequestLog
 }
 
+// Store tracks the OOB tokens one run has sent, until the target calls back. Each run owns its
+// own store (runner.Runner): a store shared by concurrent runs lets one run's start or end wipe
+// the tokens another run is still waiting on. A nil *Store holds nothing: it records no token and
+// matches no callback.
 type Store struct {
 	mu sync.RWMutex
 	m  map[string]*OOBContext
@@ -29,12 +33,18 @@ func NewStore() *Store {
 }
 
 func (s *Store) RegisterUUID(uuid string, ctx *OOBContext) {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.m[uuid] = ctx
 }
 
 func (s *Store) UpdateRequest(uuid string, req *swagger.RequestLog) {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx, ok := s.m[uuid]; ok {
@@ -43,6 +53,9 @@ func (s *Store) UpdateRequest(uuid string, req *swagger.RequestLog) {
 }
 
 func (s *Store) GetAndRemoveUUID(uuid string) (*OOBContext, bool) {
+	if s == nil {
+		return nil, false
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ctx, ok := s.m[uuid]
@@ -53,26 +66,19 @@ func (s *Store) GetAndRemoveUUID(uuid string) (*OOBContext, bool) {
 }
 
 func (s *Store) Clear() {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.m = make(map[string]*OOBContext)
 }
 
-func (s *Store) ClearSession(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for k, v := range s.m {
-		if v.SessionID == sessionID {
-			delete(s.m, k)
-		}
-	}
-}
-
 func (s *Store) Size() int {
+	if s == nil {
+		return 0
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.m)
 }
-
-// GlobalStore is a singleton for tracking OOB interactions across the application
-var GlobalStore = NewStore()

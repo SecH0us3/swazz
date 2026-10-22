@@ -551,7 +551,13 @@ func (r *Runner) logCompletionSummary(stats swagger.RunStats) {
 	for _, res := range r.allResults {
 		findingsCount += len(res.AnalyzerFindings)
 	}
+	notRetained, droppedFindings := r.retained.notRetained, r.retained.droppedFindings
 	r.resultsMu.Unlock()
+	if droppedFindings > 0 {
+		r.logWarn("%d analyzer finding(s) past the post-scan cap are in the results stream but not in Smart Triage or WAF patches", droppedFindings)
+	} else if notRetained > 0 {
+		r.logDebug("%d successful result(s) were streamed but not kept for the post-scan phases (see retainResult)", notRetained)
+	}
 
 	sentStr := formatBytes(int(stats.TotalSentBytes))
 	recvStr := formatBytes(int(stats.TotalResponseBytes))
@@ -562,7 +568,7 @@ func (r *Runner) logCompletionSummary(stats swagger.RunStats) {
 	r.logInfo("📊 Requests Executed:   %d / %d (%.1f%%) | Sent: %s | Received: %s", stats.TotalRequests, stats.TotalPlanned, percent, sentStr, recvStr)
 	r.logInfo("🛑 Status Distribution: %s", statusSummary)
 	if findingsCount > 0 {
-		r.logInfo("🚨 Security Findings:   %d active analyzer finding(s) discovered across %d result(s)", findingsCount, resultsCount)
+		r.logInfo("🚨 Security Findings:   %d active analyzer finding(s) discovered across %d result(s)", findingsCount+droppedFindings, resultsCount)
 	} else {
 		r.logInfo("✨ Security Findings:   Clean scan (0 analyzer findings)")
 	}

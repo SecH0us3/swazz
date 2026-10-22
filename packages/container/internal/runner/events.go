@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"swazz-engine/internal/logger"
 )
 
 // Event types for SSE streaming.
@@ -88,25 +90,47 @@ func (r *Runner) Broadcast(evt Event) {
 	r.eventQueue.Push(evt)
 }
 
+// subLag is the delivery state of a subscriber that once missed a critical event: it did not take
+// one within criticalSendTimeout.
+//   - While stalled, critical events are only offered to it without waiting (one stuck subscriber
+//     must not hold up the others for criticalSendTimeout per event), the ones it misses are
+//     counted, and it gets no non-critical events, which would take the room critical ones need.
+//   - It is no longer stalled once its buffer is at most half full and it takes a critical event:
+//     the headroom keeps a subscriber that stays slow from going back to the blocking send, and
+//     its timeout, on every freed slot.
+//   - It never gets a checkpoint again (gap): a checkpoint after missed results would let a
+//     resumed scan skip them for good.
+type subLag struct {
+	stalled bool
+	dropped int
+}
+
+// criticalSendTimeout is how long a critical event waits for a subscriber that is not stalled.
+var criticalSendTimeout = 2 * time.Second
+
 func (r *Runner) broadcastLoop() {
 	if r.broadcastDone != nil {
 		defer close(r.broadcastDone)
 	}
-	stalledSubs := make(map[chan Event]bool)
+	lagging := make(map[chan Event]*subLag)
 
 	for {
 		select {
 		case <-r.doneCh:
 			// Drain remaining events before exiting
-			r.processEvents(r.eventQueue.PopAll(), stalledSubs)
+			r.processEvents(r.eventQueue.PopAll(), lagging)
 			return
 		case <-r.eventQueue.WaitChan():
-			r.processEvents(r.eventQueue.PopAll(), stalledSubs)
+			r.processEvents(r.eventQueue.PopAll(), lagging)
 		}
 	}
 }
 
-func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool) {
+func isCriticalEvent(evt Event) bool {
+	return evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError || evt.Type == EventCheckpoint
+}
+
+func (r *Runner) processEvents(nodes *EventNode, lagging map[chan Event]*subLag) {
 	if nodes == nil {
 		return
 	}
@@ -114,24 +138,53 @@ func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool
 	r.subsMu.RLock()
 	defer r.subsMu.RUnlock()
 
+	// Forget subscribers that have unsubscribed: the map must not keep their channels.
+	for ch := range lagging {
+		if _, ok := r.subs[ch]; !ok {
+			delete(lagging, ch)
+		}
+	}
+
 	for nodes != nil {
 		evt := nodes.Value
 		nodes = nodes.Next
 
 		for ch := range r.subs {
-			if stalledSubs[ch] {
+			lag := lagging[ch]
+			if !isCriticalEvent(evt) {
+				// Non-critical events (like progress stats) can be dropped if the client is too slow.
+				if lag == nil || !lag.stalled {
+					safeSendNonBlocking(ch, evt)
+				}
+				continue
+			}
+			if lag != nil && evt.Type == EventCheckpoint {
 				continue
 			}
 
-			if evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError || evt.Type == EventCheckpoint {
-				// Critical events MUST be delivered, but with a timeout to prevent OOM
-				// if a client stalls indefinitely.
-				if !safeSend(ch, evt, 2*time.Second) {
-					stalledSubs[ch] = true
+			if lag != nil && lag.stalled {
+				if len(ch) > cap(ch)/2 || !safeSendNonBlocking(ch, evt) {
+					lag.dropped++
+					continue
 				}
-			} else {
-				// Non-critical events (like progress stats) can be dropped if the client is too slow.
-				safeSendNonBlocking(ch, evt)
+				lag.stalled = false
+				// Local log only: an event for the user's runner log would be queued behind the
+				// very backlog it reports on.
+				logger.Warn("[Runner] A live event subscriber caught up after missing %d event(s) (results, or the run's end); checkpoints stay off for it", lag.dropped)
+				lag.dropped = 0
+				continue
+			}
+
+			// Critical events MUST be delivered, but with a timeout to prevent OOM
+			// if a client stalls indefinitely.
+			if !safeSend(ch, evt, criticalSendTimeout) {
+				if lag == nil {
+					lag = &subLag{}
+					lagging[ch] = lag
+				}
+				lag.stalled = true
+				lag.dropped = 1
+				logger.Warn("[Runner] A live event subscriber did not take a %s event for %v; dropping its events until it catches up", evt.Type, criticalSendTimeout)
 			}
 		}
 	}

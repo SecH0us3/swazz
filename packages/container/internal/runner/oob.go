@@ -11,13 +11,12 @@ import (
 	"time"
 
 	"swazz-engine/internal/logger"
-	"swazz-engine/internal/oob"
 	"swazz-engine/internal/swagger"
 )
 
 // HandleOOBTrigger is called when an Out-of-Band trigger message is received from the coordinator.
 func (r *Runner) HandleOOBTrigger(uuid string) {
-	ctx, ok := oob.GlobalStore.GetAndRemoveUUID(uuid)
+	ctx, ok := r.oobStore.GetAndRemoveUUID(uuid)
 	if !ok {
 		logger.Debug("OOB UUID not found or already processed: %s", uuid)
 		return

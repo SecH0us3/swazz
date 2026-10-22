@@ -8,6 +8,10 @@ package runner
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -368,21 +372,19 @@ func TestStart_PanicEndsTheRunWithAnErrorNotComplete(t *testing.T) {
 	assert.Equal(t, RunPanicMessage, errData)
 }
 
-// A worker still sending its stats when Start panics must not be hit by the channel closing
-// under it: that panic, in its own goroutine, used to take the whole agent down.
-func TestStart_PanicWaitsForWorkersBeforeClosingTheirStatsChannel(t *testing.T) {
+// A worker still sending its stats when Start panics must not be hit by the end of the run:
+// a send on a closed stats channel, in its own goroutine, used to take the whole agent down.
+func TestStart_PanicLeavesAWorkerSendingItsStatsUnharmed(t *testing.T) {
 	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
 	defer r.Close()
+	r.workerStopTimeout = 50 * time.Millisecond
 	sending := make(chan struct{})
-	r.afterInitHook = func(ctx context.Context) {
+	r.afterInitHook = func(context.Context) {
 		r.goWorker(func() {
 			close(sending)
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case r.statsChan <- statsMsg{result: &swagger.FuzzResult{Status: 200}}:
-				}
+			// Ignores the cancelled run and keeps sending until a send is refused: some are
+			// in flight when the pipe closes.
+			for r.sendStats(statsMsg{result: &swagger.FuzzResult{Status: 200}}) {
 			}
 		})
 		<-sending
@@ -437,4 +439,176 @@ func TestMCPDiscovery_WebMCPToolsKeepTheConfigAnAllowlist(t *testing.T) {
 	for _, ep := range r.config.Endpoints {
 		assert.NotEqual(t, "mcp://tool/server_only_tool", ep.Path)
 	}
+}
+
+// A worker that outlives the run (finalise gives up waiting for it) used to leave the stats
+// aggregator running for good: it leaked, and kept publishing snapshots over the final one,
+// so the ended run read as running again. Now the aggregator stops with the run, and the late
+// worker's stats are dropped instead of blocking it once the buffer is full.
+func TestFinalise_StopsStatsWhenAWorkerOutlivesTheRun(t *testing.T) {
+	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
+	defer r.Close()
+	r.workerStopTimeout = 50 * time.Millisecond
+	release, sent := make(chan struct{}), make(chan int, 1)
+	r.afterInitHook = func(context.Context) {
+		r.goWorker(func() {
+			<-release // stuck past the run's end, ignoring its context
+			n := 0
+			for range 2 * cap(r.stats.Load().ch) {
+				if r.sendStats(statsMsg{result: &swagger.FuzzResult{Status: 200}}) {
+					n++
+				}
+			}
+			sent <- n
+		})
+		panic("end the run while the worker is stuck")
+	}
+
+	assert.Panics(t, func() { _ = r.Start(context.Background()) })
+	select {
+	case <-r.stats.Load().done:
+	default:
+		t.Fatal("the stats aggregator is still running after the run ended")
+	}
+	final := r.GetStats()
+	require.False(t, final.IsRunning)
+
+	// No run starts while that worker is alive: its stats and results would land in it.
+	r.afterInitHook = nil
+	_, err := r.initRun(context.Background())
+	require.ErrorContains(t, err, "still stopping")
+
+	close(release)
+	select {
+	case n := <-sent:
+		assert.Zero(t, n, "stats sent after the run ended are dropped")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the late worker blocked on its stats")
+	}
+	require.True(t, r.waitWorkers(5*time.Second))
+	assert.Equal(t, final, r.GetStats(), "nothing publishes over the final stats")
+
+	_, err = r.initRun(context.Background())
+	require.NoError(t, err, "a run starts once the worker is gone")
+	r.finaliseRun()
+}
+
+// Stats sent while no run is going (no aggregator) are dropped instead of filling the buffer
+// and then blocking the sender.
+func TestSendStats_WithoutARunDrops(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+	defer r.Close()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 10000 {
+			r.SendStat(&swagger.FuzzResult{Status: 200}, 1, 1)
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("SendStat blocked with no run going")
+	}
+}
+
+// A send that reports delivery is counted: the pipe closes only once no send is in progress, so
+// the aggregator's final drain takes in every message a sender was told went through.
+func TestStatsPipe_DeliveredMeansCounted(t *testing.T) {
+	for range 20 {
+		r := New(&swagger.Config{}, nil)
+		p := newStatsPipe()
+		r.stats.Store(p)
+		go r.statsAggregator(p)
+
+		var delivered atomic.Int64
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for r.sendStats(statsMsg{result: &swagger.FuzzResult{Status: 200}}) {
+					delivered.Add(1)
+				}
+			}()
+		}
+		time.Sleep(5 * time.Millisecond)
+		r.stopStats()
+		wg.Wait()
+		assert.Equal(t, delivered.Load(), r.GetStats().TotalRequests)
+		r.Close()
+	}
+}
+
+// Closing a pipe twice, or the stopped pipe of a runner with no run, only waits.
+func TestStopStats_IsIdempotent(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+	defer r.Close()
+	assert.NotPanics(t, r.stopStats, "no run going")
+	p := newStatsPipe()
+	r.stats.Store(p)
+	go r.statsAggregator(p)
+	r.stopStats()
+	assert.NotPanics(t, r.stopStats, "already stopped")
+}
+
+// A send blocked on a full pipe gives up when its context ends (Stop during the rate-limit
+// phase), instead of waiting for the run to end.
+func TestSendStatsUntil_GivesUpOnTheContext(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+	defer r.Close()
+	p := newStatsPipe() // no aggregator: it fills up
+	r.stats.Store(p)
+	for range cap(p.ch) {
+		require.True(t, r.sendStats(statsMsg{}))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	assert.False(t, r.sendStatsUntil(ctx, statsMsg{}))
+	assert.Less(t, time.Since(start), 2*time.Second)
+}
+
+// A result of a run that has ended is dropped whole: a late worker's result is neither counted
+// nor streamed after the run's final event.
+func TestBaselinePhase_DropsResultsAfterTheRunEnded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	r := New(&swagger.Config{
+		BaseURL:   server.URL,
+		Security:  swagger.SecurityConfig{AllowPrivateIPs: true},
+		Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}},
+	}, nil)
+	defer r.Close()
+	sub := r.Subscribe()
+
+	r.baselinePhase(context.Background()) // no run going: the stats pipe is stopped
+	timeout := time.After(300 * time.Millisecond)
+	for {
+		select {
+		case ev := <-sub:
+			assert.NotEqual(t, EventResult, ev.Type)
+		case <-timeout:
+			return
+		}
+	}
+}
+
+func TestWorkerGroup(t *testing.T) {
+	var g workerGroup
+	assert.True(t, g.wait(time.Millisecond), "no workers")
+	g.add()
+	g.add()
+	assert.Equal(t, 2, g.running())
+	assert.False(t, g.wait(10*time.Millisecond))
+	g.done()
+	go g.done()
+	assert.True(t, g.wait(5*time.Second))
+	assert.Zero(t, g.running())
+	g.add() // a new run reuses the group
+	assert.False(t, g.wait(10*time.Millisecond))
+	g.done()
+	assert.True(t, g.wait(time.Second))
 }

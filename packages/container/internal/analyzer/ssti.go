@@ -13,7 +13,11 @@ import (
 	"swazz-engine/internal/swagger"
 )
 
-type SSTIAnalyzer struct{}
+// SSTIAnalyzer flags template expressions the target evaluated. Store holds the run's randomized
+// expressions (sstistore); without one only the fixed 7*7 and 7+'7' probes are recognised.
+type SSTIAnalyzer struct {
+	Store *sstistore.Store
+}
 
 var sstiRawExprBytes = map[string][]byte{
 	"7*7":   []byte("7*7"),
@@ -43,7 +47,7 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		}
 
 		// First, check dynamic store
-		if ctx, ok := sstistore.GlobalStore.Get(payloadStr); ok {
+		if ctx, ok := a.Store.Get(payloadStr); ok {
 			evalValBytes := []byte(ctx.Expected)
 			rawExprBytes := []byte(ctx.RawExpr)
 			if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {

@@ -8,7 +8,6 @@ package runner
 import (
 	"context"
 	"fmt"
-	"swazz-engine/internal/generator"
 	"swazz-engine/internal/ratelimit"
 	"swazz-engine/internal/swagger"
 	"time"
@@ -38,9 +37,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		r.progress.currentEndpoint.Store(epKey)
 		r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
-		safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-		safeGen.RunID = r.config.RunID
-		safeGen.Endpoint = endpoint.Method + " " + endpoint.Path
+		safeGen := r.newGenerator(swagger.ProfileRandom, endpoint.Method+" "+endpoint.Path)
 
 		var payload any
 		var queryParams map[string]any
@@ -111,9 +108,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 				totalIterations:  len(statusCodes),
 			}
 
-			select {
-			case r.statsChan <- msg:
-			case <-ctx.Done():
+			if ctx.Err() != nil || !r.sendStatsUntil(ctx, msg) {
 				return
 			}
 		}

@@ -20,6 +20,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"swazz-engine/internal/analyzer"
+	"swazz-engine/internal/oob"
+	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 )
 
@@ -303,16 +307,16 @@ func TestStatsAggregatorShutdown(t *testing.T) {
 	defer r.Close()
 
 	// Manually start the aggregator by mimicking Start's setup
-	r.statsChan = make(chan statsMsg, 4096)
-	r.statsDone = make(chan struct{})
+	p := newStatsPipe()
+	r.stats.Store(p)
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
-	go r.statsAggregator()
+	go r.statsAggregator(p)
 
 	// Send 100 results
 	const numResults = 100
 	for i := 0; i < numResults; i++ {
-		r.statsChan <- statsMsg{
+		p.ch <- statsMsg{
 			result: &swagger.FuzzResult{
 				Method:   "GET",
 				Endpoint: "/test",
@@ -324,10 +328,10 @@ func TestStatsAggregatorShutdown(t *testing.T) {
 		}
 	}
 
-	// Close the channel and wait for aggregator to finish
-	close(r.statsChan)
+	// Stop the aggregator and wait for it to finish
+	go p.close()
 	select {
-	case <-r.statsDone:
+	case <-p.done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("aggregator did not shut down in time")
 	}
@@ -959,8 +963,6 @@ func TestCheckpointResuming(t *testing.T) {
 
 func TestCheckpointWatermark(t *testing.T) {
 	r := &Runner{
-		statsChan:  make(chan statsMsg, 100),
-		statsDone:  make(chan struct{}),
 		doneCh:     make(chan struct{}),
 		subs:       make(map[chan Event]struct{}),
 		eventQueue: NewMPSCQueue(),
@@ -969,23 +971,25 @@ func TestCheckpointWatermark(t *testing.T) {
 	r.progress.totalRequests.Store(0)
 
 	// Start the stats aggregator
-	go r.statsAggregator()
+	p := newStatsPipe()
+	r.stats.Store(p)
+	go r.statsAggregator(p)
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 3,
 		totalIterations:  10,
 		endpoint:         "GET /test",
 		profile:          "RANDOM",
 	}
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 1,
 		totalIterations:  10,
 		endpoint:         "GET /test",
 		profile:          "RANDOM",
 	}
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 2,
 		totalIterations:  10,
@@ -999,7 +1003,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to be 3, got %d", stats.Progress.CurrentIteration)
 	}
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 5,
 		totalIterations:  10,
@@ -1012,7 +1016,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to remain 3 because 4 is missing, got %d", stats.Progress.CurrentIteration)
 	}
 
-	r.statsChan <- statsMsg{
+	p.ch <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 4,
 		totalIterations:  10,
@@ -1025,8 +1029,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		t.Errorf("Expected watermark iteration to jump to 5 once 4 completed, got %d", stats.Progress.CurrentIteration)
 	}
 
-	close(r.statsChan)
-	<-r.statsDone
+	r.stopStats()
 }
 
 func TestInitRun_MCPMethodFuzzing(t *testing.T) {
@@ -1257,4 +1260,117 @@ func TestBolaPhase_UsesIDsHarvestedDuringFuzzing(t *testing.T) {
 // through r.detector; run with -race.
 func TestHarvest_ConcurrentWithVariableExtraction(t *testing.T) {
 	assert.Contains(t, boladetectorScan(t, 8, 30), "/items/harvested-42")
+}
+
+// Two scans run at once on one agent: starting and ending one must not wipe, or consume, the OOB
+// tokens and SSTI expressions the other is still waiting on.
+func TestRunStores_ConcurrentRunsDoNotClearEachOther(t *testing.T) {
+	a := New(&swagger.Config{RunID: "run-a"}, nil)
+	defer a.Close()
+	b := New(&swagger.Config{RunID: "run-b"}, nil)
+	defer b.Close()
+
+	a.oobStore.RegisterUUID("token-a", &oob.OOBContext{SessionID: "run-a", Endpoint: "GET /a"})
+	a.sstiStore.Register("{{23*37}}", sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"})
+
+	_, err := b.initRun(context.Background())
+	require.NoError(t, err)
+	b.finaliseRun()
+
+	assert.Equal(t, 1, a.oobStore.Size(), "run b's start or end cleared run a's OOB tokens")
+	_, ok := a.sstiStore.Get("{{23*37}}")
+	assert.True(t, ok, "run b's start or end cleared run a's SSTI expressions")
+
+	// A callback routed to run b does not consume run a's token.
+	b.HandleOOBTrigger("token-a")
+	assert.Equal(t, 1, a.oobStore.Size())
+
+	// Run b's analyzer does not match run a's expressions; run a's does.
+	input := &analyzer.AnalysisInput{
+		SentPayload:  "{{23*37}}",
+		ResponseBody: []byte("Hello 851!"),
+		Profile:      swagger.ProfileMalicious,
+	}
+	assert.True(t, hasFinding(a.analyzer.Analyze(input), "swazz/ssti-leak"))
+	assert.False(t, hasFinding(b.analyzer.Analyze(input), "swazz/ssti-leak"))
+}
+
+func TestRunStores_ClearedWhenTheRunStartsAndEnds(t *testing.T) {
+	r := New(&swagger.Config{RunID: "run-c"}, nil)
+	defer r.Close()
+
+	r.oobStore.RegisterUUID("stale", &oob.OOBContext{SessionID: "run-c"})
+	r.sstiStore.Register("stale", sstistore.SSTIContext{})
+	_, err := r.initRun(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, r.oobStore.Size(), "a previous run's tokens survived the start")
+	_, ok := r.sstiStore.Get("stale")
+	assert.False(t, ok)
+
+	r.oobStore.RegisterUUID("pending", &oob.OOBContext{SessionID: "run-c"})
+	r.sstiStore.Register("pending", sstistore.SSTIContext{})
+	r.finaliseRun()
+	assert.Zero(t, r.oobStore.Size(), "the run's tokens outlived it")
+	_, ok = r.sstiStore.Get("pending")
+	assert.False(t, ok)
+}
+
+// The generators a run builds register what they send in that run's stores.
+func TestNewGenerator_RegistersInTheRunsStores(t *testing.T) {
+	r := New(&swagger.Config{RunID: "run-d"}, nil)
+	defer r.Close()
+
+	gen := r.newGenerator(swagger.ProfileMalicious, "GET /d")
+	assert.Equal(t, "run-d", gen.RunID)
+	assert.Equal(t, "GET /d", gen.Endpoint)
+	assert.Same(t, r.oobStore, gen.OOBStore)
+	assert.Same(t, r.sstiStore, gen.SSTIStore)
+}
+
+func hasFinding(findings []swagger.AnalysisFinding, rule string) bool {
+	for _, f := range findings {
+		if f.RuleID == rule {
+			return true
+		}
+	}
+	return false
+}
+
+// Time a scan spends held (the agent's coordinator is away) is not counted against its maximum
+// duration: a hold pauses the scan, it must not end it.
+func TestRunner_MaxScanDurationExcludesHeldTime(t *testing.T) {
+	scanDurationUnit = time.Millisecond
+	defer func() { scanDurationUnit = time.Minute }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	r := New(&swagger.Config{
+		BaseURL:   server.URL,
+		Security:  swagger.SecurityConfig{AllowPrivateIPs: true},
+		Endpoints: []swagger.EndpointConfig{{Path: "/fast", Method: "GET"}},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 5,
+			Concurrency:          1,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
+			MaxScanDurationMin:   1000, // 1s here: the scan itself needs far less, even under -race
+		},
+	}, nil)
+	defer r.Close()
+
+	r.Hold()
+	done := make(chan error, 1)
+	go func() { done <- r.Start(context.Background()) }()
+	time.Sleep(1300 * time.Millisecond) // held past the maximum
+	assert.False(t, r.stopped(), "stopped while held")
+	r.Release()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the released scan did not finish")
+	}
+	assert.False(t, r.stopped(), "the held time was charged to the scan")
+	assert.GreaterOrEqual(t, r.heldFor(), 1300*time.Millisecond)
 }

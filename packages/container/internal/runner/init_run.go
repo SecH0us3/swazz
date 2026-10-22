@@ -18,9 +18,7 @@ import (
 
 	swazzGrpc "swazz-engine/internal/grpc"
 	"swazz-engine/internal/logger"
-	"swazz-engine/internal/oob"
 	"swazz-engine/internal/runner/bola"
-	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 )
 
@@ -71,14 +69,15 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	if r.lifecycle.isRunning.Load() {
 		return nil, fmt.Errorf("already running")
 	}
+	// A worker the last run gave up waiting for (finalise) would otherwise send its stats and
+	// results into this one.
+	if n := r.workers.running(); n > 0 {
+		return nil, fmt.Errorf("the previous run's workers are still stopping (%d)", n)
+	}
 
 	r.lifecycle.isRunning.Store(true)
 	r.lifecycle.isPaused.Store(false)
 	r.lifecycle.shouldStop.Store(false)
-
-	// Re-create channels (may have been closed by a previous run).
-	r.statsChan = make(chan statsMsg, 4096)
-	r.statsDone = make(chan struct{})
 
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
@@ -86,8 +85,8 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	r.timeBaselines = &sync.Map{}
 	r.detector.Store(bola.NewDetector(r)) // a new run starts with no harvested IDs
 
-	oob.GlobalStore.Clear()
-	sstistore.GlobalStore.Clear()
+	r.oobStore.Clear()
+	r.sstiStore.Clear()
 	r.userLogRepeats.reset()
 	r.workerPanicked.Store(false)
 
@@ -118,25 +117,27 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	}
 	r.logScanTargets()
 
-	go r.statsAggregator()
+	stats := newStatsPipe()
+	r.stats.Store(stats)
+	go r.statsAggregator(stats)
 
 	r.resultsMu.Lock()
-	r.allResults = nil
+	r.allResults, r.retained = nil, retainedResults{}
 	r.resultsMu.Unlock()
 
 	return ctx, nil
 }
 
-// workerStopTimeout bounds how long a run that ended abnormally waits for its workers.
-const workerStopTimeout = 30 * time.Second
+// defaultWorkerStopTimeout bounds how long a run that ended abnormally waits for its workers.
+const defaultWorkerStopTimeout = 30 * time.Second
 
 // goWorker runs fn as one of the run's workers. A panic in it (an analyzer, a generator, an
 // executor) must not take the agent and every other run on it down: it is logged locally,
 // stack included, and stops this run, which then ends with an error (see Start).
 func (r *Runner) goWorker(fn func()) {
-	r.workers.Add(1)
+	r.workers.add()
 	go func() {
-		defer r.workers.Done()
+		defer r.workers.done()
 		defer func() {
 			if p := recover(); p != nil {
 				logger.Error("[Runner] A worker panicked: %v\n%s", p, debug.Stack())
@@ -158,15 +159,56 @@ func (r *Runner) cancelRun() {
 
 // waitWorkers waits for the run's workers to return, at most timeout; false if they did not.
 func (r *Runner) waitWorkers(timeout time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		r.workers.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
+	return r.workers.wait(timeout)
+}
+
+// workerGroup counts a run's workers (goWorker). Unlike a sync.WaitGroup, a wait that gives up
+// leaves no goroutine behind, and the next run can see whether any is still running.
+type workerGroup struct {
+	mu   sync.Mutex
+	n    int
+	idle chan struct{} // closed when n drops to 0; nil before the first worker
+}
+
+func (g *workerGroup) add() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.n == 0 {
+		g.idle = make(chan struct{})
+	}
+	g.n++
+}
+
+func (g *workerGroup) done() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.n--
+	if g.n == 0 {
+		close(g.idle)
+	}
+}
+
+func (g *workerGroup) running() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.n
+}
+
+// wait waits for the count to drop to 0, at most timeout; false if it did not.
+func (g *workerGroup) wait(timeout time.Duration) bool {
+	g.mu.Lock()
+	if g.n == 0 {
+		g.mu.Unlock()
 		return true
-	case <-time.After(timeout):
+	}
+	idle := g.idle
+	g.mu.Unlock()
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-idle:
+		return true
+	case <-t.C:
 		return false
 	}
 }
@@ -188,16 +230,17 @@ func (r *Runner) finaliseRunAfterPanic() {
 func (r *Runner) finalise(panicked bool) {
 	r.cancelRun()
 
-	// Workers send to statsChan: closing it under one still running would panic it ("send on
-	// closed channel"). On a normal end they have all returned; after a panic they stop on the
-	// cancelled context, within a bound (a request in flight has its own timeout).
-	if r.waitWorkers(workerStopTimeout) {
-		// Signal stats aggregator to flush and exit.
-		close(r.statsChan)
-		<-r.statsDone
-	} else {
-		logger.Error("[Runner] Workers still running %v after the run ended; leaving their stats channel open", workerStopTimeout)
+	// On a normal end the workers have all returned; after a panic they stop on the cancelled
+	// context, within a bound (a request in flight has its own timeout). Past it the run ends
+	// anyway: the aggregator still stops, and a late worker's stats are dropped (sendStats).
+	timeout := r.workerStopTimeout
+	if timeout == 0 {
+		timeout = defaultWorkerStopTimeout
 	}
+	if !r.waitWorkers(timeout) {
+		logger.Error("[Runner] Workers still running %v after the run ended; their remaining stats are dropped", timeout)
+	}
+	r.stopStats()
 
 	r.lifecycle.isRunning.Store(false)
 
@@ -217,8 +260,8 @@ func (r *Runner) finalise(panicked bool) {
 	if r.mcpClient != nil {
 		_ = r.mcpClient.Close()
 	}
-	sstistore.GlobalStore.Clear()
-	oob.GlobalStore.ClearSession(r.config.RunID)
+	r.sstiStore.Clear()
+	r.oobStore.Clear()
 }
 
 // mcpFixHint tells the user what to change when the MCP server cannot be used.

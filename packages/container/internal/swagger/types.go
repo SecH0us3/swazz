@@ -487,6 +487,12 @@ type FuzzResult struct {
 	OWASPCategory    []string          `json:"owaspCategory,omitempty"`
 	OWASPAPICategory []string          `json:"owaspApiCategory,omitempty"`
 	CWEIDs           []string          `json:"cweIds,omitempty"`
+	// Slim marks a result the runner kept for the post-scan phases without its payload, body and
+	// headers (runner.slimResult). Never set on a result that is streamed or reported.
+	Slim bool `json:"-"`
+	// NotSent marks a request the scan stopped before sending (it was held): not a result, so it
+	// is never counted, streamed, kept or reported.
+	NotSent bool `json:"-"`
 }
 
 // FuzzResultSSE is the lightweight version sent over SSE to the browser.

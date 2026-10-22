@@ -39,6 +39,7 @@ func closedChan() chan struct{} {
 
 func TestFinishExecution_NothingMoreOnceTheRunReportedItsEnd(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
+	t.Cleanup(d.Close)
 	var sent sentByExecution
 	d.finishExecution("run-1", false, func() bool { return true }, closedChan(), noStats, sent.sendEvent, sent.sendError)
 	assert.Empty(t, sent.events)
@@ -50,6 +51,7 @@ func TestFinishExecution_NothingMoreOnceTheRunReportedItsEnd(t *testing.T) {
 // reported complete, with the runner's final stats.
 func TestFinishExecution_ReportsCompletionThatWasNotForwarded(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
+	t.Cleanup(d.Close)
 	var sent sentByExecution
 	var payload interface{}
 	sendEvent := func(typ string, p interface{}) { sent.sendEvent(typ, p); payload = p }
@@ -61,6 +63,7 @@ func TestFinishExecution_ReportsCompletionThatWasNotForwarded(t *testing.T) {
 
 func TestFinishExecution_PanicIsReportedWithoutInternals(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
+	t.Cleanup(d.Close)
 	var sent sentByExecution
 	d.finishExecution("run-1", true, func() bool { return false }, closedChan(), noStats, sent.sendEvent, sent.sendError)
 	require.Len(t, sent.errors, 1)
@@ -75,6 +78,7 @@ func TestFinishExecution_PanicIsReportedWithoutInternals(t *testing.T) {
 // long (a "complete" of its own could not get out sooner), and sends nothing more if it came.
 func TestFinishExecution_WaitsForForwardingToFinish(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
+	t.Cleanup(d.Close)
 	var sent sentByExecution
 	done := make(chan struct{})
 	var completed atomic.Bool

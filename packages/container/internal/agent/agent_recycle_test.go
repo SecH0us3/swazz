@@ -29,6 +29,7 @@ func recyclingDispatcher(t *testing.T) (*AgentDispatcher, chan int) {
 	recyclePollInterval, recycleDrainTimeout = 5*time.Millisecond, time.Second
 	t.Cleanup(func() { recyclePollInterval, recycleDrainTimeout = oldPoll, oldTimeout })
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
+	t.Cleanup(d.Close)
 	exits := make(chan int, 4)
 	d.exit = func(code int) { exits <- code }
 	d.EnableRecycleWhenIdle()
@@ -56,6 +57,7 @@ func expectNoExit(t *testing.T, exits chan int, within time.Duration) {
 
 func TestRecycle_OffByDefault(t *testing.T) {
 	d := NewAgentDispatcher("ws://localhost", "tok", true, make(chan interface{}, 10))
+	t.Cleanup(d.Close)
 	exited := false
 	d.exit = func(int) { exited = true }
 	d.maybeRecycle()
@@ -68,6 +70,7 @@ func TestRecycle_ExitsOnceIdleAndDelivered(t *testing.T) {
 	d.maybeRecycle()
 	d.maybeRecycle() // a second scan ending at the same time
 	expectExit(t, exits)
+	d.maybeRecycle() // or just after the exit began
 	expectNoExit(t, exits, 50*time.Millisecond)
 }
 
@@ -120,13 +123,55 @@ func TestRecycle_DeliveryWaitIsBounded(t *testing.T) {
 	expectExit(t, exits)
 }
 
+// The drain timeout bounds the wait for acknowledgements only: a message never written would be
+// lost with the process, however long the coordinator is away.
+func TestRecycle_NeverExitsWithUnwrittenMessages(t *testing.T) {
+	out := make(chan interface{}, 10)
+	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
+	oldPoll, oldTimeout := recyclePollInterval, recycleDrainTimeout
+	recyclePollInterval, recycleDrainTimeout = 5*time.Millisecond, 150*time.Millisecond
+	t.Cleanup(func() { recyclePollInterval, recycleDrainTimeout = oldPoll, oldTimeout })
+	exits := make(chan int, 1)
+	d.exit = func(code int) { exits <- code }
+	d.pendingOutput = func() bool { return true } // never acknowledged
+	d.EnableRecycleWhenIdle()
+
+	d.SendWSEvent("run-1", "complete", nil)
+	ev := (<-out).(WSEventOut) // taken by the write loop, not written yet
+	d.maybeRecycle()
+	expectNoExit(t, exits, 300*time.Millisecond) // past the drain timeout
+	d.delivery.written(ev, true)
+	// The wait for its acknowledgement starts now, not when recycling began.
+	expectNoExit(t, exits, 50*time.Millisecond)
+	expectExit(t, exits)
+}
+
+// A reply (no seq) already handed to the write loop, or carried after a failed write, is unwritten
+// too.
+func TestRecycle_SessionCountsUnwrittenReplies(t *testing.T) {
+	s := newAgentSession("ws://localhost", "tok", true)
+	t.Cleanup(s.dispatcher.Close)
+	assert.False(t, s.dispatcher.unwritten())
+	s.carry <- map[string]interface{}{"type": "parse_result"}
+	assert.True(t, s.dispatcher.unwritten())
+	<-s.carry
+	s.dispatcher.queueReply(map[string]interface{}{"type": "parse_result"})
+	assert.True(t, s.dispatcher.unwritten())
+	<-s.outChan // taken by the write loop; the drain timeout that follows covers the write itself
+	assert.Eventually(t, func() bool { return !s.dispatcher.unwritten() }, time.Second, time.Millisecond)
+}
+
 func TestRecycle_SessionCountsQueuedAndUnacknowledgedOutput(t *testing.T) {
 	s := newAgentSession("ws://localhost", "tok", true)
+	t.Cleanup(s.dispatcher.Close)
 	assert.False(t, s.dispatcher.pendingOutput())
 	s.dispatcher.delivery.setEnabled(true)
 	s.dispatcher.SendWSEvent("run-1", "result", nil)
 	assert.True(t, s.dispatcher.pendingOutput(), "queued")
 	ev := (<-s.outChan).(WSEventOut)
+	assert.True(t, s.dispatcher.pendingOutput(), "taken by the write loop, not written yet")
+	s.dispatcher.delivery.written(ev, true)
 	assert.True(t, s.dispatcher.pendingOutput(), "sent, not acknowledged")
 	s.dispatcher.delivery.ack("run-1", ev.Exec, ev.Seq)
 	assert.False(t, s.dispatcher.pendingOutput())
@@ -144,12 +189,13 @@ func TestRecycle_AfterARealScanEnds(t *testing.T) {
 
 	out := make(chan interface{}, 1000)
 	d := NewAgentDispatcher("ws://localhost", "tok", true, out)
+	t.Cleanup(d.Close)
 	oldPoll := recyclePollInterval
 	recyclePollInterval = 5 * time.Millisecond
 	defer func() { recyclePollInterval = oldPoll }()
 	exits := make(chan int, 1)
 	d.exit = func(code int) { exits <- code }
-	d.pendingOutput = func() bool { return len(out) > 0 }
+	d.pendingOutput = func() bool { return d.outbox.pending() > 0 || len(out) > 0 }
 	d.EnableRecycleWhenIdle()
 
 	sawComplete := make(chan struct{})

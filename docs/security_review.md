@@ -241,6 +241,8 @@ sequenceDiagram
 
 Real-time scanning feedback and vulnerability discoveries are reported immediately to the front-end dashboard using persistent streaming channels.
 
+Browsers cannot set headers on a WebSocket, so the dashboard does not put its session JWT in the stream's URL, where proxy and Cloudflare logs would keep it. It trades the session for a one-time ticket first: the ticket opens one run's stream, for the user it was issued to, once, within 30 seconds, and access to the run is checked again when it is used. Session JWTs are not accepted from a query string anywhere: `?token=` is read only for an API key (`swazz_live_...`), for MCP clients that cannot set headers. Not covered: the runner agent may still pass its runner token as `?token=` on `/api/runners/connect` (the Go agent sends a header), and the JWT itself still lives in `localStorage`, so script running on the dashboard's origin can read it.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -251,8 +253,11 @@ sequenceDiagram
     participant DB as SQLite D1 Database
 
     %% Establish Streams
-    UI->>Worker: WS Connection: /api/runs/:id/events
-    Worker->>DO: Forward WebSocket client connection
+    UI->>Worker: POST /api/runs/:id/stream-ticket (Authorization: Bearer)
+    Worker->>DB: Store SHA-256 of a one-time ticket (this user, this run, 30 s)
+    UI->>Worker: WS Connection: /api/runs/:id/events?ticket=...
+    Worker->>DB: DELETE ... RETURNING the ticket (used once)
+    Worker->>DO: Forward WebSocket client connection (ticket stripped)
     note over DO: Register client WebSocket in active client set for runId
 
     Agent->>DO: WS Connection: /connect-runner (Authenticated)

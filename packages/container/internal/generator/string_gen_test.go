@@ -267,6 +267,7 @@ func TestStringGen_GenerateString_Malicious(t *testing.T) {
 			oobServerURL:              "http://oob.swazz.test:8080",
 			RunID:                     "test-run-123",
 			Endpoint:                  "/api/v1/ping",
+			OOBStore:                  oob.NewStore(),
 		}
 		val := g.generateString("", "")
 		str, ok := val.(string)
@@ -274,10 +275,10 @@ func TestStringGen_GenerateString_Malicious(t *testing.T) {
 		assert.NotContains(t, str, "{{OOB_URL}}")
 		assert.Contains(t, str, "http://oob.swazz.test:8080/api/oob/test-run-123/")
 
-		// Verify OOB registration in global store
+		// Verify OOB registration in the run's store
 		parts := strings.Split(str, "/")
 		registeredUUID := parts[len(parts)-1]
-		ctx, found := oob.GlobalStore.GetAndRemoveUUID(registeredUUID)
+		ctx, found := g.OOBStore.GetAndRemoveUUID(registeredUUID)
 		require.True(t, found)
 		assert.Equal(t, "test-run-123", ctx.SessionID)
 		assert.Equal(t, "/api/v1/ping", ctx.Endpoint)
@@ -288,12 +289,13 @@ func TestStringGen_GenerateString_Malicious(t *testing.T) {
 			profile:                   swagger.ProfileMalicious,
 			hasActiveMaliciousStrings: true,
 			cachedMaliciousStrings:    []any{"prefix_{{7*7}}_suffix"},
+			SSTIStore:                 sstistore.NewStore(),
 		}
 		val := g.generateString("", "")
 		str, ok := val.(string)
 		require.True(t, ok)
 		assert.NotContains(t, str, "{{7*7}}") // the SSTI probe token was replaced; random primes may incidentally contain "7*7"
-		ctx, found := sstistore.GlobalStore.Get(str)
+		ctx, found := g.SSTIStore.Get(str)
 		require.True(t, found)
 		assert.NotEmpty(t, ctx.RawExpr)
 		assert.NotEmpty(t, ctx.Expected)
@@ -403,6 +405,20 @@ func TestStringGen_OOBURL(t *testing.T) {
 		assert.Equal(t, "http://localhost:8080/api/oob/uuid-1234", url)
 	})
 
+	t.Run("without run stores the payload is still sent, unregistered", func(t *testing.T) {
+		g := &Generator{
+			profile:                   swagger.ProfileMalicious,
+			hasActiveMaliciousStrings: true,
+			cachedMaliciousStrings:    []any{"{{OOB_URL}}", "prefix_{{7*7}}_suffix"},
+		}
+		oobVal, ok := g.generateString("", "").(string)
+		require.True(t, ok)
+		assert.NotContains(t, oobVal, "{{OOB_URL}}")
+		sstiVal, ok := g.generateString("", "").(string)
+		require.True(t, ok)
+		assert.Equal(t, "prefix_{{7*7}}_suffix", sstiVal, "the fixed probe the static fallback detects is kept")
+	})
+
 	t.Run("custom host without scheme and without api/oob", func(t *testing.T) {
 		g := &Generator{oobServerURL: "interact.sh:443"}
 		url := g.oobURL("uuid-1234")
@@ -422,7 +438,7 @@ func TestStringGen_OOBURL(t *testing.T) {
 func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 	t.Parallel()
 
-	g := &Generator{}
+	g := &Generator{SSTIStore: sstistore.NewStore()}
 
 	t.Run("ssti multiplication expression 7*7", func(t *testing.T) {
 		input := "payload_{{7*7}}_test"
@@ -431,7 +447,7 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 		assert.True(t, strings.HasPrefix(out, "payload_{{"))
 		assert.True(t, strings.HasSuffix(out, "}}_test"))
 
-		ctx, found := sstistore.GlobalStore.Get(out)
+		ctx, found := g.SSTIStore.Get(out)
 		require.True(t, found)
 		assert.NotEmpty(t, ctx.RawExpr)
 		assert.NotEmpty(t, ctx.Expected)
@@ -444,7 +460,7 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 		assert.True(t, strings.HasPrefix(out, "expr_${"))
 		assert.True(t, strings.HasSuffix(out, "}_tail"))
 
-		ctx, found := sstistore.GlobalStore.Get(out)
+		ctx, found := g.SSTIStore.Get(out)
 		require.True(t, found)
 		assert.NotEmpty(t, ctx.RawExpr)
 		assert.NotEmpty(t, ctx.Expected)
