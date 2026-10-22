@@ -666,6 +666,31 @@ describe('RequestDetail Component', () => {
         spy.mockRestore();
     });
 
+    it('shows the Adaptive AI script while the model streams it', async () => {
+        const spy = vi.spyOn(adaptivePocModule, 'generateAdaptivePoc').mockImplementation((_input, opts) => {
+            opts?.onPartial?.('```python\nprint("streaming part")');
+            return new Promise(() => {});
+        });
+
+        render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+            />
+        );
+        fireEvent.click(screen.getByRole('tab', { name: /Live Replay & PoC Export/i }));
+        fireEvent.click(screen.getByRole('button', { name: /⚡ Adaptive AI/i }));
+
+        expect(await screen.findByText(/streaming part/)).toBeTruthy();
+        expect(screen.getByText(/Generating with on-device AI/i)).toBeTruthy();
+        expect(screen.queryByText(/```/)).toBeNull();
+        expect((screen.getByRole('button', { name: /Copy Exploit Script/i }) as HTMLButtonElement).disabled).toBe(true);
+        spy.mockRestore();
+    });
+
     it('says when Adaptive AI fell back to the template because on-device AI is unavailable', async () => {
         const spy = vi.spyOn(adaptivePocModule, 'generateAdaptivePoc').mockResolvedValue({
             code: 'print("ok")', model: 'algorithmic-rules (local)', simulated: true, fallbackReason: 'unavailable',
