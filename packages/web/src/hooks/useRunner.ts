@@ -6,7 +6,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { RunStats, AnalysisFinding } from '../types.js';
 import { useAppStore, type ScanIssue } from '../store/appStore.js';
-import { interpretRunMessage, fetchScanStatus, fetchRunnerWarnings } from '../services/runStream.js';
+import { interpretRunMessage, fetchScanStatus, fetchRunnerWarnings, fetchStreamQuery } from '../services/runStream.js';
 import { hintForRunnerMessage } from '../utils/runnerErrorHints.js';
 
 const VALUE_LIMIT = 80;
@@ -291,12 +291,11 @@ export function followRun(runId: string, proxyUrl: string, handlers: RunHandlers
         }
     };
 
-    const connect = () => {
+    const open = (query: string) => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         const wsUrl = proxyUrl ? proxyUrl.replace(/^http/, 'ws') : `${protocol}//${host}`;
-        const wsToken = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
-        const socket = new WebSocket(`${wsUrl}/api/runs/${runId}/events${wsToken ? `?token=${encodeURIComponent(wsToken)}` : ''}`);
+        const socket = new WebSocket(`${wsUrl}/api/runs/${runId}/events${query}`);
         ws = socket;
         wsRef.current = socket;
         socket.onmessage = (e) => onMessage(e.data);
@@ -308,6 +307,24 @@ export function followRun(runId: string, proxyUrl: string, handlers: RunHandlers
             if (finished || ws !== socket) return;
             void onDrop();
         };
+    };
+
+    // Signed in, the stream opens with a one-time ticket: the session token never goes in a URL.
+    // Signed out there is no ticket to wait for, so the socket opens at once.
+    const connect = () => {
+        const signedIn = typeof localStorage !== 'undefined' && localStorage ? !!localStorage.getItem('swazz_token') : false;
+        if (!signedIn) {
+            open('');
+            return;
+        }
+        void fetchStreamQuery(runId, proxyUrl).then((query) => {
+            if (finished) return;
+            if (query === null) {
+                void onDrop();
+                return;
+            }
+            open(query);
+        });
     };
 
     // The stream dropped before the scan ended: it may have ended meanwhile, or keep running.

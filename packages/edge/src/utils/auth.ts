@@ -12,11 +12,18 @@ import type { AuthRepository } from '../repositories/auth';
 declare module 'hono' {
   interface ContextVariableMap {
     jwtPayload: Record<string, unknown>;
+    // The user a one-time event stream ticket was issued to, once the auth middleware redeemed it.
+    streamTicketUser: string;
   }
 }
 
 const KV_POSITIVE_TTL = 300; // 5 minutes
 const KV_NEGATIVE_TTL = 60;  // 1 minute
+
+/** `bytes` random bytes from the CSPRNG, as lowercase hex. */
+export function randomHex(bytes: number): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
+}
 
 export async function hashApiKey(key: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(key);
@@ -25,14 +32,30 @@ export async function hashApiKey(key: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Context<E>): Promise<string | null> {
-  let token = null;
+/**
+ * An API key passed as ?token= by a client that cannot set headers. Nothing else is taken from a
+ * URL: URLs end up in proxy and Cloudflare logs, and a session JWT there would outlive the request
+ * (the dashboard opens its WebSockets with a one-time ticket instead).
+ */
+export function queryApiKey<E extends { Bindings: Env }>(c: Context<E>): string | null {
+  const token = c.req.query('token');
+  return token && token.startsWith('swazz_live_') ? token : null;
+}
+
+/** The bearer token of the request, or an API key from its query string. */
+export function requestToken<E extends { Bindings: Env }>(c: Context<E>): string | null {
   const authHeader = c.req.header('Authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else {
-    token = c.req.query('token');
+    return authHeader.substring(7);
   }
+  return queryApiKey(c);
+}
+
+export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Context<E>): Promise<string | null> {
+  // A redeemed stream ticket stands for its user, whatever else the request carries.
+  const ticketUser = c.get('streamTicketUser');
+  if (ticketUser) return ticketUser;
+  const token = requestToken(c);
   if (!token) {
     return null;
   }
@@ -230,13 +253,7 @@ const LOCKOUT_MINUTES = 15;
 
 
 export async function getSessionIat<E extends { Bindings: Env }>(c: Context<E>): Promise<number | null> {
-  let token = null;
-  const authHeader = c.req.header('Authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else {
-    token = c.req.query('token');
-  }
+  const token = requestToken(c);
   if (!token) return null;
   
   if (token.startsWith('swazz_live_')) {

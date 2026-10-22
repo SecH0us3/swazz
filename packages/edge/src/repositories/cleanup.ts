@@ -7,7 +7,7 @@ import { Env } from '../env';
 import { BaseService } from './base';
 
 export interface ICleanupRepository {
-  cleanupSecurityTables(): Promise<{ challenges: number; rateLimits: number; loginHistory: number; auditLogs: number }>;
+  cleanupSecurityTables(): Promise<{ challenges: number; wsTickets: number; rateLimits: number; loginHistory: number; auditLogs: number }>;
   getExpiredGuestUsers(): Promise<{ id: string; username: string }[]>;
   getProjectsOwnedByUser(userId: string): Promise<string[]>;
   deleteGuestUserData(userId: string, projectIds: string[], username: string): Promise<void>;
@@ -26,11 +26,13 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
     super(env);
   }
 
-  async cleanupSecurityTables(): Promise<{ challenges: number; rateLimits: number; loginHistory: number; auditLogs: number }> {
-    const [challengesRes, usedPasskeyRes, rateLimitsRes, historyRes, auditRes] = await Promise.all([
+  async cleanupSecurityTables(): Promise<{ challenges: number; wsTickets: number; rateLimits: number; loginHistory: number; auditLogs: number }> {
+    const [challengesRes, usedPasskeyRes, wsTicketsRes, rateLimitsRes, historyRes, auditRes] = await Promise.all([
       this.db.prepare("DELETE FROM login_challenges WHERE expires_at < datetime('now')").run(),
       // Login challenges expire after 5 minutes, so a day-old spent marker can never matter again.
       this.db.prepare("DELETE FROM used_passkey_challenges WHERE used_at < datetime('now', '-1 day')").run(),
+      // Event stream tickets nobody used: refused once expired, so nothing reads them any more.
+      this.db.prepare("DELETE FROM ws_tickets WHERE expires_at < CAST(strftime('%s', 'now') AS INTEGER)").run(),
       this.db.prepare("DELETE FROM rate_limits WHERE reset_at < datetime('now')").run(),
       this.db.prepare("DELETE FROM user_login_history WHERE created_at < datetime('now', '-90 days')").run(),
       this.db.prepare("DELETE FROM audit_logs WHERE timestamp < datetime('now', '-45 days')").run(),
@@ -38,6 +40,7 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
 
     return {
       challenges: (challengesRes.meta?.changes || 0) + (usedPasskeyRes.meta?.changes || 0),
+      wsTickets: wsTicketsRes.meta?.changes || 0,
       rateLimits: rateLimitsRes.meta?.changes || 0,
       loginHistory: historyRes.meta?.changes || 0,
       auditLogs: auditRes.meta?.changes || 0,

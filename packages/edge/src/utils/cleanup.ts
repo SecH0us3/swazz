@@ -17,6 +17,9 @@ export async function cleanupSecurityTables(db: D1Database, env?: any, ctx?: any
     if (changes.challenges > 0) {
       logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.challenges} expired login challenges.`);
     }
+    if (changes.wsTickets > 0) {
+      logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.wsTickets} unused event stream tickets.`);
+    }
     if (changes.rateLimits > 0) {
       logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.rateLimits} expired rate limits.`);
     }
