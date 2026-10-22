@@ -77,6 +77,15 @@ func TestOrchestrator_GroupFindings_PrefersResultWithBody(t *testing.T) {
 		t.Errorf("expected all 3 findings in the group, got %d", len(groups[0].AffectedFindingIDs))
 	}
 
+	// A slim first representative gives way to a later whole result, even with shorter evidence.
+	groups = orch.GroupFindings([]*swagger.FuzzResult{
+		{Method: "GET", Endpoint: "/a", Slim: true, AnalyzerFindings: finding("long slim evidence")},
+		{Method: "GET", Endpoint: "/a", ResponseBody: "whole body", AnalyzerFindings: finding("short")},
+	})
+	if got := groups[0].Result.ResponseBody; got != "whole body" {
+		t.Errorf("expected the whole result to replace the slim representative, got body %v", got)
+	}
+
 	// A result that never had a body (headers-only finding) is not slim: longer evidence wins.
 	groups = orch.GroupFindings([]*swagger.FuzzResult{
 		{Method: "GET", Endpoint: "/a", ResponseBody: "body", AnalyzerFindings: finding("short")},

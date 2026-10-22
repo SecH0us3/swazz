@@ -318,7 +318,7 @@ func (r *Runner) runActiveParameterFuzzing(
 				r.Broadcast(Event{Type: EventResult, Data: result})
 
 				if result.Status >= 200 && result.Status < 300 {
-					r.retainResult(result)
+					r.retainActiveResult(result)
 				}
 			})
 

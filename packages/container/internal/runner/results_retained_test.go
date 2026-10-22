@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"swazz-engine/internal/swagger"
 
@@ -46,7 +48,7 @@ func TestRetainResult_CapsPlainResultsPerEndpointAndProfile(t *testing.T) {
 		"GET /a " + string(swagger.ProfileBoundary): maxRetainedPerEndpoint, // later profiles get their share
 		"POST /a " + string(swagger.ProfileRandom):  maxRetainedPerEndpoint,
 	}, count)
-	assert.Equal(t, 30, r.notRetained)
+	assert.Equal(t, 30, r.retained.notRetained)
 }
 
 func TestRetainResult_CapsThePlainTotal(t *testing.T) {
@@ -73,7 +75,7 @@ func TestRetainResult_CapsThePlainTotal(t *testing.T) {
 	}
 	assert.Equal(t, minRetainedPerEndpoint, late)
 	assert.Len(t, r.Results(), maxRetainedResults+minRetainedPerEndpoint)
-	assert.Equal(t, 20-minRetainedPerEndpoint, r.notRetained)
+	assert.Equal(t, 20-minRetainedPerEndpoint, r.retained.notRetained)
 
 	// Plain results filling the cap do not crowd out findings.
 	r.retainResult(okResult("GET", "/e/0", swagger.ProfileRandom, "swazz/stack-trace-leak"))
@@ -95,7 +97,7 @@ func TestRetainResult_KeepsEveryFindingSlimPastTheDefectCap(t *testing.T) {
 
 	results := r.Results()
 	require.Len(t, results, n+2)
-	assert.Zero(t, r.notRetained)
+	assert.Zero(t, r.retained.notRetained)
 	whole, slim := 0, 0
 	for _, res := range results[:n] {
 		require.Len(t, res.AnalyzerFindings, 1)
@@ -146,14 +148,14 @@ func TestRetainResult_SlimLeavesTheStreamedResultIntact(t *testing.T) {
 
 // Past maxSlimFindings slim results are dropped, but a defect's first results are still kept whole.
 func TestRetainResult_CapsTheSlimTotal(t *testing.T) {
-	r := &Runner{retainedSlim: maxSlimFindings - 2}
+	r := &Runner{retained: retainedResults{slim: maxSlimFindings - 2}}
 	for range maxFullPerDefect + 5 {
 		r.retainResult(okResult("GET", "/a", swagger.ProfileRandom, "swazz/stack-trace-leak"))
 	}
 	r.retainResult(okResult("GET", "/b", swagger.ProfileRandom, "swazz/stack-trace-leak"))
 	results := r.Results()
 	assert.Len(t, results, maxFullPerDefect+2+1)
-	assert.Equal(t, 3, r.notRetained)
+	assert.Equal(t, 3, r.retained.notRetained)
 	assert.False(t, results[len(results)-1].Slim, "a new defect is kept whole")
 }
 
@@ -186,5 +188,67 @@ func TestStart_RetainsBoundedResults(t *testing.T) {
 	stats := r.GetStats()
 	require.Greater(t, stats.TotalRequests, int64(maxRetainedPerEndpoint), "the run made more successful requests than the cap")
 	assert.Len(t, r.Results(), maxRetainedPerEndpoint)
-	assert.Positive(t, r.notRetained)
+	assert.Positive(t, r.retained.notRetained)
+}
+
+// Whole results with findings have a total cap too: past maxFullResults even a new defect is kept
+// slim, so a scan with findings on every endpoint stays bounded.
+func TestRetainResult_CapsTheWholeTotal(t *testing.T) {
+	r := &Runner{}
+	for i := range maxFullResults + 10 {
+		r.retainResult(okResult("GET", fmt.Sprintf("/e/%d", i), swagger.ProfileRandom, "swazz/stack-trace-leak"))
+	}
+	results := r.Results()
+	require.Len(t, results, maxFullResults+10)
+	assert.Len(t, r.WholeResults(), maxFullResults)
+	for _, res := range results[maxFullResults:] {
+		assert.True(t, res.Slim)
+	}
+	assert.Zero(t, r.retained.notRetained)
+}
+
+// A slim result keeps its findings but cuts the texts that can carry the payload or a large
+// response fragment; the streamed result and its findings are left untouched.
+func TestSlimResult_CutsLargeTexts(t *testing.T) {
+	long := strings.Repeat("я", maxSlimTextBytes)
+	orig := okResult("GET", "/a", swagger.ProfileRandom, "swazz/stack-trace-leak")
+	orig.RequestURI, orig.Error = "/a?q="+long, long
+	orig.AnalyzerFindings[0].Evidence, orig.AnalyzerFindings[0].Message = long, long
+
+	slim := slimResult(orig)
+	for _, s := range []string{slim.RequestURI, slim.Error, slim.AnalyzerFindings[0].Evidence, slim.AnalyzerFindings[0].Message} {
+		assert.LessOrEqual(t, len(s), maxSlimTextBytes)
+		assert.True(t, utf8.ValidString(s))
+	}
+	assert.Equal(t, long, orig.AnalyzerFindings[0].Evidence, "the streamed result's findings are not changed")
+	assert.Equal(t, long, orig.Error)
+}
+
+// A finding without a rule id is a defect of its own: its first results are kept whole.
+func TestRetainResult_EmptyRuleIsADefect(t *testing.T) {
+	r := &Runner{}
+	r.retainResult(okResult("GET", "/a", swagger.ProfileRandom, ""))
+	require.Len(t, r.Results(), 1)
+	assert.False(t, r.Results()[0].Slim)
+}
+
+// Active parameter fuzzing has its own share, so the main loop filling an endpoint's slots does
+// not leave the post-scan phases without its differently shaped requests.
+func TestRetainResult_ActiveFuzzingHasItsOwnShare(t *testing.T) {
+	r := &Runner{}
+	for range maxRetainedPerEndpoint {
+		r.retainResult(okResult("POST", "/items", swagger.ProfileRandom))
+	}
+	r.retainActiveResult(okResult("POST", "/items", swagger.ProfileRandom))
+	assert.Len(t, r.Results(), maxRetainedPerEndpoint+1)
+	assert.Zero(t, r.retained.notRetained)
+}
+
+// Findings dropped past the slim cap are counted, so the completion summary can say so.
+func TestRetainResult_CountsDroppedFindings(t *testing.T) {
+	r := &Runner{retained: retainedResults{slim: maxSlimFindings, full: maxFullResults}}
+	r.retainResult(okResult("GET", "/a", swagger.ProfileRandom, "swazz/stack-trace-leak", "swazz/cors-misconfig"))
+	assert.Empty(t, r.Results())
+	assert.Equal(t, 1, r.retained.notRetained)
+	assert.Equal(t, 2, r.retained.droppedFindings)
 }
