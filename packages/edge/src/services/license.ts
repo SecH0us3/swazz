@@ -6,6 +6,7 @@
 import { Env } from '../env';
 import { IAuthRepository } from '../repositories/auth';
 import { getFeatureType, FEATURE_TYPE_PAID } from '@swazz/shared';
+import { bytesToBase64Url, base64UrlToBytes } from '../utils/base64url';
 
 export const DEFAULT_LICENSE_PUBKEY_HEX = '0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef';
 export const DEFAULT_DEV_LICENSE_PRIVKEY_HEX = '302e020100300506032b657004220420b52bfb4e1736b2d3026e64fc4273b3703d1c3c993d6661a40b6f0c144678bef6';
@@ -55,28 +56,13 @@ export async function computeLicenseFingerprint(token: string): Promise<string> 
     .substring(0, 16);
 }
 
+// Tokens are unpadded base64url; padding is tolerated.
 function base64UrlDecode(str: string): Uint8Array {
-  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-  let binary: string;
   try {
-    binary = atob(padded);
+    return base64UrlToBytes(str.replace(/=+$/, ''));
   } catch {
     throw new Error('license: invalid token format|400');
   }
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function hexToBytes(hex: string): Uint8Array {

@@ -70,6 +70,20 @@ describe('LicenseService', () => {
     await expect(makeService().verifyToken('not.a.token')).rejects.toThrow('invalid token format');
   });
 
+  // The shared base64url decoder: characters outside the alphabet are refused, not skipped the
+  // way atob skips whitespace; trailing padding is tolerated.
+  it('decodes tokens with the shared base64url decoder', async () => {
+    const token = await signLicenseToken(keyPair.privKeyHex, {
+      company: 'Acme',
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      features: ['*'],
+    });
+    const [header, payload, sig] = token.split('.');
+    const withSig = (s: string) => `${header}.${payload}.${s}`;
+    await expect(makeService().verifyToken(withSig(`${sig.slice(0, 10)} ${sig.slice(10)}`))).rejects.toThrow('invalid token format');
+    expect((await makeService().verifyToken(withSig(sig + '=='))).company).toBe('Acme');
+  });
+
   it('activate stores the key and returns status', async () => {
     const token = await signLicenseToken(keyPair.privKeyHex, {
       company: 'Acme',
