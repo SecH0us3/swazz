@@ -701,7 +701,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 
 		// Post-scan WAF Mitigation (Virtual Patch Generation)
 		if wafResult := r.GetWAFCheckResult(); wafResult != nil && wafResult.Detection.Detected {
-			findings := liveCls.ClassifyAll(r.Results())
+			findings := liveCls.ClassifyAll(r.WholeResults()) // patches are built from payloads
 			items := classifier.ToAuditResultItems(findings)
 			if len(items) > 0 {
 				client := wafcheck.NewClient(r.Config().Settings.WAFCheckEndpoint)

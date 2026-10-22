@@ -53,6 +53,49 @@ func TestOrchestrator_GroupFindings_AndPreFilter(t *testing.T) {
 	}
 }
 
+// The runner keeps a defect's later findings without their response body; the representative
+// must stay one the LLM can see the body of.
+func TestOrchestrator_GroupFindings_PrefersResultWithBody(t *testing.T) {
+	orch := NewOrchestrator(nil, 30)
+	finding := func(evidence string) []swagger.AnalysisFinding {
+		return []swagger.AnalysisFinding{{RuleID: "swazz/stack-trace-leak", Evidence: evidence}}
+	}
+	results := []*swagger.FuzzResult{
+		{Method: "GET", Endpoint: "/a", ResponseBody: "first body", AnalyzerFindings: finding("short")},
+		{Method: "GET", Endpoint: "/a", Slim: true, AnalyzerFindings: finding("much longer evidence, no body")},
+		{Method: "GET", Endpoint: "/a", ResponseBody: "third body", AnalyzerFindings: finding("longer evidence")},
+	}
+
+	groups := orch.GroupFindings(results)
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(groups))
+	}
+	if got := groups[0].Result.ResponseBody; got != "third body" {
+		t.Errorf("expected the longest evidence among results with a body, got body %v", got)
+	}
+	if len(groups[0].AffectedFindingIDs) != 3 {
+		t.Errorf("expected all 3 findings in the group, got %d", len(groups[0].AffectedFindingIDs))
+	}
+
+	// A slim first representative gives way to a later whole result, even with shorter evidence.
+	groups = orch.GroupFindings([]*swagger.FuzzResult{
+		{Method: "GET", Endpoint: "/a", Slim: true, AnalyzerFindings: finding("long slim evidence")},
+		{Method: "GET", Endpoint: "/a", ResponseBody: "whole body", AnalyzerFindings: finding("short")},
+	})
+	if got := groups[0].Result.ResponseBody; got != "whole body" {
+		t.Errorf("expected the whole result to replace the slim representative, got body %v", got)
+	}
+
+	// A result that never had a body (headers-only finding) is not slim: longer evidence wins.
+	groups = orch.GroupFindings([]*swagger.FuzzResult{
+		{Method: "GET", Endpoint: "/a", ResponseBody: "body", AnalyzerFindings: finding("short")},
+		{Method: "GET", Endpoint: "/a", AnalyzerFindings: finding("longer")},
+	})
+	if groups[0].Representative.Evidence != "longer" {
+		t.Errorf("expected the longer evidence, got %q", groups[0].Representative.Evidence)
+	}
+}
+
 func TestOrchestrator_Run(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
