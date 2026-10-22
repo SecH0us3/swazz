@@ -97,13 +97,17 @@ describe('ScansRepository Unit Tests', () => {
     expect(mockBind).toHaveBeenCalledWith('a-1', 'p-1', 'u-1', 'alex', 'admin', 'action-1', 'label-1', 'web', '{}', '127.0.0.1');
   });
 
-  it('getScans queries scans ordered by created_at desc', async () => {
+  it('getScans reads one page of the list columns, newest first', async () => {
     const scansList = [{ id: 's-1' }];
     mockAll.mockResolvedValue({ results: scansList });
 
     const repo = new ScansRepository(mockEnv);
-    expect(await repo.getScans('p-1')).toBe(scansList);
-    expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM scans WHERE project_id = ?'));
+    expect(await repo.getScans('p-1', 50)).toEqual({ scans: scansList, next: null });
+    const sql = mockPrepare.mock.calls.at(-1)[0];
+    expect(sql).toContain('WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?');
+    expect(sql).not.toContain('*');
+    expect(sql).not.toContain('waf_patch_report');
+    expect(mockBind).toHaveBeenLastCalledWith('p-1', 51);
   });
 
   it('getScan returns details by scanId', async () => {

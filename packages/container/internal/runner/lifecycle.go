@@ -35,17 +35,14 @@ func (r *Runner) Close() {
 	if r.client != nil {
 		r.client.CloseIdleConnections()
 	}
+	if c := r.proxyClient.Load(); c != nil {
+		c.CloseIdleConnections()
+	}
 	r.grpcClients.Range(func(key, value any) bool {
 		if c, ok := value.(*swazzGrpc.Client); ok {
 			if err := c.Close(); err != nil {
 				logger.Debug("[Runner] Error closing gRPC client for %v: %v", key, err)
 			}
-		}
-		return true
-	})
-	r.wsClients.Range(func(key, value any) bool {
-		if c, ok := value.(interface{ Close() error }); ok {
-			_ = c.Close()
 		}
 		return true
 	})

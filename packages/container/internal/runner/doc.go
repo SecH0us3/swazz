@@ -28,7 +28,7 @@
 // The runner uses a channel-based stats aggregation pattern to eliminate
 // mutex contention from the per-request hot path:
 //
-//   - Worker goroutines send [statsMsg] to a buffered statsChan.
+//   - Worker goroutines send [statsMsg] to the run's buffered [statsPipe] ([Runner.sendStats]).
 //   - A single [Runner.statsAggregator] goroutine owns all mutable stats
 //     data, accumulating results without any locks.
 //   - Immutable stats snapshots are published via [atomic.Pointer] at
