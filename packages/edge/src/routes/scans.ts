@@ -64,7 +64,7 @@ export function registerScansRoutes(
     const userId = await getUserIdFromRequest(c);
 
     try {
-      const result = await services.getScans(projectId || '', userId);
+      const result = await services.getScans(projectId || '', userId, { limit: c.req.query('limit'), cursor: c.req.query('cursor') });
       return c.json(result);
     } catch (err: any) {
       const parts = (err instanceof Error ? err.message : String(err)).split('|');

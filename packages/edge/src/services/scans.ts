@@ -5,7 +5,7 @@
 
 import { reportKeyForScan } from '../repositories/cleanup';
 import { Env } from '../env';
-import { IScansRepository } from '../repositories/scans';
+import { IScansRepository, ScansCursor } from '../repositories/scans';
 import { IRbacRepository } from '../repositories/rbac';
 import { sign, verify } from 'hono/jwt';
 import { ulid } from 'ulidx';
@@ -13,6 +13,8 @@ import { isValidRunId, serializeScanConfig, writeScanConfig } from './scanConfig
 
 import { WorkersAIService, type FindingAnalysisResult } from './ai';
 import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE, SCAN_NOT_QUEUED } from '../utils/runnerMessages';
+import { bytesToBase64Url, base64UrlToBytes } from '../utils/base64url';
+import { isValidId } from '../utils/validation';
 
 export interface TriageUpdatePayload {
   finding_id: string;
@@ -30,7 +32,7 @@ export interface IScansService {
     clientIp: string,
     waitUntil?: (p: Promise<any>) => void
   ): Promise<{ id: string; status: string }>;
-  getScans(projectId: string, userId: string | null): Promise<{ scans: any[] }>;
+  getScans(projectId: string, userId: string | null, page?: { limit?: string; cursor?: string }): Promise<{ scans: any[]; next_cursor?: string }>;
   getScan(scanId: string, userId: string | null): Promise<{ scan: any }>;
   updateScan(scanId: string, body: any, userId: string | null): Promise<{ scan: any }>;
   generateUploadUrl(scanId: string, userId: string | null): Promise<any>;
@@ -216,7 +218,7 @@ export class ScansService implements IScansService {
     return { id, status: 'queued' };
   }
 
-  async getScans(projectId: string, userId: string | null) {
+  async getScans(projectId: string, userId: string | null, page: { limit?: string; cursor?: string } = {}) {
     if (!projectId) {
       throw new Error('Missing query parameter: project_id|400');
     }
@@ -230,9 +232,11 @@ export class ScansService implements IScansService {
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
-    const scans = await this.scansRepo.getScans(projectId);
+    const limit = parseScansLimit(page.limit);
+    const before = page.cursor === undefined || page.cursor === '' ? undefined : decodeScansCursor(page.cursor);
+    const { scans, next } = await this.scansRepo.getScans(projectId, limit, before);
     await this.attachFailureReasons(scans);
-    return { scans };
+    return next ? { scans, next_cursor: encodeScansCursor(next) } : { scans };
   }
 
   async getScan(scanId: string, userId: string | null) {
@@ -509,4 +513,40 @@ function isStoredError(row: any): boolean {
   } catch {
     return false;
   }
+}
+
+// The scan list is paged: the dashboard polls it every few seconds, and a project's scans pile up.
+export const DEFAULT_SCANS_PAGE = 50;
+export const MAX_SCANS_PAGE = 200;
+
+function parseScansLimit(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_SCANS_PAGE;
+  if (!/^\d{1,4}$/.test(raw)) throw new Error('Invalid query parameter: limit|400');
+  const n = Number(raw);
+  if (n < 1) throw new Error('Invalid query parameter: limit|400');
+  return Math.min(n, MAX_SCANS_PAGE);
+}
+
+// The cursor is opaque to clients: the created_at and id of the last scan of the page before.
+// It only narrows a query bound to the project already checked, so a forged one shows nothing new;
+// one that does not decode is refused rather than read as "from the start".
+export function encodeScansCursor(c: ScansCursor): string {
+  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify([c.createdAt, c.id])));
+}
+
+function decodeScansCursor(raw: string): ScansCursor {
+  const invalid = new Error('Invalid query parameter: cursor|400');
+  if (raw.length > 256) throw invalid;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(base64UrlToBytes(raw)));
+  } catch {
+    throw invalid;
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 2) throw invalid;
+  const [createdAt, id] = parsed;
+  // created_at is CURRENT_TIMESTAMP ("YYYY-MM-DD HH:MM:SS").
+  if (typeof createdAt !== 'string' || !/^[0-9][0-9:. TZ+-]{0,39}$/.test(createdAt)) throw invalid;
+  if (!isValidId(id)) throw invalid;
+  return { createdAt, id };
 }

@@ -12,6 +12,17 @@ import { logError } from '../../../common/logging/logger';
 import { eventIdFor, isValidExec } from '../coordinator/delivery';
 import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
 
+// A position in a project's scan list, newest first: the last scan of the page before.
+export interface ScansCursor {
+  createdAt: string;
+  id: string;
+}
+
+// The scan list leaves out what only one scan's page needs and can be large (the WAF patch report,
+// the resume checkpoint).
+const SCAN_LIST_COLUMNS = 'id, project_id, target_url, profile, status, summary_stats, report_url, is_encrypted, ' +
+  'created_at, completed_at, user_id, trigger_type, failure_reason, status_changed_at';
+
 export interface IScansRepository {
   createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null, triggerType?: string): Promise<void>;
   getUserPublicKey(userId: string): Promise<string | null>;
@@ -30,7 +41,7 @@ export interface IScansRepository {
     ip: string | null
   ): Promise<void>;
   
-  getScans(projectId: string): Promise<any[]>;
+  getScans(projectId: string, limit: number, before?: ScansCursor): Promise<{ scans: any[]; next: ScansCursor | null }>;
   getScan(scanId: string): Promise<any | null>;
   updateScan(scanId: string, fields: Record<string, any>): Promise<any>;
   updateScanReportUrl(scanId: string, reportUrl: string): Promise<void>;
@@ -189,11 +200,22 @@ export class ScansRepository extends BaseService implements IScansRepository {
     ).run();
   }
 
-  async getScans(projectId: string): Promise<any[]> {
-    const { results } = await this.db.prepare(
-      'SELECT * FROM scans WHERE project_id = ? ORDER BY created_at DESC'
-    ).bind(projectId).all();
-    return results || [];
+  async getScans(projectId: string, limit: number, before?: ScansCursor): Promise<{ scans: any[]; next: ScansCursor | null }> {
+    // One more than the page, to tell whether another one follows.
+    const stmt = before
+      ? this.db.prepare(
+        `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ` +
+        'ORDER BY created_at DESC, id DESC LIMIT ?'
+      ).bind(projectId, before.createdAt, before.createdAt, before.id, limit + 1)
+      : this.db.prepare(
+        `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`
+      ).bind(projectId, limit + 1);
+    const { results } = await stmt.all<any>();
+    const scans = results || [];
+    if (scans.length <= limit) return { scans, next: null };
+    scans.length = limit;
+    const last = scans[limit - 1];
+    return { scans, next: { createdAt: last.created_at, id: last.id } };
   }
 
   async getScan(scanId: string): Promise<any | null> {

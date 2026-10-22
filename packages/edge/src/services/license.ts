@@ -6,6 +6,7 @@
 import { Env } from '../env';
 import { IAuthRepository } from '../repositories/auth';
 import { getFeatureType, FEATURE_TYPE_PAID } from '@swazz/shared';
+import { bytesToBase64Url } from '../utils/base64url';
 
 export const DEFAULT_LICENSE_PUBKEY_HEX = '0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef';
 export const DEFAULT_DEV_LICENSE_PRIVKEY_HEX = '302e020100300506032b657004220420b52bfb4e1736b2d3026e64fc4273b3703d1c3c993d6661a40b6f0c144678bef6';
@@ -71,13 +72,6 @@ function base64UrlDecode(str: string): Uint8Array {
   return bytes;
 }
 
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
 
 function hexToBytes(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);

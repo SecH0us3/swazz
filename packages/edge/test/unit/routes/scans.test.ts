@@ -104,7 +104,14 @@ describe('Scans Routes Unit Tests', () => {
       const res = await app.request('/api/scans?project_id=p123');
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ scans: [] });
-      expect(mockServices.getScans).toHaveBeenCalledWith('p123', 'user_123');
+      expect(mockServices.getScans).toHaveBeenCalledWith('p123', 'user_123', { limit: undefined, cursor: undefined });
+    });
+
+    it('passes the page parameters on', async () => {
+      (mockServices.getScans as any).mockResolvedValue({ scans: [], next_cursor: 'abc' });
+      const res = await app.request('/api/scans?project_id=p123&limit=10&cursor=abc');
+      expect(await res.json()).toEqual({ scans: [], next_cursor: 'abc' });
+      expect(mockServices.getScans).toHaveBeenCalledWith('p123', 'user_123', { limit: '10', cursor: 'abc' });
     });
 
     it('returns error', async () => {

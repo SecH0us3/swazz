@@ -41,6 +41,7 @@ import { matchesFinding } from './utils/findings.js';
 import { useWebMcp } from './hooks/useWebMcp.js';
 import { scheduledFailureIssue } from './utils/scheduledFailures.js';
 import { UNKNOWN_FAILURE } from './services/runStream.js';
+import { fetchProjectScans } from './services/scansService.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -207,6 +208,8 @@ export default function App() {
     const [triageScope, setTriageScope] = useState<'finding' | 'endpoint' | 'all'>('finding');
 
     const attemptedReconnections = useRef<Set<string>>(new Set());
+    // Projects whose scan history has been read in full since the page loaded (checkActiveScan).
+    const historySynced = useRef<Set<string>>(new Set());
     const { start, stop, pause, resume, sendRequest, connectToExisting } = useRunner(PROXY_URL);
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
@@ -301,12 +304,10 @@ export default function App() {
 
         const checkActiveScan = async () => {
             try {
-                const res = await fetch(`${PROXY_URL}/api/scans?project_id=${activeProject.id}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok && active) {
-                    const data = await res.json();
-                    const scans = data.scans || [];
+                // The first check of a project reads its whole history; later ones its newest page.
+                const allPages = !historySynced.current.has(activeProject.id);
+                const scans = await fetchProjectScans(token, activeProject.id, { allPages });
+                if (active) {
 
                     // Sync all scans to local IndexedDB to catch background/scheduled runs
                     for (const s of scans) {
@@ -332,6 +333,8 @@ export default function App() {
                             await saveRun(localRun && localRun.completedAt > 0 ? { ...localRun, failureReason } : scanRun);
                         }
                     }
+
+                    if (allPages) historySynced.current.add(activeProject.id);
 
                     // Scheduled scans run while nobody watches: say so when the latest ones failed.
                     const scheduledIssue = scheduledFailureIssue(scans);
