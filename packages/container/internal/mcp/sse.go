@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -32,9 +33,14 @@ type SSEEvent struct {
 
 // SSEClient implements the Client interface using SSE and HTTP POST to communicate with an MCP server.
 type SSEClient struct {
-	url          string
-	writeURL     string
+	url      string
+	writeURL string
+	// httpClient has no overall timeout (http.Client.Timeout covers reading the whole body, so it
+	// would cut the event stream, and every response pending on it): Connect bounds the stream's
+	// response headers and sendRequest each exchange, by the caller's deadline or else timeout.
 	httpClient   *http.Client
+	timeout      time.Duration // sseRequestTimeout when the client was made (tests change the variable)
+	streamEnded  bool          // the event stream is gone: no response can arrive any more
 	pendingMu    sync.Mutex
 	pending      map[string]chan *Response
 	nextID       uint64
@@ -47,15 +53,21 @@ type SSEClient struct {
 	headers      map[string]string
 }
 
+// sseRequestTimeout bounds each exchange with the server (a POST and the wait for its response on
+// the stream) when the caller's ctx has no deadline, and the stream's response headers. It is a
+// variable for tests.
+var sseRequestTimeout = 30 * time.Second
+
 // NewSSEClient initializes a new SSEClient.
 // If tlsConfig is nil, uses system certificate pool with certificate validation enabled.
 func NewSSEClient(urlStr string, allowPrivateIPs bool, headers map[string]string, tlsConfig *tls.Config) *SSEClient {
 	client := &SSEClient{
 		url:          urlStr,
-		httpClient:   security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs),
+		httpClient:   security.NewSSRFProtectedClient(0, allowPrivateIPs),
 		pending:      make(map[string]chan *Response),
 		endpointChan: make(chan string, 1),
 		headers:      headers,
+		timeout:      sseRequestTimeout,
 	}
 
 	// Always enable certificate validation by default
@@ -74,6 +86,9 @@ func NewSSEClient(urlStr string, allowPrivateIPs bool, headers map[string]string
 			}
 		}
 	}
+
+	// A redirect must not take the client's headers somewhere sameOriginEndpoint would refuse.
+	client.httpClient.CheckRedirect = checkSameOriginRedirect
 
 	return client
 }
@@ -94,20 +109,23 @@ func (c *SSEClient) Connect(ctx context.Context) error {
 		req.Header.Set(k, v)
 	}
 
-	// Enforce the connection timeout context during the dial/handshake phase.
-	// Since c.ctx does not have a timeout (it manages client lifecycle), we monitor
-	// the passed-in timeout context ctx and cancel c.ctx if it expires.
-	connectDone := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			c.cancel() // Aborts Do(req)
-		case <-connectDone:
-		}
-	}()
+	// c.ctx manages the stream's whole life, so it has no deadline. The response headers are
+	// bounded by the caller's deadline, or the client's timeout without one: when that runs out
+	// first, c.ctx is cancelled, which aborts Do. If it runs out just as Do returns, the stream
+	// is already cancelled, and Connect fails rather than return a client whose stream is dead.
+	headerCtx, headerCancel := c.bounded(ctx)
+	defer headerCancel()
+	stop := context.AfterFunc(headerCtx, c.cancel)
 
 	resp, err := c.httpClient.Do(req)
-	close(connectDone)
+	if !stop() && err == nil { // the cancel has started: this stream is about to be cut
+		_ = resp.Body.Close()
+		err = fmt.Errorf("no SSE response headers: %w", headerCtx.Err())
+	}
+	if err == nil && c.ctx.Err() != nil {
+		_ = resp.Body.Close()
+		err = fmt.Errorf("no SSE response headers: %w", headerCtx.Err())
+	}
 	if err != nil {
 		c.cancel()
 		return err
@@ -123,39 +141,25 @@ func (c *SSEClient) Connect(ctx context.Context) error {
 	go c.readSSELoop(resp.Body)
 
 	// Determine default write URL using net/url to avoid string concatenation
-	u, err := url.Parse(c.url)
-	if err != nil {
-		_ = c.Close()
-		return fmt.Errorf("invalid URL: %w", err)
-	}
+	// The stream's URL after any redirect (an http to https upgrade): the write endpoint is
+	// checked and resolved against where the stream actually is.
+	sseURL := resp.Request.URL
+	u := *sseURL
 	u.Path = strings.TrimSuffix(u.Path, "/") + "/message"
+	u.RawQuery = ""
 	defaultWriteURL := u.String()
 
 	select {
 	case ep := <-c.endpointChan:
-		epURL, err := url.Parse(ep)
-		if err == nil {
-			if epURL.IsAbs() {
-				// Security: only allow redirects to the same host as the original SSE URL
-				// to prevent a compromised server from redirecting to internal metadata services.
-				baseURL, baseErr := url.Parse(c.url)
-				if baseErr == nil && epURL.Host == baseURL.Host {
-					c.writeURL = ep
-				} else {
-					// Reject cross-host redirect; fall back to derived default
-					c.writeURL = defaultWriteURL
-				}
-			} else {
-				base, err := url.Parse(c.url)
-				if err == nil {
-					c.writeURL = base.ResolveReference(epURL).String()
-				} else {
-					c.writeURL = ep
-				}
-			}
-		} else {
-			c.writeURL = defaultWriteURL
+		w, ok := sameOriginEndpoint(sseURL, ep)
+		if !ok {
+			// Fail closed and say why: a fallback URL would drop the server's session id and
+			// surface only as an unexplained 404 on the handshake.
+			_ = c.Close()
+			return fmt.Errorf("MCP server announced the endpoint %q, which is not on %s://%s; refusing to send requests there",
+				ep, sseURL.Scheme, sseURL.Host)
 		}
+		c.writeURL = w
 	case <-ctx.Done():
 		_ = c.Close()
 		return ctx.Err()
@@ -169,6 +173,59 @@ func (c *SSEClient) Connect(ctx context.Context) error {
 		return fmt.Errorf("handshake failed: %w", err)
 	}
 
+	return nil
+}
+
+// sameOriginEndpoint resolves the endpoint the server announced against the SSE URL and returns
+// it only if it keeps the SSE URL's origin (ok false otherwise). The server chooses the endpoint,
+// and every POST to it carries the client's headers: a cross-host one ("https://evil",
+// "//evil") would send them elsewhere, an http one in cleartext.
+func sameOriginEndpoint(sseURL *url.URL, endpoint string) (string, bool) {
+	epURL, err := url.Parse(endpoint)
+	if err != nil {
+		return "", false
+	}
+	resolved := sseURL.ResolveReference(epURL)
+	if !sameOrigin(resolved, sseURL) {
+		return "", false
+	}
+	return resolved.String(), true
+}
+
+// sameOrigin reports whether a and b have the same scheme, host and port, a missing port
+// counting as the scheme's default.
+func sameOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		portOrDefault(a) == portOrDefault(b)
+}
+
+func portOrDefault(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	}
+	return ""
+}
+
+// checkSameOriginRedirect refuses a redirect that leaves the first request's origin, except an
+// upgrade from http to https on the same host, and stops after 10 like the default policy.
+func checkSameOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	first := via[0].URL
+	upgrade := strings.EqualFold(first.Scheme, "http") && strings.EqualFold(req.URL.Scheme, "https") &&
+		strings.EqualFold(first.Hostname(), req.URL.Hostname()) &&
+		(req.URL.Port() == first.Port() || (portOrDefault(first) == "80" && portOrDefault(req.URL) == "443")) // same service, now encrypted
+	if !upgrade && !sameOrigin(req.URL, first) {
+		return fmt.Errorf("refusing redirect to another origin: %s://%s", req.URL.Scheme, req.URL.Host)
+	}
 	return nil
 }
 
@@ -204,7 +261,9 @@ func (c *SSEClient) initializeHandshake(ctx context.Context) error {
 		return err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.writeURL, bytes.NewReader(notifBytes))
+	notifCtx, cancel := c.bounded(ctx)
+	defer cancel()
+	httpReq, err := http.NewRequestWithContext(notifCtx, "POST", c.writeURL, bytes.NewReader(notifBytes))
 	if err != nil {
 		return err
 	}
@@ -221,11 +280,28 @@ func (c *SSEClient) initializeHandshake(ctx context.Context) error {
 	return nil
 }
 
+// bounded returns ctx unchanged when it has a deadline, else ctx limited to the client's timeout:
+// the caller's deadline bounds a POST and the wait for its response, and the client has no
+// overall timeout of its own (it would cut the stream).
+func (c *SSEClient) bounded(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, c.timeout)
+}
+
 func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.RawMessage, extraHeaders map[string]string) (*Response, error) {
+	ctx, cancel := c.bounded(ctx)
+	defer cancel()
+
 	c.pendingMu.Lock()
 	if c.isClosed {
 		c.pendingMu.Unlock()
 		return nil, io.ErrClosedPipe
+	}
+	if c.streamEnded {
+		c.pendingMu.Unlock()
+		return nil, fmt.Errorf("the MCP server closed the SSE stream, so no response can arrive (it is not reopened): %w", io.ErrClosedPipe)
 	}
 	c.nextID++
 	id := c.nextID
@@ -292,7 +368,7 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 		c.pendingMu.Lock()
 		delete(c.pending, key)
 		c.pendingMu.Unlock()
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("no response to %s: %w", method, ctx.Err())
 	}
 }
 
@@ -334,6 +410,7 @@ func (c *SSEClient) readSSELoop(body io.ReadCloser) {
 	}
 
 	c.pendingMu.Lock()
+	c.streamEnded = true // later requests fail at once instead of waiting for a response
 	for k, ch := range c.pending {
 		delete(c.pending, k)
 		close(ch)
@@ -530,5 +607,7 @@ func (c *SSEClient) Close() error {
 	}
 	c.pendingMu.Unlock()
 
+	// Each client has its own transport (connection pool): release its idle connections now.
+	c.httpClient.CloseIdleConnections()
 	return nil
 }

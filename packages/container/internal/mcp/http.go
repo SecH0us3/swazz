@@ -297,5 +297,6 @@ func (c *HTTPClient) GetPrompt(ctx context.Context, name string, arguments map[s
 
 // Close is a no-op for HTTPClient.
 func (c *HTTPClient) Close() error {
+	c.httpClient.CloseIdleConnections() // its transport (connection pool) is its own
 	return nil
 }
