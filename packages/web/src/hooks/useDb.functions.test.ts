@@ -7,7 +7,7 @@
  * @vitest-environment jsdom
  *
  * Coverage for the lower-level exported IndexedDB helpers in useDb.ts
- * (openDb schema, dbStreamResult, dbGetRunResults, dbQueryResults pagination /
+ * (openDb schema, dbAppendResults, dbGetRunResults, dbQueryResults pagination /
  * sort paths and empty/boundary cases). Uses fake-indexeddb with a fresh
  * factory per test so state never leaks.
  */
@@ -17,7 +17,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import {
     openDb,
     __resetDbPromise,
-    dbStreamResult,
+    dbAppendResults,
     dbGetRunResults,
     dbQueryResults,
     createResultWriter,
@@ -47,17 +47,17 @@ describe('useDb IndexedDB helpers', () => {
         expect(a).toBe(b);
     });
 
-    it('dbStreamResult writes a row that dbGetRunResults reads back', async () => {
+    it('dbAppendResults writes a row that dbGetRunResults reads back', async () => {
         const db = await openDb();
-        await dbStreamResult(db, 'run-1', row('r1'));
-        await dbStreamResult(db, 'run-1', row('r2'));
+        await dbAppendResults(db, 'run-1', [row('r1')]);
+        await dbAppendResults(db, 'run-1', [row('r2')]);
         const rows = await dbGetRunResults(db, 'run-1');
         expect(rows.map(r => r.id).sort()).toEqual(['r1', 'r2']);
     });
 
     it('dbGetRunResults returns an empty array for an unknown run', async () => {
         const db = await openDb();
-        await dbStreamResult(db, 'run-1', row('r1'));
+        await dbAppendResults(db, 'run-1', [row('r1')]);
         expect(await dbGetRunResults(db, 'does-not-exist')).toEqual([]);
     });
 
@@ -71,7 +71,7 @@ describe('useDb IndexedDB helpers', () => {
     it('dbQueryResults paginates with limit/offset while reporting the full total', async () => {
         const db = await openDb();
         for (let i = 0; i < 5; i++) {
-            await dbStreamResult(db, 'run-p', row(`r${i}`, { timestamp: 1000 + i }));
+            await dbAppendResults(db, 'run-p', [row(`r${i}`, { timestamp: 1000 + i })]);
         }
         const page = await dbQueryResults(db, { runId: 'run-p', limit: 2, offset: 1, sortKey: 'timestamp', sortDir: 'asc' });
         expect(page.total).toBe(5);
@@ -80,8 +80,8 @@ describe('useDb IndexedDB helpers', () => {
 
     it('dbQueryResults sorts in-memory for a non-timestamp sort key', async () => {
         const db = await openDb();
-        await dbStreamResult(db, 'run-s', row('slow', { duration: 90, timestamp: 1 }));
-        await dbStreamResult(db, 'run-s', row('fast', { duration: 10, timestamp: 2 }));
+        await dbAppendResults(db, 'run-s', [row('slow', { duration: 90, timestamp: 1 })]);
+        await dbAppendResults(db, 'run-s', [row('fast', { duration: 10, timestamp: 2 })]);
         const asc = await dbQueryResults(db, { runId: 'run-s', sortKey: 'duration', sortDir: 'asc' });
         expect(asc.rows.map(r => r.id)).toEqual(['fast', 'slow']);
         const desc = await dbQueryResults(db, { runId: 'run-s', sortKey: 'duration', sortDir: 'desc' });
@@ -90,10 +90,10 @@ describe('useDb IndexedDB helpers', () => {
 
     it('dbQueryResults filters by statusFilter (2xx, 4xx, 5xx)', async () => {
         const db = await openDb();
-        await dbStreamResult(db, 'run-status', row('r200', { status: 200 }));
-        await dbStreamResult(db, 'run-status', row('r404', { status: 404 }));
-        await dbStreamResult(db, 'run-status', row('r500', { status: 500 }));
-        await dbStreamResult(db, 'run-status', row('r0', { status: 0 }));
+        await dbAppendResults(db, 'run-status', [row('r200', { status: 200 })]);
+        await dbAppendResults(db, 'run-status', [row('r404', { status: 404 })]);
+        await dbAppendResults(db, 'run-status', [row('r500', { status: 500 })]);
+        await dbAppendResults(db, 'run-status', [row('r0', { status: 0 })]);
 
         const res2xx = await dbQueryResults(db, { runId: 'run-status', statusFilter: '2xx' });
         expect(res2xx.rows.map(r => r.id)).toEqual(['r200']);
@@ -107,9 +107,9 @@ describe('useDb IndexedDB helpers', () => {
 
     it('dbQueryResults filters by identityFilter', async () => {
         const db = await openDb();
-        await dbStreamResult(db, 'run-ident', row('rA1', { identity: undefined }));
-        await dbStreamResult(db, 'run-ident', row('rA2', { identity: 'user a' }));
-        await dbStreamResult(db, 'run-ident', row('rB', { identity: 'User B' }));
+        await dbAppendResults(db, 'run-ident', [row('rA1', { identity: undefined })]);
+        await dbAppendResults(db, 'run-ident', [row('rA2', { identity: 'user a' })]);
+        await dbAppendResults(db, 'run-ident', [row('rB', { identity: 'User B' })]);
 
         const userA = await dbQueryResults(db, { runId: 'run-ident', identityFilter: 'User A' });
         expect(userA.rows.map(r => r.id).sort()).toEqual(['rA1', 'rA2']);
@@ -120,11 +120,11 @@ describe('useDb IndexedDB helpers', () => {
 
     it('dbQueryResults filters by findingsOnly and heatmapFilter', async () => {
         const db = await openDb();
-        await dbStreamResult(db, 'run-find', row('ok', { status: 200, method: 'GET', endpoint: '/api/v1', analyzerFindings: [] }));
-        await dbStreamResult(db, 'run-find', row('has-finding', { status: 200, method: 'GET', endpoint: '/api/v1', analyzerFindings: [{ id: 'f1' }] }));
-        await dbStreamResult(db, 'run-find', row('err-403', { status: 403, method: 'GET', endpoint: '/api/v1' }));
-        await dbStreamResult(db, 'run-find', row('net-err', { status: 0, method: 'POST', endpoint: '/api/v1', error: 'ECONNREFUSED' }));
-        await dbStreamResult(db, 'run-find', row('mcp-call', { status: 200, method: 'CALL', endpoint: 'mcp://tool/check' }));
+        await dbAppendResults(db, 'run-find', [row('ok', { status: 200, method: 'GET', endpoint: '/api/v1', analyzerFindings: [] })]);
+        await dbAppendResults(db, 'run-find', [row('has-finding', { status: 200, method: 'GET', endpoint: '/api/v1', analyzerFindings: [{ id: 'f1' }] })]);
+        await dbAppendResults(db, 'run-find', [row('err-403', { status: 403, method: 'GET', endpoint: '/api/v1' })]);
+        await dbAppendResults(db, 'run-find', [row('net-err', { status: 0, method: 'POST', endpoint: '/api/v1', error: 'ECONNREFUSED' })]);
+        await dbAppendResults(db, 'run-find', [row('mcp-call', { status: 200, method: 'CALL', endpoint: 'mcp://tool/check' })]);
 
         const findings = await dbQueryResults(db, { runId: 'run-find', findingsOnly: true });
         expect(findings.rows.map(r => r.id).sort()).toEqual(['err-403', 'has-finding', 'mcp-call', 'net-err']);
@@ -138,9 +138,9 @@ describe('useDb IndexedDB helpers', () => {
 
     it('dbQueryResults searches by endpoint and profile keywords', async () => {
         const db = await openDb();
-        await dbStreamResult(db, 'run-search', row('r1', { endpoint: '/api/auth/login', profile: 'SQLi' }));
-        await dbStreamResult(db, 'run-search', row('r2', { endpoint: '/api/users', profile: 'XSS' }));
-        await dbStreamResult(db, 'run-search', row('r3', { endpoint: '/api/health', profile: 'PING' }));
+        await dbAppendResults(db, 'run-search', [row('r1', { endpoint: '/api/auth/login', profile: 'SQLi' })]);
+        await dbAppendResults(db, 'run-search', [row('r2', { endpoint: '/api/users', profile: 'XSS' })]);
+        await dbAppendResults(db, 'run-search', [row('r3', { endpoint: '/api/health', profile: 'PING' })]);
 
         const loginRes = await dbQueryResults(db, { runId: 'run-search', search: 'login' });
         expect(loginRes.rows.map(r => r.id)).toEqual(['r1']);
@@ -207,12 +207,59 @@ describe('useDb IndexedDB helpers', () => {
             const writer = createResultWriter(() => (broken ? ({ transaction: () => { throw new Error('quota'); } } as any) : db), 'run-f');
             writer.add(row('lost'));
             await writer.flush();
-            expect(warn).toHaveBeenCalledWith('[swazz] IDB write error:', expect.any(Error));
+            expect(warn).toHaveBeenCalledWith('[swazz] IDB write error: 1 result row(s) dropped:', expect.any(Error));
             broken = false;
             writer.add(row('kept'));
             await writer.flush();
             expect((await dbGetRunResults(db, 'run-f')).map(r => r.id)).toEqual(['kept']);
             warn.mockRestore();
+        });
+
+        // Retrying a batch row by row only helps a row that cannot be cloned: a quota or closing
+        // database fails every row the same way, so the batch is dropped in one go, and counted.
+        it('drops a batch that fails for another reason without retrying its rows', async () => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const transaction = vi.fn(() => { throw new DOMException('full', 'QuotaExceededError'); });
+            const writer = createResultWriter(() => ({ transaction } as any), 'run-q');
+            for (let i = 0; i < 3; i++) writer.add(row(`q${i}`));
+            await writer.flush();
+            expect(transaction).toHaveBeenCalledTimes(1);
+            expect(warn).toHaveBeenCalledWith('[swazz] IDB write error: 3 result row(s) dropped:', expect.any(DOMException));
+            warn.mockRestore();
+        });
+
+        it('reports the rows written once each batch is committed', async () => {
+            const db = await openDb();
+            const counts: number[] = [];
+            const writer = createResultWriter(() => db, 'run-c', {
+                maxRows: 2,
+                maxDelayMs: 60_000,
+                onWritten: async (n) => {
+                    counts.push(n);
+                    expect(await dbGetRunResults(db, 'run-c')).toHaveLength(n);
+                },
+            });
+            for (let i = 0; i < 5; i++) writer.add(row(`c${i}`));
+            await writer.flush();
+            expect(counts).toEqual([2, 4, 5]);
+        });
+
+        // A closing page does not wait for a batch still being written: the waiting rows get their
+        // own transaction at once, and the listener only lives while rows wait.
+        it('writes the waiting rows at once on pagehide', async () => {
+            const db = await openDb();
+            const tx = vi.spyOn(db, 'transaction');
+            const writer = createResultWriter(() => db, 'run-h', { maxRows: 2, maxDelayMs: 60_000 });
+            writer.add(row('h1'));
+            writer.add(row('h2')); // a batch is being written
+            writer.add(row('h3'));
+            window.dispatchEvent(new Event('pagehide'));
+            // h3's transaction is opened before the page goes, not queued behind the h1+h2 batch.
+            expect(tx).toHaveBeenCalledTimes(1);
+            await writer.flush();
+            await vi.waitFor(async () => expect(await dbGetRunResults(db, 'run-h')).toHaveLength(3));
+            window.dispatchEvent(new Event('pagehide')); // nothing waits: no listener left
+            expect(tx.mock.calls.filter(([, mode]) => mode === 'readwrite')).toHaveLength(2);
         });
 
         it('drops rows when there is no database, and flushes nothing twice', async () => {

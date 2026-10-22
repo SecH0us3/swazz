@@ -25,8 +25,8 @@ interface UseFuzzSessionProps {
 
 /**
  * The callbacks that follow one scan: each result is written to IndexedDB in batches (no React state
- * in the hot path, only a throttled counter), and the run is saved when it completes or fails, once
- * its last results are written. A failed run keeps its reason, so History shows why it failed (see
+ * in the hot path, only a throttled count of the rows written), and the run is saved when it
+ * completes or fails. A failed run keeps its reason, so History shows why it failed (see
  * ScanIssueBanner).
  */
 function createRunHandlers(
@@ -35,39 +35,46 @@ function createRunHandlers(
 ) {
     let liveCount = 0;
     let lastCountUpdate = 0;
-    const writer = createResultWriter(getDb, runRec.id);
-    // Rows still waiting for their batch go out if the tab is closed or reloaded mid-scan.
-    const onPageHide = () => { void writer.flush(); };
-    window.addEventListener('pagehide', onPageHide);
+    let published = -1;
+    // The count the Inspector reloads on is the number of rows already in IndexedDB, so a reload
+    // it triggers finds every row it counts. It is only published while this run is the live one:
+    // a run that ended does not overwrite the count of the next.
+    const publish = (written: number) => {
+        if (written === published || useAppStore.getState().liveRunId !== runRec.id) return;
+        published = written;
+        useAppStore.setState({ liveCount: written });
+    };
+    let written = 0;
+    const writer = createResultWriter(getDb, runRec.id, {
+        onWritten: (n) => {
+            written = n;
+            const now = Date.now();
+            if (now - lastCountUpdate > 500) {
+                lastCountUpdate = now;
+                publish(n);
+            }
+        },
+    });
 
-    // Once the last results are written: refresh the count the Inspector reloads on, then save the
-    // run, so neither History nor the Inspector sees a finished run with rows still missing.
-    const end = (run: ScanRun) => writer.flush()
-        .then(() => {
-            window.removeEventListener('pagehide', onPageHide);
-            useAppStore.setState({ liveCount });
-            return saveRun(run);
-        })
-        .catch((err) => console.warn('[swazz] Failed to save the run:', err));
+    // The run is saved at once, as the server would have it; its last rows follow, and then the
+    // final count (even inside the throttle), which makes the Inspector reload with all of them.
+    const end = (run: ScanRun) => {
+        void Promise.resolve(saveRun(run)).catch((err) => console.warn('[swazz] Failed to save the run:', err));
+        void writer.flush().then(() => publish(written));
+    };
 
     const onResult = (raw: any) => {
         writer.add(toSummary(raw));
-
         liveCount++;
-        const now = Date.now();
-        if (now - lastCountUpdate > 500) {
-            lastCountUpdate = now;
-            useAppStore.setState({ liveCount });
-        }
     };
 
     const onComplete = (finalStats: RunStats) => {
-        void end({ ...runRec, completedAt: Date.now(), stats: finalStats });
+        end({ ...runRec, completedAt: Date.now(), stats: finalStats });
         showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
     };
 
     const onError = (message: string) => {
-        void end({ ...runRec, completedAt: Date.now(), stats: useAppStore.getState().stats as RunStats, failureReason: message });
+        end({ ...runRec, completedAt: Date.now(), stats: useAppStore.getState().stats as RunStats, failureReason: message });
         showToast('Scan failed — see the details above the results', 'error');
     };
 

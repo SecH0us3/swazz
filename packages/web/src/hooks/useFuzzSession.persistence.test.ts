@@ -28,12 +28,12 @@ describe('useFuzzSession persistence', () => {
         await __resetDbPromise();
     });
 
-    // The run is saved once its last results are in IndexedDB, so History never shows a completed
-    // run with rows still missing.
-    it.each(['complete', 'error'] as const)('saves a run that ends (%s) after its results are written', async (ending) => {
+    // The run is saved as soon as it ends (so a server record synced meanwhile is not overwritten
+    // later); the final count follows its last rows, so the Inspector's reload finds them all.
+    it.each(['complete', 'error'] as const)('publishes the final count of a run that ends (%s) after its rows', async (ending) => {
         const db = await openDb();
         const tx = vi.spyOn(db, 'transaction');
-        let rowsWhenSaved = -1;
+        let saved = 0;
         // The Inspector reloads when liveCount changes: its last change must find every row.
         useAppStore.setState({ liveCount: 0 });
         let rowsAtFinalCount = -1;
@@ -44,7 +44,7 @@ describe('useFuzzSession persistence', () => {
         });
         // The run is saved once when it starts, and again when it ends.
         const saveRun = vi.fn(async (run: any) => {
-            if (run.completedAt > 0) rowsWhenSaved = (await dbGetRunResults(db, run.id)).length;
+            if (run.completedAt > 0) saved++;
         });
         const connectToExisting = vi.fn(async (_runId: string, onResult: any, onComplete: any, onError: any) => {
             for (let i = 0; i < 25; i++) onResult({ id: `r${i}`, endpoint: '/a', method: 'GET', status: 200, duration: 1 });
@@ -65,11 +65,44 @@ describe('useFuzzSession persistence', () => {
             await result.current.handleConnectToExisting(`run-${ending}`, Date.now() - 5000, 'https://api.example.com', 'manual', 'running');
         });
 
-        await vi.waitFor(() => expect(rowsWhenSaved).toBe(25));
+        expect(saved).toBe(1); // at once, not after the rows
         await vi.waitFor(() => expect(rowsAtFinalCount).toBe(25));
         unsubscribe();
         expect(saveRun.mock.calls.filter(([run]) => run.completedAt > 0)).toHaveLength(1);
         // The 25 results went in one write, not one transaction each.
         expect(tx.mock.calls.filter(([, mode]) => mode === 'readwrite')).toHaveLength(1);
+    });
+});
+
+// A run that ended does not overwrite the count of the run that is live now.
+describe('useFuzzSession count of a run that ended', () => {
+    beforeEach(async () => {
+        (globalThis as any).indexedDB = new IDBFactory();
+        await __resetDbPromise();
+    });
+    afterEach(async () => {
+        await __resetDbPromise();
+    });
+
+    it('leaves the next run\'s count alone', async () => {
+        const db = await openDb();
+        let finish: () => void = () => {};
+        const connectToExisting = vi.fn(async (_runId: string, onResult: any, onComplete: any) => {
+            for (let i = 0; i < 5; i++) onResult({ id: `o${i}`, endpoint: '/a', method: 'GET', status: 200, duration: 1 });
+            finish = () => onComplete({ totalRequests: 5 });
+        });
+        const { result } = renderHook(() => useFuzzSession({
+            config, updateConfig: vi.fn(), start: vi.fn(), connectToExisting,
+            saveRun: vi.fn(), getDb: () => db, showToast: vi.fn(),
+        }));
+        await act(async () => {
+            await result.current.handleConnectToExisting('run-old', Date.now(), 'https://api.example.com', 'manual', 'running');
+        });
+        // Another scan becomes the live one before the old one's last rows are written.
+        useAppStore.setState({ liveRunId: 'run-new', liveCount: 0 });
+        finish();
+        await vi.waitFor(async () => expect(await dbGetRunResults(db, 'run-old')).toHaveLength(5));
+        await new Promise(r => setTimeout(r, 20));
+        expect(useAppStore.getState().liveCount).toBe(0);
     });
 });
