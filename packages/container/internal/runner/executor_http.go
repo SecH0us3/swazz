@@ -81,7 +81,7 @@ func (r *Runner) executeRequest(
 		return r.executeGRPCRequest(ctx, baseURL, resolvedPath, originalPath, payload, profile, generatedHeaders)
 	}
 	if method == "WS" || strings.HasPrefix(baseURL, "ws://") || strings.HasPrefix(baseURL, "wss://") {
-		return r.executeWebSocketRequest(ctx, baseURL, resolvedPath, originalPath, payload, profile, headers, generatedHeaders)
+		return r.executeWebSocketRequest(ctx, baseURL, resolvedPath, originalPath, method, payload, profile, headers, generatedHeaders)
 	}
 
 	// Merge headers: generatedHeaders < global headers
@@ -502,15 +502,7 @@ func (r *Runner) executeRequest(
 		}
 
 		if r.config.Settings.AnalyzeResponseBody {
-			var baselineSize int64
-			if profile == swagger.ProfileMalicious {
-				baselineSize = r.getSizeBaselineMedian(method, originalPath)
-			}
-			multiplier := r.config.Settings.ResponseSizeAnomalyMultiplier
-			if multiplier <= 0 {
-				multiplier = 5.0
-			}
-			baselineTime := r.getTimeBaselineMedian(method, originalPath)
+			baselineSize, multiplier, baselineTime := r.anomalyBaselines(method, originalPath, profile, r.config.Settings)
 			input := &analyzer.AnalysisInput{
 				SentPayload:     result.Payload,
 				ResponseBody:    rawBodyBytes,

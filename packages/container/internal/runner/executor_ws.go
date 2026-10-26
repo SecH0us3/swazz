@@ -22,7 +22,7 @@ import (
 
 func (r *Runner) executeWebSocketRequest(
 	ctx context.Context,
-	baseURL, resolvedPath, originalPath string,
+	baseURL, resolvedPath, originalPath, method string,
 	payload any,
 	profile swagger.FuzzingProfile,
 	globalHeaders map[string]string,
@@ -116,19 +116,40 @@ func (r *Runner) executeWebSocketRequest(
 	}
 	result.ResponseHeaders = resHeaders
 
-	input := &analyzer.AnalysisInput{
-		SentPayload:     payloadBytes,
-		ResponseBody:    respMsg,
-		ResponseHeaders: resHeaders,
-		Duration:        duration,
-		Profile:         profile,
-		Endpoint:        urlStr,
-		Method:          "WS",
-		ResponseSize:    int64(len(respMsg)),
-		Settings:        settings,
-	}
-
+	// Analysed like an HTTP response, against the endpoint's size and time baselines. The close
+	// code and transport error (the X-Swazz-WS-* headers) are always checked; the body only when
+	// the scan asks for response analysis. An exchange that failed or timed out says nothing about
+	// how long the target took to answer, so it is not compared with the time baseline.
 	if r.analyzer != nil {
+		baselineSize, multiplier, baselineTime := r.anomalyBaselines(method, originalPath, profile, settings)
+		if err != nil {
+			baselineTime = 0
+		}
+		body := respMsg
+		if !settings.AnalyzeResponseBody {
+			body = nil
+		}
+		// The analyzers read the payload as the HTTP executor hands it over: as values, not as the
+		// encoded bytes, which none of them looks into (every payload check missed on WebSocket).
+		var sent any = payload
+		if b, ok := payload.([]byte); ok {
+			sent = string(b)
+		}
+		input := &analyzer.AnalysisInput{
+			SentPayload:     sent,
+			ResponseBody:    body,
+			ResponseHeaders: resHeaders,
+			Duration:        duration,
+			Profile:         profile,
+			Endpoint:        urlStr,
+			Method:          "WS",
+			ResponseSize:    int64(len(respMsg)),
+			BaselineSize:    baselineSize,
+			SizeMultiplier:  multiplier,
+			BaselineTimeMs:  baselineTime,
+			TimeThresholdMs: settings.TimeAnomalyThresholdMs,
+			Settings:        settings,
+		}
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
 	}
 
