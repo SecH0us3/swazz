@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { Env } from '../../src/env';
 import { CleanupRepository } from '../../src/repositories/cleanup';
 import { ProjectRepository } from '../../src/repositories/projects';
-import { SCAN_CHILD_TABLES } from '../../src/repositories/scanDeletion';
+import { SCAN_CHILD_TABLES, SCAN_CHILD_DELETE_CHUNK, purgeScanChildren } from '../../src/repositories/scanDeletion';
 import { applyMigrations } from '../utils/migrations';
 
 const env = rawEnv as unknown as Env;
@@ -101,5 +101,25 @@ describe('deleting scans deletes their findings, events and pending OOB tokens',
     expect(await childRows(inProject)).toEqual(none);
     expect(await childRows(ofB)).toEqual(none);
     expect(await childRows(kept)).toEqual(one);
+  });
+});
+
+describe('purgeScanChildren', () => {
+  it('deletes more child rows than one chunk holds, and only those of the matching scans', async () => {
+    const projectId = crypto.randomUUID();
+    const gone = await seedScan({ projectId });
+    const kept = await seedScan({ projectId: crypto.randomUUID() });
+    // One chunk and a bit more, so the loop has to run a second statement.
+    const extra = SCAN_CHILD_DELETE_CHUNK + 7;
+    const rows = Array.from({ length: extra }, (_, i) =>
+      env.DB.prepare("INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, 'event', '{}')").bind(`e-${gone}-${i}`, gone));
+    for (let i = 0; i < rows.length; i += 500) await env.DB.batch(rows.slice(i, i + 500));
+
+    await purgeScanChildren(env.DB, 'project_id = ?', [projectId]);
+
+    expect(await childRows(gone)).toEqual(none);
+    expect(await childRows(kept)).toEqual(one);
+    // The scan itself is left for the batch that deletes it.
+    expect(await env.DB.prepare('SELECT id FROM scans WHERE id = ?').bind(gone).first()).not.toBeNull();
   });
 });

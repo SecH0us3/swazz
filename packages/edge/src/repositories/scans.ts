@@ -8,7 +8,7 @@ import { BaseService } from './base';
 import { dispatchWebhook } from '../utils/webhooks';
 import { sendScanCompletedDigestEmail } from '../services/email';
 import { WorkersAIService } from '../services/ai';
-import { logError } from '../../../common/logging/logger';
+import { logError, logWarn } from '../../../common/logging/logger';
 import { eventIdFor, isValidExec } from '../coordinator/delivery';
 import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
 import { isValidId } from '../utils/validation';
@@ -750,6 +750,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
       for (const r of results ?? []) alreadyStored.add(r.id);
     }
     const seenInBatch = new Set<string>();
+    const droppedForMissingScan = new Set<string>();
 
     for (const [index, msg] of messages.entries()) {
       const stableId = eventIds[index];
@@ -760,8 +761,13 @@ export class ScansRepository extends BaseService implements IScansRepository {
       const id = stableId ?? crypto.randomUUID();
       const { scanId, type, payload } = msg.body;
       // A scan deleted while its runner still reported (its project or account went) keeps no
-      // events or findings: nothing would ever delete them (scanDeletion.ts).
-      if (!scanToProject[scanId]) continue;
+      // events or findings: nothing would ever delete them (scanDeletion.ts). The inserts below
+      // check again, for a scan deleted while this batch is prepared.
+      const projInfo = scanToProject[scanId];
+      if (!projInfo) {
+        droppedForMissingScan.add(scanId);
+        continue;
+      }
       const oobTokens = payload && payload.type === 'oob_pending' ? sanitizeOobPending(payload.data) : null;
       // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
       // The OOB tokens themselves are stored by the coordinator as the event arrives
@@ -774,12 +780,12 @@ export class ScansRepository extends BaseService implements IScansRepository {
       
       statements.push(
         this.db.prepare(
-          `INSERT OR IGNORE INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
-        ).bind(id, scanId, eventType, payloadStr)
+          `INSERT OR IGNORE INTO scan_events (id, scan_id, type, payload)
+           SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+        ).bind(id, scanId, eventType, payloadStr, scanId)
       );
 
-      const projInfo = scanToProject[scanId];
-      const projectId = projInfo?.projectId;
+      const projectId = projInfo.projectId;
 
       if (payload && payload.type === 'complete') {
         const stats = JSON.stringify(payload.data || {});
@@ -842,11 +848,16 @@ export class ScansRepository extends BaseService implements IScansRepository {
           statements.push(
             this.db.prepare(
               `INSERT OR IGNORE INTO findings (id, scan_id, rule_id, level, message, evidence)
-               VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(finding.id, scanId, finding.ruleId, finding.level, finding.message, finding.evidence)
+               SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+            ).bind(finding.id, scanId, finding.ruleId, finding.level, finding.message, finding.evidence, scanId)
           );
         }
       }
+    }
+
+    if (droppedForMissingScan.size > 0) {
+      // Its runner may still be running: deleting a scan does not stop it.
+      logWarn({ env: this.env, executionCtx: ctx }, 'FindingsQueue', 'Dropped events of scans that no longer exist', { scanIds: [...droppedForMissingScan].slice(0, 20) });
     }
 
     const results: any[] = statements.length > 0 ? ((await this.db.batch(statements)) ?? []) : [];

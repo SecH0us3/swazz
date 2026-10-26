@@ -196,9 +196,11 @@ describe('ProjectRepository Unit Tests', () => {
       await expect(repo.deleteProject(123 as any)).rejects.toThrow(TypeError);
     });
 
-    it('deletes project via batch', async () => {
+    it('deletes project via batch, after purging scan child rows', async () => {
+      for (let i = 0; i < 3; i++) mockAll.mockResolvedValueOnce({ meta: { changes: 0 } }); // purgeScanChildren's chunked DELETEs
       const repo = new ProjectRepository(mockEnv);
       await repo.deleteProject('p1');
+      expect(mockAll).toHaveBeenCalledTimes(3); // one chunk per child table
       expect(mockBatch).toHaveBeenCalled();
     });
   });
