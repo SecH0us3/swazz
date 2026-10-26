@@ -759,6 +759,9 @@ export class ScansRepository extends BaseService implements IScansRepository {
       }
       const id = stableId ?? crypto.randomUUID();
       const { scanId, type, payload } = msg.body;
+      // A scan deleted while its runner still reported (its project or account went) keeps no
+      // events or findings: nothing would ever delete them (scanDeletion.ts).
+      if (!scanToProject[scanId]) continue;
       const oobTokens = payload && payload.type === 'oob_pending' ? sanitizeOobPending(payload.data) : null;
       // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
       // The OOB tokens themselves are stored by the coordinator as the event arrives

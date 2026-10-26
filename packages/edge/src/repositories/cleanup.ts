@@ -6,6 +6,7 @@
 import { Env } from '../env';
 import { BaseService } from './base';
 import { OOB_PENDING_DAYS } from './scans';
+import { deleteScansWhere } from './scanDeletion';
 
 export interface ICleanupRepository {
   cleanupSecurityTables(): Promise<{ challenges: number; wsTickets: number; rateLimits: number; loginHistory: number; auditLogs: number; oobPending: number }>;
@@ -70,14 +71,14 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
 
     // Clean up project-related data
     for (const projectId of projectIds) {
-      batchStatements.push(this.db.prepare("DELETE FROM scans WHERE project_id = ?").bind(projectId));
+      batchStatements.push(...deleteScansWhere(this.db, 'project_id = ?', [projectId]));
       batchStatements.push(this.db.prepare("DELETE FROM scan_configs WHERE project_id = ?").bind(projectId));
       batchStatements.push(this.db.prepare("DELETE FROM project_members WHERE project_id = ?").bind(projectId));
       batchStatements.push(this.db.prepare("DELETE FROM projects WHERE id = ?").bind(projectId));
     }
 
     // Clean up user-related data
-    batchStatements.push(this.db.prepare("DELETE FROM scans WHERE user_id = ?").bind(userId));
+    batchStatements.push(...deleteScansWhere(this.db, 'user_id = ?', [userId]));
     batchStatements.push(this.db.prepare("DELETE FROM project_members WHERE user_id = ?").bind(userId));
     batchStatements.push(this.db.prepare("DELETE FROM runners WHERE user_id = ?").bind(userId));
     batchStatements.push(this.db.prepare("DELETE FROM login_attempts WHERE username = ?").bind(username));
@@ -142,15 +143,13 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
     if (projectIds.length > 0) {
       const projPlaceholders = projectIds.map(() => '?').join(',');
       queries.push(
-        this.db.prepare(`DELETE FROM scans WHERE user_id IN (${userPlaceholders}) OR project_id IN (${projPlaceholders})`).bind(...userIds, ...projectIds),
+        ...deleteScansWhere(this.db, `user_id IN (${userPlaceholders}) OR project_id IN (${projPlaceholders})`, [...userIds, ...projectIds]),
         this.db.prepare(`DELETE FROM scan_configs WHERE project_id IN (${projPlaceholders})`).bind(...projectIds),
         this.db.prepare(`DELETE FROM project_members WHERE project_id IN (${projPlaceholders})`).bind(...projectIds),
         this.db.prepare(`DELETE FROM projects WHERE id IN (${projPlaceholders})`).bind(...projectIds)
       );
     } else {
-      queries.push(
-        this.db.prepare(`DELETE FROM scans WHERE user_id IN (${userPlaceholders})`).bind(...userIds)
-      );
+      queries.push(...deleteScansWhere(this.db, `user_id IN (${userPlaceholders})`, userIds));
     }
 
     queries.push(
