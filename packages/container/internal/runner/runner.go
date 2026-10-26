@@ -268,6 +268,12 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		regexCache:     make(map[string]*regexp.Regexp),
 		mcpRateLimiter: mcp.NewRateLimiter(100, 50),
 	}
+	r.oobStore.OnFirstDrop(func() {
+		r.logWarn("[OOB] The run has more pending OOB tokens than it keeps (%d); the oldest are dropped, and their callbacks will not be reported", oob.DefaultMaxEntries)
+	})
+	r.sstiStore.OnFirstDrop(func() {
+		r.logWarn("[SSTI] The run has sent more SSTI probes than it keeps (%d); responses to the oldest are no longer checked", sstistore.DefaultMaxEntries)
+	})
 	r.analyzer = analyzer.NewRegistry(r.sstiStore)
 	if config.MCPServer != nil {
 		client, err := mcp.NewClientFromConfig(

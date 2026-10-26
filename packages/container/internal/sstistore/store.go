@@ -5,7 +5,15 @@
 
 package sstistore
 
-import "sync"
+import (
+	"sync"
+
+	"swazz-engine/internal/boundedmap"
+)
+
+// DefaultMaxEntries bounds a run's SSTI store. Each randomized probe registers its own expression
+// until the run ends; past this the least recently registered are dropped first.
+const DefaultMaxEntries = 20_000
 
 type SSTIContext struct {
 	RawExpr  string // e.g. "23*37"
@@ -16,23 +24,49 @@ type SSTIContext struct {
 // its own store (runner.Runner), so concurrent runs cannot clear each other's expressions. A nil
 // *Store holds nothing: it records no expression and matches no payload.
 type Store struct {
-	mu sync.RWMutex
-	m  map[string]SSTIContext
+	mu      sync.RWMutex
+	m       *boundedmap.Map[string, SSTIContext]
+	onDrop  func() // called on the first drop after the store is made or cleared
+	dropped bool
 }
 
 func NewStore() *Store {
-	return &Store{
-		m: make(map[string]SSTIContext),
-	}
+	return NewStoreWithLimit(DefaultMaxEntries)
 }
 
-func (s *Store) Register(payload string, ctx SSTIContext) {
+// NewStoreWithLimit makes a store that keeps at most limit payloads (at least 1).
+func NewStoreWithLimit(limit int) *Store {
+	return &Store{m: boundedmap.New[string, SSTIContext](limit)}
+}
+
+// OnFirstDrop sets fn to be called, outside the store's lock, the first time a full store drops an
+// expression after it is made or cleared, so the run can tell its user that some probes go unchecked.
+func (s *Store) OnFirstDrop(fn func()) {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.m[payload] = ctx
+	s.onDrop = fn
+}
+
+// Register records a payload. A full store drops its least recently registered payload for it; a
+// response to that payload is then not checked for its expression. The limit counts payloads, not
+// bytes.
+func (s *Store) Register(payload string, ctx SSTIContext) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	var notify func()
+	if s.m.Set(payload, ctx) && !s.dropped {
+		s.dropped = true
+		notify = s.onDrop
+	}
+	s.mu.Unlock()
+	if notify != nil {
+		notify()
+	}
 }
 
 func (s *Store) Get(payload string) (SSTIContext, bool) {
@@ -41,8 +75,7 @@ func (s *Store) Get(payload string) (SSTIContext, bool) {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	ctx, ok := s.m[payload]
-	return ctx, ok
+	return s.m.Get(payload)
 }
 
 func (s *Store) Clear() {
@@ -51,5 +84,6 @@ func (s *Store) Clear() {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.m = make(map[string]SSTIContext)
+	s.m.Clear()
+	s.dropped = false
 }

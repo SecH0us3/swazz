@@ -76,3 +76,77 @@ func TestOOBStore_Nil(t *testing.T) {
 		t.Error("nil store has a size")
 	}
 }
+
+// A full store drops its oldest tokens first, so a long scan stays bounded.
+func TestStore_EvictsOldestPastTheLimit(t *testing.T) {
+	s := NewStoreWithLimit(3)
+	for _, id := range []string{"a", "b", "c", "d"} {
+		s.RegisterUUID(id, &OOBContext{SessionID: id})
+	}
+	if s.Size() != 3 {
+		t.Fatalf("size = %d, want 3", s.Size())
+	}
+	if _, ok := s.GetAndRemoveUUID("a"); ok {
+		t.Error("the oldest token survived")
+	}
+	for _, id := range []string{"b", "c", "d"} {
+		if _, ok := s.GetAndRemoveUUID(id); !ok {
+			t.Errorf("token %s was dropped", id)
+		}
+	}
+}
+
+// A removed token frees its slot, and registering it again does not evict anything.
+func TestStore_RemoveFreesSlot(t *testing.T) {
+	s := NewStoreWithLimit(2)
+	s.RegisterUUID("a", &OOBContext{})
+	s.RegisterUUID("b", &OOBContext{})
+	s.GetAndRemoveUUID("a")
+	s.RegisterUUID("a", &OOBContext{})
+	if s.Size() != 2 {
+		t.Fatalf("size = %d, want 2", s.Size())
+	}
+	if _, ok := s.GetAndRemoveUUID("b"); !ok {
+		t.Error("b was evicted although a slot was free")
+	}
+}
+
+// Registering a token again keeps one entry with the newest context.
+func TestStore_ReRegisterKeepsOneEntry(t *testing.T) {
+	s := NewStoreWithLimit(2)
+	s.RegisterUUID("a", &OOBContext{SessionID: "1"})
+	s.RegisterUUID("a", &OOBContext{SessionID: "2"})
+	s.RegisterUUID("b", &OOBContext{})
+	if s.Size() != 2 {
+		t.Fatalf("size = %d, want 2", s.Size())
+	}
+	ctx, ok := s.GetAndRemoveUUID("a")
+	if !ok || ctx.SessionID != "2" {
+		t.Fatalf("got %+v, %v", ctx, ok)
+	}
+}
+
+// The drop handler runs once per run, without the store locked, and again after Clear.
+func TestStore_OnFirstDropOncePerClear(t *testing.T) {
+	s := NewStoreWithLimit(1)
+	calls := 0
+	s.OnFirstDrop(func() {
+		calls++
+		_ = s.Size() // would deadlock if the store were still locked
+	})
+	s.RegisterUUID("a", &OOBContext{})
+	if calls != 0 {
+		t.Fatal("handler ran without a drop")
+	}
+	s.RegisterUUID("b", &OOBContext{})
+	s.RegisterUUID("c", &OOBContext{})
+	if calls != 1 {
+		t.Fatalf("handler ran %d times, want 1", calls)
+	}
+	s.Clear()
+	s.RegisterUUID("d", &OOBContext{})
+	s.RegisterUUID("e", &OOBContext{})
+	if calls != 2 {
+		t.Fatalf("handler ran %d times after Clear, want 2", calls)
+	}
+}
