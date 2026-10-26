@@ -8,9 +8,13 @@ package crawler
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chromedp/chromedp"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -104,3 +108,63 @@ func TestSniffer_WebMCPEndpoint(t *testing.T) {
 	assert.Equal(t, "false", eps[0].Headers["X-WebMCP-ReadOnly"])
 }
 
+// fakeChrome writes a stand-in browser that runs body, and returns its path and a function that
+// counts its launches.
+func fakeChrome(t *testing.T, body string) (string, func() int) {
+	t.Helper()
+	dir := t.TempDir()
+	count := filepath.Join(dir, "launches")
+	fake := filepath.Join(dir, "chrome")
+	script := "#!/bin/sh\necho launch >> " + count + "\n" + body + "\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil { // #nosec G306 -- test helper
+		t.Fatal(err)
+	}
+	return fake, func() int {
+		data, _ := os.ReadFile(count) // #nosec G304 -- test temp file
+		return strings.Count(string(data), "launch")
+	}
+}
+
+// A browser that comes up but cannot be reached is launched again once, then reported.
+func TestStartBrowser_RetriesHandshakeFailureOnce(t *testing.T) {
+	fake, launches := fakeChrome(t, "echo 'DevTools listening on ws://127.0.0.1:1/devtools/browser/x' >&2\nsleep 5")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, _, err := startBrowser(ctx, []chromedp.ExecAllocatorOption{chromedp.ExecPath(fake)})
+	if err == nil || !strings.Contains(err.Error(), "failed to start the browser") {
+		t.Fatalf("err = %v, want a start failure", err)
+	}
+	if n := launches(); n != browserStartAttempts {
+		t.Fatalf("browser launched %d times, want %d", n, browserStartAttempts)
+	}
+}
+
+// A browser that crashes on start would crash again, so it is not relaunched.
+func TestStartBrowser_DoesNotRetryCrash(t *testing.T) {
+	fake, launches := fakeChrome(t, "exit 1")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, _, err := startBrowser(ctx, []chromedp.ExecAllocatorOption{chromedp.ExecPath(fake)}); err == nil {
+		t.Fatal("a crashing browser started")
+	}
+	if n := launches(); n != 1 {
+		t.Fatalf("browser launched %d times, want 1", n)
+	}
+}
+
+// A caller that gives up during the start is not retried.
+func TestStartBrowser_StopsWhenCallerIsDone(t *testing.T) {
+	fake, launches := fakeChrome(t, "sleep 5")
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(300*time.Millisecond, cancel)
+	start := time.Now()
+	if _, _, err := startBrowser(ctx, []chromedp.ExecAllocatorOption{chromedp.ExecPath(fake)}); err == nil {
+		t.Fatal("started after the caller was done")
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("start took %v after the caller was done", d)
+	}
+	if n := launches(); n != 1 {
+		t.Fatalf("browser launched %d times, want 1", n)
+	}
+}
