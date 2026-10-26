@@ -253,6 +253,7 @@ func (r *Runner) finalise(panicked bool) {
 	if panicked {
 		r.Broadcast(Event{Type: EventError, Data: RunPanicMessage})
 	} else {
+		r.handOverPendingOOB()
 		r.Broadcast(Event{Type: EventComplete, Data: final})
 		r.logCompletionSummary(final)
 	}

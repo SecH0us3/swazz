@@ -11,6 +11,7 @@ import { WorkersAIService } from '../services/ai';
 import { logError } from '../../../common/logging/logger';
 import { eventIdFor, isValidExec } from '../coordinator/delivery';
 import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
+import { isValidId } from '../utils/validation';
 
 // A position in a project's scan list, newest first: the last scan of the page before.
 export interface ScansCursor {
@@ -106,6 +107,26 @@ function normalizeAIRelevance(val: unknown): boolean {
 }
 
 const MAX_FINDINGS_PER_EVENT = 1000;
+
+// A run's unanswered OOB tokens (runner/oob.go): at most this many per event and per scan, each
+// field cut to OOB_FIELD_LIMIT characters, kept OOB_PENDING_DAYS after the scan.
+const MAX_OOB_TOKENS_PER_EVENT = 100;
+const MAX_OOB_TOKENS_PER_SCAN = 2000;
+const OOB_FIELD_LIMIT = 256;
+export const OOB_PENDING_DAYS = 7;
+
+/** The valid tokens of an oob_pending event; anything malformed is dropped. */
+export function sanitizeOobPending(data: unknown): Array<{ token: string; endpoint: string; payload: string }> {
+  const tokens = (data as any)?.tokens;
+  if (!Array.isArray(tokens)) return [];
+  const text = (v: unknown) => (typeof v === 'string' ? v : '').slice(0, OOB_FIELD_LIMIT);
+  const out: Array<{ token: string; endpoint: string; payload: string }> = [];
+  for (const t of tokens.slice(0, MAX_OOB_TOKENS_PER_EVENT)) {
+    if (!t || typeof t !== 'object' || !isValidId((t as any).uuid)) continue;
+    out.push({ token: (t as any).uuid, endpoint: text((t as any).endpoint), payload: text((t as any).payload) });
+  }
+  return out;
+}
 const FINDING_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const FINDING_TEXT_LIMIT = 64 * 1024;
 
@@ -738,8 +759,14 @@ export class ScansRepository extends BaseService implements IScansRepository {
       }
       const id = stableId ?? crypto.randomUUID();
       const { scanId, type, payload } = msg.body;
+      const oobTokens = payload && payload.type === 'oob_pending' ? sanitizeOobPending(payload.data) : null;
       // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
-      const payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
+      // The OOB tokens themselves are stored by the coordinator as the event arrives
+      // (storeOobPending); stored again here, a token already reported would come back. The event
+      // log keeps only their count.
+      const payloadStr = oobTokens
+        ? JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } })
+        : (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
       const eventType = typeof type === 'string' && type ? type : 'event';
       
       statements.push(
@@ -841,6 +868,51 @@ export class ScansRepository extends BaseService implements IScansRepository {
       );
     }
     return { ended };
+  }
+
+  /**
+   * Stores a run's handed-over OOB tokens (sanitizeOobPending), in one statement per event. OR
+   * IGNORE: a token stored twice keeps its first row. Nothing is stored for a scan that does not
+   * exist, and the LIMIT caps a scan's rows whatever the runner sends.
+   */
+  async storeOobPending(scanId: string, tokens: Array<{ token: string; endpoint: string; payload: string }>): Promise<void> {
+    if (tokens.length === 0) return;
+    await this.db.prepare(
+      `INSERT OR IGNORE INTO oob_pending (scan_id, token, endpoint, payload)
+       SELECT ?, json_extract(value, '$.token'), json_extract(value, '$.endpoint'), json_extract(value, '$.payload')
+       FROM json_each(?)
+       WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)
+       LIMIT max(0, ? - (SELECT COUNT(*) FROM oob_pending WHERE scan_id = ?))`
+    ).bind(scanId, JSON.stringify(tokens), scanId, MAX_OOB_TOKENS_PER_SCAN, scanId).run();
+  }
+
+  /**
+   * Reports an OOB callback that arrived after its scan's run ended: if the scan still exists and
+   * handed the token over no more than OOB_PENDING_DAYS ago, the scan gets a swazz/oob-interaction
+   * finding and the token's row is removed. False when the scan holds no such token.
+   */
+  async recordLateOobCallback(scanId: string, token: string): Promise<boolean> {
+    // A read first: most callbacks that reach here match nothing, and must not cost a write.
+    const pending = await this.db.prepare(
+      `SELECT 1 AS found FROM oob_pending
+       WHERE scan_id = ? AND token = ? AND created_at > datetime('now', ?) AND EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+    ).bind(scanId, token, `-${OOB_PENDING_DAYS} days`, scanId).first<{ found: number }>();
+    if (!pending) return false;
+
+    const message = "'Out-of-Band (OOB) Interaction detected after the scan ended: the target application initiated an external connection in response to the payload sent to ' || COALESCE(NULLIF(endpoint, ''), 'an unknown endpoint') || ': ' || COALESCE(payload, '')";
+    // One transaction: the finding is written and the token consumed together, or neither. The id
+    // is scoped to the scan, so no other tenant's finding can claim it. A token is either matched
+    // by the live runner or handed over, never both, so it cannot also have a live finding.
+    await this.db.batch([
+      this.db.prepare(
+        `INSERT OR IGNORE INTO findings (id, scan_id, rule_id, level, message, evidence)
+         SELECT ?, scan_id, 'swazz/oob-interaction', 'error', ${message}, ?
+         FROM oob_pending
+         WHERE scan_id = ? AND token = ?`
+      ).bind(`oob-${scanId}-${token}`, `Late callback triggered with token/UUID: ${token}`, scanId, token),
+      this.db.prepare('DELETE FROM oob_pending WHERE scan_id = ? AND token = ?').bind(scanId, token),
+    ]);
+    return true;
   }
 
   async saveWAFPatchReport(scanId: string, report: unknown): Promise<void> {

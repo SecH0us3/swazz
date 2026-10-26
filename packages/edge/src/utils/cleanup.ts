@@ -29,6 +29,9 @@ export async function cleanupSecurityTables(db: D1Database, env?: any, ctx?: any
     if (changes.auditLogs > 0) {
       logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.auditLogs} audit logs older than 45 days.`);
     }
+    if (changes.oobPending > 0) {
+      logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.oobPending} expired OOB tokens.`);
+    }
   } catch (err) {
     logError({ env, executionCtx: ctx }, "Cleanup", "Failed to clean up security tables", { error: err });
   }

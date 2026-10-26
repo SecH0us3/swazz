@@ -163,7 +163,7 @@ Unknown keys are ignored, so a misspelled key silently falls back to its default
   - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.
   - **`bola_similarity_threshold`**: (Float) Threshold ratio for BOLA detection. Default is `0.85`.
   - **`time_anomaly_threshold_ms`**: (Integer) Threshold in milliseconds for detecting response time anomalies. Default is `4000`.
-  - **`oob_server_url`**: (String) Out-of-band interaction server URL for detecting SSRF / out-of-band vulnerability trigger interactions. Default is `""`.
+  - **`oob_server_url`**: (String) Out-of-band interaction server URL for detecting SSRF / out-of-band vulnerability trigger interactions. Default is `""`. When callbacks go to the coordinator (the default for dashboard scans), one that arrives after the scan has ended is still added to that scan's findings as `swazz/oob-interaction`, for up to 7 days; the 2,000 most recent unanswered tokens of a scan are kept. Reports, exports and webhooks produced when the scan ended do not include it.
   - **`waf_check_enabled`**: (Boolean) If `true`, runs pre-scan domain WAF fingerprinting via `waf.secmy.app` before initiating fuzzing. The detected WAF type, confidence score, and bypass techniques are saved in the scan record and displayed in report summaries. Default is `true` (opt-out).
   - **`waf_endpoint`**: (String) Custom endpoint URL for the WAF analysis service. Defaults to `https://waf.secmy.app`.
   - **`debug`**: (Boolean) Enables debug logging output. Default is `false`.

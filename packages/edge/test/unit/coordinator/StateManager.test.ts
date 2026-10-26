@@ -101,5 +101,24 @@ describe('StateManager', () => {
       expect(manager.hasCapacity(ws)).toBe(false);
     });
   });
-});
 
+  describe('OOB hand-overs', () => {
+    const state = () => ({ getWebSockets: vi.fn().mockReturnValue([]), getTags: vi.fn().mockReturnValue([]) } as any);
+
+    it('remembers a hand-over for the window only', () => {
+      const manager = new StateManager(state());
+      manager.noteOobHandOver('run-1', 1_000);
+      expect(manager.oobHandedOverWithin('run-1', 500, 1_400)).toBe(true);
+      expect(manager.oobHandedOverWithin('run-1', 500, 1_600)).toBe(false);
+      expect(manager.oobHandedOverWithin('run-2', 500, 1_400)).toBe(false);
+    });
+
+    it('keeps at most 200 runs, dropping the oldest', () => {
+      const manager = new StateManager(state());
+      for (let i = 0; i < 205; i++) manager.noteOobHandOver(`run-${i}`, i);
+      expect(manager.oobHandOvers.size).toBe(200);
+      expect(manager.oobHandedOverWithin('run-0', 1_000, 300)).toBe(false);
+      expect(manager.oobHandedOverWithin('run-204', 1_000, 300)).toBe(true);
+    });
+  });
+});
