@@ -204,6 +204,25 @@ describe('RequestHandler', () => {
     });
   });
 
+  describe('/revoke-user and MCP connections', () => {
+    it("closes the revoked user's SSE connections only", async () => {
+      mockState.getWebSockets.mockReturnValue([]);
+      const stateManager = new StateManager(mockState);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const mine = { enqueue: vi.fn(), close: vi.fn() } as any;
+      const theirs = { enqueue: vi.fn(), close: vi.fn() } as any;
+      stateManager.sseStreams.set('c1', { controller: mine, userId: 'gone' });
+      stateManager.sseStreams.set('c2', { controller: theirs, userId: 'other' });
+
+      const res = await handler.handle(new Request('http://localhost/revoke-user?userId=gone'));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ disconnectedCount: 1 });
+      expect(mine.close).toHaveBeenCalled();
+      expect(theirs.close).not.toHaveBeenCalled();
+      expect([...stateManager.sseStreams.keys()]).toEqual(['c2']);
+    });
+  });
+
   describe('/revoke-user', () => {
     it('returns 400 if userId is missing', async () => {
       const stateManager = new StateManager(mockState);

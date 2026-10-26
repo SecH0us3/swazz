@@ -10,10 +10,21 @@ import { RouteHandler, HandlerContext } from './types';
 // up in logs) must not let anyone else write into the stream, where its client takes every
 // message for an answer of the server it trusts.
 
-/** The connection, if it exists and was opened by userId; undefined otherwise, alike. */
-function ownedStream(context: HandlerContext, connectionId: string, userId: string | null): ReadableStreamDefaultController | undefined {
+/**
+ * The connection named by the request (connectionId), if it was opened by the caller (userId), or
+ * the response to give instead: someone else's connection is answered exactly like a missing one.
+ */
+function ownedStream(url: URL, context: HandlerContext): { connectionId: string; controller: ReadableStreamDefaultController } | Response {
+  const connectionId = url.searchParams.get('connectionId');
+  if (!connectionId) {
+    return new Response('Missing connectionId', { status: 400 });
+  }
+  const userId = url.searchParams.get('userId');
   const stream = context.stateManager.sseStreams.get(connectionId);
-  return stream && userId && stream.userId === userId ? stream.controller : undefined;
+  if (!stream || !userId || stream.userId !== userId) {
+    return new Response('Connection not found', { status: 404 });
+  }
+  return { connectionId, controller: stream.controller };
 }
 
 export class SseHandler implements RouteHandler {
@@ -27,7 +38,7 @@ export class SseHandler implements RouteHandler {
       return new Response('Missing userId', { status: 400 });
     }
 
-    const origin = decodeURIComponent(url.searchParams.get('origin') || '');
+    const origin = url.searchParams.get('origin') || '';
     const stream = new ReadableStream({
       start: (controller) => {
         context.stateManager.sseStreams.set(connectionId, { controller, userId });
@@ -50,31 +61,21 @@ export class SseHandler implements RouteHandler {
   }
 }
 
-/** 204 if the caller (userId) may send on the connection, 404 otherwise. */
+/** 204 if the caller (userId) may send on the connection; see ownedStream otherwise. */
 export class SseOwnerHandler implements RouteHandler {
   async handle(_request: Request, url: URL, context: HandlerContext): Promise<Response> {
-    const connectionId = url.searchParams.get('connectionId');
-    if (!connectionId) {
-      return new Response('Missing connectionId', { status: 400 });
-    }
-    return ownedStream(context, connectionId, url.searchParams.get('userId'))
-      ? new Response(null, { status: 204 })
-      : new Response('Connection not found', { status: 404 });
+    const owned = ownedStream(url, context);
+    return owned instanceof Response ? owned : new Response(null, { status: 204 });
   }
 }
 
 export class SseSendHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
-    const connectionId = url.searchParams.get('connectionId');
-    if (!connectionId) {
-      return new Response('Missing connectionId', { status: 400 });
+    const owned = ownedStream(url, context);
+    if (owned instanceof Response) {
+      return owned;
     }
-
-    // Someone else's connection is answered exactly like a missing one.
-    const controller = ownedStream(context, connectionId, url.searchParams.get('userId'));
-    if (!controller) {
-      return new Response('Connection not found', { status: 404 });
-    }
+    const { connectionId, controller } = owned;
 
     try {
       const body = await request.text();

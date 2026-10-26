@@ -144,6 +144,17 @@ async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promis
   };
 }
 
+/** The status of a coordinator call (0 if it failed outright); its body is not needed. */
+async function coordinatorCall(stub: { fetch(req: Request): Promise<Response> }, req: Request): Promise<number> {
+  try {
+    const res = await stub.fetch(req);
+    await res.body?.cancel();
+    return res.status;
+  } catch {
+    return 0;
+  }
+}
+
 export function registerMcpRoutes(app: Hono<AppEnv>) {
   app.get('/api/mcp/sse', async (c) => {
     const userId = await getUserIdFromRequest(c);
@@ -208,15 +219,21 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
     const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
     const stub = c.env.COORDINATOR_DO.get(doId);
     const owner = `connectionId=${encodeURIComponent(connectionId)}&userId=${encodeURIComponent(userId)}`;
-    const check = await stub.fetch(new Request(`http://localhost/sse-owner?${owner}`));
-    if (check.status !== 204) return c.json({ error: 'Connection not found' }, 404);
+    const check = await coordinatorCall(stub, new Request(`http://localhost/sse-owner?${owner}`));
+    if (check !== 204) {
+      return check === 404 ? c.json({ error: 'Connection not found' }, 404) : c.json({ error: 'Coordinator unavailable' }, 502);
+    }
 
     const responsePayload = await handleMcpJsonRpc(body, c, app);
     if (responsePayload) {
-      await stub.fetch(new Request(`http://localhost/sse-send?${owner}`, {
+      // The connection can close while the call runs; its answer is then lost, and the caller is
+      // told so rather than left waiting for it.
+      const sent = await coordinatorCall(stub, new Request(`http://localhost/sse-send?${owner}`, {
         method: 'POST',
         body: JSON.stringify(responsePayload)
       }));
+      if (sent === 404 || sent === 410) return c.json({ error: 'Connection closed before the answer could be sent' }, 410);
+      if (sent !== 200) return c.json({ error: 'Coordinator unavailable' }, 502);
     }
 
     return new Response('Accepted', { status: 202 });

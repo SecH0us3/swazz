@@ -28,6 +28,18 @@ export class RevokeUserHandler implements RouteHandler {
       }
     }
 
+    // The user's MCP SSE connections end with the account too.
+    for (const [connectionId, stream] of context.stateManager.sseStreams) {
+      if (stream.userId !== userId) continue;
+      try {
+        stream.controller.close();
+      } catch {
+        // already closed
+      }
+      context.stateManager.sseStreams.delete(connectionId);
+      disconnectedCount++;
+    }
+
     return new Response(JSON.stringify({ disconnectedCount }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

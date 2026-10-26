@@ -403,6 +403,35 @@ describe('MCP Routes', () => {
       expect(fetchSpy.mock.calls.filter(([r]) => new URL((r as Request).url).pathname === '/api/mcp/call')).toHaveLength(0);
     });
 
+    it('tells the caller when the connection closed before the answer was sent', async () => {
+      mockStub.fetch.mockImplementation(async (req: Request) =>
+        new URL(req.url).pathname === '/sse-owner' ? new Response(null, { status: 204 }) : new Response('Connection closed', { status: 410 }));
+      const res = await app.request('/api/mcp/message?connectionId=conn-123', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })
+      });
+      expect(res.status).toBe(410);
+    });
+
+    it('reports a coordinator failure as one, not as a missing connection', async () => {
+      mockStub.fetch.mockResolvedValueOnce(new Response('boom', { status: 500 }));
+      const failed = await app.request('/api/mcp/message?connectionId=conn-123', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })
+      });
+      expect(failed.status).toBe(502);
+
+      mockStub.fetch.mockRejectedValueOnce(new Error('reset'));
+      const thrown = await app.request('/api/mcp/message?connectionId=conn-123', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })
+      });
+      expect(thrown.status).toBe(502);
+    });
+
     it('keeps a crafted connectionId out of the coordinator query', async () => {
       const res = await app.request(`/api/mcp/message?connectionId=${encodeURIComponent('conn&userId=victim')}`, {
         method: 'POST',
