@@ -12,12 +12,14 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/security"
+
+	"golang.org/x/net/idna"
 )
 
 // proxiedClient returns the client for requests sent through the run's proxies
@@ -70,8 +72,11 @@ func (r *Runner) proxiedClient() *http.Client {
 				trusted[addr] = true
 			}
 		}
-		transport.DialContext = trustedProxyDial(transport.DialContext, r.client.Timeout, trusted)
-		targets := &publicTargets{}
+		var targets *publicTargets
+		if len(trusted) > 0 {
+			transport.DialContext = trustedProxyDial(transport.DialContext, r.client.Timeout, trusted)
+			targets = &publicTargets{}
+		}
 
 		transport.Proxy = func(req *http.Request) (*url.URL, error) {
 			if err != nil {
@@ -79,7 +84,7 @@ func (r *Runner) proxiedClient() *http.Client {
 			}
 			i := int((r.proxyTurn.Add(1) - 1) % uint32(len(proxies))) // #nosec G115 -- a proxy list is far shorter than 2^32
 			if !allowPrivate && trusted[proxyDialAddr(proxies[i])] {
-				if err := targets.check(req); err != nil {
+				if err := targets.check(req, proxies[i]); err != nil {
 					return nil, err
 				}
 			}
@@ -113,29 +118,36 @@ func trustedProxyDial(guarded security.DialFunc, timeout time.Duration, trusted 
 	}
 }
 
-// publicTargetTTL is how long a target host found public is not looked up again, and
-// maxPublicTargets how many such hosts are remembered: every request through a trusted proxy is
-// checked, and a lookup for each would double the scan's DNS traffic.
+// targetCheckTTL is how long the check of a target host is remembered, and maxCheckedTargets
+// how many hosts are: every request through a trusted proxy is checked, and a lookup for each
+// would double the scan's DNS traffic.
 const (
-	publicTargetTTL  = time.Minute
-	maxPublicTargets = 1024
+	targetCheckTTL    = time.Minute
+	maxCheckedTargets = 1024
 )
 
 // publicTargets checks the target of a request about to go through a trusted proxy: through that
 // proxy nothing else would. Proxies that are not trusted are dialed through the guard, which
 // refuses one at a private address, and their requests are left as they were.
 type publicTargets struct {
-	mu    sync.Mutex
-	until map[string]time.Time
+	mu      sync.Mutex
+	checked map[string]targetCheck
 }
 
-// check refuses req when a host it names is, or resolves to, a private or reserved address
-// (security.ResolvePublic). That is the URL's host and, when a Host header overrides it, that
-// host too: for a plain-HTTP target net/http writes the request line the proxy follows from it.
-func (p *publicTargets) check(req *http.Request) error {
+type targetCheck struct {
+	until time.Time
+	err   error
+}
+
+// check refuses req when a host the proxy will connect to is, or resolves to, a private or
+// reserved address (security.ResolvePublic). That is the URL's host and, for a plain-HTTP target
+// through an HTTP proxy, also the Host header's: net/http writes the request line the proxy
+// follows from it. (HTTPS targets are tunnelled with CONNECT to the URL's host, and a SOCKS proxy
+// connects to it too, so their Host header goes to that host and is left alone.)
+func (p *publicTargets) check(req *http.Request, proxy *url.URL) error {
 	hosts := []string{req.URL.Hostname()}
-	if req.Host != "" {
-		if h := hostOnly(req.Host); h != hosts[0] {
+	if req.Host != "" && req.URL.Scheme == "http" && (proxy.Scheme == "http" || proxy.Scheme == "https") {
+		if h := (&url.URL{Host: req.Host}).Hostname(); h != hosts[0] {
 			hosts = append(hosts, h)
 		}
 	}
@@ -147,32 +159,44 @@ func (p *publicTargets) check(req *http.Request) error {
 	return nil
 }
 
+// checkHost checks host in the form net/http sends it (an ASCII name as it is, any other one in
+// punycode), so the name looked up is the name the proxy is given. A non-ASCII host that has no
+// punycode form is refused, as net/http would refuse to send it.
 func (p *publicTargets) checkHost(ctx context.Context, host string) error {
+	ascii := host
+	if !isASCII(host) {
+		var err error
+		if ascii, err = idna.Lookup.ToASCII(host); err != nil {
+			return fmt.Errorf("%w: invalid host name", security.ErrSSRFBlocked)
+		}
+	}
 	now := time.Now()
 	p.mu.Lock()
-	ok := now.Before(p.until[host])
+	c, ok := p.checked[ascii]
 	p.mu.Unlock()
-	if ok {
-		return nil
+	if ok && now.Before(c.until) {
+		return c.err
 	}
-	if _, err := security.ResolvePublic(ctx, host); err != nil {
-		return err
+	_, err := security.ResolvePublic(ctx, ascii)
+	if err != nil && ctx.Err() != nil {
+		return err // the request was cancelled, which says nothing about the host
 	}
 	p.mu.Lock()
-	if p.until == nil || len(p.until) >= maxPublicTargets {
-		p.until = make(map[string]time.Time)
+	if p.checked == nil || len(p.checked) >= maxCheckedTargets {
+		p.checked = make(map[string]targetCheck)
 	}
-	p.until[host] = now.Add(publicTargetTTL)
+	p.checked[ascii] = targetCheck{until: now.Add(targetCheckTTL), err: err}
 	p.mu.Unlock()
-	return nil
+	return err
 }
 
-// hostOnly is the host of a host[:port] value, as an http.Request's Host holds it.
-func hostOnly(hostport string) string {
-	if h, _, err := net.SplitHostPort(hostport); err == nil {
-		return h
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
 	}
-	return strings.Trim(hostport, "[]")
+	return true
 }
 
 // proxyDialAddr is the address the transport dials for a proxy: its host and port, or the

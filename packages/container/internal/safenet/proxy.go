@@ -24,9 +24,11 @@ import (
 // request sent through a trusted proxy goes out only if its target host resolves to public
 // addresses only (runner/proxy.go), the check the runner would have made dialing it directly.
 //
-// Non-goals: the proxy resolves the target again when it forwards the request, so a name whose
-// DNS answer changes in between (rebinding) can still reach what the proxy can reach. Every job on
-// the runner may use a trusted proxy, so trust one only on a runner the operator alone uses.
+// Non-goals: the proxy resolves the target itself when it forwards the request, so a name it
+// resolves differently from the runner (a DNS answer that changed since the runner's check, which
+// it remembers for a minute; or another resolver, hosts file or split-horizon DNS on the proxy's
+// machine) reaches whatever the proxy can reach. Every job on the runner may use a trusted proxy,
+// so trust one only on a runner the operator alone uses.
 var trustedProxies atomic.Pointer[map[netip.AddrPort]struct{}]
 
 // TrustProxies sets the trusted proxies from entries of the form ip:port (IPv6 as [ip]:port),
@@ -51,7 +53,7 @@ func TrustProxies(entries []string) error {
 		trustedProxies.Store(nil)
 		return nil
 	}
-	log.Printf("WARNING: --trusted-proxy: every job may send its requests through %d proxy address(es) on a private network", len(set))
+	log.Printf("WARNING: --trusted-proxy: requests may go through %d proxy address(es) on a private network", len(set))
 	trustedProxies.Store(&set)
 	return nil
 }

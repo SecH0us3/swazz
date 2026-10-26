@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"swazz-engine/internal/safenet"
+	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
 
 	"github.com/stretchr/testify/assert"
@@ -199,16 +200,36 @@ func TestProxyClient_TrustedProxyChecksTheHostHeader(t *testing.T) {
 	assert.Equal(t, 200, res.Status, res.Error)
 }
 
-func TestHostOnly(t *testing.T) {
-	for in, want := range map[string]string{
-		"example.com":      "example.com",
-		"example.com:8080": "example.com",
-		"127.0.0.1:6379":   "127.0.0.1",
-		"[::1]:80":         "::1",
-		"[::1]":            "::1",
-	} {
-		assert.Equal(t, want, hostOnly(in), in)
-	}
+// An HTTPS target is tunnelled to its URL's host whatever its Host header says, so the header
+// is not checked there; the URL's host still is.
+func TestProxyClient_TrustedProxyHTTPSHostHeader(t *testing.T) {
+	proxy := newFakeProxy(t)
+	trustProxies(t, proxy.Listener.Addr().String())
+	r := trustedProxyRunner(t, nil, proxy.URL)
+	pc := r.proxiedClient()
+	transport := pc.Transport.(*http.Transport)
+
+	req, err := http.NewRequest("GET", "https://93.184.216.34/items", nil)
+	require.NoError(t, err)
+	req.Host = "127.0.0.1"
+	_, err = transport.Proxy(req)
+	assert.NoError(t, err, "an HTTPS Host header is not where the proxy connects")
+
+	req, err = http.NewRequest("GET", "https://127.0.0.1/items", nil)
+	require.NoError(t, err)
+	_, err = transport.Proxy(req)
+	assert.Error(t, err)
+}
+
+// The target check knows the name net/http sends: an internationalised name is checked in its
+// punycode form, and a name that cannot be one is refused.
+func TestPublicTargets_Names(t *testing.T) {
+	var p publicTargets
+	assert.ErrorIs(t, p.checkHost(context.Background(), "bü cher.example"), security.ErrSSRFBlocked)
+	assert.ErrorIs(t, p.checkHost(context.Background(), "127.0.0.1"), security.ErrSSRFBlocked)
+	require.NoError(t, p.checkHost(context.Background(), "93.184.216.34"))
+	assert.Contains(t, p.checked, "93.184.216.34")
+	assert.Contains(t, p.checked, "127.0.0.1", "a refusal is remembered too")
 }
 
 // With private addresses allowed, a trusted proxy may take a private target like any proxy.
