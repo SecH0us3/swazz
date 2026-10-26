@@ -6,6 +6,7 @@
 import { Env } from '../env';
 import { BaseService } from './base';
 import { OOB_PENDING_DAYS } from './scans';
+import { deleteScansWhere, purgeScanChildren } from './scanDeletion';
 
 export interface ICleanupRepository {
   cleanupSecurityTables(): Promise<{ challenges: number; wsTickets: number; rateLimits: number; loginHistory: number; auditLogs: number; oobPending: number }>;
@@ -66,18 +67,21 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
   }
 
   async deleteGuestUserData(userId: string, projectIds: string[], username: string): Promise<void> {
-    const batchStatements = [];
+    // The guest's own scans and the scans of the projects it owns.
+    const where = ['user_id = ?', ...projectIds.map(() => 'project_id = ?')].join(' OR ');
+    const binds = [userId, ...projectIds];
+    await purgeScanChildren(this.db, where, binds);
+
+    const batchStatements = [...deleteScansWhere(this.db, where, binds)];
 
     // Clean up project-related data
     for (const projectId of projectIds) {
-      batchStatements.push(this.db.prepare("DELETE FROM scans WHERE project_id = ?").bind(projectId));
       batchStatements.push(this.db.prepare("DELETE FROM scan_configs WHERE project_id = ?").bind(projectId));
       batchStatements.push(this.db.prepare("DELETE FROM project_members WHERE project_id = ?").bind(projectId));
       batchStatements.push(this.db.prepare("DELETE FROM projects WHERE id = ?").bind(projectId));
     }
 
     // Clean up user-related data
-    batchStatements.push(this.db.prepare("DELETE FROM scans WHERE user_id = ?").bind(userId));
     batchStatements.push(this.db.prepare("DELETE FROM project_members WHERE user_id = ?").bind(userId));
     batchStatements.push(this.db.prepare("DELETE FROM runners WHERE user_id = ?").bind(userId));
     batchStatements.push(this.db.prepare("DELETE FROM login_attempts WHERE username = ?").bind(username));
@@ -139,17 +143,19 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
     const userPlaceholders = userIds.map(() => '?').join(',');
     const usernamePlaceholders = usernames.map(() => '?').join(',');
 
+    const projPlaceholders = projectIds.map(() => '?').join(',');
+    const where = projectIds.length > 0
+      ? `user_id IN (${userPlaceholders}) OR project_id IN (${projPlaceholders})`
+      : `user_id IN (${userPlaceholders})`;
+    const binds = [...userIds, ...projectIds];
+    await purgeScanChildren(this.db, where, binds);
+    queries.push(...deleteScansWhere(this.db, where, binds));
+
     if (projectIds.length > 0) {
-      const projPlaceholders = projectIds.map(() => '?').join(',');
       queries.push(
-        this.db.prepare(`DELETE FROM scans WHERE user_id IN (${userPlaceholders}) OR project_id IN (${projPlaceholders})`).bind(...userIds, ...projectIds),
         this.db.prepare(`DELETE FROM scan_configs WHERE project_id IN (${projPlaceholders})`).bind(...projectIds),
         this.db.prepare(`DELETE FROM project_members WHERE project_id IN (${projPlaceholders})`).bind(...projectIds),
         this.db.prepare(`DELETE FROM projects WHERE id IN (${projPlaceholders})`).bind(...projectIds)
-      );
-    } else {
-      queries.push(
-        this.db.prepare(`DELETE FROM scans WHERE user_id IN (${userPlaceholders})`).bind(...userIds)
       );
     }
 

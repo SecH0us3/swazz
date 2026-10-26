@@ -1859,6 +1859,9 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
 
     it("processes FINDINGS_QUEUE messages correctly in bulk", async () => {
       const scanId = "findings-scan-id";
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, ?, ?, ?)"
+      ).bind(scanId, "proj-findings-bulk", "http://test.com", "default", "dispatched").run();
       const mockMessages = [
         {
           body: { scanId, type: "event", payload: { type: "progress", progress: 50 } },
@@ -1884,6 +1887,36 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(results.length).toBe(2);
       expect(results[0].type).toBe("event");
       expect(results[1].type).toBe("error");
+    });
+
+    it("acknowledges but does not store events of a scan that no longer exists", async () => {
+      const scanId = "findings-scan-deleted";
+      const mockMessages = [
+        {
+          body: {
+            scanId,
+            type: "event",
+            payload: {
+              type: "result",
+              data: {
+                id: "req-gone",
+                analyzerFindings: [{ ruleId: "swazz/sensitive-data-leak", level: "warning", message: "leak", evidence: "x" }]
+              }
+            }
+          },
+          ack: vi.fn(),
+        },
+        { body: { scanId, type: "event", payload: { type: "progress", progress: 10 } }, ack: vi.fn() },
+      ];
+
+      await app.queue({ queue: "swazz-findings-queue", messages: mockMessages } as any, testEnv as any, {} as any);
+
+      expect(mockMessages[0].ack).toHaveBeenCalled();
+      expect(mockMessages[1].ack).toHaveBeenCalled();
+      const events = await env.DB.prepare("SELECT COUNT(*) AS n FROM scan_events WHERE scan_id = ?").bind(scanId).first<{ n: number }>();
+      const findings = await env.DB.prepare("SELECT COUNT(*) AS n FROM findings WHERE scan_id = ?").bind(scanId).first<{ n: number }>();
+      expect(events?.n).toBe(0);
+      expect(findings?.n).toBe(0);
     });
 
     it("extracts findings from result events and populates findings table in D1", async () => {
