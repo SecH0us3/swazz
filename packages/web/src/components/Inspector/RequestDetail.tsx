@@ -10,6 +10,7 @@ import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, parseQueryParamList, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
 import { generateAdaptivePoc, codeFromReply, type AdaptivePocResult } from '../../services/adaptivePocService.js';
+import { aiFallbackNote } from '../../services/chromeAiService.js';
 import { tokenizeCode } from '../../utils/syntaxHighlight.js';
 import { FormattedMarkdown } from '../Shared/FormattedMarkdown.js';
 import { AiEngineInfoModal } from '../Shared/AiEngineInfoModal.js';
@@ -861,12 +862,7 @@ export function RequestDetail({
                                 )}
                                 {!generatingAdaptive && adaptiveCache[pocLang]?.fallbackReason && (
                                     <span className="poc-fallback-note">
-                                        {{
-                                            unavailable: 'On-device AI (Chrome Prompt API) is not available in this browser, so a rule-based template was used.',
-                                            timeout: 'On-device AI took too long, so a rule-based template was used.',
-                                            downloadable: 'Chrome has not downloaded its on-device model (Gemini Nano) yet, so a rule-based template was used.',
-                                            failed: 'On-device AI failed or did not return a usable script, so a rule-based template was used.',
-                                        }[adaptiveCache[pocLang].fallbackReason!]}
+                                        {aiFallbackNote(adaptiveCache[pocLang].fallbackReason!, 'template')}
                                     </span>
                                 )}
                             </div>
