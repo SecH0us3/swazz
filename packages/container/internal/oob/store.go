@@ -6,9 +6,16 @@
 package oob
 
 import (
+	"swazz-engine/internal/boundedmap"
 	"swazz-engine/internal/swagger"
 	"sync"
 )
+
+// DefaultMaxEntries bounds a run's OOB store. Every OOB payload registers a token that waits for a
+// callback until the run ends, so a long scan would otherwise grow the store without limit. Past
+// this the least recently registered tokens are dropped, and a late callback for one of them is
+// not matched.
+const DefaultMaxEntries = 50_000
 
 type OOBContext struct {
 	SessionID string
@@ -22,23 +29,48 @@ type OOBContext struct {
 // the tokens another run is still waiting on. A nil *Store holds nothing: it records no token and
 // matches no callback.
 type Store struct {
-	mu sync.RWMutex
-	m  map[string]*OOBContext
+	mu      sync.RWMutex
+	m       *boundedmap.Map[string, *OOBContext]
+	onDrop  func() // called on the first drop after the store is made or cleared
+	dropped bool
 }
 
 func NewStore() *Store {
-	return &Store{
-		m: make(map[string]*OOBContext),
-	}
+	return NewStoreWithLimit(DefaultMaxEntries)
 }
 
-func (s *Store) RegisterUUID(uuid string, ctx *OOBContext) {
+// NewStoreWithLimit makes a store that keeps at most limit tokens (at least 1).
+func NewStoreWithLimit(limit int) *Store {
+	return &Store{m: boundedmap.New[string, *OOBContext](limit)}
+}
+
+// OnFirstDrop sets fn to be called, outside the store's lock, the first time a full store drops a
+// token after it is made or cleared, so the run can tell its user that late callbacks are lost.
+func (s *Store) OnFirstDrop(fn func()) {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.m[uuid] = ctx
+	s.onDrop = fn
+}
+
+// RegisterUUID records a token. A full store drops its least recently registered token for it;
+// a callback for that token is then not matched. The limit counts tokens, not bytes.
+func (s *Store) RegisterUUID(uuid string, ctx *OOBContext) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	var notify func()
+	if s.m.Set(uuid, ctx) && !s.dropped {
+		s.dropped = true
+		notify = s.onDrop
+	}
+	s.mu.Unlock()
+	if notify != nil {
+		notify()
+	}
 }
 
 func (s *Store) UpdateRequest(uuid string, req *swagger.RequestLog) {
@@ -47,7 +79,7 @@ func (s *Store) UpdateRequest(uuid string, req *swagger.RequestLog) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if ctx, ok := s.m[uuid]; ok {
+	if ctx, ok := s.m.Get(uuid); ok {
 		ctx.Request = req
 	}
 }
@@ -58,11 +90,7 @@ func (s *Store) GetAndRemoveUUID(uuid string) (*OOBContext, bool) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ctx, ok := s.m[uuid]
-	if ok {
-		delete(s.m, uuid)
-	}
-	return ctx, ok
+	return s.m.Delete(uuid)
 }
 
 func (s *Store) Clear() {
@@ -71,7 +99,8 @@ func (s *Store) Clear() {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.m = make(map[string]*OOBContext)
+	s.m.Clear()
+	s.dropped = false
 }
 
 func (s *Store) Size() int {
@@ -80,5 +109,5 @@ func (s *Store) Size() int {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.m)
+	return s.m.Len()
 }
