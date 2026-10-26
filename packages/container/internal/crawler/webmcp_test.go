@@ -118,7 +118,9 @@ func TestCrawl_WebMCPDiscovery(t *testing.T) {
 	cfg.TimeoutPerPage = 20
 	sniffer := NewSniffer()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Room for every browser start attempt plus the page budget.
+	startBudget := browserStartAttempts * (browserStartTimeout + 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), startBudget+time.Duration(cfg.TimeoutPerPage)*time.Second+10*time.Second)
 	defer cancel()
 	res, err := NewCrawler(cfg, sniffer).Crawl(ctx, srv.URL)
 	require.NoError(t, err)
