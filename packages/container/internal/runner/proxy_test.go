@@ -181,6 +181,36 @@ func TestProxyClient_TrustedProxyChecksTheTarget(t *testing.T) {
 	assert.EqualValues(t, 0, proxy.requests.Load(), "nothing reached the proxy")
 }
 
+// A Host header picks the host a proxy forwards a plain-HTTP request to, so it is checked too.
+func TestProxyClient_TrustedProxyChecksTheHostHeader(t *testing.T) {
+	proxy := newFakeProxy(t)
+	trustProxies(t, proxy.Listener.Addr().String())
+	r := trustedProxyRunner(t, nil, proxy.URL)
+
+	for _, host := range []string{"169.254.169.254", "127.0.0.1:6379", "[::1]:80"} {
+		res := r.executeRequest(context.Background(), "http://93.184.216.34", "/items", "/items", "GET", map[string]string{"Host": host}, nil, nil, swagger.ProfileRandom, nil, nil, "")
+		require.NotNil(t, res)
+		assert.Equal(t, 0, res.Status, host)
+	}
+	assert.EqualValues(t, 0, proxy.requests.Load(), "nothing reached the proxy")
+
+	res := r.executeRequest(context.Background(), "http://93.184.216.34", "/items", "/items", "GET", map[string]string{"Host": "93.184.216.35"}, nil, nil, swagger.ProfileRandom, nil, nil, "")
+	require.NotNil(t, res)
+	assert.Equal(t, 200, res.Status, res.Error)
+}
+
+func TestHostOnly(t *testing.T) {
+	for in, want := range map[string]string{
+		"example.com":      "example.com",
+		"example.com:8080": "example.com",
+		"127.0.0.1:6379":   "127.0.0.1",
+		"[::1]:80":         "::1",
+		"[::1]":            "::1",
+	} {
+		assert.Equal(t, want, hostOnly(in), in)
+	}
+}
+
 // With private addresses allowed, a trusted proxy may take a private target like any proxy.
 func TestProxyClient_TrustedProxyWithPrivateAllowed(t *testing.T) {
 	proxy := newFakeProxy(t)

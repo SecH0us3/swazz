@@ -57,7 +57,7 @@ func runCLIErr(args []string) error {
 	ignoreConfig := flags.String("ignore-config", "swazz.ignore.json", "Path to ignore rules JSON file")
 	allowPrivateIps := flags.Bool("allow-private-ips", false, "Allow requests to private IP addresses (overrides security.allow_private_ips from the config file)")
 	var trustedProxies stringList
-	flags.Var(&trustedProxies, "trusted-proxy", "A private ip:port proxy from settings.proxyList to allow, e.g. a local Burp on 127.0.0.1:8080 (repeatable or comma-separated); targets stay checked")
+	flags.Var(&trustedProxies, "trusted-proxy", "A private ip:port proxy from settings.proxy_list to allow, e.g. a local Burp on 127.0.0.1:8080 (repeatable or comma-separated); targets stay checked")
 	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
 	logLevelFlag := flags.String("log-level", "", "Log level: debug, info, warn, error")
 	quietFlag := flags.Bool("quiet", false, "Silence all progress output (only show errors)")

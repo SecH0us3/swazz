@@ -12,6 +12,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
+	"sync"
 	"time"
 
 	"swazz-engine/internal/safenet"
@@ -34,7 +36,7 @@ import (
 // The one exception is a proxy the runner's operator trusted (safenet.TrustProxies): it is dialed
 // even at a private address (trustedProxyDial), and since the guard then checks nothing, a
 // request goes through it only once its target passed the check the guard would have made
-// (checkTrustedProxyTarget).
+// (publicTargets).
 func (r *Runner) proxiedClient() *http.Client {
 	r.proxyOnce.Do(func() {
 		var transport *http.Transport
@@ -51,8 +53,6 @@ func (r *Runner) proxiedClient() *http.Client {
 			security.ConfigureTransport(transport)
 		}
 
-		transport.DialContext = trustedProxyDial(transport.DialContext, r.client.Timeout)
-
 		r.configMu.RLock()
 		proxies, err := parseProxyList(r.config.Settings.ProxyList)
 		allowPrivate := r.config.Security.AllowPrivateIPs
@@ -60,13 +60,26 @@ func (r *Runner) proxiedClient() *http.Client {
 		if err != nil {
 			r.logError("Proxy list: %v; every request sent through the proxies fails", err)
 		}
+
+		// Trust is decided once per proxy, from the address proxyDialAddr gives, and both the
+		// dial and the target check below go by that one decision. Were net/http ever to dial a
+		// proxy at an address spelled otherwise, that dial would simply stay guarded.
+		trusted := make(map[string]bool)
+		for _, p := range proxies {
+			if addr := proxyDialAddr(p); safenet.IsTrustedProxy(addr) {
+				trusted[addr] = true
+			}
+		}
+		transport.DialContext = trustedProxyDial(transport.DialContext, r.client.Timeout, trusted)
+		targets := &publicTargets{}
+
 		transport.Proxy = func(req *http.Request) (*url.URL, error) {
 			if err != nil {
 				return nil, err
 			}
 			i := int((r.proxyTurn.Add(1) - 1) % uint32(len(proxies))) // #nosec G115 -- a proxy list is far shorter than 2^32
-			if !allowPrivate {
-				if err := checkTrustedProxyTarget(req, proxies[i]); err != nil {
+			if !allowPrivate && trusted[proxyDialAddr(proxies[i])] {
+				if err := targets.check(req); err != nil {
 					return nil, err
 				}
 			}
@@ -79,12 +92,12 @@ func (r *Runner) proxiedClient() *http.Client {
 	return r.proxyClient.Load()
 }
 
-// trustedProxyDial wraps the proxied transport's dial so the operator's trusted proxies
-// (safenet.IsTrustedProxy) are dialed without the private-address check, and every other address
+// trustedProxyDial wraps the proxied transport's dial so the trusted proxies' addresses (trusted,
+// from proxyDialAddr) are dialed without the private-address check, and every other address
 // through guarded as before. It is only ever set on the proxied transport, whose dials all go to
 // a proxy: a target at a trusted proxy's address is still checked on the direct transport.
 // timeout bounds the dial like the client's requests (30s when the client sets none).
-func trustedProxyDial(guarded security.DialFunc, timeout time.Duration) security.DialFunc {
+func trustedProxyDial(guarded security.DialFunc, timeout time.Duration, trusted map[string]bool) security.DialFunc {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
@@ -93,25 +106,73 @@ func trustedProxyDial(guarded security.DialFunc, timeout time.Duration) security
 		guarded = direct
 	}
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		if safenet.IsTrustedProxy(addr) {
+		if trusted[addr] {
 			return direct(ctx, network, addr)
 		}
 		return guarded(ctx, network, addr)
 	}
 }
 
-// checkTrustedProxyTarget refuses a request about to go through a trusted proxy when its target
-// host is, or resolves to, a private or reserved address (security.ResolvePublic): through that
-// proxy nothing else would check it. Other proxies are dialed through the guard, which refuses
-// one at a private address, and are left as they were.
-func checkTrustedProxyTarget(req *http.Request, proxy *url.URL) error {
-	if !safenet.IsTrustedProxy(proxyDialAddr(proxy)) {
-		return nil
+// publicTargetTTL is how long a target host found public is not looked up again, and
+// maxPublicTargets how many such hosts are remembered: every request through a trusted proxy is
+// checked, and a lookup for each would double the scan's DNS traffic.
+const (
+	publicTargetTTL  = time.Minute
+	maxPublicTargets = 1024
+)
+
+// publicTargets checks the target of a request about to go through a trusted proxy: through that
+// proxy nothing else would. Proxies that are not trusted are dialed through the guard, which
+// refuses one at a private address, and their requests are left as they were.
+type publicTargets struct {
+	mu    sync.Mutex
+	until map[string]time.Time
+}
+
+// check refuses req when a host it names is, or resolves to, a private or reserved address
+// (security.ResolvePublic). That is the URL's host and, when a Host header overrides it, that
+// host too: for a plain-HTTP target net/http writes the request line the proxy follows from it.
+func (p *publicTargets) check(req *http.Request) error {
+	hosts := []string{req.URL.Hostname()}
+	if req.Host != "" {
+		if h := hostOnly(req.Host); h != hosts[0] {
+			hosts = append(hosts, h)
+		}
 	}
-	if _, err := security.ResolvePublic(req.Context(), req.URL.Hostname()); err != nil {
-		return fmt.Errorf("target %s through trusted proxy: %w", req.URL.Hostname(), err)
+	for _, host := range hosts {
+		if err := p.checkHost(req.Context(), host); err != nil {
+			return fmt.Errorf("target %s through trusted proxy: %w", host, err)
+		}
 	}
 	return nil
+}
+
+func (p *publicTargets) checkHost(ctx context.Context, host string) error {
+	now := time.Now()
+	p.mu.Lock()
+	ok := now.Before(p.until[host])
+	p.mu.Unlock()
+	if ok {
+		return nil
+	}
+	if _, err := security.ResolvePublic(ctx, host); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	if p.until == nil || len(p.until) >= maxPublicTargets {
+		p.until = make(map[string]time.Time)
+	}
+	p.until[host] = now.Add(publicTargetTTL)
+	p.mu.Unlock()
+	return nil
+}
+
+// hostOnly is the host of a host[:port] value, as an http.Request's Host holds it.
+func hostOnly(hostport string) string {
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		return h
+	}
+	return strings.Trim(hostport, "[]")
 }
 
 // proxyDialAddr is the address the transport dials for a proxy: its host and port, or the

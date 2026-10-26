@@ -260,7 +260,7 @@ func printHelp() {
 	fmt.Println("  --waf-patch-output <path>    File to save generated WAF virtual patch rules")
 	fmt.Println("  --ignore-config <path>       Path to ignore rules file (default: swazz.ignore.json)")
 	fmt.Println("  --allow-private-ips          Allow requests to private IP addresses (default: false)")
-	fmt.Println("  --trusted-proxy <ip:port>    Allow this private proxy from settings.proxyList (e.g. 127.0.0.1:8080); targets are still checked")
+	fmt.Println("  --trusted-proxy <ip:port>    Allow this private proxy from settings.proxy_list (e.g. 127.0.0.1:8080); targets are still checked")
 	fmt.Println("  --log-level <level>          Log level: debug, info, warn, error (default: info)")
 	fmt.Println("  --quiet, -q                  Silence all progress output (only show errors)")
 	fmt.Println("  --progress-on-change         Only print progress when the active endpoint changes")
