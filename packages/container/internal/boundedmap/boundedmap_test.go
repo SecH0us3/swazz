@@ -5,7 +5,10 @@
 
 package boundedmap
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestMap_DropsLeastRecentlySetFirst(t *testing.T) {
 	m := New[string, int](2)
@@ -59,5 +62,25 @@ func TestMap_ClearAndLimitFloor(t *testing.T) {
 	}
 	if _, ok := m.Get(2); ok {
 		t.Fatal("clear left an entry readable")
+	}
+}
+
+func TestNewestKeys(t *testing.T) {
+	m := New[string, int](3)
+	if got := m.NewestKeys(5); len(got) != 0 {
+		t.Fatalf("empty map gave %v", got)
+	}
+	m.Set("a", 1)
+	m.Set("b", 2)
+	m.Set("c", 3)
+	m.Set("a", 4) // most recent again
+	if got := m.NewestKeys(2); !slices.Equal(got, []string{"a", "c"}) {
+		t.Fatalf("NewestKeys(2) = %v, want [a c]", got)
+	}
+	if got := m.NewestKeys(10); !slices.Equal(got, []string{"a", "c", "b"}) {
+		t.Fatalf("NewestKeys(10) = %v, want [a c b]", got)
+	}
+	if got := m.NewestKeys(-1); len(got) != 0 {
+		t.Fatalf("NewestKeys(-1) = %v", got)
 	}
 }

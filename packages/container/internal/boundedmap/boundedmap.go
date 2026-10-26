@@ -67,6 +67,15 @@ func (m *Map[K, V]) Delete(k K) (V, bool) {
 
 func (m *Map[K, V]) Len() int { return m.ll.Len() }
 
+// NewestKeys returns the keys of at most n entries, the most recently set first.
+func (m *Map[K, V]) NewestKeys(n int) []K {
+	out := make([]K, 0, min(max(n, 0), m.ll.Len()))
+	for el := m.ll.Back(); el != nil && len(out) < n; el = el.Prev() {
+		out = append(out, el.Value.(*entry[K, V]).key)
+	}
+	return out
+}
+
 func (m *Map[K, V]) Clear() {
 	m.ll.Init()
 	m.idx = make(map[K]*list.Element)

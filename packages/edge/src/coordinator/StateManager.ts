@@ -32,7 +32,25 @@ export class StateManager {
   // The runner each parse request went to; only that runner may answer it.
   pendingParseRunners = new Map<string, WebSocket>();
   sseStreams = new Map<string, ReadableStreamDefaultController>();
+  // Runs that handed their unanswered OOB tokens over lately (run id -> when), oldest first: a
+  // callback for one may come before its tokens are in D1 (handlers/oob.ts). In memory, bounded.
+  oobHandOvers = new Map<string, number>();
   delivery: DeliveryTracker;
+
+  /** Notes that a run handed OOB tokens over, for oobHandedOverWithin. */
+  noteOobHandOver(runId: string, now = Date.now()): void {
+    this.oobHandOvers.delete(runId);
+    this.oobHandOvers.set(runId, now);
+    while (this.oobHandOvers.size > 200) {
+      this.oobHandOvers.delete(this.oobHandOvers.keys().next().value!);
+    }
+  }
+
+  /** Whether the run handed OOB tokens over in this coordinator within the last ms milliseconds. */
+  oobHandedOverWithin(runId: string, ms: number, now = Date.now()): boolean {
+    const at = this.oobHandOvers.get(runId);
+    return at !== undefined && now - at <= ms;
+  }
 
   constructor(private state: DurableObjectState) {
     this.delivery = new DeliveryTracker(state);

@@ -5,9 +5,10 @@
 
 import { Env } from '../env';
 import { BaseService } from './base';
+import { OOB_PENDING_DAYS } from './scans';
 
 export interface ICleanupRepository {
-  cleanupSecurityTables(): Promise<{ challenges: number; wsTickets: number; rateLimits: number; loginHistory: number; auditLogs: number }>;
+  cleanupSecurityTables(): Promise<{ challenges: number; wsTickets: number; rateLimits: number; loginHistory: number; auditLogs: number; oobPending: number }>;
   getExpiredGuestUsers(): Promise<{ id: string; username: string }[]>;
   getProjectsOwnedByUser(userId: string): Promise<string[]>;
   deleteGuestUserData(userId: string, projectIds: string[], username: string): Promise<void>;
@@ -26,8 +27,8 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
     super(env);
   }
 
-  async cleanupSecurityTables(): Promise<{ challenges: number; wsTickets: number; rateLimits: number; loginHistory: number; auditLogs: number }> {
-    const [challengesRes, usedPasskeyRes, wsTicketsRes, rateLimitsRes, historyRes, auditRes] = await Promise.all([
+  async cleanupSecurityTables(): Promise<{ challenges: number; wsTickets: number; rateLimits: number; loginHistory: number; auditLogs: number; oobPending: number }> {
+    const [challengesRes, usedPasskeyRes, wsTicketsRes, rateLimitsRes, historyRes, auditRes, oobPendingRes] = await Promise.all([
       this.db.prepare("DELETE FROM login_challenges WHERE expires_at < datetime('now')").run(),
       // Login challenges expire after 5 minutes, so a day-old spent marker can never matter again.
       this.db.prepare("DELETE FROM used_passkey_challenges WHERE used_at < datetime('now', '-1 day')").run(),
@@ -36,6 +37,8 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
       this.db.prepare("DELETE FROM rate_limits WHERE reset_at < datetime('now')").run(),
       this.db.prepare("DELETE FROM user_login_history WHERE created_at < datetime('now', '-90 days')").run(),
       this.db.prepare("DELETE FROM audit_logs WHERE timestamp < datetime('now', '-45 days')").run(),
+      // OOB tokens past the window a late callback is still reported in (recordLateOobCallback).
+      this.db.prepare(`DELETE FROM oob_pending WHERE created_at < datetime('now', '-${OOB_PENDING_DAYS} days')`).run(),
     ]);
 
     return {
@@ -44,6 +47,7 @@ export class CleanupRepository extends BaseService<Env | { DB: D1Database }> imp
       rateLimits: rateLimitsRes.meta?.changes || 0,
       loginHistory: historyRes.meta?.changes || 0,
       auditLogs: auditRes.meta?.changes || 0,
+      oobPending: oobPendingRes.meta?.changes || 0,
     };
   }
 

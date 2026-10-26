@@ -189,18 +189,24 @@ func (g *Generator) fallbackRandom(propName string) any {
 	return payloads.RandomString(payloads.IntRange(3, 10))
 }
 
-func (g *Generator) oobURL(uuidStr string) string {
-	baseURL := g.oobServerURL
-	if baseURL == "" {
-		baseURL = "http://localhost:8080/api/oob"
-	} else {
-		if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
-			baseURL = "http://" + baseURL
-		}
-		if !strings.Contains(baseURL, "/api/oob") {
-			baseURL = strings.TrimRight(baseURL, "/") + "/api/oob"
-		}
+// OOBBaseURL is the callback base an OOB payload uses for a configured OOB server URL: a missing
+// scheme becomes http, and the coordinator's /api/oob route is appended when absent. Compare OOB
+// servers through it, as payloads see them.
+func OOBBaseURL(server string) string {
+	if server == "" {
+		return "http://localhost:8080/api/oob"
 	}
+	if !strings.HasPrefix(server, "http://") && !strings.HasPrefix(server, "https://") {
+		server = "http://" + server
+	}
+	if !strings.Contains(server, "/api/oob") {
+		server = strings.TrimRight(server, "/") + "/api/oob"
+	}
+	return strings.TrimRight(server, "/")
+}
+
+func (g *Generator) oobURL(uuidStr string) string {
+	baseURL := OOBBaseURL(g.oobServerURL)
 	if g.RunID != "" {
 		return fmt.Sprintf("%s/%s/%s", strings.TrimRight(baseURL, "/"), g.RunID, uuidStr)
 	}

@@ -522,8 +522,9 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		return
 	}
 	runCfg.RunID = dispatch.RunID
+	coordinatorOOB := inferOOBServerURL(d.coordinatorURL)
 	if runCfg.Settings.OOBServerURL == "" {
-		runCfg.Settings.OOBServerURL = inferOOBServerURL(d.coordinatorURL)
+		runCfg.Settings.OOBServerURL = coordinatorOOB
 	}
 
 	var client *http.Client
@@ -533,6 +534,10 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		client = safenet.NewSafeHTTPClient(time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond)
 	}
 	r := runner.New(runCfg, client)
+	if callbacksReachCoordinator(runCfg.Settings.OOBServerURL, coordinatorOOB) {
+		// The coordinator can still report a callback that arrives after the run ends.
+		r.HandOverOOBTokens()
+	}
 
 	d.activeRunnersMu.Lock()
 	if d.held.Load() {
