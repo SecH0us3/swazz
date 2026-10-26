@@ -16,8 +16,11 @@ const mockUpdateScanStatus = vi.fn();
 const mockLogError = vi.fn();
 const mockLogWarn = vi.fn();
 
+const mockStoreOobPending = vi.fn();
+
 vi.mock('../../../src/repositories/scans', () => {
   return {
+    sanitizeOobPending: (data: any) => (Array.isArray(data?.tokens) ? data.tokens.map((t: any) => ({ token: t.uuid, endpoint: t.endpoint, payload: t.payload })) : []),
     ScansRepository: vi.fn().mockImplementation(function () {
       return {
         getCachedSwaggerDetails: mockGetCachedSwaggerDetails,
@@ -48,12 +51,14 @@ describe('WebSocketHandler', () => {
 
     mockGetActiveScans.mockResolvedValue([]);
     mockUpdateScanStatus.mockResolvedValue(true);
+    mockStoreOobPending.mockResolvedValue(undefined);
     (ScansRepository as any).mockImplementation(function () {
       return {
         getCachedSwaggerDetails: mockGetCachedSwaggerDetails,
         upsertSwaggerCache: mockUpsertSwaggerCache,
         getActiveScans: mockGetActiveScans,
         updateScanStatus: mockUpdateScanStatus,
+        storeOobPending: mockStoreOobPending,
       };
     });
 
@@ -246,6 +251,36 @@ describe('WebSocketHandler', () => {
       payload: msg.payload
     });
     expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(msg.payload));
+  });
+
+  // A run's handed-over OOB tokens are stored at once (a callback can follow within seconds), the
+  // run is noted as handing over, and the dashboard does not get them.
+  it('stores handed-over OOB tokens directly and does not broadcast them', async () => {
+    mockEnv.JWT_SECRET = 'prod-secret';
+    mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-oob'] });
+    const stateManager = new StateManager(mockState);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, new QueueService(mockEnv, mockState, stateManager));
+    stateManager.clients.set('run-oob', new Set([mockClientWs]));
+
+    const payload = { type: 'oob_pending', data: { tokens: [{ uuid: 'tok-1', endpoint: 'GET /a', payload: 'p' }] } };
+    await handler.handleMessage(mockWs, JSON.stringify({ type: 'event', runId: 'run-oob', payload }));
+
+    expect(mockStoreOobPending).toHaveBeenCalledWith('run-oob', [{ token: 'tok-1', endpoint: 'GET /a', payload: 'p' }]);
+    expect(stateManager.oobHandedOverWithin('run-oob', 60_000)).toBe(true);
+    expect(mockEnv.FINDINGS_QUEUE.send).toHaveBeenCalled();
+    expect(mockClientWs.send).not.toHaveBeenCalled();
+  });
+
+  it('ignores handed-over OOB tokens for a run the runner does not own', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-mine'] });
+    const stateManager = new StateManager(mockState);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, new QueueService(mockEnv, mockState, stateManager));
+    const payload = { type: 'oob_pending', data: { tokens: [{ uuid: 'tok-1' }] } };
+    await handler.handleMessage(mockWs, JSON.stringify({ type: 'event', runId: 'run-other', payload }));
+    expect(mockStoreOobPending).not.toHaveBeenCalled();
+    expect(stateManager.oobHandedOverWithin('run-other', 60_000)).toBe(false);
   });
 
   it('should persist events to D1 directly in local dev (test-secret) and broadcast to clients', async () => {

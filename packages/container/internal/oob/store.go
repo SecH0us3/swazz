@@ -6,9 +6,13 @@
 package oob
 
 import (
+	"fmt"
+	"strings"
+	"sync"
+	"unicode/utf8"
+
 	"swazz-engine/internal/boundedmap"
 	"swazz-engine/internal/swagger"
-	"sync"
 )
 
 // DefaultMaxEntries bounds a run's OOB store. Every OOB payload registers a token that waits for a
@@ -23,6 +27,18 @@ type OOBContext struct {
 	Payload   any
 	Request   *swagger.RequestLog
 }
+
+// PendingToken is a token still waiting for its callback when the run ends, handed to the
+// coordinator so a later callback can still be reported.
+type PendingToken struct {
+	UUID     string `json:"uuid"`
+	Endpoint string `json:"endpoint"`
+	Payload  string `json:"payload"`
+}
+
+// MaxPendingFieldBytes bounds a pending token's endpoint and payload: they only name the probe in
+// a finding.
+const MaxPendingFieldBytes = 256
 
 // Store tracks the OOB tokens one run has sent, until the target calls back. Each run owns its
 // own store (runner.Runner): a store shared by concurrent runs lets one run's start or end wipe
@@ -110,4 +126,73 @@ func (s *Store) Size() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.m.Len()
+}
+
+// TakePending removes and returns at most n tokens still waiting for a callback, the most recently
+// registered first, with their endpoint and payload cut to MaxPendingFieldBytes. A callback for a
+// taken token is no longer matched here: whoever took it reports it.
+func (s *Store) TakePending(n int) []PendingToken {
+	if s == nil {
+		return nil
+	}
+	type taken struct {
+		uuid string
+		ctx  *OOBContext
+	}
+	s.mu.Lock()
+	keys := s.m.NewestKeys(n)
+	all := make([]taken, 0, len(keys))
+	for _, k := range keys {
+		if ctx, _ := s.m.Delete(k); ctx != nil {
+			all = append(all, taken{k, ctx})
+		}
+	}
+	s.mu.Unlock()
+
+	// Formatted outside the lock: callbacks and registrations must not wait on it.
+	out := make([]PendingToken, 0, len(all))
+	for _, t := range all {
+		out = append(out, PendingToken{
+			UUID:     t.uuid,
+			Endpoint: cutUTF8(t.ctx.Endpoint, MaxPendingFieldBytes),
+			Payload:  cutUTF8(payloadText(t.ctx.Payload), MaxPendingFieldBytes),
+		})
+	}
+	return out
+}
+
+// payloadText is a payload as text. A string payload, the usual case, is used as is; anything
+// else is formatted, up to a bound past which the cut drops it anyway.
+func payloadText(p any) string {
+	if s, ok := p.(string); ok {
+		return s
+	}
+	w := &cappedWriter{limit: MaxPendingFieldBytes + utf8.UTFMax}
+	_, _ = fmt.Fprint(w, p)
+	return w.b.String()
+}
+
+// cappedWriter keeps the first limit bytes written to it and discards the rest.
+type cappedWriter struct {
+	b     strings.Builder
+	limit int
+}
+
+func (w *cappedWriter) Write(p []byte) (int, error) {
+	if room := w.limit - w.b.Len(); room > 0 {
+		w.b.Write(p[:min(room, len(p))])
+	}
+	return len(p), nil
+}
+
+// cutUTF8 cuts s to at most n bytes without splitting a character.
+func cutUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	// A rune is at most UTFMax bytes: backing off further would only eat invalid bytes.
+	for i := 0; i < utf8.UTFMax-1 && n > 0 && !utf8.RuneStart(s[n]); i++ {
+		n--
+	}
+	return s[:n]
 }

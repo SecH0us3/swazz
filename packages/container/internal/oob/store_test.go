@@ -6,8 +6,11 @@
 package oob
 
 import (
-	"swazz-engine/internal/swagger"
+	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"swazz-engine/internal/swagger"
 )
 
 func TestOOBStore(t *testing.T) {
@@ -148,5 +151,74 @@ func TestStore_OnFirstDropOncePerClear(t *testing.T) {
 	s.RegisterUUID("e", &OOBContext{})
 	if calls != 2 {
 		t.Fatalf("handler ran %d times after Clear, want 2", calls)
+	}
+}
+
+// TakePending takes the waiting tokens out, newest first, with long fields cut on a character
+// boundary.
+func TestStore_TakePending(t *testing.T) {
+	s := NewStoreWithLimit(10)
+	if got := s.TakePending(5); len(got) != 0 {
+		t.Fatalf("empty store gave %v", got)
+	}
+	s.RegisterUUID("a", &OOBContext{Endpoint: "GET /a", Payload: "p"})
+	s.RegisterUUID("b", &OOBContext{Endpoint: "GET /" + strings.Repeat("é", MaxPendingFieldBytes), Payload: map[string]any{"k": 1}})
+	s.RegisterUUID("c", &OOBContext{Endpoint: "GET /c", Payload: "c"})
+	s.GetAndRemoveUUID("c") // answered: not pending
+	got := s.TakePending(1)
+	if len(got) != 1 || got[0].UUID != "b" {
+		t.Fatalf("TakePending(1) = %+v, want b", got)
+	}
+	if _, ok := s.GetAndRemoveUUID("b"); ok {
+		t.Error("a taken token is still matched")
+	}
+	s.RegisterUUID("b", &OOBContext{Endpoint: "GET /" + strings.Repeat("é", MaxPendingFieldBytes), Payload: map[string]any{"k": 1}})
+	got = s.TakePending(5)
+	if len(got) != 2 || got[0].UUID != "b" || got[1].UUID != "a" {
+		t.Fatalf("Pending = %+v, want b then a", got)
+	}
+	if len(got[0].Endpoint) > MaxPendingFieldBytes || !utf8.ValidString(got[0].Endpoint) {
+		t.Errorf("endpoint of %d bytes not cut cleanly", len(got[0].Endpoint))
+	}
+	if got[0].Payload != "map[k:1]" {
+		t.Errorf("payload = %q", got[0].Payload)
+	}
+	if s.Size() != 0 {
+		t.Errorf("%d tokens left after taking all", s.Size())
+	}
+	var nilStore *Store
+	if nilStore.TakePending(3) != nil {
+		t.Error("nil store has pending tokens")
+	}
+}
+
+// A cut keeps everything before the limit, even after an invalid byte.
+func TestCutUTF8(t *testing.T) {
+	s := "ab\xffcd" + strings.Repeat("é", 10)
+	if got := cutUTF8(s, 9); len(got) != 9 && len(got) != 8 {
+		t.Fatalf("cut to %d bytes: %q", len(got), got)
+	}
+	if got := cutUTF8("ééé", 3); got != "é" {
+		t.Fatalf("cutUTF8 split a character: %q", got)
+	}
+	if got := cutUTF8(strings.Repeat("\x80", 300), 256); len(got) < 256-utf8.UTFMax {
+		t.Fatalf("continuation bytes cut to %d bytes", len(got))
+	}
+	if got := cutUTF8("abc", 10); got != "abc" {
+		t.Fatalf("short string changed: %q", got)
+	}
+}
+
+// A large non-string payload is formatted only as far as it is kept.
+func TestPayloadText_Bounded(t *testing.T) {
+	big := make([]string, 10_000)
+	for i := range big {
+		big[i] = "xxxxxxxx"
+	}
+	if got := payloadText(big); len(got) > MaxPendingFieldBytes+utf8.UTFMax {
+		t.Fatalf("formatted %d bytes", len(got))
+	}
+	if got := payloadText("plain"); got != "plain" {
+		t.Fatalf("string payload = %q", got)
 	}
 }

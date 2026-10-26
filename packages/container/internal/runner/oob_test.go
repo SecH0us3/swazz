@@ -6,10 +6,15 @@
 package runner
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/swagger"
 )
@@ -132,4 +137,90 @@ func TestHandleOOBTrigger_NotFound(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		// OK
 	}
+}
+
+// A run that ends with OOB tokens still unanswered hands them over in batches, before its end
+// event: the coordinator accepts none of the run's events after that.
+func TestFinalise_HandsOverPendingOOBTokensBeforeComplete(t *testing.T) {
+	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
+	defer r.Close()
+	r.HandOverOOBTokens()
+	_, err := r.initRun(context.Background())
+	require.NoError(t, err)
+	for i := range oobPendingBatchSize + 5 {
+		r.oobStore.RegisterUUID(fmt.Sprintf("tok-%d", i), &oob.OOBContext{Endpoint: "GET /a", Payload: "http://x/{{OOB_URL}}"})
+	}
+	sub := r.Subscribe()
+	r.finaliseRun()
+
+	types, _ := runEvents(t, sub)
+	require.Contains(t, types, EventComplete)
+	complete := 0
+	for i, typ := range types {
+		if typ == EventComplete {
+			complete = i
+		}
+	}
+	batches := 0
+	for i, typ := range types {
+		if typ == EventOOBPending {
+			batches++
+			assert.Less(t, i, complete, "a batch came after the end event")
+		}
+	}
+	assert.Equal(t, 2, batches)
+}
+
+func TestFinalise_NoPendingOOBEventWithoutTokens(t *testing.T) {
+	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
+	defer r.Close()
+	r.HandOverOOBTokens()
+	_, err := r.initRun(context.Background())
+	require.NoError(t, err)
+	sub := r.Subscribe()
+	r.finaliseRun()
+	types, _ := runEvents(t, sub)
+	assert.NotContains(t, types, EventOOBPending)
+}
+
+// A run whose callbacks do not reach the coordinator (CLI mode, another OOB server) hands nothing
+// over: nothing could report a later callback.
+func TestFinalise_NoHandOverUnlessEnabled(t *testing.T) {
+	r := New(&swagger.Config{Endpoints: []swagger.EndpointConfig{{Method: "GET", Path: "/a"}}}, nil)
+	defer r.Close()
+	_, err := r.initRun(context.Background())
+	require.NoError(t, err)
+	r.oobStore.RegisterUUID("tok", &oob.OOBContext{Endpoint: "GET /a"})
+	sub := r.Subscribe()
+	r.finaliseRun()
+	types, _ := runEvents(t, sub)
+	assert.NotContains(t, types, EventOOBPending)
+}
+
+// The worst-case batch, every byte escaped by JSON, stays under the coordinator's 128 KB message
+// limit, with room for the event envelope.
+func TestOOBPendingBatch_FitsTheCoordinatorMessageLimit(t *testing.T) {
+	tokens := make([]oob.PendingToken, oobPendingBatchSize)
+	for i := range tokens {
+		tokens[i] = oob.PendingToken{
+			UUID:     "00000000-0000-4000-8000-000000000000",
+			Endpoint: strings.Repeat("<", oob.MaxPendingFieldBytes),
+			Payload:  strings.Repeat("<", oob.MaxPendingFieldBytes),
+		}
+	}
+	b, err := json.Marshal(Event{Type: EventOOBPending, Data: OOBPendingBatch{Tokens: tokens}})
+	require.NoError(t, err)
+	assert.Less(t, len(b), 112*1024)
+}
+
+// The announcement is an empty batch, and only a run that hands over sends it.
+func TestAnnounceOOBHandOver(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+	defer r.Close()
+	sub := r.Subscribe()
+	r.announceOOBHandOver()
+	r.HandOverOOBTokens()
+	r.announceOOBHandOver()
+	types, _ := runEvents(t, sub)
+	assert.Equal(t, []string{EventOOBPending}, types)
 }

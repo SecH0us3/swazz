@@ -619,3 +619,21 @@ func TestResolveCoordinatorURL(t *testing.T) {
 	})
 }
 
+// OOB servers are compared as payloads use them, so a configured URL that reaches the
+// coordinator's OOB route still hands its run's tokens over.
+func TestCallbacksReachCoordinator(t *testing.T) {
+	coord := inferOOBServerURL("wss://Coord.Example/api/runners/connect")
+	for _, server := range []string{coord, "https://coord.example/", "https://coord.example/api/oob", "https://COORD.example/api/oob/"} {
+		if !callbacksReachCoordinator(server, coord) {
+			t.Errorf("%q does not reach the coordinator %q", server, coord)
+		}
+	}
+	for _, server := range []string{"", "https://oob.attacker.example", "http://coord.example", "https://coord.example/other/api/oob"} {
+		if callbacksReachCoordinator(server, coord) {
+			t.Errorf("%q counted as the coordinator %q", server, coord)
+		}
+	}
+	if callbacksReachCoordinator("https://coord.example", "") {
+		t.Error("matched without a coordinator")
+	}
+}

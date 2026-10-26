@@ -192,6 +192,8 @@ type Runner struct {
 	// several scans at once, and each must only ever clear or match its own.
 	oobStore  *oob.Store
 	sstiStore *sstistore.Store
+	// handOverOOB: the run's unanswered OOB tokens go to the coordinator when it ends (oob.go).
+	handOverOOB atomic.Bool
 
 	mcpClient      mcp.Client
 	mcpMutex       sync.Mutex
@@ -484,6 +486,7 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	// Wait a brief grace period for any late OOB network interactions to complete
 	if !r.stopped() && r.oobStore.Size() > 0 {
+		r.announceOOBHandOver()
 		logger.Info("Waiting a 5-second grace period for pending OOB interactions...")
 		select {
 		case <-runCtx.Done():
