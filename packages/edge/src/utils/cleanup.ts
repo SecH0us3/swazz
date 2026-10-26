@@ -93,7 +93,7 @@ export async function cleanupScheduledDeletions(env: Env, ctx?: any): Promise<vo
       try {
         const doId = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(doId);
-        const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, {
+        const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${encodeURIComponent(userId)}`, {
           method: 'POST'
         }));
         if (!doRes.ok) {

@@ -63,6 +63,8 @@ describe('MCP Routes', () => {
       const res = await app.request('/api/mcp/sse');
       expect(res.status).toBe(200);
       expect(await res.text()).toBe('sse-stream');
+      // The connection is opened for the caller, who alone may send on it.
+      expect(new URL(mockStub.fetch.mock.calls[0][0].url).searchParams.get('userId')).toBe('user-123');
       expect(mockCoordinatorDo.idFromName).toHaveBeenCalledWith('global-coordinator');
       expect(mockCoordinatorDo.get).toHaveBeenCalled();
     });
@@ -357,6 +359,8 @@ describe('MCP Routes', () => {
     });
 
     it('should call handleMcpJsonRpc and forward output to Durable Object connection', async () => {
+      mockStub.fetch.mockImplementation(async (req: Request) =>
+        new URL(req.url).pathname === '/sse-owner' ? new Response(null, { status: 204 }) : new Response('Sent'));
       const payload = {
         jsonrpc: '2.0',
         id: 1,
@@ -370,12 +374,72 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(202);
-      expect(mockStub.fetch).toHaveBeenCalled();
-      const calledRequest = mockStub.fetch.mock.calls[0][0];
+      expect(mockStub.fetch).toHaveBeenCalledTimes(2);
+      const owner = new URL(mockStub.fetch.mock.calls[0][0].url);
+      expect(owner.pathname).toBe('/sse-owner');
+      expect(owner.searchParams.get('connectionId')).toBe('conn-123');
+      expect(owner.searchParams.get('userId')).toBe('user-123');
+      const calledRequest = mockStub.fetch.mock.calls[1][0];
       const url = new URL(calledRequest.url);
       expect(url.pathname).toBe('/sse-send');
       expect(url.searchParams.get('connectionId')).toBe('conn-123');
+      expect(url.searchParams.get('userId')).toBe('user-123');
       expect(calledRequest.method).toBe('POST');
+    });
+
+    it("refuses someone else's connection before running anything", async () => {
+      mockStub.fetch.mockResolvedValue(new Response('Connection not found', { status: 404 }));
+      const fetchSpy = vi.spyOn(app, 'fetch');
+      const res = await app.request('/api/mcp/message?connectionId=conn-123', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_scans', arguments: {} } })
+      });
+
+      expect(res.status).toBe(404);
+      expect(mockStub.fetch).toHaveBeenCalledTimes(1);
+      expect(new URL(mockStub.fetch.mock.calls[0][0].url).pathname).toBe('/sse-owner');
+      // Only the outer request went through the app: the tool call never ran.
+      expect(fetchSpy.mock.calls.filter(([r]) => new URL((r as Request).url).pathname === '/api/mcp/call')).toHaveLength(0);
+    });
+
+    it('tells the caller when the connection closed before the answer was sent', async () => {
+      mockStub.fetch.mockImplementation(async (req: Request) =>
+        new URL(req.url).pathname === '/sse-owner' ? new Response(null, { status: 204 }) : new Response('Connection closed', { status: 410 }));
+      const res = await app.request('/api/mcp/message?connectionId=conn-123', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })
+      });
+      expect(res.status).toBe(410);
+    });
+
+    it('reports a coordinator failure as one, not as a missing connection', async () => {
+      mockStub.fetch.mockResolvedValueOnce(new Response('boom', { status: 500 }));
+      const failed = await app.request('/api/mcp/message?connectionId=conn-123', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })
+      });
+      expect(failed.status).toBe(502);
+
+      mockStub.fetch.mockRejectedValueOnce(new Error('reset'));
+      const thrown = await app.request('/api/mcp/message?connectionId=conn-123', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })
+      });
+      expect(thrown.status).toBe(502);
+    });
+
+    it('keeps a crafted connectionId out of the coordinator query', async () => {
+      const res = await app.request(`/api/mcp/message?connectionId=${encodeURIComponent('conn&userId=victim')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })
+      });
+      expect(res.status).toBe(400);
+      expect(mockStub.fetch).not.toHaveBeenCalled();
     });
   });
 

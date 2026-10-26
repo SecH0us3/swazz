@@ -8,6 +8,7 @@ import { Env, AppEnv } from '../env';
 import { mcpTools } from '../utils/mcp';
 import { getUserIdFromRequest, queryApiKey, requestToken } from '../utils/auth';
 import { errorStatus } from '../utils/http';
+import { logError } from '../../../common/logging/logger';
 import { ValidationError, isValidId, LIMITS, readJsonBody, reqString } from '../utils/validation';
 
 async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promise<any> {
@@ -144,6 +145,20 @@ async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promis
   };
 }
 
+/** The status of a coordinator call (0 if it failed outright); its body is not needed. */
+async function coordinatorCall(c: any, stub: { fetch(req: Request): Promise<Response> }, req: Request): Promise<number> {
+  try {
+    const res = await stub.fetch(req);
+    await res.body?.cancel();
+    return res.status;
+  } catch (err) {
+    let executionCtx: unknown;
+    try { executionCtx = c.executionCtx; } catch { /* none outside a Worker request */ }
+    logError({ env: c.env, executionCtx }, 'MCP', 'Coordinator call failed', { error: err, path: new URL(req.url).pathname });
+    return 0;
+  }
+}
+
 export function registerMcpRoutes(app: Hono<AppEnv>) {
   app.get('/api/mcp/sse', async (c) => {
     const userId = await getUserIdFromRequest(c);
@@ -163,7 +178,8 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
       origin = 'http://localhost:8787';
     }
 
-    const doRes = await stub.fetch(new Request(`http://localhost/sse?connectionId=${connectionId}&origin=${encodeURIComponent(origin)}`));
+    // The connection is the caller's: only their messages are answered on it (handlers/sse.ts).
+    const doRes = await stub.fetch(new Request(`http://localhost/sse?connectionId=${connectionId}&userId=${encodeURIComponent(userId)}&origin=${encodeURIComponent(origin)}`));
     return doRes;
   });
 
@@ -202,14 +218,26 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
 
+    // Only the user who opened the connection may send on it, and nothing runs before that is
+    // known: someone else's connection is answered like one that does not exist.
+    const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(doId);
+    const owner = `connectionId=${encodeURIComponent(connectionId)}&userId=${encodeURIComponent(userId)}`;
+    const check = await coordinatorCall(c, stub, new Request(`http://localhost/sse-owner?${owner}`));
+    if (check !== 204) {
+      return check === 404 ? c.json({ error: 'Connection not found' }, 404) : c.json({ error: 'Coordinator unavailable' }, 502);
+    }
+
     const responsePayload = await handleMcpJsonRpc(body, c, app);
     if (responsePayload) {
-      const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-      const stub = c.env.COORDINATOR_DO.get(doId);
-      await stub.fetch(new Request(`http://localhost/sse-send?connectionId=${connectionId}`, {
+      // The connection can close while the call runs; its answer is then lost, and the caller is
+      // told so rather than left waiting for it.
+      const sent = await coordinatorCall(c, stub, new Request(`http://localhost/sse-send?${owner}`, {
         method: 'POST',
         body: JSON.stringify(responsePayload)
       }));
+      if (sent === 404 || sent === 410) return c.json({ error: 'The call ran, but the connection closed before its answer could be sent' }, 410);
+      if (sent !== 200) return c.json({ error: 'Coordinator unavailable' }, 502);
     }
 
     return new Response('Accepted', { status: 202 });

@@ -31,7 +31,8 @@ export class StateManager {
   pendingParseUrls = new Map<string, string>();
   // The runner each parse request went to; only that runner may answer it.
   pendingParseRunners = new Map<string, WebSocket>();
-  sseStreams = new Map<string, ReadableStreamDefaultController>();
+  // MCP SSE connections, each with the user who opened it (handlers/sse.ts).
+  sseStreams = new Map<string, { controller: ReadableStreamDefaultController; userId: string }>();
   // Runs that handed their unanswered OOB tokens over lately (run id -> when), oldest first: a
   // callback for one may come before its tokens are in D1 (handlers/oob.ts). In memory, bounded.
   oobHandOvers = new Map<string, number>();

@@ -7,7 +7,7 @@ import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
 import { RouteHandler } from './handlers/types';
-import { SseHandler, SseSendHandler } from './handlers/sse';
+import { SseHandler, SseSendHandler, SseOwnerHandler } from './handlers/sse';
 import { RevokeUserHandler } from './handlers/users';
 import { DispatchHandler, CommandHandler, StartRunHandler, ControlRunHandler } from './handlers/jobs';
 import { ParseHandler } from './handlers/parse';
@@ -28,6 +28,7 @@ export class RequestHandler {
     this.routes = new Map<string, RouteHandler>([
       ['/sse', new SseHandler()],
       ['/sse-send', new SseSendHandler()],
+      ['/sse-owner', new SseOwnerHandler()],
       ['/revoke-user', new RevokeUserHandler()],
       ['/dispatch', new DispatchHandler()],
       ['/command', new CommandHandler()],

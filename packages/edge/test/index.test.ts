@@ -3535,6 +3535,30 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(resChunkStr).toContain("data: {");
       expect(resChunkStr).toContain('"id":42');
       expect(resChunkStr).toContain("swazz_list_projects");
+
+      // 5. Another user cannot write into this connection: it is answered like a missing one.
+      const otherId = `u_mcp_other_${Math.floor(Math.random() * 1000000)}`;
+      const otherKey = `swazz_live_mcpo_${Math.floor(Math.random() * 1000000)}`;
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(otherId, `user_${otherId}`, "hash", await hashApiKey(otherKey)).run();
+      const forged = await appFetchWrapper(new Request(`http://localhost/api/mcp/message?connectionId=${connectionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${otherKey}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 43, method: "tools/list" })
+      }), testEnv);
+      expect(forged.status).toBe(404);
+
+      // The owner's connection still works, and carries nothing from the other user.
+      const again = await appFetchWrapper(new Request(`http://localhost/api/mcp/message?connectionId=${connectionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 44, method: "tools/list" })
+      }), testEnv);
+      expect(again.status).toBe(202);
+      const next = new TextDecoder().decode((await reader.read()).value);
+      expect(next).toContain('"id":44');
+      expect(next).not.toContain('"id":43');
+      await reader.cancel();
     });
 
     it("enforces scan ownership BOLA on retrieving/triaging specific standalone scan findings", async () => {

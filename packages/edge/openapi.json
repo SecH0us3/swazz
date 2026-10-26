@@ -1989,6 +1989,15 @@
           },
           "401": {
             "description": "Unauthorized"
+          },
+          "404": {
+            "description": "No such connection, or one opened by another user"
+          },
+          "410": {
+            "description": "The connection closed before the answer could be sent"
+          },
+          "502": {
+            "description": "The coordinator could not be reached"
           }
         },
         "tags": [
