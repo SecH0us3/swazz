@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"swazz-engine/internal/swagger"
 )
 
 type EndpointSizeBaseline struct {
@@ -60,6 +62,9 @@ func (r *Runner) recordSizeBaseline(method, path string, size int64) {
 }
 
 func (r *Runner) getSizeBaselineMedian(method, path string) int64 {
+	if r.sizeBaselines == nil {
+		return 0
+	}
 	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
 	val, ok := r.sizeBaselines.Load(key)
 	if !ok {
@@ -116,10 +121,27 @@ func (r *Runner) recordTimeBaseline(method, path string, t int64) {
 }
 
 func (r *Runner) getTimeBaselineMedian(method, path string) int64 {
+	if r.timeBaselines == nil {
+		return 0
+	}
 	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
 	val, ok := r.timeBaselines.Load(key)
 	if !ok {
 		return 0
 	}
 	return val.(*EndpointTimeBaseline).getMedian()
+}
+
+// anomalyBaselines returns what the size and timing analyzers compare one response of an endpoint
+// against: the endpoint's median size (for MALICIOUS payloads only), the size multiplier, and its
+// median duration. The RANDOM profile records both medians under the endpoint's method and path.
+func (r *Runner) anomalyBaselines(method, path string, profile swagger.FuzzingProfile, settings swagger.Settings) (baselineSize int64, multiplier float64, baselineTime int64) {
+	if profile == swagger.ProfileMalicious {
+		baselineSize = r.getSizeBaselineMedian(method, path)
+	}
+	multiplier = settings.ResponseSizeAnomalyMultiplier
+	if multiplier <= 0 {
+		multiplier = 5.0
+	}
+	return baselineSize, multiplier, r.getTimeBaselineMedian(method, path)
 }

@@ -448,6 +448,7 @@ func TestExecuteWebSocketRequest(t *testing.T) {
 		"ws://127.0.0.1:59998",
 		"/chat",
 		"/chat",
+		"WS",
 		map[string]string{"message": "hello"},
 		swagger.ProfileRandom,
 		nil,
