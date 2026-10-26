@@ -216,7 +216,7 @@ describe('RequestHandler', () => {
 
       const res = await handler.handle(new Request('http://localhost/revoke-user?userId=gone'));
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ disconnectedCount: 1 });
+      expect(await res.json()).toEqual({ disconnectedCount: 0, sseClosed: 1 });
       expect(mine.close).toHaveBeenCalled();
       expect(theirs.close).not.toHaveBeenCalled();
       expect([...stateManager.sseStreams.keys()]).toEqual(['c2']);

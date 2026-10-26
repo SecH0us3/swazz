@@ -28,7 +28,10 @@ export class RevokeUserHandler implements RouteHandler {
       }
     }
 
-    // The user's MCP SSE connections end with the account too.
+    // The user's MCP SSE connections end with the account too. (Counted apart: disconnectedCount
+    // is the runners'.) One the user opens after this, while other isolates have not yet seen the
+    // deletion, is a non-goal: it ends when the account is purged.
+    let sseClosed = 0;
     for (const [connectionId, stream] of context.stateManager.sseStreams) {
       if (stream.userId !== userId) continue;
       try {
@@ -37,10 +40,10 @@ export class RevokeUserHandler implements RouteHandler {
         // already closed
       }
       context.stateManager.sseStreams.delete(connectionId);
-      disconnectedCount++;
+      sseClosed++;
     }
 
-    return new Response(JSON.stringify({ disconnectedCount }), {
+    return new Response(JSON.stringify({ disconnectedCount, sseClosed }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

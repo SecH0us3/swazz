@@ -8,6 +8,7 @@ import { Env, AppEnv } from '../env';
 import { mcpTools } from '../utils/mcp';
 import { getUserIdFromRequest, queryApiKey, requestToken } from '../utils/auth';
 import { errorStatus } from '../utils/http';
+import { logError } from '../../../common/logging/logger';
 import { ValidationError, isValidId, LIMITS, readJsonBody, reqString } from '../utils/validation';
 
 async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promise<any> {
@@ -145,12 +146,15 @@ async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promis
 }
 
 /** The status of a coordinator call (0 if it failed outright); its body is not needed. */
-async function coordinatorCall(stub: { fetch(req: Request): Promise<Response> }, req: Request): Promise<number> {
+async function coordinatorCall(c: any, stub: { fetch(req: Request): Promise<Response> }, req: Request): Promise<number> {
   try {
     const res = await stub.fetch(req);
     await res.body?.cancel();
     return res.status;
-  } catch {
+  } catch (err) {
+    let executionCtx: unknown;
+    try { executionCtx = c.executionCtx; } catch { /* none outside a Worker request */ }
+    logError({ env: c.env, executionCtx }, 'MCP', 'Coordinator call failed', { error: err, path: new URL(req.url).pathname });
     return 0;
   }
 }
@@ -219,7 +223,7 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
     const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
     const stub = c.env.COORDINATOR_DO.get(doId);
     const owner = `connectionId=${encodeURIComponent(connectionId)}&userId=${encodeURIComponent(userId)}`;
-    const check = await coordinatorCall(stub, new Request(`http://localhost/sse-owner?${owner}`));
+    const check = await coordinatorCall(c, stub, new Request(`http://localhost/sse-owner?${owner}`));
     if (check !== 204) {
       return check === 404 ? c.json({ error: 'Connection not found' }, 404) : c.json({ error: 'Coordinator unavailable' }, 502);
     }
@@ -228,11 +232,11 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
     if (responsePayload) {
       // The connection can close while the call runs; its answer is then lost, and the caller is
       // told so rather than left waiting for it.
-      const sent = await coordinatorCall(stub, new Request(`http://localhost/sse-send?${owner}`, {
+      const sent = await coordinatorCall(c, stub, new Request(`http://localhost/sse-send?${owner}`, {
         method: 'POST',
         body: JSON.stringify(responsePayload)
       }));
-      if (sent === 404 || sent === 410) return c.json({ error: 'Connection closed before the answer could be sent' }, 410);
+      if (sent === 404 || sent === 410) return c.json({ error: 'The call ran, but the connection closed before its answer could be sent' }, 410);
       if (sent !== 200) return c.json({ error: 'Coordinator unavailable' }, 502);
     }
 

@@ -547,7 +547,7 @@ export class AuthService implements IAuthService {
     try {
       const doId = this.env.COORDINATOR_DO.idFromName('global-coordinator');
       const stub = this.env.COORDINATOR_DO.get(doId);
-      await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, { method: 'POST' }));
+      await stub.fetch(new Request(`http://do/revoke-user?userId=${encodeURIComponent(userId)}`, { method: 'POST' }));
     } catch {}
 
     return { status: 'deletion_scheduled', eta_days: 7 };
