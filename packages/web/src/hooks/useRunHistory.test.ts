@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useRunHistory } from './useRunHistory.js';
+import { useRunHistory, withFallbackNote } from './useRunHistory.js';
 import type { ResultSummary } from './useRunner.js';
 
 describe('useRunHistory', () => {
@@ -396,5 +396,16 @@ describe('useRunHistory', () => {
         expect(result.current.handleExport).toBe(initialExport);
         expect(result.current.handleLoadRun).toBe(initialLoadRun);
         expect(result.current.handleDeleteRun).toBe(initialDeleteRun);
+    });
+});
+
+describe('withFallbackNote', () => {
+    it('tells the report reader why the summary is rule-based', () => {
+        expect(withFallbackNote({ summary: 'Body', model: 'algorithmic-rules (local)', simulated: true, fallbackReason: 'unavailable' }))
+            .toBe('Note: On-device AI (Chrome Prompt API) is not available in this browser, so a rule-based summary was used.\n\nBody');
+    });
+
+    it('leaves a summary the model wrote as is', () => {
+        expect(withFallbackNote({ summary: 'Body', model: 'chrome-gemini-nano (on-device)', simulated: false })).toBe('Body');
     });
 });

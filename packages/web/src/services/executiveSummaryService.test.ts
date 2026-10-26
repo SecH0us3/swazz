@@ -13,6 +13,8 @@ import {
 describe('executiveSummaryService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    delete (globalThis as any).ai;
+    delete (globalThis as any).LanguageModel;
   });
 
   const sampleReportData: ReportStatsInput = {
@@ -111,7 +113,45 @@ The automated fuzzing assessment evaluated 18 endpoints across 1,450 requests. 2
     const result = await generateExecutiveSummary(sampleReportData);
 
     expect(result.simulated).toBe(true);
+    expect(result.fallbackReason).toBe('failed');
     expect(result.model).toContain('algorithmic-rules');
     expect(result.summary).toContain('CRITICAL');
+  });
+
+  it('reports why the summary is rule-based when no model is ready', async () => {
+    expect((await generateExecutiveSummary(sampleReportData)).fallbackReason).toBe('unavailable');
+
+    (globalThis as any).LanguageModel = { availability: vi.fn().mockResolvedValue('downloadable'), create: vi.fn() };
+    expect((await generateExecutiveSummary(sampleReportData)).fallbackReason).toBe('downloadable');
+  });
+
+  it('uses the rule-based summary when the model takes too long', async () => {
+    const session = { prompt: vi.fn((_t: string, _o: { signal: AbortSignal }) => new Promise(() => {})), destroy: vi.fn() };
+    (globalThis as any).LanguageModel = { availability: vi.fn().mockResolvedValue('available'), create: vi.fn().mockResolvedValue(session) };
+    const result = await generateExecutiveSummary(sampleReportData, { timeoutMs: 20 });
+    expect(result.fallbackReason).toBe('timeout');
+    expect(session.prompt.mock.calls[0]![1].signal.aborted).toBe(true);
+    expect(session.destroy).toHaveBeenCalled();
+  });
+
+  it('stops when the caller aborts', async () => {
+    const session = { prompt: vi.fn(() => new Promise(() => {})), destroy: vi.fn() };
+    (globalThis as any).LanguageModel = { availability: vi.fn().mockResolvedValue('available'), create: vi.fn().mockResolvedValue(session) };
+    const controller = new AbortController();
+    const pending = generateExecutiveSummary(sampleReportData, { signal: controller.signal });
+    await vi.waitFor(() => expect(session.prompt).toHaveBeenCalled());
+    controller.abort();
+    const result = await pending;
+    expect(result.simulated).toBe(true);
+    expect(result.fallbackReason).toBeUndefined();
+    expect(session.destroy).toHaveBeenCalled();
+  });
+
+  it('reports no fallback reason for a summary the model wrote', async () => {
+    const session = { prompt: vi.fn().mockResolvedValue('A professional executive summary of the scan results.'), destroy: vi.fn() };
+    (globalThis as any).LanguageModel = { availability: vi.fn().mockResolvedValue('available'), create: vi.fn().mockResolvedValue(session) };
+    const result = await generateExecutiveSummary(sampleReportData);
+    expect(result.simulated).toBe(false);
+    expect(result.fallbackReason).toBeUndefined();
   });
 });

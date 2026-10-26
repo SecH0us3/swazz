@@ -6,11 +6,13 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal.js';
 import { FormattedMarkdown } from './FormattedMarkdown.js';
+import { aiFallbackNote, type AiFallbackReason } from '../../services/chromeAiService.js';
+import type { ExecutiveSummaryResult } from '../../services/executiveSummaryService.js';
 
 interface ExecutiveSummaryModalProps {
   runId: string | null;
   onClose: () => void;
-  getExecutiveSummary: (runId: string) => Promise<{ summary: string; model: string }>;
+  getExecutiveSummary: (runId: string, signal?: AbortSignal) => Promise<ExecutiveSummaryResult>;
 }
 
 export const ExecutiveSummaryModal: React.FC<ExecutiveSummaryModalProps> = ({
@@ -20,7 +22,8 @@ export const ExecutiveSummaryModal: React.FC<ExecutiveSummaryModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState('');
-  const [model, setModel] = useState('');
+  const [simulated, setSimulated] = useState<boolean | null>(null);
+  const [fallbackReason, setFallbackReason] = useState<AiFallbackReason | undefined>();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,12 +35,18 @@ export const ExecutiveSummaryModal: React.FC<ExecutiveSummaryModalProps> = ({
     }
 
     let mounted = true;
+    const controller = new AbortController();
     setLoading(true);
-    getExecutiveSummary(runId)
+    setError(null);
+    setSummary('');
+    setSimulated(null);
+    setFallbackReason(undefined);
+    getExecutiveSummary(runId, controller.signal)
       .then(res => {
         if (mounted) {
           setSummary(res.summary);
-          setModel(res.model);
+          setSimulated(res.simulated);
+          setFallbackReason(res.fallbackReason);
           setLoading(false);
         }
       })
@@ -50,6 +59,7 @@ export const ExecutiveSummaryModal: React.FC<ExecutiveSummaryModalProps> = ({
 
     return () => {
       mounted = false;
+      controller.abort();
     };
   }, [runId, getExecutiveSummary]);
 
@@ -68,7 +78,7 @@ export const ExecutiveSummaryModal: React.FC<ExecutiveSummaryModalProps> = ({
         {loading ? (
           <div className="exec-summary-loading-state">
             <span className="spinner-sm" />
-            <span>Generating Executive Summary with on-device AI...</span>
+            <span>Generating Executive Summary (on-device AI when available)...</span>
           </div>
         ) : error ? (
           <div className="exec-summary-error-state">
@@ -78,14 +88,17 @@ export const ExecutiveSummaryModal: React.FC<ExecutiveSummaryModalProps> = ({
           <>
             <div className="exec-summary-modal-header">
               <span className="exec-summary-scope-label">Scan Assessment Summary</span>
-              {model && (
+              {simulated !== null && (
                 <span className="badge badge-ai-model">
-                  {model.includes('gemini') || model.includes('chrome')
+                  {!simulated
                     ? '⚡ Gemini Nano (On-Device)'
                     : '🛠️ Rule-based (Local)'}
                 </span>
               )}
             </div>
+            {fallbackReason && (
+              <p className="exec-summary-fallback-note">{aiFallbackNote(fallbackReason, 'summary')}</p>
+            )}
 
             <div className="exec-summary-markdown-container">
               <FormattedMarkdown content={summary} />

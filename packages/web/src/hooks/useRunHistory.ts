@@ -8,7 +8,8 @@ import type { RunStats } from '../types.js';
 import type { ResultSummary } from './useRunner.js';
 import type { QueryOptions } from './useDb.js';
 import { useAppStore } from '../store/appStore.js';
-import { generateExecutiveSummary } from '../services/executiveSummaryService.js';
+import { generateExecutiveSummary, type ExecutiveSummaryResult } from '../services/executiveSummaryService.js';
+import { aiFallbackNote } from '../services/chromeAiService.js';
 
 interface UseRunHistoryProps {
     runs: any[];
@@ -101,7 +102,7 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
             let execSummary = '';
             try {
                 const summaryRes = await generateExecutiveSummary(buildSummaryInput(findings, rows, stats, startedAt, completedAt));
-                execSummary = summaryRes.summary;
+                execSummary = withFallbackNote(summaryRes);
             } catch {
                 // fallback handled inside service
             }
@@ -139,7 +140,7 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
             let execSummary = '';
             try {
                 const summaryRes = await generateExecutiveSummary(buildSummaryInput(findings, rows, stats, startedAt, completedAt));
-                execSummary = summaryRes.summary;
+                execSummary = withFallbackNote(summaryRes);
             } catch {
                 // fallback handled inside service
             }
@@ -159,7 +160,7 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         }
     }, [runs, getRunResults, showToast]);
 
-    const getRunExecutiveSummary = useCallback(async (runId: string) => {
+    const getRunExecutiveSummary = useCallback(async (runId: string, signal?: AbortSignal) => {
         const runData = runs.find(r => r.id === runId);
         const startedAt = runData ? runData.startedAt : Date.now();
         const completedAt = runData ? runData.completedAt : Date.now();
@@ -168,7 +169,7 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         const rows = await getRunResults(runId);
         const findings = classifyResults(rows);
         const summaryInput = buildSummaryInput(findings, rows, stats, startedAt, completedAt);
-        return generateExecutiveSummary(summaryInput);
+        return generateExecutiveSummary(summaryInput, { signal });
     }, [runs, getRunResults]);
 
     return {
@@ -179,6 +180,11 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
 }
 
 // ─── Helpers for Client-Side Report Generation ─────────────────
+
+/** The summary as a report carries it: a rule-based one says so, and why, in plain text. */
+export function withFallbackNote(res: ExecutiveSummaryResult): string {
+    return res.fallbackReason ? `Note: ${aiFallbackNote(res.fallbackReason, 'summary')}\n\n${res.summary}` : res.summary;
+}
 
 function buildSummaryInput(findings: ClientFinding[], rows: ResultSummary[], stats: RunStats | null, startedAt: number, completedAt: number) {
     const durationSec = completedAt && startedAt ? Math.max(0, Math.floor((completedAt - startedAt) / 1000)) : 0;
