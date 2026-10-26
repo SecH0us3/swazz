@@ -472,3 +472,66 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 		assert.Equal(t, input, out)
 	})
 }
+
+// With semantic mutation the SSTI expression is registered under the wrapped string that is
+// sent, so the analyzer can still match it. A variant that drops or URL-encodes the expression
+// registers nothing.
+func TestStringGen_SSTIRegisteredAfterSemanticWrap(t *testing.T) {
+	t.Parallel()
+	tr := true
+	for _, format := range []string{"email", "date-time", "uri", "phone"} {
+		for _, probe := range []string{"{{7*7}}", "{{7+'7'}}"} {
+			t.Run(format+" "+probe, func(t *testing.T) {
+				t.Parallel()
+				g := &Generator{
+					profile:                   swagger.ProfileMalicious,
+					settings:                  swagger.Settings{EnableSemanticMutation: &tr},
+					hasActiveMaliciousStrings: true,
+					cachedMaliciousStrings:    []any{probe},
+					SSTIStore:                 sstistore.NewStore(),
+				}
+				registered := 0
+				for range 40 {
+					str, ok := g.generateString(format, "").(string)
+					require.True(t, ok)
+					if ctx, found := g.SSTIStore.Get(str); found {
+						registered++
+						assert.Contains(t, str, ctx.RawExpr, "registered without its expression")
+					}
+				}
+				switch format {
+				case "email":
+					// "<vector>"@example.com keeps the expression as is.
+					assert.NotZero(t, registered, "no wrapped email payload was registered")
+				case "date-time", "phone":
+					// Both variants of each URL-encode the expression or keep only its digits.
+					assert.Zero(t, registered, "a %s variant registered an expression it encodes or drops", format)
+				}
+			})
+		}
+	}
+}
+
+// A string that no longer holds the expression verbatim is not registered.
+func TestRegisterSentSSTI_NeedsTheExpression(t *testing.T) {
+	t.Parallel()
+	g := &Generator{SSTIStore: sstistore.NewStore()}
+	ctx := sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"}
+	for _, sent := range []string{"+1555233700;ext=%7B%7B23%2A37%7D%7D", "user+%7B%7B23%2A37%7D%7D@example.org"} {
+		g.registerSentSSTI(sent, ctx)
+		_, found := g.SSTIStore.Get(sent)
+		assert.False(t, found, sent)
+	}
+	g.registerSentSSTI(`"{{23*37}}"@example.com`, ctx)
+	_, found := g.SSTIStore.Get(`"{{23*37}}"@example.com`)
+	assert.True(t, found)
+}
+
+// randomizeAndRegisterSSTI randomizes s and registers it unwrapped, for tests of randomizeSSTI.
+func (g *Generator) randomizeAndRegisterSSTI(s string) string {
+	newS, ctx, ok := g.randomizeSSTI(s)
+	if ok {
+		g.registerSentSSTI(newS, ctx)
+	}
+	return newS
+}
