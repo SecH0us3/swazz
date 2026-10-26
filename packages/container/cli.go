@@ -25,7 +25,6 @@ import (
 	"swazz-engine/internal/swagger"
 	"swazz-engine/internal/wafcheck"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -179,14 +178,53 @@ func runCLIErr(args []string) error {
 		}
 	}()
 
+	// Load ignore rules
+	ignoreRules, err := classifier.LoadIgnoreRules(*ignoreConfig)
+	if err != nil {
+		log.Fatalf("Failed to load ignore rules: %v", err)
+	}
+
+	var combinedIgnoreRules []classifier.IgnoreRule
+	combinedIgnoreRules = append(combinedIgnoreRules, ignoreRules...)
+	if runCfg.Rules != nil && len(runCfg.Rules.IgnoreRules) > 0 {
+		combinedIgnoreRules = append(combinedIgnoreRules, runCfg.Rules.IgnoreRules...)
+	}
+
+	// Map swagger.RulesConfig to classifier.RulesConfig
+	clsRules := &classifier.RulesConfig{
+		IgnoreRules: combinedIgnoreRules,
+	}
+	if runCfg.Rules != nil {
+		clsRules.Ignore = runCfg.Rules.Ignore
+		// Only set Severity/Defaults when the user actually provided values.
+		// Leaving them nil lets classifier.New fall back to the built-in defaults,
+		// preventing an empty map from silently overriding defaultDefaults.
+		if len(runCfg.Rules.Severity) > 0 {
+			clsRules.Severity = make(map[string]classifier.Severity, len(runCfg.Rules.Severity))
+			for k, v := range runCfg.Rules.Severity {
+				clsRules.Severity[k] = classifier.Severity(v)
+			}
+		}
+		if len(runCfg.Rules.Defaults) > 0 {
+			clsRules.Defaults = make(map[string]classifier.Severity, len(runCfg.Rules.Defaults))
+			for k, v := range runCfg.Rules.Defaults {
+				clsRules.Defaults[k] = classifier.Severity(v)
+			}
+		}
+	}
+
+	cls := classifier.New(clsRules)
+
 	// Run auth sequence if present
 	if err := r.RunAuthSequence(ctx); err != nil {
 		log.Fatalf("Authentication failed: %v", err)
 	}
 
+
+	// Results are classified as they arrive and only their findings are kept: holding every
+	// result of a long scan until it ends grew without bound.
+	collector := cls.NewCollector()
 	resultsCh := r.Subscribe()
-	var results []*swagger.FuzzResult
-	var resultsMu sync.Mutex
 	resultsDone := make(chan struct{})
 
 	go func() {
@@ -196,9 +234,7 @@ func runCLIErr(args []string) error {
 		for evt := range resultsCh {
 			if evt.Type == runner.EventResult {
 				if res, ok := evt.Data.(*swagger.FuzzResult); ok {
-					resultsMu.Lock()
-					results = append(results, res)
-					resultsMu.Unlock()
+					collector.Add(res)
 				}
 			} else if evt.Type == runner.EventProgress {
 				if stats, ok := evt.Data.(swagger.RunStats); ok {
@@ -296,47 +332,7 @@ func runCLIErr(args []string) error {
 	logger.Info("Run complete. Total scan time: %v (%d requests executed)", runDuration, stats.TotalRequests)
 
 	// 5. Generate outputs
-	resultsMu.Lock()
-	finalResults := results
-	resultsMu.Unlock()
-
-	// Load ignore rules
-	ignoreRules, err := classifier.LoadIgnoreRules(*ignoreConfig)
-	if err != nil {
-		log.Fatalf("Failed to load ignore rules: %v", err)
-	}
-
-	var combinedIgnoreRules []classifier.IgnoreRule
-	combinedIgnoreRules = append(combinedIgnoreRules, ignoreRules...)
-	if runCfg.Rules != nil && len(runCfg.Rules.IgnoreRules) > 0 {
-		combinedIgnoreRules = append(combinedIgnoreRules, runCfg.Rules.IgnoreRules...)
-	}
-
-	// Map swagger.RulesConfig to classifier.RulesConfig
-	clsRules := &classifier.RulesConfig{
-		IgnoreRules: combinedIgnoreRules,
-	}
-	if runCfg.Rules != nil {
-		clsRules.Ignore = runCfg.Rules.Ignore
-		// Only set Severity/Defaults when the user actually provided values.
-		// Leaving them nil lets classifier.New fall back to the built-in defaults,
-		// preventing an empty map from silently overriding defaultDefaults.
-		if len(runCfg.Rules.Severity) > 0 {
-			clsRules.Severity = make(map[string]classifier.Severity, len(runCfg.Rules.Severity))
-			for k, v := range runCfg.Rules.Severity {
-				clsRules.Severity[k] = classifier.Severity(v)
-			}
-		}
-		if len(runCfg.Rules.Defaults) > 0 {
-			clsRules.Defaults = make(map[string]classifier.Severity, len(runCfg.Rules.Defaults))
-			for k, v := range runCfg.Rules.Defaults {
-				clsRules.Defaults[k] = classifier.Severity(v)
-			}
-		}
-	}
-
-	cls := classifier.New(clsRules)
-	findings := cls.ClassifyAll(finalResults)
+	findings := collector.Findings() // the collector's goroutine has ended
 
 	printSummary(findings, &stats)
 
