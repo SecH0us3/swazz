@@ -31,7 +31,8 @@ export class StateManager {
   pendingParseUrls = new Map<string, string>();
   // The runner each parse request went to; only that runner may answer it.
   pendingParseRunners = new Map<string, WebSocket>();
-  sseStreams = new Map<string, ReadableStreamDefaultController>();
+  // MCP SSE connections, each with the user who opened it (handlers/sse.ts).
+  sseStreams = new Map<string, { controller: ReadableStreamDefaultController; userId: string }>();
   delivery: DeliveryTracker;
 
   constructor(private state: DurableObjectState) {

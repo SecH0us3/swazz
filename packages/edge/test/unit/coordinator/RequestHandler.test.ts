@@ -109,11 +109,11 @@ describe('RequestHandler', () => {
     it('creates a stream and saves controller on /sse', async () => {
       const stateManager = new StateManager(mockState);
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
-      const res = await handler.handle(new Request('http://localhost/sse?connectionId=conn1&origin=http%3A%2F%2Ftest.com'));
+      const res = await handler.handle(new Request('http://localhost/sse?connectionId=conn1&userId=u1&origin=http%3A%2F%2Ftest.com'));
       
       expect(res.status).toBe(200);
       expect(res.headers.get('Content-Type')).toBe('text/event-stream');
-      expect(stateManager.sseStreams.has('conn1')).toBe(true);
+      expect(stateManager.sseStreams.get('conn1')?.userId).toBe('u1');
 
       // Trigger cancel to clean up
       const reader = res.body?.getReader();
@@ -124,7 +124,7 @@ describe('RequestHandler', () => {
     it('creates a stream without origin query parameter', async () => {
       const stateManager = new StateManager(mockState);
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
-      const res = await handler.handle(new Request('http://localhost/sse?connectionId=conn1'));
+      const res = await handler.handle(new Request('http://localhost/sse?connectionId=conn1&userId=u1'));
       expect(res.status).toBe(200);
     });
 
@@ -149,9 +149,9 @@ describe('RequestHandler', () => {
       const mockController = {
         enqueue: vi.fn()
       } as any;
-      stateManager.sseStreams.set('conn1', mockController);
+      stateManager.sseStreams.set('conn1', { controller: mockController, userId: 'u1' });
 
-      const res = await handler.handle(new Request('http://localhost/sse-send?connectionId=conn1', { method: 'POST', body: 'hello-world' }));
+      const res = await handler.handle(new Request('http://localhost/sse-send?connectionId=conn1&userId=u1', { method: 'POST', body: 'hello-world' }));
       expect(res.status).toBe(200);
       expect(mockController.enqueue).toHaveBeenCalled();
     });
@@ -165,11 +165,42 @@ describe('RequestHandler', () => {
           throw new Error('closed');
         })
       } as any;
-      stateManager.sseStreams.set('conn1', mockController);
+      stateManager.sseStreams.set('conn1', { controller: mockController, userId: 'u1' });
 
-      const res = await handler.handle(new Request('http://localhost/sse-send?connectionId=conn1', { method: 'POST', body: 'hello-world' }));
+      const res = await handler.handle(new Request('http://localhost/sse-send?connectionId=conn1&userId=u1', { method: 'POST', body: 'hello-world' }));
       expect(res.status).toBe(410);
       expect(stateManager.sseStreams.has('conn1')).toBe(false);
+    });
+  });
+
+  describe('MCP connection ownership', () => {
+    it('refuses /sse without the user who opens it', async () => {
+      const stateManager = new StateManager(mockState);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const res = await handler.handle(new Request('http://localhost/sse?connectionId=conn1'));
+      expect(res.status).toBe(400);
+      expect(stateManager.sseStreams.has('conn1')).toBe(false);
+    });
+
+    it("answers someone else's connection like a missing one, and writes nothing to it", async () => {
+      const stateManager = new StateManager(mockState);
+      const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
+      const mockController = { enqueue: vi.fn() } as any;
+      stateManager.sseStreams.set('conn1', { controller: mockController, userId: 'u1' });
+
+      for (const query of ['connectionId=conn1&userId=u2', 'connectionId=conn1']) {
+        const send = await handler.handle(new Request(`http://localhost/sse-send?${query}`, { method: 'POST', body: '{"forged":true}' }));
+        expect(send.status).toBe(404);
+        const owner = await handler.handle(new Request(`http://localhost/sse-owner?${query}`));
+        expect(owner.status).toBe(404);
+      }
+      expect(mockController.enqueue).not.toHaveBeenCalled();
+      expect(stateManager.sseStreams.has('conn1')).toBe(true);
+
+      const owner = await handler.handle(new Request('http://localhost/sse-owner?connectionId=conn1&userId=u1'));
+      expect(owner.status).toBe(204);
+      const missing = await handler.handle(new Request('http://localhost/sse-owner?connectionId=nope&userId=u1'));
+      expect(missing.status).toBe(404);
     });
   });
 

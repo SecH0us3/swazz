@@ -163,7 +163,8 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
       origin = 'http://localhost:8787';
     }
 
-    const doRes = await stub.fetch(new Request(`http://localhost/sse?connectionId=${connectionId}&origin=${encodeURIComponent(origin)}`));
+    // The connection is the caller's: only their messages are answered on it (handlers/sse.ts).
+    const doRes = await stub.fetch(new Request(`http://localhost/sse?connectionId=${connectionId}&userId=${encodeURIComponent(userId)}&origin=${encodeURIComponent(origin)}`));
     return doRes;
   });
 
@@ -202,11 +203,17 @@ export function registerMcpRoutes(app: Hono<AppEnv>) {
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
 
+    // Only the user who opened the connection may send on it, and nothing runs before that is
+    // known: someone else's connection is answered like one that does not exist.
+    const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(doId);
+    const owner = `connectionId=${encodeURIComponent(connectionId)}&userId=${encodeURIComponent(userId)}`;
+    const check = await stub.fetch(new Request(`http://localhost/sse-owner?${owner}`));
+    if (check.status !== 204) return c.json({ error: 'Connection not found' }, 404);
+
     const responsePayload = await handleMcpJsonRpc(body, c, app);
     if (responsePayload) {
-      const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-      const stub = c.env.COORDINATOR_DO.get(doId);
-      await stub.fetch(new Request(`http://localhost/sse-send?connectionId=${connectionId}`, {
+      await stub.fetch(new Request(`http://localhost/sse-send?${owner}`, {
         method: 'POST',
         body: JSON.stringify(responsePayload)
       }));
