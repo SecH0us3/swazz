@@ -22,6 +22,7 @@ import (
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/runner"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"swazz-engine/internal/wafcheck"
 	"strings"
@@ -38,6 +39,12 @@ func runCLI(args []string) {
 	}
 }
 
+// stringList is a flag that may be given more than once; every value is kept.
+type stringList []string
+
+func (l *stringList) String() string     { return strings.Join(*l, ",") }
+func (l *stringList) Set(v string) error { *l = append(*l, v); return nil }
+
 func runCLIErr(args []string) error {
 	flags := flag.NewFlagSet("start", flag.ContinueOnError)
 	configPath := flags.String("config", "swazz.config.json", "Path to config file")
@@ -49,6 +56,8 @@ func runCLIErr(args []string) error {
 	failOnSeverity := flags.String("fail-on-severity", "none", "Exit with code 2 if findings meet severity threshold (error|warning|note|none)")
 	ignoreConfig := flags.String("ignore-config", "swazz.ignore.json", "Path to ignore rules JSON file")
 	allowPrivateIps := flags.Bool("allow-private-ips", false, "Allow requests to private IP addresses (overrides security.allow_private_ips from the config file)")
+	var trustedProxies stringList
+	flags.Var(&trustedProxies, "trusted-proxy", "A private ip:port proxy from settings.proxyList to allow, e.g. a local Burp on 127.0.0.1:8080 (repeatable or comma-separated); targets stay checked")
 	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
 	logLevelFlag := flags.String("log-level", "", "Log level: debug, info, warn, error")
 	quietFlag := flags.Bool("quiet", false, "Silence all progress output (only show errors)")
@@ -61,6 +70,10 @@ func runCLIErr(args []string) error {
 	wafPatchOutput := flags.String("waf-patch-output", "", "Path to save generated WAF virtual patch rules")
 
 	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	if err := safenet.TrustProxies(trustedProxies); err != nil {
 		return err
 	}
 

@@ -32,14 +32,25 @@ func StartAgent(args []string) {
 	var hasQuiet, hasLogLevel bool
 	var disableTelemetry bool
 	var recycleWhenIdle bool
+	var trustedProxies []string
 
 	// Simple arg parsing
 	for i := 0; i < len(args); i++ {
+		if v, ok := strings.CutPrefix(args[i], "--trusted-proxy="); ok {
+			trustedProxies = append(trustedProxies, v)
+			continue
+		}
 		switch args[i] {
 		case "--dangerous-no-container":
 			dangerousNoContainer = true
 		case "--allow-private-networks":
 			allowPrivateNetworks = true
+		case "--trusted-proxy":
+			if i+1 >= len(args) {
+				log.Fatalf("Error: --trusted-proxy needs an ip:port value")
+			}
+			trustedProxies = append(trustedProxies, args[i+1])
+			i++
 		case "--disable-telemetry":
 			disableTelemetry = true
 		case "--recycle-when-idle":
@@ -129,6 +140,9 @@ func StartAgent(args []string) {
 	safenet.AssertRunningInContainer(dangerousNoContainer)
 	if allowPrivateNetworks {
 		safenet.EnableLocalNetwork()
+	}
+	if err := safenet.TrustProxies(trustedProxies); err != nil {
+		log.Fatalf("Error: %v", err)
 	}
 
 	coordinatorURL = resolveCoordinatorURL(coordinatorURL)

@@ -6,11 +6,15 @@
 package runner
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"time"
 
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/security"
 )
 
@@ -27,6 +31,10 @@ import (
 // The transport keeps the runner's dial guard. That guard checks the address it dials, which
 // through a proxy is the proxy's, never the target's: it keeps a run from reaching a private
 // network through a proxy on it, not a proxy elsewhere from reaching what that proxy can reach.
+// The one exception is a proxy the runner's operator trusted (safenet.TrustProxies): it is dialed
+// even at a private address (trustedProxyDial), and since the guard then checks nothing, a
+// request goes through it only once its target passed the check the guard would have made
+// (checkTrustedProxyTarget).
 func (r *Runner) proxiedClient() *http.Client {
 	r.proxyOnce.Do(func() {
 		var transport *http.Transport
@@ -43,17 +51,25 @@ func (r *Runner) proxiedClient() *http.Client {
 			security.ConfigureTransport(transport)
 		}
 
+		transport.DialContext = trustedProxyDial(transport.DialContext, r.client.Timeout)
+
 		r.configMu.RLock()
 		proxies, err := parseProxyList(r.config.Settings.ProxyList)
+		allowPrivate := r.config.Security.AllowPrivateIPs
 		r.configMu.RUnlock()
 		if err != nil {
 			r.logError("Proxy list: %v; every request sent through the proxies fails", err)
 		}
-		transport.Proxy = func(*http.Request) (*url.URL, error) {
+		transport.Proxy = func(req *http.Request) (*url.URL, error) {
 			if err != nil {
 				return nil, err
 			}
 			i := int((r.proxyTurn.Add(1) - 1) % uint32(len(proxies))) // #nosec G115 -- a proxy list is far shorter than 2^32
+			if !allowPrivate {
+				if err := checkTrustedProxyTarget(req, proxies[i]); err != nil {
+					return nil, err
+				}
+			}
 			return proxies[i], nil
 		}
 		client := *r.client
@@ -61,6 +77,58 @@ func (r *Runner) proxiedClient() *http.Client {
 		r.proxyClient.Store(&client)
 	})
 	return r.proxyClient.Load()
+}
+
+// trustedProxyDial wraps the proxied transport's dial so the operator's trusted proxies
+// (safenet.IsTrustedProxy) are dialed without the private-address check, and every other address
+// through guarded as before. It is only ever set on the proxied transport, whose dials all go to
+// a proxy: a target at a trusted proxy's address is still checked on the direct transport.
+// timeout bounds the dial like the client's requests (30s when the client sets none).
+func trustedProxyDial(guarded security.DialFunc, timeout time.Duration) security.DialFunc {
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	direct := (&net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second}).DialContext
+	if guarded == nil {
+		guarded = direct
+	}
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if safenet.IsTrustedProxy(addr) {
+			return direct(ctx, network, addr)
+		}
+		return guarded(ctx, network, addr)
+	}
+}
+
+// checkTrustedProxyTarget refuses a request about to go through a trusted proxy when its target
+// host is, or resolves to, a private or reserved address (security.ResolvePublic): through that
+// proxy nothing else would check it. Other proxies are dialed through the guard, which refuses
+// one at a private address, and are left as they were.
+func checkTrustedProxyTarget(req *http.Request, proxy *url.URL) error {
+	if !safenet.IsTrustedProxy(proxyDialAddr(proxy)) {
+		return nil
+	}
+	if _, err := security.ResolvePublic(req.Context(), req.URL.Hostname()); err != nil {
+		return fmt.Errorf("target %s through trusted proxy: %w", req.URL.Hostname(), err)
+	}
+	return nil
+}
+
+// proxyDialAddr is the address the transport dials for a proxy: its host and port, or the
+// scheme's default port, as net/http does.
+func proxyDialAddr(u *url.URL) string {
+	port := u.Port()
+	if port == "" {
+		switch u.Scheme {
+		case "https":
+			port = "443"
+		case "socks5", "socks5h":
+			port = "1080"
+		default:
+			port = "80"
+		}
+	}
+	return net.JoinHostPort(u.Hostname(), port)
 }
 
 // parseProxyList parses every proxy of the list, or fails on the first unusable one.

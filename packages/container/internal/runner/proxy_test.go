@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 
 	"github.com/stretchr/testify/assert"
@@ -115,6 +116,120 @@ func TestProxyClient_KeepsTheDialGuard(t *testing.T) {
 	assert.Equal(t, 0, res.Status)
 	assert.NotEmpty(t, res.Error)
 	assert.EqualValues(t, 0, proxy.requests.Load(), "nothing reached the proxy")
+}
+
+// trustProxies trusts the given proxies (safenet.TrustProxies) for the rest of the test.
+func trustProxies(t *testing.T, entries ...string) {
+	t.Helper()
+	require.NoError(t, safenet.TrustProxies(entries))
+	t.Cleanup(func() { _ = safenet.TrustProxies(nil) })
+}
+
+// trustedProxyRunner is a runner without private addresses allowed, whose requests go through
+// the given proxies; client is the runner's client (nil for the CLI's default).
+func trustedProxyRunner(t *testing.T, client *http.Client, proxies ...string) *Runner {
+	t.Helper()
+	r := New(&swagger.Config{
+		BaseURL:  "http://93.184.216.34",
+		Settings: swagger.Settings{TimeoutMs: 5000, ProxyList: proxies},
+	}, client)
+	t.Cleanup(r.Close)
+	return r
+}
+
+func getTarget(t *testing.T, r *Runner, target string) *swagger.FuzzResult {
+	t.Helper()
+	res := r.executeRequest(context.Background(), target, "/items", "/items", "GET", nil, nil, nil, swagger.ProfileRandom, nil, nil, "")
+	require.NotNil(t, res)
+	return res
+}
+
+// A proxy the operator trusted is reached at a private address while private addresses are
+// otherwise blocked, through the CLI's guarded client and the agent's safenet client alike. (The
+// target is a public IP literal, so its check needs no DNS.)
+func TestProxyClient_TrustedPrivateProxy(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		client *http.Client
+	}{
+		{"cli", nil},
+		{"agent", safenet.NewSafeHTTPClient(5 * time.Second)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			proxy := newFakeProxy(t)
+			trustProxies(t, proxy.Listener.Addr().String())
+			r := trustedProxyRunner(t, tc.client, proxy.URL)
+
+			res := getTarget(t, r, "http://93.184.216.34")
+			require.Equal(t, 200, res.Status, res.Error)
+			assert.EqualValues(t, 1, proxy.requests.Load())
+		})
+	}
+}
+
+// Through a trusted proxy the target is still checked: a private one never reaches the proxy.
+func TestProxyClient_TrustedProxyChecksTheTarget(t *testing.T) {
+	proxy := newFakeProxy(t)
+	trustProxies(t, proxy.Listener.Addr().String())
+	r := trustedProxyRunner(t, nil, proxy.URL)
+
+	for _, target := range []string{"http://127.0.0.1:6379", "http://169.254.169.254", "http://[::1]"} {
+		res := getTarget(t, r, target)
+		assert.Equal(t, 0, res.Status, target)
+		assert.Contains(t, res.Error, "trusted proxy", target)
+	}
+	assert.EqualValues(t, 0, proxy.requests.Load(), "nothing reached the proxy")
+}
+
+// With private addresses allowed, a trusted proxy may take a private target like any proxy.
+func TestProxyClient_TrustedProxyWithPrivateAllowed(t *testing.T) {
+	proxy := newFakeProxy(t)
+	trustProxies(t, proxy.Listener.Addr().String())
+	r := proxiedRunner(t, true, proxy.URL)
+
+	res := getTarget(t, r, "http://127.0.0.1:6379")
+	require.Equal(t, 200, res.Status, res.Error)
+}
+
+// Trust is for the listed address only: a proxy at another private port, or named by a
+// hostname, is still refused.
+func TestProxyClient_TrustIsExact(t *testing.T) {
+	proxy := newFakeProxy(t)
+	_, port, err := net.SplitHostPort(proxy.Listener.Addr().String())
+	require.NoError(t, err)
+	trustProxies(t, "127.0.0.1:1")
+
+	for _, url := range []string{proxy.URL, "http://localhost:" + port} {
+		r := trustedProxyRunner(t, nil, url)
+		res := getTarget(t, r, "http://93.184.216.34")
+		assert.Equal(t, 0, res.Status, url)
+	}
+	assert.EqualValues(t, 0, proxy.requests.Load(), "nothing reached the proxy")
+}
+
+// A trusted proxy's address is trusted only as a proxy: a scan that targets it directly is
+// blocked like any other private target.
+func TestProxyClient_TrustedProxyIsNotATrustedTarget(t *testing.T) {
+	proxy := newFakeProxy(t)
+	trustProxies(t, proxy.Listener.Addr().String())
+	r := trustedProxyRunner(t, nil)
+
+	res := getTarget(t, r, proxy.URL)
+	assert.Equal(t, 0, res.Status)
+	assert.EqualValues(t, 0, proxy.requests.Load())
+}
+
+func TestProxyDialAddr(t *testing.T) {
+	for raw, want := range map[string]string{
+		"http://127.0.0.1:8080": "127.0.0.1:8080",
+		"http://127.0.0.1":      "127.0.0.1:80",
+		"https://[::1]":         "[::1]:443",
+		"socks5://10.0.0.1":     "10.0.0.1:1080",
+	} {
+		u, err := parseProxyURL(raw, 0)
+		require.NoError(t, err)
+		assert.Equal(t, want, proxyDialAddr(u), raw)
+	}
 }
 
 // A proxy that is not a usable URL fails the request; it never goes out without the proxy.
