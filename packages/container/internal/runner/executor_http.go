@@ -207,6 +207,7 @@ func (r *Runner) executeRequest(
 		}
 
 		var bodyReader io.Reader
+		var reqBody []byte
 		if isBody && payload != nil {
 			if strings.Contains(effectiveCT, "x-www-form-urlencoded") {
 				if m, ok := payload.(map[string]any); ok {
@@ -214,24 +215,24 @@ func (r *Runner) executeRequest(
 					for k, v := range m {
 						vals.Set(k, toString(v))
 					}
-					bodyReader = strings.NewReader(vals.Encode())
-					payloadSize = len(vals.Encode())
+					reqBody = []byte(vals.Encode())
+					bodyReader = bytes.NewReader(reqBody)
 				}
 			}
 			if bodyReader == nil && strings.Contains(effectiveCT, "xml") {
 				if m, ok := payload.(map[string]any); ok {
 					xmlContent, _ := generator.ToXML(m, "request")
 					soapBody, _ := generator.WrapInSOAP(xmlContent)
-					bodyReader = strings.NewReader(soapBody)
-					payloadSize = len(soapBody)
+					reqBody = []byte(soapBody)
+					bodyReader = bytes.NewReader(reqBody)
 				}
 			}
 
 			if bodyReader == nil {
-				b, _ := json.Marshal(payload)
-				bodyReader = bytes.NewReader(b)
-				payloadSize = len(b)
+				reqBody, _ = json.Marshal(payload)
+				bodyReader = bytes.NewReader(reqBody)
 			}
+			payloadSize = len(reqBody)
 		}
 
 		if len(cookies) > 0 {
@@ -274,40 +275,25 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		var reqDump []byte
-		var dumpErr error
-		if logger.IsDebugEnabled() || r.config.Settings.Debug || profile == swagger.ProfileMalicious {
-			reqDump, dumpErr = httputil.DumpRequestOut(req, true)
-		}
-
-		if (logger.IsDebugEnabled() || r.config.Settings.Debug) && dumpErr == nil {
-			r.logDebug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
+		if logger.IsDebugEnabled() || r.config.Settings.Debug {
+			if reqDump, dumpErr := httputil.DumpRequestOut(req, true); dumpErr == nil {
+				r.logDebug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
+			}
 		}
 
 		// Look for OOB payloads to register the actual request details
 		if profile == swagger.ProfileMalicious {
-			if dumpErr == nil {
-				reqStr := string(reqDump)
-				matches := uuidRegex.FindAllString(reqStr, -1)
-				if len(matches) > 0 {
-					reqLog := &swagger.RequestLog{
-						Method:       method,
-						URL:          rawURL,
-						Headers:      mergedHeaders,
-						OriginalPath: originalPath,
-						ResolvedPath: req.URL.RequestURI(),
-					}
-					var body string
-					if parts := strings.SplitN(reqStr, "\r\n\r\n", 2); len(parts) == 2 {
-						body = parts[1]
-					} else if parts := strings.SplitN(reqStr, "\n\n", 2); len(parts) == 2 {
-						body = parts[1]
-					}
-					reqLog.Body = body
-
-					for _, uuidMatch := range matches {
-						r.oobStore.UpdateRequest(uuidMatch, reqLog)
-					}
+			if matches := oobUUIDsInRequest(rawURL, mergedHeaders, reqBody); len(matches) > 0 {
+				reqLog := &swagger.RequestLog{
+					Method:       method,
+					URL:          rawURL,
+					Headers:      mergedHeaders,
+					OriginalPath: originalPath,
+					ResolvedPath: req.URL.RequestURI(),
+					Body:         string(reqBody),
+				}
+				for _, uuidMatch := range matches {
+					r.oobStore.UpdateRequest(uuidMatch, reqLog)
 				}
 			}
 		}
@@ -344,6 +330,8 @@ func (r *Runner) executeRequest(
 
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
+			// Drained before closing so the connection is kept for the retry.
+			safenet.DrainBody(resp.Body, maxResponseRead)
 			resp.Body.Close() // #nosec G104 -- error from Body.Close irrelevant after 429 backoff
 			reqCancel()
 
@@ -530,4 +518,18 @@ func (r *Runner) executeRequest(
 
 		return result
 	}
+}
+
+// oobUUIDsInRequest returns the UUIDs (OOB callback tokens) a request carries in its URL, header
+// names and values, and body: every part of the wire request a payload can reach.
+func oobUUIDsInRequest(rawURL string, headers map[string]string, body []byte) []string {
+	matches := uuidRegex.FindAllString(rawURL, -1)
+	for k, v := range headers {
+		matches = append(matches, uuidRegex.FindAllString(k, -1)...)
+		matches = append(matches, uuidRegex.FindAllString(v, -1)...)
+	}
+	for _, m := range uuidRegex.FindAll(body, -1) {
+		matches = append(matches, string(m))
+	}
+	return matches
 }
