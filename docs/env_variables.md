@@ -61,7 +61,7 @@ These environment variables are read by the fuzzer agent engine (`packages/conta
 
 | Variable Name | Description | Allowed Values / Example |
 | :--- | :--- | :--- |
-| **`SWAZZ_LOG_LEVEL`** | Verbosity threshold for fuzzer engine logging. | `debug`, `info`, `warn`, `error` (Default: `info`) |
+| **`SWAZZ_LOG_LEVEL`** | Verbosity threshold for fuzzer engine logging. At `debug`, a runner agent also logs one line per fuzz request. | `debug`, `info`, `warn`, `error` (Default: `info`) |
 | **`SWAZZ_LOG_FORMAT`** | Format of log messages output to stdout/stderr. | `text`, `json` (Default: `text`) |
 | **`SWAZZ_DEV`** | Bypass local URL/SSRF blocks (enables scanning `localhost`). | `1` (Bypasses check), `0` (Enforced default) |
 | **`CLOUDFLARE_APPLICATION_ID`** | Optional Cloudflare Access client ID header injection. | *Header string* |
