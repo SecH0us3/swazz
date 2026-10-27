@@ -27,7 +27,7 @@ func (a *GraphQLSecurityAnalyzer) Analyze(input *AnalysisInput) []swagger.Analys
 	}
 
 	// Fast pre-filter: skip scanning if no GraphQL keywords are present
-	if !containsAnyFoldASCII(input.ResponseBody, "__schema", "did you mean", "query depth", "complexity limit", "nested queries") {
+	if !input.containsAnyLower("__schema", "did you mean", "query depth", "complexity limit", "nested queries") {
 		return nil
 	}
 

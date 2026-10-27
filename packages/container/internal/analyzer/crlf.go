@@ -44,7 +44,7 @@ func (a *CRLFAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	sentStrings := extractStrings(input.SentPayload)
+	sentStrings := input.sentStrings()
 	if len(sentStrings) == 0 {
 		return nil
 	}

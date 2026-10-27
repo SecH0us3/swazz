@@ -5,6 +5,12 @@
 
 package analyzer
 
+import (
+	"bytes"
+	"regexp"
+	"strings"
+)
+
 // containsFoldASCII checks if haystack contains needle (ASCII case-insensitive) without any heap allocations.
 func containsFoldASCII(haystack []byte, needle string) bool {
 	nLen := len(needle)
@@ -63,6 +69,48 @@ func containsAnyFoldASCII(haystack []byte, needles ...string) bool {
 	return false
 }
 
+// containsLower reports whether the response body contains needle, ASCII case-insensitively,
+// like containsFoldASCII over input.ResponseBody. It searches the body lowercased once per
+// input, so a run of prefilters costs one fast strings.Index pass per needle.
+func (in *AnalysisInput) containsLower(needle string) bool {
+	return strings.Contains(in.lowerBody(), lowerNeedle(needle))
+}
+
+// containsAnyLower reports whether the response body contains any of needles (see containsLower).
+func (in *AnalysisInput) containsAnyLower(needles ...string) bool {
+	body := in.lowerBody()
+	for _, needle := range needles {
+		if strings.Contains(body, lowerNeedle(needle)) {
+			return true
+		}
+	}
+	return false
+}
+
+// lowerASCII returns b as a string with ASCII letters lowercased and every other byte unchanged.
+func lowerASCII(b []byte) string {
+	var sb strings.Builder
+	sb.Grow(len(b))
+	for _, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		sb.WriteByte(c)
+	}
+	return sb.String()
+}
+
+// lowerNeedle returns needle with ASCII letters lowercased. Needles are lowercase literals in
+// practice, so this returns needle itself without allocating.
+func lowerNeedle(needle string) string {
+	for i := 0; i < len(needle); i++ {
+		if c := needle[i]; c >= 'A' && c <= 'Z' {
+			return lowerASCII([]byte(needle))
+		}
+	}
+	return needle
+}
+
 // indexFoldASCII returns the index of the first instance of needle in haystack (ASCII case-insensitive), or -1 if needle is not present.
 func indexFoldASCII(haystack []byte, needle string) int {
 	nLen := len(needle)
@@ -109,4 +157,37 @@ func indexFoldASCII(haystack []byte, needle string) int {
 		}
 	}
 	return -1
+}
+
+// anchoredRegexp compiles pattern to match only at the start of its input. Run at each position
+// a match can start, it finds what FindIndex finds without the engine stepping through every
+// byte: Go's regexp has no literal prefix to skip ahead to when a pattern opens with (?i) or \b.
+func anchoredRegexp(pattern string) *regexp.Regexp {
+	return regexp.MustCompile(`^(?:` + pattern + `)`)
+}
+
+// findFrom returns the leftmost match of the anchored regexp in body, like FindIndex of the
+// pattern it was made from. Every match must begin with first, and canStart(i) must hold for each
+// position i a match can begin at: it may let through positions where none does, never the other
+// way round.
+func findFrom(body []byte, anchored *regexp.Regexp, first byte, canStart func(i int) bool) []int {
+	for i := 0; i < len(body); {
+		j := bytes.IndexByte(body[i:], first)
+		if j < 0 {
+			return nil
+		}
+		i += j
+		if canStart(i) {
+			if loc := anchored.FindIndex(body[i:]); loc != nil {
+				return []int{i + loc[0], i + loc[1]}
+			}
+		}
+		i++
+	}
+	return nil
+}
+
+// isWordASCII reports whether c is a word character for \b: [0-9A-Za-z_].
+func isWordASCII(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }

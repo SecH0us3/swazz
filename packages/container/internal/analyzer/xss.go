@@ -16,14 +16,15 @@ import (
 
 type XSSAnalyzer struct{}
 
-// maliciousXSSSet is a pre-built set for O(1) payload lookups instead of O(N) slice scan.
-var maliciousXSSSet map[string]struct{}
+// maliciousXSSSet maps each XSS payload to its lowercased form, for O(1) lookups instead of an
+// O(N) slice scan.
+var maliciousXSSSet map[string][]byte
 
 func init() {
-	maliciousXSSSet = make(map[string]struct{}, len(payloads.MaliciousXSS))
+	maliciousXSSSet = make(map[string][]byte, len(payloads.MaliciousXSS))
 	for _, x := range payloads.MaliciousXSS {
 		if s, ok := x.(string); ok {
-			maliciousXSSSet[s] = struct{}{}
+			maliciousXSSSet[s] = []byte(strings.ToLower(s))
 		}
 	}
 }
@@ -54,7 +55,7 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	sentStrings := extractStrings(input.SentPayload)
+	sentStrings := input.sentStrings()
 	if len(sentStrings) == 0 {
 		return nil
 	}
@@ -79,7 +80,8 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	}
 
 	var findings []swagger.AnalysisFinding
-	bodyLower := bytes.ToLower(input.ResponseBody)
+	// Lowercased (Unicode-aware) only once a sent string is a known XSS payload.
+	var bodyLower []byte
 
 	for _, payloadStr := range sentStrings {
 		if payloadStr == "" {
@@ -87,11 +89,14 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		}
 
 		// O(1) lookup in pre-built set instead of O(N) slice scan
-		if _, ok := maliciousXSSSet[payloadStr]; !ok {
+		payloadLower, ok := maliciousXSSSet[payloadStr]
+		if !ok {
 			continue
 		}
 
-		payloadLower := []byte(strings.ToLower(payloadStr))
+		if bodyLower == nil {
+			bodyLower = bytes.ToLower(input.ResponseBody)
+		}
 		if bytes.Contains(bodyLower, payloadLower) {
 			findings = append(findings, swagger.AnalysisFinding{
 				RuleID:           "swazz/reflected-xss",

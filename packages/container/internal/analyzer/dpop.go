@@ -20,7 +20,7 @@ func (a *DPoPTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.Analysis
 	}
 
 	// Fast pre-filter: skip scanning if no DPoP indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "dpop", "invalid_dpop_proof", "htm claim", "htu claim", "dpopproof") {
+	if !input.containsAnyLower("dpop", "invalid_dpop_proof", "htm claim", "htu claim", "dpopproof") {
 		return nil
 	}
 

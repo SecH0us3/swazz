@@ -6,12 +6,15 @@
 package analyzer
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"swazz-engine/internal/swagger"
 )
 
 type SensitiveAnalyzer struct{}
+
+const internalIPPattern = `\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b`
 
 type secretSignature struct {
 	category string
@@ -31,7 +34,7 @@ func init() {
 		{"Stripe Standard API Key", `\b(sk_live_[0-9a-zA-Z]{24,})\b`},
 		{"Private Key Block", `-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----`},
 		{"JWT Token", `\b(eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_.+/=]+)\b`},
-		{"Internal IP", `\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b`},
+		{"Internal IP", internalIPPattern},
 		{"Generic Secret/Key", `(?i)(api[_-]?key|apikey|secret[_-]?key|access[_-]?token)\s*[:=]\s*["']?([A-Za-z0-9-_]{20,})["']?`},
 	}
 
@@ -43,13 +46,29 @@ func init() {
 	}
 }
 
+// internalIPAt is the "Internal IP" signature anchored for findInternalIP.
+var internalIPAt = anchoredRegexp(internalIPPattern)
+
+// findInternalIP returns the location of the first internalIPRx match in body. A match opens at a
+// word boundary with "10.", "172." or "192.168.", so only those positions are tried; the anchored
+// pattern's own leading \b always holds there, so the boundary is checked against the byte before.
+func findInternalIP(body []byte) []int {
+	return findFrom(body, internalIPAt, '1', func(i int) bool {
+		if i > 0 && isWordASCII(body[i-1]) {
+			return false
+		}
+		rest := body[i:]
+		return bytes.HasPrefix(rest, []byte("10.")) || bytes.HasPrefix(rest, []byte("172.")) || bytes.HasPrefix(rest, []byte("192.168."))
+	})
+}
+
 func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	if len(input.ResponseBody) == 0 {
 		return nil
 	}
 
 	// Fast pre-filter: skip scanning if no secret/key indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "akia", "aiza", "xox", "sk_live", "-----begin", "eyj", "10.", "172.", "192.168.", "key", "token", "secret", "apikey", "api_key") {
+	if !input.containsAnyLower("akia", "aiza", "xox", "sk_live", "-----begin", "eyj", "10.", "172.", "192.168.", "key", "token", "secret", "apikey", "api_key") {
 		return nil
 	}
 
@@ -58,40 +77,45 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 	for _, sig := range secretSignatures {
 		switch sig.category {
 		case "AWS Access Key":
-			if !containsFoldASCII(input.ResponseBody, "akia") {
+			if !input.containsLower("akia") {
 				continue
 			}
 		case "Google Cloud API Key":
-			if !containsFoldASCII(input.ResponseBody, "aiza") {
+			if !input.containsLower("aiza") {
 				continue
 			}
 		case "Slack Token":
-			if !containsFoldASCII(input.ResponseBody, "xox") {
+			if !input.containsLower("xox") {
 				continue
 			}
 		case "Stripe Standard API Key":
-			if !containsFoldASCII(input.ResponseBody, "sk_live") {
+			if !input.containsLower("sk_live") {
 				continue
 			}
 		case "Private Key Block":
-			if !containsFoldASCII(input.ResponseBody, "-----begin") {
+			if !input.containsLower("-----begin") {
 				continue
 			}
 		case "JWT Token":
-			if !containsFoldASCII(input.ResponseBody, "eyj") {
+			if !input.containsLower("eyj") {
 				continue
 			}
 		case "Internal IP":
-			if !containsAnyFoldASCII(input.ResponseBody, "10.", "172.", "192.168.") {
+			if !input.containsAnyLower("10.", "172.", "192.168.") {
 				continue
 			}
 		case "Generic Secret/Key":
-			if !containsAnyFoldASCII(input.ResponseBody, "key", "secret", "token", "apikey") {
+			if !input.containsAnyLower("key", "secret", "token", "apikey") {
 				continue
 			}
 		}
 
-		loc := sig.pattern.FindIndex(input.ResponseBody)
+		var loc []int
+		if sig.category == "Internal IP" {
+			loc = findInternalIP(input.ResponseBody)
+		} else {
+			loc = sig.pattern.FindIndex(input.ResponseBody)
+		}
 		if loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])
 

@@ -22,7 +22,7 @@ var (
 )
 
 func (a *JWTTamperingAnalyzer) isAlgNonePayload(input *AnalysisInput) bool {
-	if input.SentPayload != nil && strings.Contains(fmt.Sprintf("%v", input.SentPayload), jwtAlgNone) {
+	if input.SentPayload != nil && strings.Contains(input.payloadText(), jwtAlgNone) {
 		return true
 	}
 	return false
@@ -34,7 +34,7 @@ func (a *JWTTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisF
 	}
 
 	// Fast pre-filter: skip scanning if no JWT error indicators or alg:none payloads are present
-	if !containsAnyFoldASCII(input.ResponseBody, "jwt", "jsonwebtoken", "tokenexpirederror", "expiredsignatureerror", "algorithm: none", "keyfunc", "rsa: verification", "jwk", "nimbus", "jose") && !a.isAlgNonePayload(input) {
+	if !input.containsAnyLower("jwt", "jsonwebtoken", "tokenexpirederror", "expiredsignatureerror", "algorithm: none", "keyfunc", "rsa: verification", "jwk", "nimbus", "jose") && !a.isAlgNonePayload(input) {
 		return nil
 	}
 
@@ -69,7 +69,7 @@ func (a *JWTTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisF
 	}
 
 	// 2. Check for acceptance of alg:none token (authenticated data returned when alg:none token sent)
-	if a.isAlgNonePayload(input) && containsAnyFoldASCII(input.ResponseBody, "\"user\":", "\"email\":", "\"roles\":", "\"username\":", "\"sub\":") {
+	if a.isAlgNonePayload(input) && input.containsAnyLower("\"user\":", "\"email\":", "\"roles\":", "\"username\":", "\"sub\":") {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:           "swazz/jwt-tampering",
 			Level:            "critical",
