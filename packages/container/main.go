@@ -9,13 +9,14 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"runtime"
 	"strings"
 	"swazz-engine/internal/agent"
 	"time"
 
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/wizard"
+
+	"github.com/google/uuid"
 )
 
 //go:embed LICENSE
@@ -136,7 +137,9 @@ func extractPprofAddr() string {
 }
 
 func main() {
-	runtime.GOMAXPROCS(2)
+	// Before any goroutine starts: uuid.New() then draws from a buffered pool instead of
+	// reading crypto/rand for every finding ID and OOB token.
+	uuid.EnableRandPool()
 
 	pprofAddr := extractPprofAddr()
 	if pprofAddr != "" {

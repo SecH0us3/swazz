@@ -6,126 +6,107 @@
 package runner
 
 import (
-	"fmt"
-	"sort"
+	"container/heap"
 	"strings"
 	"sync"
 
 	"swazz-engine/internal/swagger"
 )
 
-type EndpointSizeBaseline struct {
-	mu         sync.Mutex
-	sizes      []int64
-	medianSize int64
-	calculated bool
+// sortedSamples keeps a running median of its samples in two heaps: the lower half as a max-heap
+// and the upper half as a min-heap, sized equal or the lower one larger by one. An insert costs
+// O(log n) and a read O(1), under the lock the endpoint's workers share.
+type sortedSamples struct {
+	mu    sync.Mutex
+	lower int64Heap // max-heap, stored negated
+	upper int64Heap // min-heap
 }
 
-func (b *EndpointSizeBaseline) addSize(size int64) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.sizes = append(b.sizes, size)
-	b.calculated = false
-}
-
-func (b *EndpointSizeBaseline) getMedian() int64 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.calculated {
-		return b.medianSize
-	}
-	n := len(b.sizes)
-	if n == 0 {
-		b.medianSize = 0
-		b.calculated = true
-		return 0
-	}
-
-	temp := make([]int64, n)
-	copy(temp, b.sizes)
-	sort.Slice(temp, func(i, j int) bool { return temp[i] < temp[j] })
-
-	if n%2 == 1 {
-		b.medianSize = temp[n/2]
+func (s *sortedSamples) add(v int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lower.Len() == 0 || v <= -s.lower[0] {
+		heap.Push(&s.lower, -v)
 	} else {
-		b.medianSize = (temp[n/2-1] + temp[n/2]) / 2
+		heap.Push(&s.upper, v)
 	}
-	b.calculated = true
-	return b.medianSize
+	switch {
+	case s.lower.Len() > s.upper.Len()+1:
+		heap.Push(&s.upper, -heap.Pop(&s.lower).(int64))
+	case s.upper.Len() > s.lower.Len():
+		heap.Push(&s.lower, -heap.Pop(&s.upper).(int64))
+	}
+}
+
+// median returns the middle sample, or the mean of the two middle ones; 0 with no samples.
+func (s *sortedSamples) median() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case s.lower.Len() == 0:
+		return 0
+	case s.lower.Len() > s.upper.Len():
+		return -s.lower[0]
+	default:
+		return (-s.lower[0] + s.upper[0]) / 2
+	}
+}
+
+// int64Heap is a min-heap of int64 for container/heap.
+type int64Heap []int64
+
+func (h int64Heap) Len() int           { return len(h) }
+func (h int64Heap) Less(i, j int) bool { return h[i] < h[j] }
+func (h int64Heap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *int64Heap) Push(x any)        { *h = append(*h, x.(int64)) }
+func (h *int64Heap) Pop() any {
+	old := *h
+	v := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return v
+}
+
+type EndpointSizeBaseline struct{ sortedSamples }
+
+func (b *EndpointSizeBaseline) addSize(size int64) { b.add(size) }
+func (b *EndpointSizeBaseline) getMedian() int64   { return b.median() }
+
+type EndpointTimeBaseline struct{ sortedSamples }
+
+func (b *EndpointTimeBaseline) addTime(t int64)  { b.add(t) }
+func (b *EndpointTimeBaseline) getMedian() int64 { return b.median() }
+
+// baselineKey is the key both baselines are stored under: the method uppercased, then the path.
+func baselineKey(method, path string) string {
+	return strings.ToUpper(method) + " " + path
 }
 
 func (r *Runner) recordSizeBaseline(method, path string, size int64) {
-	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
-	val, _ := r.sizeBaselines.LoadOrStore(key, &EndpointSizeBaseline{})
-	baseline := val.(*EndpointSizeBaseline)
-	baseline.addSize(size)
+	val, _ := r.sizeBaselines.LoadOrStore(baselineKey(method, path), &EndpointSizeBaseline{})
+	val.(*EndpointSizeBaseline).addSize(size)
 }
 
 func (r *Runner) getSizeBaselineMedian(method, path string) int64 {
 	if r.sizeBaselines == nil {
 		return 0
 	}
-	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
-	val, ok := r.sizeBaselines.Load(key)
+	val, ok := r.sizeBaselines.Load(baselineKey(method, path))
 	if !ok {
 		return 0
 	}
 	return val.(*EndpointSizeBaseline).getMedian()
 }
 
-type EndpointTimeBaseline struct {
-	mu         sync.Mutex
-	times      []int64
-	medianTime int64
-	calculated bool
-}
-
-func (b *EndpointTimeBaseline) addTime(t int64) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.times = append(b.times, t)
-	b.calculated = false
-}
-
-func (b *EndpointTimeBaseline) getMedian() int64 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.calculated {
-		return b.medianTime
-	}
-	n := len(b.times)
-	if n == 0 {
-		b.medianTime = 0
-		b.calculated = true
-		return 0
-	}
-
-	temp := make([]int64, n)
-	copy(temp, b.times)
-	sort.Slice(temp, func(i, j int) bool { return temp[i] < temp[j] })
-
-	if n%2 == 1 {
-		b.medianTime = temp[n/2]
-	} else {
-		b.medianTime = (temp[n/2-1] + temp[n/2]) / 2
-	}
-	b.calculated = true
-	return b.medianTime
-}
-
 func (r *Runner) recordTimeBaseline(method, path string, t int64) {
-	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
-	val, _ := r.timeBaselines.LoadOrStore(key, &EndpointTimeBaseline{})
-	baseline := val.(*EndpointTimeBaseline)
-	baseline.addTime(t)
+	val, _ := r.timeBaselines.LoadOrStore(baselineKey(method, path), &EndpointTimeBaseline{})
+	val.(*EndpointTimeBaseline).addTime(t)
 }
 
 func (r *Runner) getTimeBaselineMedian(method, path string) int64 {
 	if r.timeBaselines == nil {
 		return 0
 	}
-	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
-	val, ok := r.timeBaselines.Load(key)
+	val, ok := r.timeBaselines.Load(baselineKey(method, path))
 	if !ok {
 		return 0
 	}

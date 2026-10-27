@@ -34,7 +34,7 @@ func (a *SSRFCloudMetadataAnalyzer) Analyze(input *AnalysisInput) []swagger.Anal
 	}
 
 	// Fast pre-filter: skip scanning if no cloud metadata / internal service indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "ami-", "i-", "security-credentials", "computemetadata", "metadata-flavor", "azenvironment", "subscriptionid", "vmid", "kubernetes.io/serviceaccount", "cluster_manager", "listener_manager", "serviceaccount", "lastupdated", "iam/info", "compute.internal") {
+	if !input.containsAnyLower("ami-", "i-", "security-credentials", "computemetadata", "metadata-flavor", "azenvironment", "subscriptionid", "vmid", "kubernetes.io/serviceaccount", "cluster_manager", "listener_manager", "serviceaccount", "lastupdated", "iam/info", "compute.internal") {
 		return nil
 	}
 

@@ -41,6 +41,9 @@ type Generator struct {
 	cachedMaliciousStrings []any
 	// hasActiveMaliciousStrings tracks if any malicious string categories are enabled
 	hasActiveMaliciousStrings bool
+	// bodyIterations is BodyIterations, computed once by New (bodyIterationsSet).
+	bodyIterations    int
+	bodyIterationsSet bool
 
 	// The boundary strings this generator's payload size cap can carry (BoundaryStringsFitting).
 	boundaryStrings []any
@@ -84,6 +87,7 @@ func New(dictionaries map[string][]any, profile swagger.FuzzingProfile, settings
 		g.boundaryStrings = payloads.BoundaryStringsFitting(settings.PayloadSizeCap())
 	}
 	g.cachedMaliciousStrings, g.hasActiveMaliciousStrings = g.getActiveMaliciousStrings()
+	g.bodyIterations, g.bodyIterationsSet = g.countBodyIterations(), true
 	return g
 }
 
@@ -388,52 +392,42 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 
 // BodyIterations returns the number of iterations needed for body fuzzing.
 func (g *Generator) BodyIterations() int {
+	if g.bodyIterationsSet {
+		return g.bodyIterations
+	}
+	return g.countBodyIterations()
+}
+
+// countBodyIterations computes BodyIterations; New stores it, since a generator's profile and
+// categories do not change after it.
+func (g *Generator) countBodyIterations() int {
 	if g.profile != swagger.ProfileMalicious {
 		return 0
 	}
 	is := g.isCategoryEnabled
 	bodyCount := 0
-	var maliciousBody []any
-	if is(payloads.CatMaliciousEncoding) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousEncoding...)
+	for _, c := range []struct {
+		category string
+		n        int
+	}{
+		{payloads.CatMaliciousEncoding, len(payloads.MaliciousEncoding)},
+		{payloads.CatMaliciousSQLi, len(payloads.MaliciousSQLi)},
+		{payloads.CatMaliciousXSS, len(payloads.MaliciousXSS)},
+		{payloads.CatMaliciousPathTraversal, len(payloads.MaliciousPathTraversal)},
+		{payloads.CatMaliciousCmdi, len(payloads.MaliciousCmdi)},
+		{payloads.CatMaliciousSSTI, len(payloads.MaliciousSSTI)},
+		{payloads.CatMaliciousXXE, len(payloads.MaliciousXXE)},
+		{payloads.CatMaliciousPrototypePollution, len(payloads.MaliciousPrototypePollution)},
+		{payloads.CatMaliciousNoSQLi, len(payloads.MaliciousNoSQLi)},
+		{payloads.CatMaliciousSSRF, len(payloads.MaliciousSSRF)},
+		{payloads.CatMaliciousMassAssignment, len(payloads.MaliciousMassAssignment)},
+		{payloads.CatMaliciousGraphQL, len(payloads.MaliciousGraphQL)},
+		{payloads.CatOOBInteraction, len(payloads.MaliciousOOB)},
+	} {
+		if is(c.category) {
+			bodyCount += c.n
+		}
 	}
-	if is(payloads.CatMaliciousSQLi) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousSQLi...)
-	}
-	if is(payloads.CatMaliciousXSS) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousXSS...)
-	}
-	if is(payloads.CatMaliciousPathTraversal) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousPathTraversal...)
-	}
-	if is(payloads.CatMaliciousCmdi) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousCmdi...)
-	}
-	if is(payloads.CatMaliciousSSTI) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousSSTI...)
-	}
-	if is(payloads.CatMaliciousXXE) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousXXE...)
-	}
-	if is(payloads.CatMaliciousPrototypePollution) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousPrototypePollution...)
-	}
-	if is(payloads.CatMaliciousNoSQLi) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousNoSQLi...)
-	}
-	if is(payloads.CatMaliciousSSRF) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousSSRF...)
-	}
-	if is(payloads.CatMaliciousMassAssignment) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousMassAssignment...)
-	}
-	if is(payloads.CatMaliciousGraphQL) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousGraphQL...)
-	}
-	if is(payloads.CatOOBInteraction) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousOOB...)
-	}
-	bodyCount = len(maliciousBody)
 	if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {
 		bodyCount = len(payloads.MaliciousNumbers)
 	}

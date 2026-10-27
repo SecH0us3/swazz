@@ -150,8 +150,7 @@ func (r *Runner) statsAggregator(p *statsPipe) {
 	var initializedTotalRequests bool
 
 	// Track completed iterations per endpoint to safely compute the contiguous watermark
-	completedIters := make(map[int]bool)
-	var activeEp, activePr string
+	var iters iterationWatermark
 
 	handle := func(msg statsMsg) {
 		if !initializedTotalRequests {
@@ -161,25 +160,7 @@ func (r *Runner) statsAggregator(p *statsPipe) {
 		}
 		accumulateResult(&stats, msg.result)
 
-		// If we switched to a new endpoint/profile, reset the completed iterations tracking
-		if msg.endpoint != activeEp || msg.profile != activePr {
-			activeEp = msg.endpoint
-			activePr = msg.profile
-			clear(completedIters)
-		}
-		completedIters[msg.currentIteration] = true
-
-		// Compute the contiguous watermark (highest iteration N where 1..N are all complete)
-		watermark := 0
-		for i := 1; i <= msg.totalIterations; i++ {
-			if completedIters[i] {
-				watermark = i
-			} else {
-				break
-			}
-		}
-
-		latestIteration = watermark
+		latestIteration = iters.complete(msg.endpoint, msg.profile, msg.currentIteration, msg.totalIterations)
 		if msg.totalIterations > latestTotalIterations {
 			latestTotalIterations = msg.totalIterations
 		}
@@ -232,6 +213,34 @@ func (r *Runner) statsAggregator(p *statsPipe) {
 			}
 		}
 	}
+}
+
+// iterationWatermark tracks which iterations of the current endpoint × profile have completed.
+// Iterations complete out of order; the watermark is the highest N where 1..N all have, which is
+// what a resumed scan can safely skip.
+type iterationWatermark struct {
+	endpoint, profile string
+	completed         map[int]bool
+	contiguous        int // 1..contiguous have all completed
+}
+
+// complete records iteration as done and returns the watermark, at most total. Switching to
+// another endpoint or profile starts over. Each iteration is passed over once on its way into
+// the contiguous run, rather than the run being rescanned from 1 on every result.
+func (w *iterationWatermark) complete(endpoint, profile string, iteration, total int) int {
+	if w.completed == nil || endpoint != w.endpoint || profile != w.profile {
+		w.endpoint, w.profile = endpoint, profile
+		if w.completed == nil {
+			w.completed = make(map[int]bool)
+		}
+		clear(w.completed)
+		w.contiguous = 0
+	}
+	w.completed[iteration] = true
+	for w.completed[w.contiguous+1] {
+		w.contiguous++
+	}
+	return min(w.contiguous, max(total, 0))
 }
 
 // publishSnapshot builds an immutable stats snapshot, stores it atomically,

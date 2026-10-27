@@ -450,10 +450,9 @@ func (r *Runner) isSessionExpired(resp *http.Response, bodyBytes []byte, reqHead
 
 	// 3. Response body contains typical login form indicators
 	if len(bodyBytes) > 0 {
-		bodyStr := strings.ToLower(string(bodyBytes))
-		if (strings.Contains(bodyStr, "login-form") || strings.Contains(bodyStr, "sign in") || strings.Contains(bodyStr, "please sign in")) &&
-			strings.Contains(bodyStr, "<form") &&
-			(strings.Contains(bodyStr, "password") || strings.Contains(bodyStr, "username") || strings.Contains(bodyStr, "email")) {
+		if (containsFoldASCII(bodyBytes, "login-form") || containsFoldASCII(bodyBytes, "sign in")) &&
+			containsFoldASCII(bodyBytes, "<form") &&
+			(containsFoldASCII(bodyBytes, "password") || containsFoldASCII(bodyBytes, "username") || containsFoldASCII(bodyBytes, "email")) {
 			return r.isUsingActiveSession(reqHeaders, reqCookies)
 		}
 	}

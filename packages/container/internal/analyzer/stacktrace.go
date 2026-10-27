@@ -80,7 +80,7 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	}
 
 	// Fast pre-filter: skip scanning if no stack trace / exception indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "exception", "traceback", "trace", "panic", "error", "nil", "none", "null", "undefined", "cannot", "goroutine", "stack", "at ", "fatal", "line ", "server error", "laravel", "illuminate", "django", "actionpack", "rails", "node_modules", "gems") {
+	if !input.containsAnyLower("exception", "traceback", "trace", "panic", "error", "nil", "none", "null", "undefined", "cannot", "goroutine", "stack", "at ", "fatal", "line ", "server error", "laravel", "illuminate", "django", "actionpack", "rails", "node_modules", "gems") {
 		return nil
 	}
 
@@ -88,7 +88,7 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 
 	// 1. Check for Null Reference / Pointer Exceptions first (higher priority/severity)
 	for _, sig := range nullPointerSignatures {
-		if !containsAnyFoldASCII(input.ResponseBody, sig.guards...) {
+		if !input.containsAnyLower(sig.guards...) {
 			continue
 		}
 
@@ -121,7 +121,7 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 
 	// 2. Generic language stack traces
 	for _, sig := range stackSignatures {
-		if !containsAnyFoldASCII(input.ResponseBody, sig.guards...) {
+		if !input.containsAnyLower(sig.guards...) {
 			continue
 		}
 
