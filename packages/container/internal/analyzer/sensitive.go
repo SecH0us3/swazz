@@ -77,27 +77,27 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 	for _, sig := range secretSignatures {
 		switch sig.category {
 		case "AWS Access Key":
-			if !input.containsLower("akia") {
+			if !input.containsAnyLower("akia") {
 				continue
 			}
 		case "Google Cloud API Key":
-			if !input.containsLower("aiza") {
+			if !input.containsAnyLower("aiza") {
 				continue
 			}
 		case "Slack Token":
-			if !input.containsLower("xox") {
+			if !input.containsAnyLower("xox") {
 				continue
 			}
 		case "Stripe Standard API Key":
-			if !input.containsLower("sk_live") {
+			if !input.containsAnyLower("sk_live") {
 				continue
 			}
 		case "Private Key Block":
-			if !input.containsLower("-----begin") {
+			if !input.containsAnyLower("-----begin") {
 				continue
 			}
 		case "JWT Token":
-			if !input.containsLower("eyj") {
+			if !input.containsAnyLower("eyj") {
 				continue
 			}
 		case "Internal IP":

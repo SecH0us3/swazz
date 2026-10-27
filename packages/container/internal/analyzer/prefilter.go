@@ -8,96 +8,31 @@ package analyzer
 import (
 	"bytes"
 	"regexp"
-	"strings"
 )
 
-// containsFoldASCII checks if haystack contains needle (ASCII case-insensitive) without any heap allocations.
-func containsFoldASCII(haystack []byte, needle string) bool {
-	nLen := len(needle)
-	hLen := len(haystack)
-	if nLen == 0 {
-		return true
-	}
-	if hLen < nLen {
-		return false
-	}
-
-	firstLower := needle[0]
-	firstUpper := firstLower
-	if firstLower >= 'a' && firstLower <= 'z' {
-		firstUpper = firstLower - 32
-	} else if firstLower >= 'A' && firstLower <= 'Z' {
-		firstLower = firstLower + 32
-	}
-
-	limit := hLen - nLen
-	for i := 0; i <= limit; i++ {
-		c := haystack[i]
-		if c == firstLower || c == firstUpper {
-			match := true
-			for j := 1; j < nLen; j++ {
-				hc := haystack[i+j]
-				nc := needle[j]
-				if hc != nc {
-					if hc >= 'A' && hc <= 'Z' {
-						hc += 32
-					}
-					if nc >= 'A' && nc <= 'Z' {
-						nc += 32
-					}
-					if hc != nc {
-						match = false
-						break
-					}
-				}
-			}
-			if match {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// containsAnyFoldASCII checks if haystack contains any of the provided needles (ASCII case-insensitive).
-func containsAnyFoldASCII(haystack []byte, needles ...string) bool {
-	for _, needle := range needles {
-		if containsFoldASCII(haystack, needle) {
-			return true
-		}
-	}
-	return false
-}
-
-// containsLower reports whether the response body contains needle, ASCII case-insensitively,
-// like containsFoldASCII over input.ResponseBody. It searches the body lowercased once per
-// input, so a run of prefilters costs one fast strings.Index pass per needle.
-func (in *AnalysisInput) containsLower(needle string) bool {
-	return strings.Contains(in.lowerBody(), lowerNeedle(needle))
-}
-
-// containsAnyLower reports whether the response body contains any of needles (see containsLower).
+// containsAnyLower reports whether the response body contains any of needles, ASCII
+// case-insensitively, like containsAnyFoldASCII over input.ResponseBody. It searches the body
+// lowercased once per input, so a run of prefilters costs one fast bytes.Index pass per needle.
 func (in *AnalysisInput) containsAnyLower(needles ...string) bool {
 	body := in.lowerBody()
 	for _, needle := range needles {
-		if strings.Contains(body, lowerNeedle(needle)) {
+		if bytes.Contains(body, []byte(lowerNeedle(needle))) {
 			return true
 		}
 	}
 	return false
 }
 
-// lowerASCII returns b as a string with ASCII letters lowercased and every other byte unchanged.
-func lowerASCII(b []byte) string {
-	var sb strings.Builder
-	sb.Grow(len(b))
-	for _, c := range b {
+// lowerASCIIInto writes b with ASCII letters lowercased into *dst (len(b) long) and returns dst.
+func lowerASCIIInto(dst *[]byte, b []byte) *[]byte {
+	out := *dst
+	for i, c := range b {
 		if c >= 'A' && c <= 'Z' {
 			c += 'a' - 'A'
 		}
-		sb.WriteByte(c)
+		out[i] = c
 	}
-	return sb.String()
+	return dst
 }
 
 // lowerNeedle returns needle with ASCII letters lowercased. Needles are lowercase literals in
@@ -105,7 +40,8 @@ func lowerASCII(b []byte) string {
 func lowerNeedle(needle string) string {
 	for i := 0; i < len(needle); i++ {
 		if c := needle[i]; c >= 'A' && c <= 'Z' {
-			return lowerASCII([]byte(needle))
+			b := []byte(needle)
+			return string(*lowerASCIIInto(&b, b))
 		}
 	}
 	return needle

@@ -6,6 +6,7 @@
 package analyzer
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"strings"
@@ -34,7 +35,7 @@ var ormErrorLiterals = []string{
 // findORMError returns the location of the first ormErrorRx match in the response body, skipping
 // the regex when no match can exist.
 func findORMError(input *AnalysisInput) []int {
-	if !input.containsAnyLower(ormErrorLiterals...) {
+	if !input.hasUnicodeFoldRunes() && !input.containsAnyLower(ormErrorLiterals...) {
 		return nil
 	}
 	return ormErrorRx.FindIndex(input.ResponseBody)
@@ -42,16 +43,19 @@ func findORMError(input *AnalysisInput) []int {
 
 // massAssignmentKeys are the attribute names massAssignmentRx matches, each followed by the
 // closing quote.
-var massAssignmentKeys = []string{`role"`, `role_id"`, `is_admin"`, `admin"`, `tier"`, `permissions"`, `verified"`, `status"`}
+var massAssignmentKeys = [][]byte{[]byte(`role"`), []byte(`role_id"`), []byte(`is_admin"`), []byte(`admin"`), []byte(`tier"`), []byte(`permissions"`), []byte(`verified"`), []byte(`status"`)}
 
 // findMassAssignment returns the location of the first massAssignmentRx match in the response
 // body. A match opens with a quote and one of massAssignmentKeys, so only those positions are tried.
 func findMassAssignment(input *AnalysisInput) []int {
+	if input.hasUnicodeFoldRunes() {
+		return massAssignmentRx.FindIndex(input.ResponseBody)
+	}
 	lower := input.lowerBody()
 	return findFrom(input.ResponseBody, massAssignmentAt, '"', func(i int) bool {
 		rest := lower[i+1:]
 		for _, k := range massAssignmentKeys {
-			if strings.HasPrefix(rest, k) {
+			if bytes.HasPrefix(rest, k) {
 				return true
 			}
 		}

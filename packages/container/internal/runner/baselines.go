@@ -6,41 +6,64 @@
 package runner
 
 import (
-	"slices"
+	"container/heap"
 	"strings"
 	"sync"
 
 	"swazz-engine/internal/swagger"
 )
 
-// sortedSamples keeps its samples in ascending order, so the median is read without sorting:
-// each insert costs one binary search and a shift, instead of every read after an insert
-// copying and sorting all of them under the lock the endpoint's workers share.
+// sortedSamples keeps a running median of its samples in two heaps: the lower half as a max-heap
+// and the upper half as a min-heap, sized equal or the lower one larger by one. An insert costs
+// O(log n) and a read O(1), under the lock the endpoint's workers share.
 type sortedSamples struct {
-	mu      sync.Mutex
-	samples []int64
+	mu    sync.Mutex
+	lower int64Heap // max-heap, stored negated
+	upper int64Heap // min-heap
 }
 
 func (s *sortedSamples) add(v int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	i, _ := slices.BinarySearch(s.samples, v)
-	s.samples = slices.Insert(s.samples, i, v)
+	if s.lower.Len() == 0 || v <= -s.lower[0] {
+		heap.Push(&s.lower, -v)
+	} else {
+		heap.Push(&s.upper, v)
+	}
+	switch {
+	case s.lower.Len() > s.upper.Len()+1:
+		heap.Push(&s.upper, -heap.Pop(&s.lower).(int64))
+	case s.upper.Len() > s.lower.Len():
+		heap.Push(&s.lower, -heap.Pop(&s.upper).(int64))
+	}
 }
 
 // median returns the middle sample, or the mean of the two middle ones; 0 with no samples.
 func (s *sortedSamples) median() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	n := len(s.samples)
 	switch {
-	case n == 0:
+	case s.lower.Len() == 0:
 		return 0
-	case n%2 == 1:
-		return s.samples[n/2]
+	case s.lower.Len() > s.upper.Len():
+		return -s.lower[0]
 	default:
-		return (s.samples[n/2-1] + s.samples[n/2]) / 2
+		return (-s.lower[0] + s.upper[0]) / 2
 	}
+}
+
+// int64Heap is a min-heap of int64 for container/heap.
+type int64Heap []int64
+
+func (h int64Heap) Len() int           { return len(h) }
+func (h int64Heap) Less(i, j int) bool { return h[i] < h[j] }
+func (h int64Heap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *int64Heap) Push(x any)        { *h = append(*h, x.(int64)) }
+func (h *int64Heap) Pop() any {
+	old := *h
+	v := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return v
 }
 
 type EndpointSizeBaseline struct{ sortedSamples }

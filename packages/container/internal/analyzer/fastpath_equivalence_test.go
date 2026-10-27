@@ -18,10 +18,9 @@ import (
 // fragments that sit near the edge of a match: keys and values in either case, partial
 // signatures, word characters around IPs, non-ASCII bytes.
 //
-// Excluded: the two non-ASCII runes Go's (?i) folds onto ASCII letters, U+212A KELVIN SIGN (k)
-// and U+017F LATIN SMALL LETTER LONG S (s). Like the ASCII prefilters that already guard the
-// (?i) regexes, the fast paths fold ASCII only, so a body spelling a signature with them is not
-// matched.
+// The fragments include the two non-ASCII runes Go's (?i) folds onto ASCII letters, U+017F
+// LATIN SMALL LETTER LONG S (s) and U+212A KELVIN SIGN (k): the (?i) fast paths fall back to
+// their regex when a body holds one.
 
 var equivalenceFragments = []string{
 	`"`, `'`, ` `, "\n", "\t", `:`, `,`, `{`, `}`, `[`, `]`, `*`, `(`, `)`, `=`, `.`, `_`, `-`,
@@ -34,6 +33,7 @@ var equivalenceFragments = []string{
 	`root:x:0:0:`, `[boot loader]`, `[boot loader] timeout=30`,
 	`ActiveRecord::UnknownAttributeError`, `activerecord::unknownattributeerror`, `UnrecognizedPropertyException`,
 	`Cannot set property 'role' on`, `cannot set property 'tier' on`, `MongoError: Unknown modifier: $set.status`,
+	"\u017f", "\u212a", "\"\u017ftatus\":\"active\"", "Un\u212anownAttributeError", "ActiveRecord::Un\u212anownAttributeError",
 }
 
 func equivalenceBodies(n int) [][]byte {
@@ -110,8 +110,8 @@ func TestContainsLowerMatchesFoldASCII(t *testing.T) {
 	for _, body := range bodies {
 		for _, needle := range needles {
 			input := &AnalysisInput{ResponseBody: body}
-			if got, want := input.containsLower(needle), containsFoldASCII(body, needle); got != want {
-				t.Fatalf("containsLower(%q, %q) = %v, containsFoldASCII = %v", body, needle, got, want)
+			if got, want := input.containsAnyLower(needle), containsFoldASCII(body, needle); got != want {
+				t.Fatalf("containsAnyLower(%q, %q) = %v, containsFoldASCII = %v", body, needle, got, want)
 			}
 		}
 		input := &AnalysisInput{ResponseBody: body}
@@ -124,13 +124,18 @@ func TestContainsLowerMatchesFoldASCII(t *testing.T) {
 func TestAnalysisInputViewsAreComputedOnce(t *testing.T) {
 	payload := map[string]any{"name": "x", "tags": []any{"a", "b"}}
 	input := &AnalysisInput{ResponseBody: []byte("AbC"), SentPayload: payload}
-	if got := input.lowerBody(); got != "abc" {
+	if got := string(input.lowerBody()); got != "abc" {
 		t.Fatalf("lowerBody = %q", got)
 	}
-	input.ResponseBody = []byte("changed")
-	if got := input.lowerBody(); got != "abc" {
+	input.ResponseBody = []byte("CHANGED")
+	if got := string(input.lowerBody()); got != "abc" {
 		t.Fatalf("lowerBody recomputed: %q", got)
 	}
+	input.release()
+	if got := string(input.lowerBody()); got != "changed" {
+		t.Fatalf("lowerBody after release = %q, want it computed again", got)
+	}
+	input.release()
 	strs := input.sentStrings()
 	slices.Sort(strs)
 	if !slices.Equal(strs, []string{"a", "b", "x"}) {
