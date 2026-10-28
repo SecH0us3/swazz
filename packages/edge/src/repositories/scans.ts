@@ -803,12 +803,6 @@ export class ScansRepository extends BaseService implements IScansRepository {
       const eventType = typeof type === 'string' && type ? type : 'event';
       const coalescedKind = isCoalescedProgressEvent(eventType, payload);
 
-      // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
-      // The OOB tokens themselves are stored by the coordinator as the event arrives
-      // (storeOobPending); stored again here, a token already reported would come back. The event
-      // log keeps only their count.
-      // High-volume events (progress, result, checkpoint, complete) only need their event type in
-      // scan_events to prevent database bloat; full payloads are processed in-memory.
       // Transient progress heartbeats and [Fuzz Progress] log lines are coalesced per scan via
       // deterministic IDs so a 6-hour scan keeps at most one row of each in D1 while still
       // showing the latest [Fuzz Progress] line in getRunnerLogs.
@@ -844,6 +838,12 @@ export class ScansRepository extends BaseService implements IScansRepository {
         continue;
       }
 
+      // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
+      // The OOB tokens themselves are stored by the coordinator as the event arrives
+      // (storeOobPending); stored again here, a token already reported would come back. The event
+      // log keeps only their count.
+      // High-volume events (result, checkpoint, complete) only need their event type in
+      // scan_events to prevent database bloat; full payloads are processed in-memory.
       let payloadStr: string;
       if (oobTokens) {
         payloadStr = JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } });
