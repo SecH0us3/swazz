@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strings"
 	"swazz-engine/internal/swagger"
 	"sync"
 )
@@ -38,6 +39,9 @@ type AnalysisInput struct {
 	sentDone    bool
 	payloadStr  string
 	payloadDone bool
+	bigrams      *bigramIndex // from bigramPool; returned by release
+	bigramsDone  bool
+	needleChecks int
 }
 
 // lowerBody returns ResponseBody with ASCII letters lowercased, index for index. Only ASCII is
@@ -59,6 +63,47 @@ func (in *AnalysisInput) release() {
 		in.lowered = nil
 	}
 	in.loweredDone = false
+	if in.bigrams != nil {
+		bigramPool.Put(in.bigrams)
+		in.bigrams = nil
+	}
+	in.bigramsDone = false
+	in.needleChecks = 0
+}
+
+// bigramIndex is a 65,536-bit set (8 KiB) tracking all 2-byte bigrams present in the response body.
+type bigramIndex [1024]uint64
+
+func (bg *bigramIndex) set(a, b byte) {
+	pair := uint16(a)<<8 | uint16(b)
+	bg[pair>>6] |= uint64(1) << (pair & 63)
+}
+
+func (bg *bigramIndex) has(a, b byte) bool {
+	pair := uint16(a)<<8 | uint16(b)
+	return bg[pair>>6]&(uint64(1)<<(pair&63)) != 0
+}
+
+var bigramPool = sync.Pool{
+	New: func() any {
+		return new(bigramIndex)
+	},
+}
+
+// bodyBigrams populates and returns the 2-byte bigram index of the lowercased response body.
+func (in *AnalysisInput) bodyBigrams() *bigramIndex {
+	if !in.bigramsDone {
+		bg := bigramPool.Get().(*bigramIndex)
+		*bg = bigramIndex{}
+		body := in.lowerBody()
+		limit := len(body) - 1
+		for i := 0; i < limit; i++ {
+			bg.set(body[i], body[i+1])
+		}
+		in.bigrams = bg
+		in.bigramsDone = true
+	}
+	return in.bigrams
 }
 
 // loweredPool holds the buffers lowerBody lowercases bodies into, so analyzing a response does
@@ -112,6 +157,85 @@ func (in *AnalysisInput) payloadText() string {
 		in.payloadDone = true
 	}
 	return in.payloadStr
+}
+
+// payloadContains reports whether any string value or map key in SentPayload contains any of needles.
+// It walks standard JSON payload types (string, maps, slices) without allocating, inspecting
+// individual keys and string leaves rather than matching across fmt.Sprintf("%v") formatting
+// delimiters; for unrecognized types it falls back to payloadText().
+func (in *AnalysisInput) payloadContains(needles ...string) bool {
+	if in == nil || in.SentPayload == nil || len(needles) == 0 {
+		return false
+	}
+	return valContains(in.SentPayload, needles, in)
+}
+
+func valContains(val any, needles []string, in *AnalysisInput) bool {
+	switch v := val.(type) {
+	case nil:
+		return false
+	case string:
+		for _, n := range needles {
+			if strings.Contains(v, n) {
+				return true
+			}
+		}
+		return false
+	case map[string]any:
+		for k, item := range v {
+			for _, n := range needles {
+				if strings.Contains(k, n) {
+					return true
+				}
+			}
+			if valContains(item, needles, in) {
+				return true
+			}
+		}
+		return false
+	case map[string]string:
+		for k, s := range v {
+			for _, n := range needles {
+				if strings.Contains(k, n) || strings.Contains(s, n) {
+					return true
+				}
+			}
+		}
+		return false
+	case map[any]any:
+		for k, item := range v {
+			if valContains(k, needles, in) || valContains(item, needles, in) {
+				return true
+			}
+		}
+		return false
+	case []any:
+		for _, item := range v {
+			if valContains(item, needles, in) {
+				return true
+			}
+		}
+		return false
+	case []string:
+		for _, s := range v {
+			for _, n := range needles {
+				if strings.Contains(s, n) {
+					return true
+				}
+			}
+		}
+		return false
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool:
+		return false
+	default:
+		text := in.payloadText()
+		for _, n := range needles {
+			if strings.Contains(text, n) {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 // ResponseAnalyzer is the interface implemented by each specific vulnerability scanner.

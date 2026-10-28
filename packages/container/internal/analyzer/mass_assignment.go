@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"swazz-engine/internal/swagger"
 )
@@ -64,27 +63,11 @@ func findMassAssignment(input *AnalysisInput) []int {
 }
 
 func (a *MassAssignmentAnalyzer) hasPrivilegedPayload(input *AnalysisInput) bool {
-	if input.SentPayload == nil {
-		return false
-	}
-	payloadStr := input.payloadText()
-	return strings.Contains(payloadStr, "role") ||
-		strings.Contains(payloadStr, "is_admin") ||
-		strings.Contains(payloadStr, "admin") ||
-		strings.Contains(payloadStr, "superadmin") ||
-		strings.Contains(payloadStr, "permissions") ||
-		strings.Contains(payloadStr, "verified") ||
-		strings.Contains(payloadStr, "tier") ||
-		strings.Contains(payloadStr, "status")
+	return input.payloadContains("role", "is_admin", "admin", "superadmin", "permissions", "verified", "tier", "status")
 }
 
 func (a *MassAssignmentAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	if len(input.ResponseBody) == 0 {
-		return nil
-	}
-
-	// Fast pre-filter: skip scanning if no privilege or ORM indicator is present in response body
-	if !input.containsAnyLower("role", "role_id", "is_admin", "admin", "superadmin", "permissions", "tier", "verified", "status", "unknownattributeerror", "unrecognizedpropertyexception") {
 		return nil
 	}
 

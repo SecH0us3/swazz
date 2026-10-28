@@ -67,11 +67,6 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 		return nil
 	}
 
-	// Fast pre-filter: skip scanning if no secret/key indicators are present in response body
-	if !input.containsAnyLower("akia", "aiza", "xox", "sk_live", "-----begin", "eyj", "10.", "172.", "192.168.", "key", "token", "secret", "apikey", "api_key") {
-		return nil
-	}
-
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range secretSignatures {
@@ -105,7 +100,7 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 				continue
 			}
 		case "Generic Secret/Key":
-			if !input.containsAnyLower("key", "secret", "token", "apikey") {
+			if !input.containsAnyLower("key", "secret", "token") {
 				continue
 			}
 		}
