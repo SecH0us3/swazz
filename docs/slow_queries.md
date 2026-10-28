@@ -12,7 +12,7 @@ Database operations in the edge coordinator are automatically monitored. The `ge
 Whenever a database query exceeds the configured threshold, Swazz triggers three notification channels:
 1. **Structured Log**: Logs a warning via `console.warn` with serialized JSON detailing the query, duration, threshold, and timestamp.
 2. **Cloudflare Analytics Engine**: Writes a data point to `ANALYTICS_ENGINE` (if bound) for dashboard visualization.
-3. **KV Cache**: Appends the query metadata to the `admin:slow-queries` KV array in the session cache (limited to the 100 most recent queries) with a 24-hour TTL.
+3. **In-Memory Ring Buffer**: Records query metadata into an in-memory rolling buffer (limited to the 100 most recent slow queries) exposed via `getBufferedSlowQueries()` for inspection via `/api/admin/slow-queries`, eliminating paid KV operations.
 
 ## Configuration
 

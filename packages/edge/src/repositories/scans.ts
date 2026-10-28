@@ -172,9 +172,39 @@ const ERROR_EVENT_SQL = "(type = 'error' OR (type = 'event' AND json_extract(pay
 // D1 allows at most 100 bound parameters per statement.
 const EVENT_ID_LOOKUP_CHUNK = 90;
 
+/** Whether the event is a transient progress heartbeat or a [Fuzz Progress] log line that is coalesced per scan. */
+function isCoalescedProgressEvent(eventType: string, payload: any): 'progress' | 'fuzz_progress' | null {
+  if (eventType !== 'event' || !payload || typeof payload !== 'object') return null;
+  if (payload.type === 'progress') return 'progress';
+  if (payload.type === 'runner_log' && typeof payload.data?.message === 'string') {
+    const msg = payload.data.message;
+    if (msg.startsWith('[Fuzz Progress]') || (msg.startsWith('{') && msg.includes('"totalRequests"'))) {
+      return 'fuzz_progress';
+    }
+  }
+  return null;
+}
+
+/** A sequenced event's place in its runner's stream, or null for an unsequenced one. */
+function eventOrder(body: any): { exec: string; seq: number } | null {
+  const { exec, seq } = body ?? {};
+  if (!isValidExec(exec) || typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return null;
+  return { exec, seq };
+}
+
+/**
+ * Whether a coalesced progress event may replace the one already kept: a queue redelivery or a
+ * retried batch can bring an older event after a newer one. Mirrors the upsert's WHERE clause.
+ */
+function supersedes(next: { exec: string; seq: number } | null, kept: { exec: string; seq: number } | null): boolean {
+  return next === null || kept === null || next.exec !== kept.exec || next.seq > kept.seq;
+}
+
 /** The stable scan_events id of a sequenced runner event, or undefined for any other. */
 function storedEventId(body: any): string | undefined {
-  const { scanId, exec, seq } = body ?? {};
+  const { scanId, type, payload, exec, seq } = body ?? {};
+  const eventType = typeof type === 'string' && type ? type : 'event';
+  if (isCoalescedProgressEvent(eventType, payload) !== null) return undefined;
   if (typeof scanId !== 'string' || scanId === '' || !isValidExec(exec)) return undefined;
   if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return undefined;
   return eventIdFor(scanId, exec, seq);
@@ -751,6 +781,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     }
     const seenInBatch = new Set<string>();
     const droppedForMissingScan = new Set<string>();
+    const coalescedInBatch = new Map<string, { index: number; order: { exec: string; seq: number } | null }>();
 
     for (const [index, msg] of messages.entries()) {
       const stableId = eventIds[index];
@@ -769,15 +800,66 @@ export class ScansRepository extends BaseService implements IScansRepository {
         continue;
       }
       const oobTokens = payload && payload.type === 'oob_pending' ? sanitizeOobPending(payload.data) : null;
+      const eventType = typeof type === 'string' && type ? type : 'event';
+      const coalescedKind = isCoalescedProgressEvent(eventType, payload);
+
+      // Transient progress heartbeats and [Fuzz Progress] log lines are coalesced per scan via
+      // deterministic IDs so a 6-hour scan keeps at most one row of each in D1 while still
+      // showing the latest [Fuzz Progress] line in getRunnerLogs.
+      if (coalescedKind !== null) {
+        const dedupId = `${scanId}:${coalescedKind}`;
+        const order = eventOrder(msg.body);
+        const kept = coalescedInBatch.get(dedupId);
+        if (kept !== undefined && !supersedes(order, kept.order)) {
+          continue;
+        }
+        // The kept row records its event's place (_exec, _seq) so an older event never replaces
+        // a newer one. Another exec is a resumed run and always replaces.
+        const basePayload = coalescedKind === 'progress' ? { type: 'progress' } : payload;
+        const coalescedPayload = JSON.stringify(
+          order ? { ...basePayload, _exec: order.exec, _seq: order.seq } : basePayload
+        );
+        const stmt = this.db.prepare(
+          `INSERT INTO scan_events (id, scan_id, type, payload, created_at)
+           SELECT ?, ?, ?, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)
+           ON CONFLICT(id) DO UPDATE SET type = excluded.type, payload = excluded.payload, created_at = excluded.created_at
+           WHERE json_extract(excluded.payload, '$._seq') IS NULL
+              OR json_extract(scan_events.payload, '$._seq') IS NULL
+              OR json_extract(excluded.payload, '$._exec') IS NOT json_extract(scan_events.payload, '$._exec')
+              OR json_extract(excluded.payload, '$._seq') > json_extract(scan_events.payload, '$._seq')`
+        ).bind(dedupId, scanId, eventType, coalescedPayload, scanId);
+        if (kept === undefined) {
+          coalescedInBatch.set(dedupId, { index: statements.length, order });
+          statements.push(stmt);
+        } else {
+          statements[kept.index] = stmt;
+          kept.order = order;
+        }
+        continue;
+      }
+
       // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
       // The OOB tokens themselves are stored by the coordinator as the event arrives
       // (storeOobPending); stored again here, a token already reported would come back. The event
       // log keeps only their count.
-      const payloadStr = oobTokens
-        ? JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } })
-        : (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
-      const eventType = typeof type === 'string' && type ? type : 'event';
-      
+      // High-volume events (result, checkpoint, complete) only need their event type in
+      // scan_events to prevent database bloat; full payloads are processed in-memory.
+      let payloadStr: string;
+      if (oobTokens) {
+        payloadStr = JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } });
+      } else if (
+        eventType === 'event' &&
+        payload &&
+        typeof payload === 'object' &&
+        (payload.type === 'result' ||
+          payload.type === 'checkpoint' ||
+          payload.type === 'complete')
+      ) {
+        payloadStr = JSON.stringify({ type: payload.type });
+      } else {
+        payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
+      }
+
       statements.push(
         this.db.prepare(
           `INSERT OR IGNORE INTO scan_events (id, scan_id, type, payload)

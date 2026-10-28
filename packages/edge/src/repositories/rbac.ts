@@ -58,6 +58,19 @@ import { DEFAULT_ROLES, isBuiltInRole } from '../config/rbac';
 const RBAC_CACHE_VERSION = 'v2';
 export const rbacCacheKey = (projectId: string, userId: string) => `rbac:${RBAC_CACHE_VERSION}:${projectId}:${userId}`;
 
+const NEGATIVE_RBAC_TTL_MS = 60_000; // 1 minute in-memory negative cache
+const MAX_NEGATIVE_RBAC_ENTRIES = 1000;
+export const negativeRbacCache = new Map<string, number>();
+
+function clearNegativeProjectRbac(projectId: string): void {
+  const prefix = `rbac:${RBAC_CACHE_VERSION}:${projectId}:`;
+  for (const key of negativeRbacCache.keys()) {
+    if (key.startsWith(prefix)) {
+      negativeRbacCache.delete(key);
+    }
+  }
+}
+
 export class RbacRepository extends BaseService implements IRbacRepository {
   constructor(env: Env) {
     super(env);
@@ -74,7 +87,9 @@ export class RbacRepository extends BaseService implements IRbacRepository {
   }
 
   async invalidateProjectRBAC(projectId: string): Promise<void> {
-    if (!isValidId(projectId) || !this.env.SESSION_CACHE) return;
+    if (!isValidId(projectId)) return;
+    clearNegativeProjectRbac(projectId);
+    if (!this.env.SESSION_CACHE) return;
     
     // Get all members of the project to invalidate their cache keys directly
     const { results } = await this.db.prepare(`
@@ -91,7 +106,9 @@ export class RbacRepository extends BaseService implements IRbacRepository {
   }
 
   async invalidateUserRBAC(projectId: string, userId: string): Promise<void> {
-    if (!isValidId(projectId) || !isValidId(userId) || !this.env.SESSION_CACHE) return;
+    if (!isValidId(projectId) || !isValidId(userId)) return;
+    negativeRbacCache.delete(rbacCacheKey(projectId, userId));
+    if (!this.env.SESSION_CACHE) return;
     await this.env.SESSION_CACHE.delete(rbacCacheKey(projectId, userId));
   }
 
@@ -112,7 +129,15 @@ export class RbacRepository extends BaseService implements IRbacRepository {
       return [];
     }
     const cacheKey = rbacCacheKey(projectId, userId);
-    
+
+    const negExpiry = negativeRbacCache.get(cacheKey);
+    if (negExpiry !== undefined) {
+      if (Date.now() < negExpiry) {
+        return [];
+      }
+      negativeRbacCache.delete(cacheKey);
+    }
+
     if (this.env.SESSION_CACHE) {
       const cached = await this.env.SESSION_CACHE.get<{permissions: string[]}>(cacheKey, 'json');
       if (cached) {
@@ -141,13 +166,16 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     `).bind(projectId, userId).all<{ role_id: string }>();
 
     if (!roleResults || roleResults.length === 0) {
-      if (this.env.SESSION_CACHE) {
-        await this.env.SESSION_CACHE.put(cacheKey, JSON.stringify({ permissions: [] }), { expirationTtl: 300 });
+      if (negativeRbacCache.size >= MAX_NEGATIVE_RBAC_ENTRIES) {
+        const oldestKey = negativeRbacCache.keys().next().value;
+        if (oldestKey !== undefined) negativeRbacCache.delete(oldestKey);
       }
+      negativeRbacCache.set(cacheKey, Date.now() + NEGATIVE_RBAC_TTL_MS);
       return [];
     }
 
     const permsArray = await this.permissionsForRoleIds(projectId, roleResults.map(r => r.role_id));
+    negativeRbacCache.delete(cacheKey);
     // Cache for 24 hours. Will be actively invalidated on role/member changes.
     if (this.env.SESSION_CACHE) {
       await this.env.SESSION_CACHE.put(cacheKey, JSON.stringify({ permissions: permsArray }), { expirationTtl: 86400 });
@@ -351,6 +379,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     stmts.push(this.db.prepare('UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?').bind(legacyRole, projectId, userId));
 
     await this.db.batch(stmts);
+    negativeRbacCache.delete(rbacCacheKey(projectId, userId));
   }
 
   async revokeInvitation(id: string): Promise<void> {
@@ -362,6 +391,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
       this.db.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, userId),
       this.db.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, userId)
     ]);
+    negativeRbacCache.delete(rbacCacheKey(projectId, userId));
   }
 
   async updateCustomRole(
@@ -488,6 +518,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     stmts.push(this.db.prepare("INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, 'viewer')").bind(inv.project_id, userId));
 
     await this.db.batch(stmts);
+    negativeRbacCache.delete(rbacCacheKey(inv.project_id, userId));
     return inv;
   }
 

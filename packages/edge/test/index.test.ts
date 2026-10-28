@@ -13,7 +13,8 @@ import { splitSql } from "../src/splitSql";
 import { ulid } from "ulidx";
 import { sign } from "hono/jwt";
 import { hashApiKey } from "../src/utils/auth";
-import { getDB } from "../src/utils/db";
+import { getDB, getBufferedSlowQueries, clearBufferedSlowQueries } from "../src/utils/db";
+import { logInfo, clearBufferedLogs } from "../../common/logging/logger";
 import { getSharedTestKeyPair, signSharedLicenseToken, activateSharedLicense } from "./utils/license";
 
 const originalFetch = app.fetch;
@@ -392,8 +393,6 @@ describe("D1 Database Migrations & API", () => {
     await env.DB.prepare("DELETE FROM audit_logs WHERE project_id = ?").bind(pid).run();
     await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(pid).run();
   });
-
-
 
   it("blocks login after 5 failed attempts (rate limiting)", async () => {
     // Attempt 5 bad logins
@@ -1488,7 +1487,7 @@ describe("KV Session Cache", () => {
     expect(apiKeyQueryCalled).toBe(false);
   });
 
-  it("negatively caches invalid API keys to prevent cache-miss storms", async () => {
+  it("does not write negative cache to KV for invalid API keys to prevent billing attacks", async () => {
     const mockKV = createMockKV();
     const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
@@ -1499,12 +1498,10 @@ describe("KV Session Cache", () => {
     const res = await appFetchWrapper(req as any, kvEnv);
     expect(res.status).toBe(401);
 
-    // Verify negative cache entry was written
+    // Verify negative cache entry was NOT written to KV
     const hashedFakeKey = await hashApiKey(fakeKey);
     const cached = await mockKV.get(`apikey:${hashedFakeKey}`);
-    expect(cached).not.toBeNull();
-    const parsed = JSON.parse(cached!);
-    expect(parsed.userId).toBeNull();
+    expect(cached).toBeNull();
   });
 
   it("gracefully falls back to D1 when SESSION_CACHE is not bound", async () => {
@@ -2905,34 +2902,25 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
     });
 
     it("should return logs when valid admin secret is provided", async () => {
-      const mockKV = createMockKV();
-      const mockLogs = [{ timestamp: new Date().toISOString(), level: 'info', module: 'test', msg: 'hello' }];
-      await mockKV.put('admin:logs', JSON.stringify(mockLogs));
-
-      const customEnv = {
-        ...testEnv,
-        SESSION_CACHE: mockKV as any
-      };
+      clearBufferedLogs();
+      logInfo(testEnv, 'test', 'hello');
 
       const req = new Request("http://localhost/api/admin/logs", {
         headers: { 'Authorization': `Bearer admin-secret` }
       });
-      const res = await appFetchWrapper(req, customEnv);
+      const res = await appFetchWrapper(req, testEnv);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
       expect(data.length).toBe(1);
       expect(data[0].msg).toBe('hello');
     });
 
-    it("should return empty list if SESSION_CACHE is not bound", async () => {
-      const customEnv = {
-        ...testEnv,
-        SESSION_CACHE: undefined
-      };
+    it("should return empty list if no logs are buffered", async () => {
+      clearBufferedLogs();
       const req = new Request("http://localhost/api/admin/logs", {
         headers: { 'Authorization': `Bearer admin-secret` }
       });
-      const res = await appFetchWrapper(req, customEnv);
+      const res = await appFetchWrapper(req, testEnv);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
       expect(data).toEqual([]);
@@ -2980,29 +2968,38 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(res.status).toBe(401);
     });
 
-    it("should return empty list if SESSION_CACHE is not bound", async () => {
-      const customEnv = {
-        ...testEnv,
-        SESSION_CACHE: undefined
-      };
+    it("should return empty list if no slow queries are buffered", async () => {
+      clearBufferedSlowQueries();
       const req = new Request("http://localhost/api/admin/slow-queries", {
         headers: { 'Authorization': `Bearer admin-secret` }
       });
-      const res = await appFetchWrapper(req, customEnv);
+      const res = await appFetchWrapper(req, testEnv);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
       expect(data).toEqual([]);
     });
 
     it("should return slow queries when valid admin secret is provided", async () => {
-      const mockKV = createMockKV();
-      const mockQueries = [{ event: 'slow_query', query: 'SELECT * FROM users', duration: 250, threshold: 200, timestamp: new Date().toISOString() }];
-      await mockKV.put('admin:slow-queries', JSON.stringify(mockQueries));
+      clearBufferedSlowQueries();
+      const mockDb = {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => {
+              await new Promise(resolve => setTimeout(resolve, 50));
+              return { success: true };
+            }
+          })
+        })
+      };
 
       const customEnv = {
         ...testEnv,
-        SESSION_CACHE: mockKV as any
+        DB: mockDb as any,
+        SLOW_QUERY_THRESHOLD_MS: 10
       };
+
+      const db = getDB(customEnv);
+      await db.prepare('SELECT * FROM users').bind().first();
 
       const req = new Request("http://localhost/api/admin/slow-queries", {
         headers: { 'Authorization': `Bearer admin-secret` }
@@ -3015,6 +3012,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
     });
 
     it("should intercept D1 queries and record slow queries when threshold is exceeded", async () => {
+      clearBufferedSlowQueries();
       const mockKV = createMockKV();
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -3053,17 +3051,17 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(parsedLog.payload.threshold).toBe(10);
       expect(parsedLog.payload.duration).toBeGreaterThanOrEqual(10);
 
-      // Verify it was saved to SESSION_CACHE
-      const cached = await mockKV.get('admin:slow-queries');
-      expect(cached).not.toBeNull();
-      const parsedCache = JSON.parse(cached!);
-      expect(parsedCache.length).toBe(1);
-      expect(parsedCache[0].query).toBe('SELECT * FROM dummy');
+      // Verify it was saved to in-memory buffer, not to SESSION_CACHE
+      const buffered = getBufferedSlowQueries();
+      expect(buffered.length).toBe(1);
+      expect(buffered[0].query).toBe('SELECT * FROM dummy');
+      expect(await mockKV.get('admin:slow-queries')).toBeNull();
 
       warnSpy.mockRestore();
     });
 
     it("should record slow queries for exec, batch, dump, and other statement methods", async () => {
+      clearBufferedSlowQueries();
       const mockKV = createMockKV();
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -3124,14 +3122,13 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
 
       expect(warnSpy).toHaveBeenCalledTimes(6);
       
-      // Verify KV cache has all queries
-      const cached = await mockKV.get('admin:slow-queries');
-      expect(cached).not.toBeNull();
-      const parsedCache = JSON.parse(cached!);
-      expect(parsedCache.length).toBe(6);
+      // Verify in-memory buffer has all queries and KV was not written
+      const buffered = getBufferedSlowQueries();
+      expect(buffered.length).toBe(6);
+      expect(await mockKV.get('admin:slow-queries')).toBeNull();
 
       // Verify some queries
-      const queries = parsedCache.map((q: any) => q.query);
+      const queries = buffered.map((q: any) => q.query);
       expect(queries).toContain('SELECT * FROM all');
       expect(queries).toContain('SELECT * FROM run');
       expect(queries).toContain('SELECT * FROM raw');

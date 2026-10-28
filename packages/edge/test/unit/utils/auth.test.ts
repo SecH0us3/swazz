@@ -18,7 +18,8 @@ import {
   getDeleteRequestedAt,
   verifyDummyPassword,
   safeCompare,
-  deletionCache
+  deletionCache,
+  negativeApiKeyCache
 } from '../../../src/utils/auth';
 import { Env } from '../../../src/env';
 import { sign } from 'hono/jwt';
@@ -106,6 +107,7 @@ describe('Auth Utils - Additional functions', () => {
     vi.restoreAllMocks();
     mockVerifyApiKey.mockReset();
     deletionCache.clear();
+    negativeApiKeyCache.clear();
   });
 
   it('hashApiKey generates hex hash', async () => {
@@ -193,6 +195,21 @@ describe('Auth Utils - Additional functions', () => {
 
       const res = await getUserIdFromRequest(mockContext);
       expect(res).toBe('d1-user');
+    });
+
+    it('caches invalid API keys in isolate memory without writing to KV or hitting D1 repeatedly', async () => {
+      const mockContext = createMockContext() as any;
+      mockContext.headers['authorization'] = 'Bearer swazz_live_invalid';
+      mockContext.env.SESSION_CACHE.get.mockResolvedValue(null);
+      mockVerifyApiKey.mockResolvedValueOnce(null);
+
+      expect(await getUserIdFromRequest(mockContext)).toBeNull();
+      expect(mockContext.env.SESSION_CACHE.put).not.toHaveBeenCalled();
+      expect(mockVerifyApiKey).toHaveBeenCalledTimes(1);
+
+      // Second request with the same invalid key is served from isolate negative cache (0 KV calls, 0 D1 calls)
+      expect(await getUserIdFromRequest(mockContext)).toBeNull();
+      expect(mockVerifyApiKey).toHaveBeenCalledTimes(1);
     });
 
     it('decodes JWT token if valid', async () => {
