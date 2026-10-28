@@ -76,6 +76,10 @@ queue = "swazz-findings-queue"
 queue = "swazz-findings-queue"
 max_batch_size = 100
 max_batch_timeout = 2
+# Failed messages are retried with backoff (10s…5min); past max_retries they move to the
+# dead-letter queue instead of being deleted, so findings survive a D1 outage or a full database.
+max_retries = 5
+dead_letter_queue = "swazz-findings-dlq"
 
 [[send_email]]
 name = "SEND_EMAIL"

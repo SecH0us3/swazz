@@ -519,6 +519,14 @@ app.post('/api/dev/emails/clear', (c) => {
   return c.json({ success: true });
 });
 
+/** Backoff before a failed findings message is redelivered: 10s, 20s, 40s… capped at 5 minutes. */
+export function findingsRetryDelay(msg: { attempts?: number }, storageQuotaExceeded: boolean): number {
+  // A full database does not free itself within seconds.
+  if (storageQuotaExceeded) return 300;
+  const attempts = Number(msg.attempts || 1);
+  return Math.min(300, 10 * 2 ** Math.max(0, attempts - 1));
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     return app.fetch(request, env, ctx);
@@ -571,20 +579,15 @@ export default {
           msg.ack();
         }
       } catch (err) {
+        // A failed message is never acked: past max_retries (wrangler.toml) the platform moves it
+        // to the dead-letter queue, where it waits to be replayed instead of being dropped.
         const bulkErrMsg = String((err as any)?.message || err || '');
         if (bulkErrMsg.includes('Exceeded maximum DB size')) {
-          // Storage quota exceeded: running per-message retries immediately will fail every time and
-          // waste D1 queries. Defer with a 5-minute backoff (up to 3 attempts) so space freed shortly
-          // after still saves the findings, without causing a retry storm.
+          // Every per-message write would fail the same way: skip them and defer the whole batch.
           for (const msg of batch.messages) {
-            const attempts = Number((msg as any).attempts || 1);
-            if (attempts >= 3) {
-              msg.ack();
-            } else {
-              msg.retry({ delaySeconds: 300 });
-            }
+            msg.retry({ delaySeconds: findingsRetryDelay(msg, true) });
           }
-          logError({ env, executionCtx: ctx }, "Queue", `D1 storage quota exceeded; deferred/dropped ${batch.messages.length} findings messages`, {
+          logError({ env, executionCtx: ctx }, "Queue", `D1 storage quota exceeded; deferred ${batch.messages.length} findings messages`, {
             totalCount: batch.messages.length,
             sampleScanId: batch.messages[0]?.body?.scanId,
             error: err
@@ -608,17 +611,7 @@ export default {
             if (!sampleScanId && msg.body?.scanId) sampleScanId = msg.body.scanId;
 
             const errMsg = String(msgErr?.message || msgErr || '');
-            const isStorageQuotaError = errMsg.includes('Exceeded maximum DB size');
-            const attempts = Number((msg as any).attempts || 1);
-
-            if (attempts >= 3) {
-              msg.ack();
-            } else {
-              const delaySeconds = isStorageQuotaError
-                ? 300
-                : Math.min(300, 10 * Math.pow(2, Math.max(0, attempts - 1)));
-              msg.retry({ delaySeconds });
-            }
+            msg.retry({ delaySeconds: findingsRetryDelay(msg, errMsg.includes('Exceeded maximum DB size')) });
           }
         }
 

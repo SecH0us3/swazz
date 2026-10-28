@@ -10,7 +10,7 @@ import { env as rawEnv } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi, afterEach } from 'vitest';
 import { Env } from '../../src/env';
 import { ScansRepository, sanitizeRunnerFinding } from '../../src/repositories/scans';
-import worker from '../../src/index';
+import worker, { findingsRetryDelay } from '../../src/index';
 import { applyMigrations } from '../utils/migrations';
 
 const env = rawEnv as unknown as Env;
@@ -92,24 +92,29 @@ describe('findings queue isolation', () => {
     expect((await findingsOf(good)).length).toBe(1);
   });
 
-  it('acknowledges instead of retrying when message attempts reach 3', async () => {
+  it('never acknowledges a failed message, so the dead-letter queue keeps it past max_retries', async () => {
     const bad = crypto.randomUUID();
     const failingMsg = {
       ...event(bad, { type: 'result', data: {} }),
-      attempts: 3,
+      attempts: 5,
       ack: vi.fn(),
       retry: vi.fn(),
     };
 
-    // Force processFindingsQueueMessages to fail on both batch and single message
     const repoSpy = vi.spyOn(ScansRepository.prototype, 'processFindingsQueueMessages')
       .mockRejectedValue(new Error('Persistent D1 connection failure'));
 
     await worker.queue({ queue: 'swazz-findings-queue', messages: [failingMsg] } as any, env, { waitUntil: () => {} } as any);
 
-    expect(failingMsg.ack).toHaveBeenCalled();
-    expect(failingMsg.retry).not.toHaveBeenCalled();
+    expect(failingMsg.ack).not.toHaveBeenCalled();
+    expect(failingMsg.retry).toHaveBeenCalledWith({ delaySeconds: 160 });
     repoSpy.mockRestore();
+  });
+
+  it('backs off exponentially up to five minutes, and five minutes at once for a full database', () => {
+    expect([1, 2, 3, 4, 5, 6, 7].map(attempts => findingsRetryDelay({ attempts }, false))).toEqual([10, 20, 40, 80, 160, 300, 300]);
+    expect(findingsRetryDelay({}, false)).toBe(10);
+    expect(findingsRetryDelay({ attempts: 1 }, true)).toBe(300);
   });
 
   it('short-circuits per-message retries and backs off on D1_ERROR: Exceeded maximum DB size', async () => {
@@ -136,8 +141,8 @@ describe('findings queue isolation', () => {
     expect(repoSpy).toHaveBeenCalledTimes(1);
     expect(quotaMsgAttempt1.retry).toHaveBeenCalledWith({ delaySeconds: 300 });
     expect(quotaMsgAttempt1.ack).not.toHaveBeenCalled();
-    expect(quotaMsgAttempt3.ack).toHaveBeenCalled();
-    expect(quotaMsgAttempt3.retry).not.toHaveBeenCalled();
+    expect(quotaMsgAttempt3.retry).toHaveBeenCalledWith({ delaySeconds: 300 });
+    expect(quotaMsgAttempt3.ack).not.toHaveBeenCalled();
     repoSpy.mockRestore();
   });
 });
@@ -240,5 +245,45 @@ describe('sequenced runner events', () => {
     expect(runnerLogs.some((r: any) => r.payload.includes('[Fuzz Progress] 10/100 requests'))).toBe(false);
     expect(runnerLogs.some((r: any) => r.payload.includes('runner log text'))).toBe(true);
     expect(runnerLogs.some((r: any) => r.payload.includes('fatal error text'))).toBe(true);
+  });
+
+  it('an older [Fuzz Progress] line redelivered later does not replace a newer one', async () => {
+    const scanId = await seedScan();
+    const repo = new ScansRepository(env);
+    const fuzzProgress = (seq: number, exec: string, text: string) => ({
+      body: { scanId, type: 'event', exec, seq, payload: { type: 'runner_log', data: { level: 'info', message: `[Fuzz Progress] ${text}` } } },
+    });
+    const latestLine = async () => (await repo.getRunnerLogs(scanId))
+      .map((r: any) => JSON.parse(r.payload).data.message)
+      .filter((m: string) => m.startsWith('[Fuzz Progress]'));
+
+    // Within one batch, out of order.
+    await repo.processFindingsQueueMessages([fuzzProgress(20, 'e1', '20/100'), fuzzProgress(10, 'e1', '10/100')]);
+    expect(await latestLine()).toEqual(['[Fuzz Progress] 20/100']);
+
+    // A retried batch arriving after a newer one.
+    await repo.processFindingsQueueMessages([fuzzProgress(15, 'e1', '15/100')]);
+    expect(await latestLine()).toEqual(['[Fuzz Progress] 20/100']);
+
+    await repo.processFindingsQueueMessages([fuzzProgress(30, 'e1', '30/100')]);
+    expect(await latestLine()).toEqual(['[Fuzz Progress] 30/100']);
+
+    // A resumed run starts its seq over under a new exec.
+    await repo.processFindingsQueueMessages([fuzzProgress(1, 'e2', '35/100')]);
+    expect(await latestLine()).toEqual(['[Fuzz Progress] 35/100']);
+  });
+
+  it('coalesces the JSON progress line the runner sends for non-RunStats data', async () => {
+    const scanId = await seedScan();
+    const repo = new ScansRepository(env);
+    const jsonLine = (n: number) => ({
+      body: { scanId, type: 'event', payload: { type: 'runner_log', data: { level: 'info', message: JSON.stringify({ totalRequests: n }) } } },
+    });
+
+    await repo.processFindingsQueueMessages([jsonLine(1)]);
+    await repo.processFindingsQueueMessages([jsonLine(2)]);
+
+    const { results } = await env.DB.prepare('SELECT id FROM scan_events WHERE scan_id = ?').bind(scanId).all<{ id: string }>();
+    expect(results?.map(r => r.id)).toEqual([`${scanId}:fuzz_progress`]);
   });
 });

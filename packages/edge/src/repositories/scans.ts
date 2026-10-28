@@ -178,11 +178,26 @@ function isCoalescedProgressEvent(eventType: string, payload: any): 'progress' |
   if (payload.type === 'progress') return 'progress';
   if (payload.type === 'runner_log' && typeof payload.data?.message === 'string') {
     const msg = payload.data.message;
-    if (msg.startsWith('[Fuzz Progress]') || (msg.startsWith('{') && msg.includes('"total_requests"'))) {
+    if (msg.startsWith('[Fuzz Progress]') || (msg.startsWith('{') && msg.includes('"totalRequests"'))) {
       return 'fuzz_progress';
     }
   }
   return null;
+}
+
+/** A sequenced event's place in its runner's stream, or null for an unsequenced one. */
+function eventOrder(body: any): { exec: string; seq: number } | null {
+  const { exec, seq } = body ?? {};
+  if (!isValidExec(exec) || typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return null;
+  return { exec, seq };
+}
+
+/**
+ * Whether a coalesced progress event may replace the one already kept: a queue redelivery or a
+ * retried batch can bring an older event after a newer one. Mirrors the upsert's WHERE clause.
+ */
+function supersedes(next: { exec: string; seq: number } | null, kept: { exec: string; seq: number } | null): boolean {
+  return next === null || kept === null || next.exec !== kept.exec || next.seq > kept.seq;
 }
 
 /** The stable scan_events id of a sequenced runner event, or undefined for any other. */
@@ -766,7 +781,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     }
     const seenInBatch = new Set<string>();
     const droppedForMissingScan = new Set<string>();
-    const dedupStatementIndex = new Map<string, number>();
+    const coalescedInBatch = new Map<string, { index: number; order: { exec: string; seq: number } | null }>();
 
     for (const [index, msg] of messages.entries()) {
       const stableId = eventIds[index];
@@ -816,16 +831,29 @@ export class ScansRepository extends BaseService implements IScansRepository {
 
       if (coalescedKind !== null) {
         const dedupId = `${scanId}:${coalescedKind}`;
+        const order = eventOrder(msg.body);
+        // The kept row records its event's place (_exec, _seq) so an older event never replaces
+        // a newer one. Another exec is a resumed run and always replaces.
+        const coalescedPayload = JSON.stringify({
+          ...JSON.parse(payloadStr),
+          ...(order ? { _exec: order.exec, _seq: order.seq } : {}),
+        });
         const stmt = this.db.prepare(
-          `INSERT OR REPLACE INTO scan_events (id, scan_id, type, payload, created_at)
-           SELECT ?, ?, ?, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)`
-        ).bind(dedupId, scanId, eventType, payloadStr, scanId);
-        const existingIdx = dedupStatementIndex.get(dedupId);
-        if (existingIdx !== undefined) {
-          statements[existingIdx] = stmt;
-        } else {
-          dedupStatementIndex.set(dedupId, statements.length);
+          `INSERT INTO scan_events (id, scan_id, type, payload, created_at)
+           SELECT ?, ?, ?, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)
+           ON CONFLICT(id) DO UPDATE SET type = excluded.type, payload = excluded.payload, created_at = excluded.created_at
+           WHERE json_extract(excluded.payload, '$._seq') IS NULL
+              OR json_extract(scan_events.payload, '$._seq') IS NULL
+              OR json_extract(excluded.payload, '$._exec') IS NOT json_extract(scan_events.payload, '$._exec')
+              OR json_extract(excluded.payload, '$._seq') > json_extract(scan_events.payload, '$._seq')`
+        ).bind(dedupId, scanId, eventType, coalescedPayload, scanId);
+        const kept = coalescedInBatch.get(dedupId);
+        if (kept === undefined) {
+          coalescedInBatch.set(dedupId, { index: statements.length, order });
           statements.push(stmt);
+        } else if (supersedes(order, kept.order)) {
+          statements[kept.index] = stmt;
+          kept.order = order;
         }
         continue;
       }

@@ -64,6 +64,7 @@ External client runner agents never interact directly with the queues. Instead, 
   1. The runner streams findings and metrics to the coordinator DO over WebSocket.
   2. The coordinator enqueues each event to `FINDINGS_QUEUE` and broadcasts it to active UI clients.
   3. The consumer receives events in batches (up to 100 messages or every 2 seconds) and bulk-inserts them into the D1 `scan_events` table.
+* **Failures**: a failed message is never acknowledged. It is redelivered with backoff (10s, 20s, 40s… up to 5 minutes; 5 minutes at once when D1 reports `Exceeded maximum DB size`), and after `max_retries` (5) the platform moves it to the dead-letter queue `swazz-findings-dlq`, which keeps it for replay instead of deleting it. Create that queue once per account before deploying: `npx wrangler queues create swazz-findings-dlq`.
 
 ---
 
@@ -89,6 +90,8 @@ max_batch_timeout = 0
 queue = "swazz-findings-queue"
 max_batch_size = 100
 max_batch_timeout = 2
+max_retries = 5
+dead_letter_queue = "swazz-findings-dlq"
 ```
 
 ---
