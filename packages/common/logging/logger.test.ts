@@ -79,4 +79,15 @@ describe('Logger Library', () => {
     });
     expect(entry.error).toBe('raw-string-error');
   });
+
+  it('should clone buffered entries so caller mutations do not affect buffered logs', () => {
+    const mutablePayload = { count: 1, nested: { status: 'ok' } };
+    logInfo(null, 'test-mod', 'snapshot test', { payload: mutablePayload });
+    mutablePayload.count = 999;
+    mutablePayload.nested.status = 'mutated';
+
+    const logs = getBufferedLogs();
+    expect(logs[0].payload?.count).toBe(1);
+    expect(logs[0].payload?.nested?.status).toBe('ok');
+  });
 });

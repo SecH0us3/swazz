@@ -2911,7 +2911,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       const res = await appFetchWrapper(req, testEnv);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
-      expect(data.length).toBeGreaterThanOrEqual(1);
+      expect(data.length).toBe(1);
       expect(data[0].msg).toBe('hello');
     });
 

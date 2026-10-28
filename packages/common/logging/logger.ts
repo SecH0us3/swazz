@@ -70,20 +70,23 @@ function recordLog(entry: LogEntry): void {
   }
 }
 
-export function logInfo(ctxOrEnv: any, module: string, msg: string, options?: any) {
+export function logInfo(_ctxOrEnv: any, module: string, msg: string, options?: any) {
   const entry = formatLog('info', module, msg, options);
-  console.log(JSON.stringify(entry));
-  recordLog(entry);
+  const serialized = JSON.stringify(entry);
+  console.log(serialized);
+  recordLog(JSON.parse(serialized));
 }
 
-export function logWarn(ctxOrEnv: any, module: string, msg: string, options?: any) {
+export function logWarn(_ctxOrEnv: any, module: string, msg: string, options?: any) {
   const entry = formatLog('warn', module, msg, options);
-  console.warn(JSON.stringify(entry));
-  recordLog(entry);
+  const serialized = JSON.stringify(entry);
+  console.warn(serialized);
+  recordLog(JSON.parse(serialized));
 }
 
-export function logError(ctxOrEnv: any, module: string, msg: string, options?: any) {
+export function logError(_ctxOrEnv: any, module: string, msg: string, options?: any) {
   const entry = formatLog('error', module, msg, options);
-  console.error(JSON.stringify(entry));
-  recordLog(entry);
+  const serialized = JSON.stringify(entry);
+  console.error(serialized);
+  recordLog(JSON.parse(serialized));
 }

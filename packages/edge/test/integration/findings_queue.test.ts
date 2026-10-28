@@ -87,7 +87,7 @@ describe('findings queue isolation', () => {
 
     expect(msgs[0].ack).toHaveBeenCalled();
     expect(msgs[0].retry).not.toHaveBeenCalled();
-    expect(msgs[1].retry).toHaveBeenCalled();
+    expect(msgs[1].retry).toHaveBeenCalledWith({ delaySeconds: 10 });
     expect(msgs[1].ack).not.toHaveBeenCalled();
     expect((await findingsOf(good)).length).toBe(1);
   });
@@ -112,11 +112,17 @@ describe('findings queue isolation', () => {
     repoSpy.mockRestore();
   });
 
-  it('acknowledges instead of retrying on D1_ERROR: Exceeded maximum DB size', async () => {
+  it('short-circuits per-message retries and backs off on D1_ERROR: Exceeded maximum DB size', async () => {
     const bad = crypto.randomUUID();
-    const quotaMsg = {
+    const quotaMsgAttempt1 = {
       ...event(bad, { type: 'result', data: {} }),
       attempts: 1,
+      ack: vi.fn(),
+      retry: vi.fn(),
+    };
+    const quotaMsgAttempt3 = {
+      ...event(bad, { type: 'result', data: {} }),
+      attempts: 3,
       ack: vi.fn(),
       retry: vi.fn(),
     };
@@ -124,10 +130,14 @@ describe('findings queue isolation', () => {
     const repoSpy = vi.spyOn(ScansRepository.prototype, 'processFindingsQueueMessages')
       .mockRejectedValue(new Error('D1_ERROR: Exceeded maximum DB size (10737418240 bytes)'));
 
-    await worker.queue({ queue: 'swazz-findings-queue', messages: [quotaMsg] } as any, env, { waitUntil: () => {} } as any);
+    await worker.queue({ queue: 'swazz-findings-queue', messages: [quotaMsgAttempt1, quotaMsgAttempt3] } as any, env, { waitUntil: () => {} } as any);
 
-    expect(quotaMsg.ack).toHaveBeenCalled();
-    expect(quotaMsg.retry).not.toHaveBeenCalled();
+    // Must short-circuit after the single bulk call without running per-message calls
+    expect(repoSpy).toHaveBeenCalledTimes(1);
+    expect(quotaMsgAttempt1.retry).toHaveBeenCalledWith({ delaySeconds: 300 });
+    expect(quotaMsgAttempt1.ack).not.toHaveBeenCalled();
+    expect(quotaMsgAttempt3.ack).toHaveBeenCalled();
+    expect(quotaMsgAttempt3.retry).not.toHaveBeenCalled();
     repoSpy.mockRestore();
   });
 });
@@ -199,31 +209,36 @@ describe('sequenced runner events', () => {
     expect(await eventCount(scanId)).toBe(4);
   });
 
-  it('compacts payload in scan_events for progress and result, but preserves runner_log and error', async () => {
+  it('compacts payload and coalesces progress and [Fuzz Progress] rows while preserving runner_log and error', async () => {
     const scanId = await seedScan();
     const repo = new ScansRepository(env);
 
     await repo.processFindingsQueueMessages([
       { body: { scanId, type: 'event', payload: { type: 'progress', data: { bigData: 'x'.repeat(1000) } } } },
+      { body: { scanId, type: 'event', payload: { type: 'progress', data: { bigData: 'y'.repeat(1000) } } } },
       { body: { scanId, type: 'event', payload: { type: 'result', data: { analyzerFindings: [{ ruleId: 'compact-test' }] } } } },
       { body: { scanId, type: 'event', payload: { type: 'runner_log', data: { level: 'info', message: '[Fuzz Progress] 10/100 requests' } } } },
-      { body: { scanId, type: 'event', payload: { type: 'runner_log', message: 'runner log text' } } },
+      { body: { scanId, type: 'event', payload: { type: 'runner_log', data: { level: 'info', message: '[Fuzz Progress] 50/100 requests' } } } },
+      { body: { scanId, type: 'event', payload: { type: 'runner_log', data: { level: 'info', message: 'runner log text' } } } },
       { body: { scanId, type: 'error', payload: { type: 'error', error: 'fatal error text' } } },
     ]);
 
-    const { results } = await env.DB.prepare('SELECT type, payload FROM scan_events WHERE scan_id = ? ORDER BY created_at ASC').bind(scanId).all<{ type: string; payload: string }>();
+    const { results } = await env.DB.prepare('SELECT id, type, payload FROM scan_events WHERE scan_id = ? ORDER BY created_at ASC').bind(scanId).all<{ id: string; type: string; payload: string }>();
+    // 2 progress events coalesced to 1 + 1 result + 2 [Fuzz Progress] coalesced to 1 + 1 runner_log + 1 error = 5 rows
     expect(results?.length).toBe(5);
 
     const progressEvents = results?.filter(r => r.payload === '{"type":"progress"}');
-    expect(progressEvents?.length).toBe(2);
+    expect(progressEvents?.length).toBe(1);
+    expect(progressEvents?.[0].id).toBe(`${scanId}:progress`);
 
     const resultEvent = results?.find(r => r.payload === '{"type":"result"}');
     expect(resultEvent).toBeDefined();
 
-    const runnerLogEvent = results?.find(r => r.payload.includes('runner log text'));
-    expect(runnerLogEvent).toBeDefined();
-
-    const errorEvent = results?.find(r => r.payload.includes('fatal error text'));
-    expect(errorEvent).toBeDefined();
+    const runnerLogs = await repo.getRunnerLogs(scanId);
+    // Latest [Fuzz Progress] line is still visible in getRunnerLogs along with regular runner_log and error
+    expect(runnerLogs.some((r: any) => r.payload.includes('[Fuzz Progress] 50/100 requests'))).toBe(true);
+    expect(runnerLogs.some((r: any) => r.payload.includes('[Fuzz Progress] 10/100 requests'))).toBe(false);
+    expect(runnerLogs.some((r: any) => r.payload.includes('runner log text'))).toBe(true);
+    expect(runnerLogs.some((r: any) => r.payload.includes('fatal error text'))).toBe(true);
   });
 });

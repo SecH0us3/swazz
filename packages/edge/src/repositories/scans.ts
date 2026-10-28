@@ -172,9 +172,24 @@ const ERROR_EVENT_SQL = "(type = 'error' OR (type = 'event' AND json_extract(pay
 // D1 allows at most 100 bound parameters per statement.
 const EVENT_ID_LOOKUP_CHUNK = 90;
 
+/** Whether the event is a transient progress heartbeat or a [Fuzz Progress] log line that is coalesced per scan. */
+function isCoalescedProgressEvent(eventType: string, payload: any): 'progress' | 'fuzz_progress' | null {
+  if (eventType !== 'event' || !payload || typeof payload !== 'object') return null;
+  if (payload.type === 'progress') return 'progress';
+  if (payload.type === 'runner_log' && typeof payload.data?.message === 'string') {
+    const msg = payload.data.message;
+    if (msg.startsWith('[Fuzz Progress]') || (msg.startsWith('{') && msg.includes('"total_requests"'))) {
+      return 'fuzz_progress';
+    }
+  }
+  return null;
+}
+
 /** The stable scan_events id of a sequenced runner event, or undefined for any other. */
 function storedEventId(body: any): string | undefined {
-  const { scanId, exec, seq } = body ?? {};
+  const { scanId, type, payload, exec, seq } = body ?? {};
+  const eventType = typeof type === 'string' && type ? type : 'event';
+  if (isCoalescedProgressEvent(eventType, payload) !== null) return undefined;
   if (typeof scanId !== 'string' || scanId === '' || !isValidExec(exec)) return undefined;
   if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return undefined;
   return eventIdFor(scanId, exec, seq);
@@ -751,6 +766,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     }
     const seenInBatch = new Set<string>();
     const droppedForMissingScan = new Set<string>();
+    const dedupStatementIndex = new Map<string, number>();
 
     for (const [index, msg] of messages.entries()) {
       const stableId = eventIds[index];
@@ -770,12 +786,17 @@ export class ScansRepository extends BaseService implements IScansRepository {
       }
       const oobTokens = payload && payload.type === 'oob_pending' ? sanitizeOobPending(payload.data) : null;
       const eventType = typeof type === 'string' && type ? type : 'event';
+      const coalescedKind = isCoalescedProgressEvent(eventType, payload);
+
       // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
       // The OOB tokens themselves are stored by the coordinator as the event arrives
       // (storeOobPending); stored again here, a token already reported would come back. The event
       // log keeps only their count.
       // High-volume events (progress, result, checkpoint, complete) only need their event type in
       // scan_events to prevent database bloat; full payloads are processed in-memory.
+      // Transient progress heartbeats and [Fuzz Progress] log lines are coalesced per scan via
+      // deterministic IDs so a 6-hour scan keeps at most one row of each in D1 while still
+      // showing the latest [Fuzz Progress] line in getRunnerLogs.
       let payloadStr: string;
       if (oobTokens) {
         payloadStr = JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } });
@@ -786,16 +807,29 @@ export class ScansRepository extends BaseService implements IScansRepository {
         (payload.type === 'progress' ||
           payload.type === 'result' ||
           payload.type === 'checkpoint' ||
-          payload.type === 'complete' ||
-          (payload.type === 'runner_log' &&
-            typeof payload.data?.message === 'string' &&
-            payload.data.message.startsWith('[Fuzz Progress]')))
+          payload.type === 'complete')
       ) {
-        payloadStr = JSON.stringify({ type: payload.type === 'runner_log' ? 'progress' : payload.type });
+        payloadStr = JSON.stringify({ type: payload.type });
       } else {
         payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
       }
-      
+
+      if (coalescedKind !== null) {
+        const dedupId = `${scanId}:${coalescedKind}`;
+        const stmt = this.db.prepare(
+          `INSERT OR REPLACE INTO scan_events (id, scan_id, type, payload, created_at)
+           SELECT ?, ?, ?, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+        ).bind(dedupId, scanId, eventType, payloadStr, scanId);
+        const existingIdx = dedupStatementIndex.get(dedupId);
+        if (existingIdx !== undefined) {
+          statements[existingIdx] = stmt;
+        } else {
+          dedupStatementIndex.set(dedupId, statements.length);
+          statements.push(stmt);
+        }
+        continue;
+      }
+
       statements.push(
         this.db.prepare(
           `INSERT OR IGNORE INTO scan_events (id, scan_id, type, payload)

@@ -12,7 +12,6 @@ interface MonitoredPreparedStatement extends D1PreparedStatement {
   __query?: string;
 }
 
-const getLogCtx = (env: Pick<Env, 'DB'> & Partial<Env>, ctx?: any) => ctx?.env ? ctx : { env, executionCtx: ctx };
 /**
  * Resolves the appropriate D1 database binding based on the environment and optional routing key.
  * If routingKey indicates shard-1 and env.DB_SHARD_1 is defined, it routes there.
@@ -65,13 +64,13 @@ export async function recordQueryTime(query: string, duration: number, env: Pick
     };
 
     // 1. In-memory ring buffer
-    memorySlowQueries.unshift(logData);
+    memorySlowQueries.unshift({ ...logData });
     if (memorySlowQueries.length > MAX_SLOW_QUERIES) {
       memorySlowQueries.length = MAX_SLOW_QUERIES;
     }
 
     // 2. Emit structured log line
-    logWarn(getLogCtx(env, ctx), 'Database', `Slow query detected: ${query}`, logData);
+    logWarn(env, 'Database', `Slow query detected: ${query}`, logData);
 
     // 3. Expose to Analytics Engine if bound
     if (env.ANALYTICS_ENGINE) {
@@ -82,7 +81,7 @@ export async function recordQueryTime(query: string, duration: number, env: Pick
           indexes: ['slow_query']
         });
       } catch (err) {
-        logError(getLogCtx(env, ctx), 'Database', 'Failed to write to Analytics Engine', { error: err });
+        logError(env, 'Database', 'Failed to write to Analytics Engine', { error: err });
       }
     }
   }
@@ -120,7 +119,7 @@ function wrapD1Database(db: D1Database, env: Pick<Env, 'DB'> & Partial<Env>, ctx
                 await timingPromise;
               }
             } catch (err) {
-              logError(getLogCtx(env, ctx), 'Database', 'Failed to record slow query for batch', { error: err });
+              logError(env, 'Database', 'Failed to record slow query for batch', { error: err });
             }
           }
         };
@@ -141,7 +140,7 @@ function wrapD1Database(db: D1Database, env: Pick<Env, 'DB'> & Partial<Env>, ctx
                 await timingPromise;
               }
             } catch (err) {
-              logError(getLogCtx(env, ctx), 'Database', 'Failed to record slow query for exec', { error: err });
+              logError(env, 'Database', 'Failed to record slow query for exec', { error: err });
             }
           }
         };
@@ -162,7 +161,7 @@ function wrapD1Database(db: D1Database, env: Pick<Env, 'DB'> & Partial<Env>, ctx
                 await timingPromise;
               }
             } catch (err) {
-              logError(getLogCtx(env, ctx), 'Database', 'Failed to record slow query for dump', { error: err });
+              logError(env, 'Database', 'Failed to record slow query for dump', { error: err });
             }
           }
         };
@@ -219,7 +218,7 @@ function wrapD1PreparedStatement(stmt: D1PreparedStatement, query: string, env: 
                 await timingPromise;
               }
             } catch (err) {
-              logError(getLogCtx(env, ctx), 'Database', 'Failed to record slow query for statement execution', { error: err });
+              logError(env, 'Database', 'Failed to record slow query for statement execution', { error: err });
             }
           }
         };

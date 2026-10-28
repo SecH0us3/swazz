@@ -571,9 +571,29 @@ export default {
           msg.ack();
         }
       } catch (err) {
+        const bulkErrMsg = String((err as any)?.message || err || '');
+        if (bulkErrMsg.includes('Exceeded maximum DB size')) {
+          // Storage quota exceeded: running per-message retries immediately will fail every time and
+          // waste D1 queries. Defer with a 5-minute backoff (up to 3 attempts) so space freed shortly
+          // after still saves the findings, without causing a retry storm.
+          for (const msg of batch.messages) {
+            const attempts = Number((msg as any).attempts || 1);
+            if (attempts >= 3) {
+              msg.ack();
+            } else {
+              msg.retry({ delaySeconds: 300 });
+            }
+          }
+          logError({ env, executionCtx: ctx }, "Queue", `D1 storage quota exceeded; deferred/dropped ${batch.messages.length} findings messages`, {
+            totalCount: batch.messages.length,
+            sampleScanId: batch.messages[0]?.body?.scanId,
+            error: err
+          });
+          return;
+        }
+
         // The batch mixes every tenant's events, so one bad message must not cost the others:
         // fall back to one message at a time and retry only the ones that still fail.
-        logError({ env, executionCtx: ctx }, "Queue", "Failed to bulk insert findings and events; retrying per message", { error: err });
         let failedCount = 0;
         let sampleScanId: string | undefined;
         let firstErr: any = null;
@@ -589,12 +609,15 @@ export default {
 
             const errMsg = String(msgErr?.message || msgErr || '');
             const isStorageQuotaError = errMsg.includes('Exceeded maximum DB size');
-            const attempts = Number((msg as any).attempts || 0);
+            const attempts = Number((msg as any).attempts || 1);
 
-            if (isStorageQuotaError || attempts >= 3) {
+            if (attempts >= 3) {
               msg.ack();
             } else {
-              msg.retry();
+              const delaySeconds = isStorageQuotaError
+                ? 300
+                : Math.min(300, 10 * Math.pow(2, Math.max(0, attempts - 1)));
+              msg.retry({ delaySeconds });
             }
           }
         }
