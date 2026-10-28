@@ -812,32 +812,19 @@ export class ScansRepository extends BaseService implements IScansRepository {
       // Transient progress heartbeats and [Fuzz Progress] log lines are coalesced per scan via
       // deterministic IDs so a 6-hour scan keeps at most one row of each in D1 while still
       // showing the latest [Fuzz Progress] line in getRunnerLogs.
-      let payloadStr: string;
-      if (oobTokens) {
-        payloadStr = JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } });
-      } else if (
-        eventType === 'event' &&
-        payload &&
-        typeof payload === 'object' &&
-        (payload.type === 'progress' ||
-          payload.type === 'result' ||
-          payload.type === 'checkpoint' ||
-          payload.type === 'complete')
-      ) {
-        payloadStr = JSON.stringify({ type: payload.type });
-      } else {
-        payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
-      }
-
       if (coalescedKind !== null) {
         const dedupId = `${scanId}:${coalescedKind}`;
         const order = eventOrder(msg.body);
+        const kept = coalescedInBatch.get(dedupId);
+        if (kept !== undefined && !supersedes(order, kept.order)) {
+          continue;
+        }
         // The kept row records its event's place (_exec, _seq) so an older event never replaces
         // a newer one. Another exec is a resumed run and always replaces.
-        const coalescedPayload = JSON.stringify({
-          ...JSON.parse(payloadStr),
-          ...(order ? { _exec: order.exec, _seq: order.seq } : {}),
-        });
+        const basePayload = coalescedKind === 'progress' ? { type: 'progress' } : payload;
+        const coalescedPayload = JSON.stringify(
+          order ? { ...basePayload, _exec: order.exec, _seq: order.seq } : basePayload
+        );
         const stmt = this.db.prepare(
           `INSERT INTO scan_events (id, scan_id, type, payload, created_at)
            SELECT ?, ?, ?, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)
@@ -847,15 +834,30 @@ export class ScansRepository extends BaseService implements IScansRepository {
               OR json_extract(excluded.payload, '$._exec') IS NOT json_extract(scan_events.payload, '$._exec')
               OR json_extract(excluded.payload, '$._seq') > json_extract(scan_events.payload, '$._seq')`
         ).bind(dedupId, scanId, eventType, coalescedPayload, scanId);
-        const kept = coalescedInBatch.get(dedupId);
         if (kept === undefined) {
           coalescedInBatch.set(dedupId, { index: statements.length, order });
           statements.push(stmt);
-        } else if (supersedes(order, kept.order)) {
+        } else {
           statements[kept.index] = stmt;
           kept.order = order;
         }
         continue;
+      }
+
+      let payloadStr: string;
+      if (oobTokens) {
+        payloadStr = JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } });
+      } else if (
+        eventType === 'event' &&
+        payload &&
+        typeof payload === 'object' &&
+        (payload.type === 'result' ||
+          payload.type === 'checkpoint' ||
+          payload.type === 'complete')
+      ) {
+        payloadStr = JSON.stringify({ type: payload.type });
+      } else {
+        payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
       }
 
       statements.push(
