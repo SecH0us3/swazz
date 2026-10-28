@@ -65,7 +65,7 @@ func (a *PrototypePollutionAnalyzer) Analyze(input *AnalysisInput) []swagger.Ana
 	}
 
 	// 2. Check for reflected polluted properties when prototype payloads were sent
-	if input.containsAnyLower("polluted") && a.isProtoPayload(input) {
+	if a.isProtoPayload(input) && input.containsAnyLower("polluted") {
 		if loc := protoReflectionRx.FindIndex(input.ResponseBody); loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])
 			start := loc[0] - 50

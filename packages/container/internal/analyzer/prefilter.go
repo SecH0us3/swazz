@@ -10,29 +10,42 @@ import (
 	"regexp"
 )
 
+const (
+	// minBigramBodyLen is the smallest response body for which an 8 KiB bigram bitset is built;
+	// below this size, SIMD bytes.Contains scans over the L1-cached body are cheaper than clearing
+	// and populating the 8 KiB index.
+	minBigramBodyLen = 2048
+	// minBigramNeedles is the cumulative needle count on an AnalysisInput required before building
+	// the bigram index, avoiding index setup on one-off single-needle calls.
+	minBigramNeedles = 4
+)
+
 // containsAnyLower reports whether the response body contains any of needles, ASCII
 // case-insensitively, like containsAnyFoldASCII over input.ResponseBody. It searches the body
-// lowercased once per input, using a 2-byte bigram index filter for bodies >= 256 bytes.
+// lowercased once per input, using a 2-byte bigram index filter for bodies >= minBigramBodyLen
+// once at least minBigramNeedles needles are checked.
 func (in *AnalysisInput) containsAnyLower(needles ...string) bool {
 	body := in.lowerBody()
-	if len(body) >= 256 {
+	in.needleChecks += len(needles)
+	if len(body) >= minBigramBodyLen && (in.bigramsDone || in.needleChecks >= minBigramNeedles) {
 		bg := in.bodyBigrams()
 		for _, needle := range needles {
 			n := lowerNeedle(needle)
 			if len(n) >= 2 {
-				p1 := uint16(n[0])<<8 | uint16(n[1])
-				if bg[p1>>6]&(uint64(1)<<(p1&63)) == 0 {
+				if !bg.has(n[0], n[1]) {
 					continue
 				}
-				last := len(n) - 1
-				p2 := uint16(n[last-1])<<8 | uint16(n[last])
-				if bg[p2>>6]&(uint64(1)<<(p2&63)) == 0 {
-					continue
-				}
-				mid := len(n) / 2
-				p3 := uint16(n[mid-1])<<8 | uint16(n[mid])
-				if bg[p3>>6]&(uint64(1)<<(p3&63)) == 0 {
-					continue
+				if len(n) > 2 {
+					last := len(n) - 1
+					if !bg.has(n[last-1], n[last]) {
+						continue
+					}
+					if len(n) >= 4 {
+						mid := len(n) / 2
+						if !bg.has(n[mid-1], n[mid]) {
+							continue
+						}
+					}
 				}
 			}
 			if bytes.Contains(body, []byte(n)) {

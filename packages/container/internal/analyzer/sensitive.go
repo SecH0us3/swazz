@@ -100,7 +100,7 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 				continue
 			}
 		case "Generic Secret/Key":
-			if !input.containsAnyLower("key", "secret", "token", "apikey") {
+			if !input.containsAnyLower("key", "secret", "token") {
 				continue
 			}
 		}

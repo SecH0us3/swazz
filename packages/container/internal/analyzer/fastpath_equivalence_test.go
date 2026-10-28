@@ -56,7 +56,7 @@ func largeEquivalenceBodies(n int) [][]byte {
 	bodies := make([][]byte, 0, n)
 	for range n {
 		var sb strings.Builder
-		targetLen := 256 + rng.IntN(1793)
+		targetLen := minBigramBodyLen - 256 + rng.IntN(1024)
 		for sb.Len() < targetLen {
 			sb.WriteString(equivalenceFragments[rng.IntN(len(equivalenceFragments))])
 		}
@@ -273,7 +273,7 @@ func TestPayloadContainsMatchesPayloadText(t *testing.T) {
 		{nil, "admin", false},
 		{"admin", "admin", true},
 		{"bearer eyJhbGciOiJub25l.xxx", "eyJhbGciOiJub25l", true},
-		{[]byte("contains_polluted_prop"), "polluted", true},
+		{[]byte("contains_polluted_prop"), "polluted", false},
 		{map[string]any{"role": "user"}, "role", true},
 		{map[string]any{"user": "admin"}, "admin", true},
 		{map[string]string{"is_admin": "true"}, "is_admin", true},
@@ -399,7 +399,7 @@ func TestAnalysisInputViewsAreComputedOnce(t *testing.T) {
 	}
 
 	// Large body to test bigrams caching and release
-	largeBody := make([]byte, 300)
+	largeBody := make([]byte, minBigramBodyLen+100)
 	for i := range largeBody {
 		largeBody[i] = 'a'
 	}
@@ -410,7 +410,52 @@ func TestAnalysisInputViewsAreComputedOnce(t *testing.T) {
 		t.Fatalf("bodyBigrams recomputed without release")
 	}
 	inputLarge.release()
-	if inputLarge.bigrams != nil || inputLarge.bigramsDone {
+	if inputLarge.bigrams != nil || inputLarge.bigramsDone || inputLarge.needleChecks != 0 {
 		t.Fatalf("bodyBigrams not cleared after release")
+	}
+}
+
+func TestPayloadNormalizerPrefixesCoverAllKeys(t *testing.T) {
+	for i := 0; i < len(payloadNormalizePairs); i += 2 {
+		key := payloadNormalizePairs[i]
+		if !needsPayloadNormalize("prefix_" + key + "_suffix") {
+			t.Fatalf("needsPayloadNormalize did not match payloadNormalizer key %q", key)
+		}
+	}
+}
+
+func TestAnalyzerGuardsCoverAllSignatures(t *testing.T) {
+	sqli := &SQLiAnalyzer{}
+	stack := &StackTraceAnalyzer{}
+	sens := &SensitiveAnalyzer{}
+	mass := &MassAssignmentAnalyzer{}
+
+	samples := []struct {
+		name     string
+		analyzer ResponseAnalyzer
+		input    *AnalysisInput
+		wantRule string
+	}{
+		{"MySQL JDBC", sqli, &AnalysisInput{ResponseBody: []byte("com.mysql.jdbc.exceptions.jdbc4.CommunicationsException")}, "swazz/sql-error-leak"},
+		{"PostgreSQL", sqli, &AnalysisInput{ResponseBody: []byte("PSQLException: connection refused")}, "swazz/sql-error-leak"},
+		{"Oracle", sqli, &AnalysisInput{ResponseBody: []byte("ORA-00933: SQL command not properly ended")}, "swazz/sql-error-leak"},
+		{"NPE Java", stack, &AnalysisInput{ResponseBody: []byte(`Cannot invoke "User.getName()" because "u" is null`)}, "swazz/null-pointer-exception"},
+		{"NPE PHP", stack, &AnalysisInput{ResponseBody: []byte("Call to a member function getId() on null")}, "swazz/null-pointer-exception"},
+		{"NPE NodeJS", stack, &AnalysisInput{ResponseBody: []byte("Cannot read properties of null (reading 'id')")}, "swazz/null-pointer-exception"},
+		{"NPE Ruby", stack, &AnalysisInput{ResponseBody: []byte("undefined method `foo' for nil:NilClass")}, "swazz/null-pointer-exception"},
+		{"Stack Flask", stack, &AnalysisInput{ResponseBody: []byte("in flask/app.py")}, "swazz/stack-trace-leak"},
+		{"Stack Catalina", stack, &AnalysisInput{ResponseBody: []byte("org.apache.catalina.connector.CoyoteAdapter")}, "swazz/stack-trace-leak"},
+		{"Sensitive AWS", sens, &AnalysisInput{ResponseBody: []byte("key=AKIAIOSFODNN7EXAMPLE")}, "swazz/sensitive-data-leak"},
+		{"Sensitive IP", sens, &AnalysisInput{ResponseBody: []byte("host: 192.168.1.42")}, "swazz/sensitive-data-leak"},
+		{"MassAssign ORM", mass, &AnalysisInput{ResponseBody: []byte("ActiveRecord::UnknownAttributeError: unknown attribute 'foo'")}, "swazz/mass-assignment"},
+		{"MassAssign Reflected", mass, &AnalysisInput{SentPayload: map[string]any{"is_admin": true}, ResponseBody: []byte(`{"id":1,"is_admin":true}`)}, "swazz/mass-assignment"},
+	}
+
+	for _, tc := range samples {
+		findings := tc.analyzer.Analyze(tc.input)
+		if len(findings) == 0 || findings[0].RuleID != tc.wantRule {
+			t.Fatalf("%s: Analyze(%q) = %v, want finding %q", tc.name, tc.input.ResponseBody, findings, tc.wantRule)
+		}
+		tc.input.release()
 	}
 }

@@ -133,7 +133,7 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 	return findings
 }
 
-var payloadNormalizer = strings.NewReplacer(
+var payloadNormalizePairs = []string{
 	"%u000d", "%0d",
 	"%u000D", "%0D",
 	"%u000a", "%0a",
@@ -144,7 +144,30 @@ var payloadNormalizer = strings.NewReplacer(
 	"%e5%98%8a", "%0a",
 	"\u560d", "\r",
 	"\u560a", "\n",
+}
+
+var (
+	payloadNormalizer        = strings.NewReplacer(payloadNormalizePairs...)
+	payloadNormalizePrefixes []string
 )
+
+func init() {
+	seen := make(map[string]bool)
+	for i := 0; i < len(payloadNormalizePairs); i += 2 {
+		key := payloadNormalizePairs[i]
+		if len(key) == 0 {
+			continue
+		}
+		prefix := key[:1]
+		if key[0] >= 0x80 && len(key) >= 2 {
+			prefix = key[:2]
+		}
+		if !seen[prefix] {
+			seen[prefix] = true
+			payloadNormalizePrefixes = append(payloadNormalizePrefixes, prefix)
+		}
+	}
+}
 
 var suspiciousOrigins = []string{
 	"evil.com",
@@ -161,7 +184,12 @@ type injectedHeader struct {
 }
 
 func needsPayloadNormalize(s string) bool {
-	return strings.IndexByte(s, '%') >= 0 || strings.Contains(s, "\xe5\x98")
+	for _, prefix := range payloadNormalizePrefixes {
+		if strings.Contains(s, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // extractInjectedHeaders parses CRLF payloads to find header name: value pairs.

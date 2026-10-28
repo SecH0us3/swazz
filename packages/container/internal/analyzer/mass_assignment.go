@@ -102,30 +102,32 @@ func (a *MassAssignmentAnalyzer) Analyze(input *AnalysisInput) []swagger.Analysi
 	}
 
 	// 2. Check for acceptance and reflection of administrative attributes when injected
-	if loc := findMassAssignment(input); loc != nil && a.hasPrivilegedPayload(input) {
-		matchText := string(input.ResponseBody[loc[0]:loc[1]])
-		start := loc[0] - 50
-		if start < 0 {
-			start = 0
-		}
-		end := loc[1] + 50
-		if end > len(input.ResponseBody) {
-			end = len(input.ResponseBody)
-		}
-		contextSnippet := string(input.ResponseBody[start:end])
-		if len(contextSnippet) > 200 {
-			contextSnippet = contextSnippet[:200]
-		}
+	if a.hasPrivilegedPayload(input) {
+		if loc := findMassAssignment(input); loc != nil {
+			matchText := string(input.ResponseBody[loc[0]:loc[1]])
+			start := loc[0] - 50
+			if start < 0 {
+				start = 0
+			}
+			end := loc[1] + 50
+			if end > len(input.ResponseBody) {
+				end = len(input.ResponseBody)
+			}
+			contextSnippet := string(input.ResponseBody[start:end])
+			if len(contextSnippet) > 200 {
+				contextSnippet = contextSnippet[:200]
+			}
 
-		findings = append(findings, swagger.AnalysisFinding{
-			RuleID:           "swazz/mass-assignment",
-			Level:            "error",
-			Message:          "Privileged administrative attribute was accepted and reflected in the resource response, indicating Mass Assignment vulnerability.",
-			Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
-			OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
-			OWASPCategory:    []string{"A01:2025 Broken Access Control"},
-			CWEIDs:           []string{"CWE-915"},
-		})
+			findings = append(findings, swagger.AnalysisFinding{
+				RuleID:           "swazz/mass-assignment",
+				Level:            "error",
+				Message:          "Privileged administrative attribute was accepted and reflected in the resource response, indicating Mass Assignment vulnerability.",
+				Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
+				OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
+				OWASPCategory:    []string{"A01:2025 Broken Access Control"},
+				CWEIDs:           []string{"CWE-915"},
+			})
+		}
 	}
 
 	return findings

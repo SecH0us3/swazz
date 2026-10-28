@@ -41,7 +41,7 @@ OuterLoop:
 	for _, sig := range dbSignatures {
 		switch sig.name {
 		case "MySQL":
-			if !input.containsAnyLower("syntax", "mysql", "jdbc") {
+			if !input.containsAnyLower("syntax", "mysql") {
 				continue
 			}
 		case "PostgreSQL":

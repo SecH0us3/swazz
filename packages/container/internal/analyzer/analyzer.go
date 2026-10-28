@@ -39,8 +39,9 @@ type AnalysisInput struct {
 	sentDone    bool
 	payloadStr  string
 	payloadDone bool
-	bigrams     *bigramIndex // from bigramPool; returned by release
-	bigramsDone bool
+	bigrams      *bigramIndex // from bigramPool; returned by release
+	bigramsDone  bool
+	needleChecks int
 }
 
 // lowerBody returns ResponseBody with ASCII letters lowercased, index for index. Only ASCII is
@@ -67,10 +68,21 @@ func (in *AnalysisInput) release() {
 		in.bigrams = nil
 	}
 	in.bigramsDone = false
+	in.needleChecks = 0
 }
 
 // bigramIndex is a 65,536-bit set (8 KiB) tracking all 2-byte bigrams present in the response body.
 type bigramIndex [1024]uint64
+
+func (bg *bigramIndex) set(a, b byte) {
+	pair := uint16(a)<<8 | uint16(b)
+	bg[pair>>6] |= uint64(1) << (pair & 63)
+}
+
+func (bg *bigramIndex) has(a, b byte) bool {
+	pair := uint16(a)<<8 | uint16(b)
+	return bg[pair>>6]&(uint64(1)<<(pair&63)) != 0
+}
 
 var bigramPool = sync.Pool{
 	New: func() any {
@@ -86,8 +98,7 @@ func (in *AnalysisInput) bodyBigrams() *bigramIndex {
 		body := in.lowerBody()
 		limit := len(body) - 1
 		for i := 0; i < limit; i++ {
-			pair := uint16(body[i])<<8 | uint16(body[i+1])
-			bg[pair>>6] |= uint64(1) << (pair & 63)
+			bg.set(body[i], body[i+1])
 		}
 		in.bigrams = bg
 		in.bigramsDone = true
@@ -149,7 +160,9 @@ func (in *AnalysisInput) payloadText() string {
 }
 
 // payloadContains reports whether any string value or map key in SentPayload contains any of needles.
-// It walks standard types without allocating; for unrecognized types it falls back to payloadText().
+// It walks standard JSON payload types (string, maps, slices) without allocating, inspecting
+// individual keys and string leaves rather than matching across fmt.Sprintf("%v") formatting
+// delimiters; for unrecognized types it falls back to payloadText().
 func (in *AnalysisInput) payloadContains(needles ...string) bool {
 	if in == nil || in.SentPayload == nil || len(needles) == 0 {
 		return false
@@ -164,13 +177,6 @@ func valContains(val any, needles []string, in *AnalysisInput) bool {
 	case string:
 		for _, n := range needles {
 			if strings.Contains(v, n) {
-				return true
-			}
-		}
-		return false
-	case []byte:
-		for _, n := range needles {
-			if bytes.Contains(v, []byte(n)) {
 				return true
 			}
 		}

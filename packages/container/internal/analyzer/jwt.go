@@ -59,7 +59,7 @@ func (a *JWTTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisF
 	}
 
 	// 2. Check for acceptance of alg:none token (authenticated data returned when alg:none token sent)
-	if input.containsAnyLower("\"user\":", "\"email\":", "\"roles\":", "\"username\":", "\"sub\":") && a.isAlgNonePayload(input) {
+	if a.isAlgNonePayload(input) && input.containsAnyLower("\"user\":", "\"email\":", "\"roles\":", "\"username\":", "\"sub\":") {
 		return []swagger.AnalysisFinding{{
 			RuleID:           "swazz/jwt-tampering",
 			Level:            "critical",
