@@ -329,4 +329,3 @@ func resolveCoordinatorURL(coordinatorFlag string) string {
 	}
 	return ""
 }
-

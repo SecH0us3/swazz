@@ -33,12 +33,12 @@ type AnalysisInput struct {
 	// Views derived from the fields above, computed on first use and shared by every analyzer
 	// of one Analyze call. An input belongs to one response and one goroutine at a time; use
 	// AcquireInput and ReleaseInput to pool instances across responses.
-	lowered     *[]byte // from loweredPool; returned by release
-	loweredDone bool
-	sent        []string
-	sentDone    bool
-	payloadStr  string
-	payloadDone bool
+	lowered      *[]byte // from loweredPool; returned by release
+	loweredDone  bool
+	sent         []string
+	sentDone     bool
+	payloadStr   string
+	payloadDone  bool
 	bigrams      *bigramIndex // from bigramPool; returned by release
 	bigramsDone  bool
 	needleChecks int

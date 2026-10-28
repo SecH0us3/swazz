@@ -139,4 +139,3 @@ func TestRegistry_MCPAnalyzer(t *testing.T) {
 	}
 	assert.True(t, found, "expected swazz/mcp-tool-exception in registry findings")
 }
-
