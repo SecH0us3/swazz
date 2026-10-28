@@ -8,7 +8,6 @@ package analyzer
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"swazz-engine/internal/swagger"
 )
@@ -22,14 +21,7 @@ var (
 )
 
 func (a *PrototypePollutionAnalyzer) isProtoPayload(input *AnalysisInput) bool {
-	if input.SentPayload == nil {
-		return false
-	}
-	payloadStr := input.payloadText()
-	return strings.Contains(payloadStr, "__proto__") ||
-		strings.Contains(payloadStr, "constructor.prototype") ||
-		strings.Contains(payloadStr, "prototype.polluted") ||
-		strings.Contains(payloadStr, "polluted")
+	return input.payloadContains("__proto__", "constructor.prototype", "prototype.polluted", "polluted")
 }
 
 func (a *PrototypePollutionAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -73,7 +65,7 @@ func (a *PrototypePollutionAnalyzer) Analyze(input *AnalysisInput) []swagger.Ana
 	}
 
 	// 2. Check for reflected polluted properties when prototype payloads were sent
-	if a.isProtoPayload(input) {
+	if input.containsAnyLower("polluted") && a.isProtoPayload(input) {
 		if loc := protoReflectionRx.FindIndex(input.ResponseBody); loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])
 			start := loc[0] - 50

@@ -8,7 +8,6 @@ package analyzer
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"swazz-engine/internal/swagger"
 )
@@ -22,10 +21,7 @@ var (
 )
 
 func (a *JWTTamperingAnalyzer) isAlgNonePayload(input *AnalysisInput) bool {
-	if input.SentPayload != nil && strings.Contains(input.payloadText(), jwtAlgNone) {
-		return true
-	}
-	return false
+	return input.payloadContains(jwtAlgNone)
 }
 
 func (a *JWTTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -33,44 +29,38 @@ func (a *JWTTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisF
 		return nil
 	}
 
-	// Fast pre-filter: skip scanning if no JWT error indicators or alg:none payloads are present
-	if !input.containsAnyLower("jwt", "jsonwebtoken", "tokenexpirederror", "expiredsignatureerror", "algorithm: none", "keyfunc", "rsa: verification", "jwk", "nimbus", "jose") && !a.isAlgNonePayload(input) {
-		return nil
-	}
-
-	var findings []swagger.AnalysisFinding
-
 	// 1. Check for JWT library exceptions and signature verification trace leaks
-	if loc := jwtErrorRx.FindIndex(input.ResponseBody); loc != nil {
-		matchText := string(input.ResponseBody[loc[0]:loc[1]])
-		start := loc[0] - 50
-		if start < 0 {
-			start = 0
-		}
-		end := loc[1] + 50
-		if end > len(input.ResponseBody) {
-			end = len(input.ResponseBody)
-		}
-		contextSnippet := string(input.ResponseBody[start:end])
-		if len(contextSnippet) > 200 {
-			contextSnippet = contextSnippet[:200]
-		}
+	if input.containsAnyLower("jwt", "jsonwebtoken", "tokenexpirederror", "expiredsignatureerror", "algorithm: none", "keyfunc", "rsa: verification", "jwk", "nimbus", "jose") {
+		if loc := jwtErrorRx.FindIndex(input.ResponseBody); loc != nil {
+			matchText := string(input.ResponseBody[loc[0]:loc[1]])
+			start := loc[0] - 50
+			if start < 0 {
+				start = 0
+			}
+			end := loc[1] + 50
+			if end > len(input.ResponseBody) {
+				end = len(input.ResponseBody)
+			}
+			contextSnippet := string(input.ResponseBody[start:end])
+			if len(contextSnippet) > 200 {
+				contextSnippet = contextSnippet[:200]
+			}
 
-		findings = append(findings, swagger.AnalysisFinding{
-			RuleID:           "swazz/jwt-tampering",
-			Level:            "error",
-			Message:          "JWT cryptographic verification error leaked in the response body.",
-			Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
-			OWASPAPICategory: []string{"API2:2023 Broken Authentication"},
-			OWASPCategory:    []string{"A07:2025 Authentication Failures"},
-			CWEIDs:           []string{"CWE-347", "CWE-287"},
-		})
-		return findings
+			return []swagger.AnalysisFinding{{
+				RuleID:           "swazz/jwt-tampering",
+				Level:            "error",
+				Message:          "JWT cryptographic verification error leaked in the response body.",
+				Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
+				OWASPAPICategory: []string{"API2:2023 Broken Authentication"},
+				OWASPCategory:    []string{"A07:2025 Authentication Failures"},
+				CWEIDs:           []string{"CWE-347", "CWE-287"},
+			}}
+		}
 	}
 
 	// 2. Check for acceptance of alg:none token (authenticated data returned when alg:none token sent)
-	if a.isAlgNonePayload(input) && input.containsAnyLower("\"user\":", "\"email\":", "\"roles\":", "\"username\":", "\"sub\":") {
-		findings = append(findings, swagger.AnalysisFinding{
+	if input.containsAnyLower("\"user\":", "\"email\":", "\"roles\":", "\"username\":", "\"sub\":") && a.isAlgNonePayload(input) {
+		return []swagger.AnalysisFinding{{
 			RuleID:           "swazz/jwt-tampering",
 			Level:            "critical",
 			Message:          "Server accepted an unsigned or alg:none JWT payload and returned authenticated resource data.",
@@ -78,8 +68,8 @@ func (a *JWTTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisF
 			OWASPAPICategory: []string{"API2:2023 Broken Authentication"},
 			OWASPCategory:    []string{"A07:2025 Authentication Failures"},
 			CWEIDs:           []string{"CWE-347", "CWE-287"},
-		})
+		}}
 	}
 
-	return findings
+	return nil
 }

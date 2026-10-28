@@ -12,9 +12,36 @@ import (
 
 // containsAnyLower reports whether the response body contains any of needles, ASCII
 // case-insensitively, like containsAnyFoldASCII over input.ResponseBody. It searches the body
-// lowercased once per input, so a run of prefilters costs one fast bytes.Index pass per needle.
+// lowercased once per input, using a 2-byte bigram index filter for bodies >= 256 bytes.
 func (in *AnalysisInput) containsAnyLower(needles ...string) bool {
 	body := in.lowerBody()
+	if len(body) >= 256 {
+		bg := in.bodyBigrams()
+		for _, needle := range needles {
+			n := lowerNeedle(needle)
+			if len(n) >= 2 {
+				p1 := uint16(n[0])<<8 | uint16(n[1])
+				if bg[p1>>6]&(uint64(1)<<(p1&63)) == 0 {
+					continue
+				}
+				last := len(n) - 1
+				p2 := uint16(n[last-1])<<8 | uint16(n[last])
+				if bg[p2>>6]&(uint64(1)<<(p2&63)) == 0 {
+					continue
+				}
+				mid := len(n) / 2
+				p3 := uint16(n[mid-1])<<8 | uint16(n[mid])
+				if bg[p3>>6]&(uint64(1)<<(p3&63)) == 0 {
+					continue
+				}
+			}
+			if bytes.Contains(body, []byte(n)) {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, needle := range needles {
 		if bytes.Contains(body, []byte(lowerNeedle(needle))) {
 			return true

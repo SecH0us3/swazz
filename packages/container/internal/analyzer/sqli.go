@@ -35,11 +35,6 @@ func (a *SQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	// Fast pre-filter: skip scanning if no SQL error indicators are present in response body
-	if !input.containsAnyLower("syntax", "sql", "mysql", "postgres", "psql", "pg_", "pg::", "sqlite", "ora-", "quotation", "quoted string", "driver", "oledb", "sqlstate", "npgsql", "sqlclient", "sqlexception") {
-		return nil
-	}
-
 	var findings []swagger.AnalysisFinding
 
 OuterLoop:
