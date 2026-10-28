@@ -7,6 +7,7 @@ package runner
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 
@@ -109,4 +110,52 @@ func TestSizedPayloadHash(t *testing.T) {
 	big := generatedPayload{body: map[string]any{"a": strings.Repeat("A", 1<<20)}}
 	_, fits = sizedPayloadHash(big, 1<<10)
 	assert.False(t, fits)
+}
+
+func referenceSizedPayloadHash(p generatedPayload, maxBytes int) (uint32, bool) {
+	payloadMap := make(map[string]any)
+	if p.body != nil {
+		payloadMap["body"] = p.body
+	}
+	if p.pathParams != nil {
+		payloadMap["pathParams"] = p.pathParams
+	}
+	if p.queryParams != nil {
+		payloadMap["queryParams"] = p.queryParams
+	}
+	b, err := json.Marshal(payloadMap)
+	if err != nil || len(b) > maxBytes {
+		return 0, false
+	}
+	return payloads.HashBytes(b), true
+}
+
+func TestSizedPayloadHash_Equivalence(t *testing.T) {
+	testCases := []generatedPayload{
+		{},
+		{body: map[string]any{}},
+		{pathParams: map[string]string{}},
+		{queryParams: map[string]any{}},
+		{body: map[string]any{"id": 123, "name": "test"}},
+		{pathParams: map[string]string{"petId": "456", "tag": "abc"}},
+		{queryParams: map[string]any{"limit": 10, "offset": 20}},
+		{
+			body:        map[string]any{"nested": map[string]any{"k": "v"}},
+			pathParams:  map[string]string{"user": "alex"},
+			queryParams: map[string]any{"debug": true},
+		},
+		{body: map[string]any{"inf": math.Inf(1)}},
+		{body: map[string]any{"nan": math.NaN()}},
+		{body: map[string]any{"customSlice": []string{"a", "b", "c"}}},
+	}
+
+	for i, tc := range testCases {
+		expectedHash, expectedFits := referenceSizedPayloadHash(tc, 1<<20)
+		actualHash, actualFits := sizedPayloadHash(tc, 1<<20)
+		assert.Equal(t, expectedFits, actualFits, "case %d fits mismatch", i)
+		assert.Equal(t, expectedHash, actualHash, "case %d hash mismatch", i)
+
+		// Also verify payloadFits
+		assert.Equal(t, expectedFits, payloadFits(tc, 1<<20), "case %d payloadFits mismatch", i)
+	}
 }

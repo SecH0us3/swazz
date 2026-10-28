@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -77,10 +78,11 @@ func (r *Runner) fuzzEndpoint(
 		if isSecHeaderIter {
 			if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
 				if built.headers == nil {
-					built.headers = make(map[string]string, len(secHeaders))
-				}
-				for k, v := range secHeaders {
-					built.headers[k] = v
+					built.headers = secHeaders
+				} else {
+					for k, v := range secHeaders {
+						built.headers[k] = v
+					}
 				}
 			}
 		}
@@ -156,31 +158,213 @@ func (r *Runner) fuzzEndpoint(
 // it is encoded, since encoding a multi-megabyte boundary string only to discard it dominated a
 // scan's allocations.
 func sizedPayloadHash(p generatedPayload, maxBytes int) (hash uint32, fits bool) {
-	payloadMap := make(map[string]any)
-	if p.body != nil {
-		payloadMap["body"] = p.body
-	}
-	if p.queryParams != nil {
-		payloadMap["queryParams"] = p.queryParams
-	}
-	if p.pathParams != nil {
-		payloadMap["pathParams"] = p.pathParams
-	}
-	if minEncodedSize(payloadMap, maxBytes) > maxBytes {
+	if minPayloadEncodedSize(p, maxBytes) > maxBytes {
 		return 0, false
 	}
 
 	buf := bufPool.Get().(*bytes.Buffer)
 	defer PutBuffer(buf)
 	buf.Reset()
-	if err := json.NewEncoder(buf).Encode(payloadMap); err != nil {
+
+	if err := encodePayloadFields(buf, p); err != nil {
 		return 0, false
 	}
-	b := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+	b := buf.Bytes()
 	if len(b) > maxBytes {
 		return 0, false
 	}
 	return payloads.HashBytes(b), true
+}
+
+func encodePayloadFields(buf *bytes.Buffer, p generatedPayload) error {
+	buf.WriteByte('{')
+	enc := json.NewEncoder(buf)
+	hasPrev := false
+
+	if p.body != nil {
+		buf.WriteString(`"body":`)
+		if err := enc.Encode(p.body); err != nil {
+			return err
+		}
+		if buf.Len() > 0 && buf.Bytes()[buf.Len()-1] == '\n' {
+			buf.Truncate(buf.Len() - 1)
+		}
+		hasPrev = true
+	}
+
+	if p.pathParams != nil {
+		if hasPrev {
+			buf.WriteByte(',')
+		}
+		buf.WriteString(`"pathParams":`)
+		if err := enc.Encode(p.pathParams); err != nil {
+			return err
+		}
+		if buf.Len() > 0 && buf.Bytes()[buf.Len()-1] == '\n' {
+			buf.Truncate(buf.Len() - 1)
+		}
+		hasPrev = true
+	}
+
+	if p.queryParams != nil {
+		if hasPrev {
+			buf.WriteByte(',')
+		}
+		buf.WriteString(`"queryParams":`)
+		if err := enc.Encode(p.queryParams); err != nil {
+			return err
+		}
+		if buf.Len() > 0 && buf.Bytes()[buf.Len()-1] == '\n' {
+			buf.Truncate(buf.Len() - 1)
+		}
+	}
+
+	buf.WriteByte('}')
+	return nil
+}
+
+// payloadFits reports whether p's JSON encoding fits within maxBytes without
+// allocating or hashing when an upper bound already proves it fits.
+func payloadFits(p generatedPayload, maxBytes int) bool {
+	if minPayloadEncodedSize(p, maxBytes) > maxBytes {
+		return false
+	}
+	if maxPayloadEncodedSize(p, maxBytes) <= maxBytes {
+		return true
+	}
+	_, fits := sizedPayloadHash(p, maxBytes)
+	return fits
+}
+
+func minPayloadEncodedSize(p generatedPayload, limit int) int {
+	count := 0
+	if p.body != nil {
+		count++
+	}
+	if p.pathParams != nil {
+		count++
+	}
+	if p.queryParams != nil {
+		count++
+	}
+	if count == 0 {
+		return 2
+	}
+	n := 2 + commas(count)
+	if p.body != nil {
+		n += len("body") + 3
+		n += minEncodedSize(p.body, limit-n)
+		if n > limit {
+			return n
+		}
+	}
+	if p.pathParams != nil {
+		n += len("pathParams") + 3
+		n += minEncodedSize(p.pathParams, limit-n)
+		if n > limit {
+			return n
+		}
+	}
+	if p.queryParams != nil {
+		n += len("queryParams") + 3
+		n += minEncodedSize(p.queryParams, limit-n)
+		if n > limit {
+			return n
+		}
+	}
+	return n
+}
+
+func maxPayloadEncodedSize(p generatedPayload, limit int) int {
+	count := 0
+	if p.body != nil {
+		count++
+	}
+	if p.pathParams != nil {
+		count++
+	}
+	if p.queryParams != nil {
+		count++
+	}
+	if count == 0 {
+		return 2
+	}
+	n := 2 + commas(count)
+	if p.body != nil {
+		n += len("body") + 3
+		n += maxEncodedSize(p.body, limit-n)
+		if n > limit {
+			return n
+		}
+	}
+	if p.pathParams != nil {
+		n += len("pathParams") + 3
+		n += maxEncodedSize(p.pathParams, limit-n)
+		if n > limit {
+			return n
+		}
+	}
+	if p.queryParams != nil {
+		n += len("queryParams") + 3
+		n += maxEncodedSize(p.queryParams, limit-n)
+		if n > limit {
+			return n
+		}
+	}
+	return n
+}
+
+func maxEncodedSize(v any, limit int) int {
+	switch t := v.(type) {
+	case nil:
+		return 4
+	case bool:
+		return 5
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return 20
+	case float64:
+		if math.IsInf(t, 0) || math.IsNaN(t) {
+			return limit + 1
+		}
+		return 24
+	case float32:
+		if math.IsInf(float64(t), 0) || math.IsNaN(float64(t)) {
+			return limit + 1
+		}
+		return 24
+	case string:
+		return len(t)*6 + 2
+	case map[string]any:
+		n := 2 + commas(len(t))
+		for k, item := range t {
+			n += len(k)*6 + 3
+			n += maxEncodedSize(item, limit-n)
+			if n > limit {
+				return n
+			}
+		}
+		return n
+	case []any:
+		n := 2 + commas(len(t))
+		for _, item := range t {
+			n += maxEncodedSize(item, limit-n)
+			if n > limit {
+				return n
+			}
+		}
+		return n
+	case map[string]string:
+		n := 2 + commas(len(t))
+		for k, item := range t {
+			n += len(k)*6 + len(item)*6 + 5
+			if n > limit {
+				return n
+			}
+		}
+		return n
+	default:
+		return limit + 1
+	}
 }
 
 // buildFuzzIteration generates one payload attempt, enforces the size cap and
@@ -209,13 +393,20 @@ func (r *Runner) buildFuzzIteration(
 	for range maxRetries {
 		attempt := buildFuzzPayload(endpoint, gen, safeGen, isSecHeaderIter, enableDedup)
 
+		if !enableDedup {
+			if !payloadFits(attempt, maxPayloadSize) {
+				continue
+			}
+			return attempt, hash, false
+		}
+
 		h, fits := sizedPayloadHash(attempt, maxPayloadSize)
 		if !fits {
 			continue
 		}
 		hash = h
 
-		if enableDedup && seenHashes[hash] {
+		if seenHashes[hash] {
 			continue
 		}
 

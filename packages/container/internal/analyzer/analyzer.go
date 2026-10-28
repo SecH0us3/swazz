@@ -31,8 +31,8 @@ type AnalysisInput struct {
 	Settings        swagger.Settings
 
 	// Views derived from the fields above, computed on first use and shared by every analyzer
-	// of one Analyze call. An input belongs to one response and one goroutine: build a new one
-	// per response rather than reusing or sharing it.
+	// of one Analyze call. An input belongs to one response and one goroutine at a time; use
+	// AcquireInput and ReleaseInput to pool instances across responses.
 	lowered     *[]byte // from loweredPool; returned by release
 	loweredDone bool
 	sent        []string
@@ -69,6 +69,27 @@ func (in *AnalysisInput) release() {
 	}
 	in.bigramsDone = false
 	in.needleChecks = 0
+}
+
+var analysisInputPool = sync.Pool{
+	New: func() any {
+		return new(AnalysisInput)
+	},
+}
+
+// AcquireInput retrieves a pooled AnalysisInput.
+func AcquireInput() *AnalysisInput {
+	return analysisInputPool.Get().(*AnalysisInput)
+}
+
+// ReleaseInput cleans up internal views and returns in to the pool.
+func ReleaseInput(in *AnalysisInput) {
+	if in == nil {
+		return
+	}
+	in.release()
+	*in = AnalysisInput{}
+	analysisInputPool.Put(in)
 }
 
 // bigramIndex is a 65,536-bit set (8 KiB) tracking all 2-byte bigrams present in the response body.
