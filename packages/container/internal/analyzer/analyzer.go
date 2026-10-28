@@ -82,13 +82,21 @@ func AcquireInput() *AnalysisInput {
 	return analysisInputPool.Get().(*AnalysisInput)
 }
 
-// ReleaseInput cleans up internal views and returns in to the pool.
+// ReleaseInput resets per-response references and cached views on in and returns it to the pool.
 func ReleaseInput(in *AnalysisInput) {
 	if in == nil {
 		return
 	}
-	in.release()
-	*in = AnalysisInput{}
+	in.SentPayload = nil
+	in.ResponseBody = nil
+	in.ResponseHeaders = nil
+	in.Endpoint = ""
+	in.Method = ""
+	clear(in.sent)
+	in.sent = in.sent[:0]
+	in.sentDone = false
+	in.payloadStr = ""
+	in.payloadDone = false
 	analysisInputPool.Put(in)
 }
 
@@ -162,10 +170,10 @@ var (
 	kelvinSign = []byte("\u212a")
 )
 
-// sentStrings returns the string leaves of SentPayload (see extractStrings).
+// sentStrings returns the string leaves of SentPayload (see extractStringsInto).
 func (in *AnalysisInput) sentStrings() []string {
 	if !in.sentDone {
-		in.sent = extractStrings(in.SentPayload)
+		in.sent = extractStringsInto(in.sent[:0], in.SentPayload)
 		in.sentDone = true
 	}
 	return in.sent

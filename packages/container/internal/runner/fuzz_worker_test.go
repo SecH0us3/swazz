@@ -144,18 +144,58 @@ func TestSizedPayloadHash_Equivalence(t *testing.T) {
 			pathParams:  map[string]string{"user": "alex"},
 			queryParams: map[string]any{"debug": true},
 		},
+		{body: map[string]any{"html": strings.Repeat("<>&", 20)}},
+		{body: map[string]any{"invalidUTF8": strings.Repeat("\xff\xfe\x80", 15)}},
+		{body: map[string]any{"lineSep": strings.Repeat("\u2028\u2029", 15)}},
+		{body: map[string]any{"ctrl": "\x00\x01\x1f\"\\\b\f\n\r\t"}},
+		{
+			pathParams: map[string]string{
+				"<key\xff\u2028>": "<val\xff\u2029>",
+			},
+		},
+		{
+			body: map[string]any{
+				"minInt64":  int64(math.MinInt64),
+				"maxInt64":  int64(math.MaxInt64),
+				"maxUint64": uint64(math.MaxUint64),
+				"boolTrue":  true,
+				"boolFalse": false,
+				"nilVal":    nil,
+			},
+		},
+		{
+			body: map[string]any{
+				"maxFloat64":  math.MaxFloat64,
+				"negMaxFloat": -math.MaxFloat64,
+				"smallest":    math.SmallestNonzeroFloat64,
+				"negSmallest": -math.SmallestNonzeroFloat64,
+				"longFixed":   -1.2345678901234567e-6,
+				"maxFloat32":  float32(math.MaxFloat32),
+			},
+		},
 		{body: map[string]any{"inf": math.Inf(1)}},
+		{body: map[string]any{"negInf": math.Inf(-1)}},
 		{body: map[string]any{"nan": math.NaN()}},
-		{body: map[string]any{"customSlice": []string{"a", "b", "c"}}},
+		{body: map[string]any{"inf32": float32(math.Inf(1))}},
+		{body: map[string]any{"nan32": float32(math.NaN())}},
+		{body: map[string]any{"customSlice": []string{"a", "<b\xff>", "\u2028c"}}},
+		{
+			body:        map[string]any{"a": strings.Repeat("A", 120)},
+			pathParams:  map[string]string{"p": strings.Repeat("<", 30)},
+			queryParams: map[string]any{"q": []any{strings.Repeat("\xff", 20), int64(math.MinInt64)}},
+		},
 	}
 
 	for i, tc := range testCases {
-		expectedHash, expectedFits := referenceSizedPayloadHash(tc, 1<<20)
-		actualHash, actualFits := sizedPayloadHash(tc, 1<<20)
-		assert.Equal(t, expectedFits, actualFits, "case %d fits mismatch", i)
-		assert.Equal(t, expectedHash, actualHash, "case %d hash mismatch", i)
+		lo, hi := payloadEncodedBounds(tc, 1<<30)
+		assert.LessOrEqual(t, lo, hi, "case %d lo > hi", i)
 
-		// Also verify payloadFits
-		assert.Equal(t, expectedFits, payloadFits(tc, 1<<20), "case %d payloadFits mismatch", i)
+		for capBytes := 0; capBytes <= 600; capBytes++ {
+			expectedHash, expectedFits := referenceSizedPayloadHash(tc, capBytes)
+			actualHash, actualFits := sizedPayloadHash(tc, capBytes)
+			require.Equal(t, expectedFits, actualFits, "case %d cap %d sizedPayloadHash fits mismatch", i, capBytes)
+			require.Equal(t, expectedHash, actualHash, "case %d cap %d hash mismatch", i, capBytes)
+			require.Equal(t, expectedFits, payloadFits(tc, capBytes), "case %d cap %d payloadFits mismatch", i, capBytes)
+		}
 	}
 }

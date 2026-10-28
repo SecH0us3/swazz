@@ -135,22 +135,13 @@ func (r *Runner) executeWebSocketRequest(
 		if b, ok := payload.([]byte); ok {
 			sent = string(b)
 		}
-		input := &analyzer.AnalysisInput{
-			SentPayload:     sent,
-			ResponseBody:    body,
-			ResponseHeaders: resHeaders,
-			Duration:        duration,
-			Profile:         profile,
-			Endpoint:        urlStr,
-			Method:          "WS",
-			ResponseSize:    int64(len(respMsg)),
-			BaselineSize:    baselineSize,
-			SizeMultiplier:  multiplier,
-			BaselineTimeMs:  baselineTime,
-			TimeThresholdMs: settings.TimeAnomalyThresholdMs,
-			Settings:        settings,
-		}
+		input := acquireAnalysisInput(
+			sent, body, resHeaders, duration, profile,
+			urlStr, "WS", int64(len(respMsg)), baselineSize, multiplier,
+			baselineTime, settings.TimeAnomalyThresholdMs, settings,
+		)
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
+		analyzer.ReleaseInput(input)
 	}
 
 	return result

@@ -275,15 +275,7 @@ func (r *Runner) runActiveParameterFuzzing(
 			}
 
 			if isSecHeaderIter {
-				if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
-					if built.headers == nil {
-						built.headers = secHeaders
-					} else {
-						for k, v := range secHeaders {
-							built.headers[k] = v
-						}
-					}
-				}
+				mergeSecurityHeaders(&built, gen)
 			}
 
 			r.waitIfPaused(ctx)

@@ -29,25 +29,20 @@ func init() {
 	}
 }
 
-func extractStrings(v any) []string {
-	var stringsList []string
-	extractStringsHelper(v, &stringsList)
-	return stringsList
-}
-
-func extractStringsHelper(v any, out *[]string) {
+func extractStringsInto(out []string, v any) []string {
 	switch val := v.(type) {
 	case string:
-		*out = append(*out, val)
+		out = append(out, val)
 	case map[string]any:
 		for _, item := range val {
-			extractStringsHelper(item, out)
+			out = extractStringsInto(out, item)
 		}
 	case []any:
 		for _, item := range val {
-			extractStringsHelper(item, out)
+			out = extractStringsInto(out, item)
 		}
 	}
+	return out
 }
 
 func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
