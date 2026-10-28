@@ -195,6 +195,17 @@ describe('Auth Utils - Additional functions', () => {
       expect(res).toBe('d1-user');
     });
 
+    it('does not write to KV when verifyApiKey returns null (no negative caching in KV)', async () => {
+      const mockContext = createMockContext() as any;
+      mockContext.headers['authorization'] = 'Bearer swazz_live_invalid';
+      mockContext.env.SESSION_CACHE.get.mockResolvedValueOnce(null);
+      mockVerifyApiKey.mockResolvedValueOnce(null);
+
+      const res = await getUserIdFromRequest(mockContext);
+      expect(res).toBeNull();
+      expect(mockContext.env.SESSION_CACHE.put).not.toHaveBeenCalled();
+    });
+
     it('decodes JWT token if valid', async () => {
       const mockContext = createMockContext() as any;
       const jwtToken = await sign({ sub: 'jwt-user' }, 'jwt-secret-123', 'HS256');

@@ -18,7 +18,6 @@ declare module 'hono' {
 }
 
 const KV_POSITIVE_TTL = 300; // 5 minutes
-const KV_NEGATIVE_TTL = 60;  // 1 minute
 
 /** `bytes` random bytes from the CSPRNG, as lowercase hex. */
 export function randomHex(bytes: number): string {
@@ -86,11 +85,10 @@ export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Conte
       const authRepo = new AuthRepoClass(c.env);
       const userId = await authRepo.verifyApiKey(hashedToken, token);
 
-      // 3. Write to KV (positive or negative cache)
-      if (kv) {
+      // 3. Write to KV (positive cache ONLY — never write random invalid tokens to paid KV)
+      if (kv && userId) {
         try {
-          const ttl = userId ? KV_POSITIVE_TTL : KV_NEGATIVE_TTL;
-          await kv.put(cacheKey, JSON.stringify({ userId }), { expirationTtl: ttl });
+          await kv.put(cacheKey, JSON.stringify({ userId }), { expirationTtl: KV_POSITIVE_TTL });
         } catch {
           // KV write failed — non-critical, continue
         }

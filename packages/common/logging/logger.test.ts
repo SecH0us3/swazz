@@ -3,10 +3,13 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { describe, it, expect, vi } from 'vitest';
-import { formatLog, logInfo } from './logger';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { formatLog, logInfo, logWarn, logError, getBufferedLogs, clearBufferedLogs } from './logger';
 
 describe('Logger Library', () => {
+  beforeEach(() => {
+    clearBufferedLogs();
+  });
   it('should format logs correctly', () => {
     const entry = formatLog('info', 'test-module', 'hello world', { requestId: 'req-123' });
     expect(entry.level).toBe('info');
@@ -16,16 +19,38 @@ describe('Logger Library', () => {
     expect(entry.timestamp).toBeDefined();
   });
 
-  it('should buffer to KV if session cache exists', async () => {
+  it('should buffer logs in-memory and never read or write to KV SESSION_CACHE', async () => {
     const mockKV = {
       get: vi.fn().mockResolvedValue(JSON.stringify([])),
       put: vi.fn().mockResolvedValue(undefined),
     };
     const env = { SESSION_CACHE: mockKV };
-    logInfo(env, 'test', 'msg');
-    // Wait for KV push async operation
-    await new Promise(resolve => setTimeout(resolve, 50));
-    expect(mockKV.put).toHaveBeenCalled();
+
+    logInfo(env, 'test-mod', 'info message');
+    logWarn(env, 'test-mod', 'warn message');
+    logError(env, 'test-mod', 'error message');
+
+    expect(mockKV.get).not.toHaveBeenCalled();
+    expect(mockKV.put).not.toHaveBeenCalled();
+
+    const logs = getBufferedLogs();
+    expect(logs.length).toBe(3);
+    expect(logs[0].msg).toBe('error message');
+    expect(logs[1].msg).toBe('warn message');
+    expect(logs[2].msg).toBe('info message');
+
+    clearBufferedLogs();
+    expect(getBufferedLogs()).toEqual([]);
+  });
+
+  it('should cap in-memory buffered logs at 200 entries', () => {
+    for (let i = 0; i < 250; i++) {
+      logInfo(null, 'bulk', `msg-${i}`);
+    }
+    const logs = getBufferedLogs();
+    expect(logs.length).toBe(200);
+    expect(logs[0].msg).toBe('msg-249');
+    expect(logs[199].msg).toBe('msg-50');
   });
 
   it('should serialize error objects and merge extra fields into payload', () => {

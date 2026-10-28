@@ -6,12 +6,12 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env, AppEnv } from './env';
-import { logInfo, logWarn, logError } from '../../common/logging/logger';
+import { logInfo, logWarn, logError, getBufferedLogs } from '../../common/logging/logger';
 import { getUserIdFromRequest, getDeleteRequestedAt, safeCompare } from './utils/auth';
 import { AuthRepository } from './repositories/auth';
 import { RunnersRepository } from './repositories/runners';
 import { redeemStreamTicket } from './services/runners';
-import { getDB } from './utils/db';
+import { getDB, getBufferedSlowQueries } from './utils/db';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
 import { registerRbacRoutes } from './routes/rbac';
@@ -200,18 +200,7 @@ app.get('/api/admin/logs', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  if (!c.env.SESSION_CACHE) {
-    return c.json([]);
-  }
-
-  const raw = await c.env.SESSION_CACHE.get('admin:logs');
-  if (!raw) return c.json([]);
-
-  try {
-    return c.json(JSON.parse(raw));
-  } catch {
-    return c.json([]);
-  }
+  return c.json(getBufferedLogs());
 });
 
 app.get('/api/admin/slow-queries', async (c) => {
@@ -226,18 +215,7 @@ app.get('/api/admin/slow-queries', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  if (!c.env.SESSION_CACHE) {
-    return c.json([]);
-  }
-
-  const raw = await c.env.SESSION_CACHE.get('admin:slow-queries');
-  if (!raw) return c.json([]);
-
-  try {
-    return c.json(JSON.parse(raw));
-  } catch {
-    return c.json([]);
-  }
+  return c.json(getBufferedSlowQueries());
 });
 // Add Security Headers middleware
 
@@ -596,14 +574,38 @@ export default {
         // The batch mixes every tenant's events, so one bad message must not cost the others:
         // fall back to one message at a time and retry only the ones that still fail.
         logError({ env, executionCtx: ctx }, "Queue", "Failed to bulk insert findings and events; retrying per message", { error: err });
+        let failedCount = 0;
+        let sampleScanId: string | undefined;
+        let firstErr: any = null;
+
         for (const msg of batch.messages) {
           try {
             await scansRepo.processFindingsQueueMessages([msg], ctx);
             msg.ack();
-          } catch (msgErr) {
-            logError({ env, executionCtx: ctx }, "Queue", `Failed to persist findings event for scan ${msg.body?.scanId}`, { error: msgErr });
-            msg.retry();
+          } catch (msgErr: any) {
+            failedCount++;
+            if (!firstErr) firstErr = msgErr;
+            if (!sampleScanId && msg.body?.scanId) sampleScanId = msg.body.scanId;
+
+            const errMsg = String(msgErr?.message || msgErr || '');
+            const isStorageQuotaError = errMsg.includes('Exceeded maximum DB size');
+            const attempts = Number((msg as any).attempts || 0);
+
+            if (isStorageQuotaError || attempts >= 3) {
+              msg.ack();
+            } else {
+              msg.retry();
+            }
           }
+        }
+
+        if (failedCount > 0) {
+          logError({ env, executionCtx: ctx }, "Queue", `Failed to persist findings events for ${failedCount}/${batch.messages.length} messages`, {
+            failedCount,
+            totalCount: batch.messages.length,
+            sampleScanId,
+            error: firstErr
+          });
         }
       }
     }

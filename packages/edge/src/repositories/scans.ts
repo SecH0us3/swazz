@@ -769,14 +769,32 @@ export class ScansRepository extends BaseService implements IScansRepository {
         continue;
       }
       const oobTokens = payload && payload.type === 'oob_pending' ? sanitizeOobPending(payload.data) : null;
+      const eventType = typeof type === 'string' && type ? type : 'event';
       // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
       // The OOB tokens themselves are stored by the coordinator as the event arrives
       // (storeOobPending); stored again here, a token already reported would come back. The event
       // log keeps only their count.
-      const payloadStr = oobTokens
-        ? JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } })
-        : (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
-      const eventType = typeof type === 'string' && type ? type : 'event';
+      // High-volume events (progress, result, checkpoint, complete) only need their event type in
+      // scan_events to prevent database bloat; full payloads are processed in-memory.
+      let payloadStr: string;
+      if (oobTokens) {
+        payloadStr = JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } });
+      } else if (
+        eventType === 'event' &&
+        payload &&
+        typeof payload === 'object' &&
+        (payload.type === 'progress' ||
+          payload.type === 'result' ||
+          payload.type === 'checkpoint' ||
+          payload.type === 'complete' ||
+          (payload.type === 'runner_log' &&
+            typeof payload.data?.message === 'string' &&
+            payload.data.message.startsWith('[Fuzz Progress]')))
+      ) {
+        payloadStr = JSON.stringify({ type: payload.type === 'runner_log' ? 'progress' : payload.type });
+      } else {
+        payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
+      }
       
       statements.push(
         this.db.prepare(

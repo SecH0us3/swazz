@@ -91,6 +91,45 @@ describe('findings queue isolation', () => {
     expect(msgs[1].ack).not.toHaveBeenCalled();
     expect((await findingsOf(good)).length).toBe(1);
   });
+
+  it('acknowledges instead of retrying when message attempts reach 3', async () => {
+    const bad = crypto.randomUUID();
+    const failingMsg = {
+      ...event(bad, { type: 'result', data: {} }),
+      attempts: 3,
+      ack: vi.fn(),
+      retry: vi.fn(),
+    };
+
+    // Force processFindingsQueueMessages to fail on both batch and single message
+    const repoSpy = vi.spyOn(ScansRepository.prototype, 'processFindingsQueueMessages')
+      .mockRejectedValue(new Error('Persistent D1 connection failure'));
+
+    await worker.queue({ queue: 'swazz-findings-queue', messages: [failingMsg] } as any, env, { waitUntil: () => {} } as any);
+
+    expect(failingMsg.ack).toHaveBeenCalled();
+    expect(failingMsg.retry).not.toHaveBeenCalled();
+    repoSpy.mockRestore();
+  });
+
+  it('acknowledges instead of retrying on D1_ERROR: Exceeded maximum DB size', async () => {
+    const bad = crypto.randomUUID();
+    const quotaMsg = {
+      ...event(bad, { type: 'result', data: {} }),
+      attempts: 1,
+      ack: vi.fn(),
+      retry: vi.fn(),
+    };
+
+    const repoSpy = vi.spyOn(ScansRepository.prototype, 'processFindingsQueueMessages')
+      .mockRejectedValue(new Error('D1_ERROR: Exceeded maximum DB size (10737418240 bytes)'));
+
+    await worker.queue({ queue: 'swazz-findings-queue', messages: [quotaMsg] } as any, env, { waitUntil: () => {} } as any);
+
+    expect(quotaMsg.ack).toHaveBeenCalled();
+    expect(quotaMsg.retry).not.toHaveBeenCalled();
+    repoSpy.mockRestore();
+  });
 });
 
 describe('sanitizeRunnerFinding', () => {
@@ -158,5 +197,33 @@ describe('sequenced runner events', () => {
       { body: { scanId, type: 'event', payload: { type: 'result' } } },
     ]);
     expect(await eventCount(scanId)).toBe(4);
+  });
+
+  it('compacts payload in scan_events for progress and result, but preserves runner_log and error', async () => {
+    const scanId = await seedScan();
+    const repo = new ScansRepository(env);
+
+    await repo.processFindingsQueueMessages([
+      { body: { scanId, type: 'event', payload: { type: 'progress', data: { bigData: 'x'.repeat(1000) } } } },
+      { body: { scanId, type: 'event', payload: { type: 'result', data: { analyzerFindings: [{ ruleId: 'compact-test' }] } } } },
+      { body: { scanId, type: 'event', payload: { type: 'runner_log', data: { level: 'info', message: '[Fuzz Progress] 10/100 requests' } } } },
+      { body: { scanId, type: 'event', payload: { type: 'runner_log', message: 'runner log text' } } },
+      { body: { scanId, type: 'error', payload: { type: 'error', error: 'fatal error text' } } },
+    ]);
+
+    const { results } = await env.DB.prepare('SELECT type, payload FROM scan_events WHERE scan_id = ? ORDER BY created_at ASC').bind(scanId).all<{ type: string; payload: string }>();
+    expect(results?.length).toBe(5);
+
+    const progressEvents = results?.filter(r => r.payload === '{"type":"progress"}');
+    expect(progressEvents?.length).toBe(2);
+
+    const resultEvent = results?.find(r => r.payload === '{"type":"result"}');
+    expect(resultEvent).toBeDefined();
+
+    const runnerLogEvent = results?.find(r => r.payload.includes('runner log text'));
+    expect(runnerLogEvent).toBeDefined();
+
+    const errorEvent = results?.find(r => r.payload.includes('fatal error text'));
+    expect(errorEvent).toBeDefined();
   });
 });

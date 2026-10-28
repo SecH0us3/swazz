@@ -35,6 +35,17 @@ export function getDB(env: Pick<Env, 'DB'> & Partial<Env>, routingKey?: string |
   return wrapD1Database(db, env, ctx);
 }
 
+const MAX_SLOW_QUERIES = 100;
+const memorySlowQueries: any[] = [];
+
+export function getBufferedSlowQueries(): any[] {
+  return [...memorySlowQueries];
+}
+
+export function clearBufferedSlowQueries(): void {
+  memorySlowQueries.length = 0;
+}
+
 /**
  * Records execution time for D1 queries and logs / caches slow queries.
  */
@@ -53,56 +64,26 @@ export async function recordQueryTime(query: string, duration: number, env: Pick
       timestamp
     };
 
-    // 1. Emit structured log line
+    // 1. In-memory ring buffer
+    memorySlowQueries.unshift(logData);
+    if (memorySlowQueries.length > MAX_SLOW_QUERIES) {
+      memorySlowQueries.length = MAX_SLOW_QUERIES;
+    }
+
+    // 2. Emit structured log line
     logWarn(getLogCtx(env, ctx), 'Database', `Slow query detected: ${query}`, logData);
 
-    const recordPromise = (async () => {
-      // 2. Expose to Analytics Engine if bound
-      if (env.ANALYTICS_ENGINE) {
-        try {
-          env.ANALYTICS_ENGINE.writeDataPoint({
-            blobs: [query, timestamp],
-            doubles: [duration, threshold],
-            indexes: ['slow_query']
-          });
-        } catch (err) {
-          logError(getLogCtx(env, ctx), 'Database', 'Failed to write to Analytics Engine', { error: err });
-        }
+    // 3. Expose to Analytics Engine if bound
+    if (env.ANALYTICS_ENGINE) {
+      try {
+        env.ANALYTICS_ENGINE.writeDataPoint({
+          blobs: [query, timestamp],
+          doubles: [duration, threshold],
+          indexes: ['slow_query']
+        });
+      } catch (err) {
+        logError(getLogCtx(env, ctx), 'Database', 'Failed to write to Analytics Engine', { error: err });
       }
-
-      // 3. Cache slow query in KV
-      if (env.SESSION_CACHE) {
-        try {
-          const kvKey = 'admin:slow-queries';
-          const existingRaw = await env.SESSION_CACHE.get(kvKey);
-          let records: any[] = [];
-          if (existingRaw) {
-            try {
-              records = JSON.parse(existingRaw);
-            } catch {
-              records = [];
-            }
-          }
-          records.unshift(logData);
-          if (records.length > 100) {
-            records = records.slice(0, 100);
-          }
-          await env.SESSION_CACHE.put(kvKey, JSON.stringify(records), { expirationTtl: 86400 });
-        } catch (err) {
-          logError(getLogCtx(env, ctx), 'Database', 'Failed to save slow query to KV', { error: err });
-        }
-      }
-    })();
-
-    const isTest = env.JWT_SECRET === 'test-secret';
-    if (isTest) {
-      await recordPromise;
-    } else if (ctx && typeof ctx.waitUntil === 'function') {
-      ctx.waitUntil(recordPromise);
-    } else if (ctx && typeof ctx.executionCtx?.waitUntil === 'function') {
-      ctx.executionCtx.waitUntil(recordPromise);
-    } else {
-      await recordPromise;
     }
   }
 }

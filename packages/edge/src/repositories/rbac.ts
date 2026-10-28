@@ -141,9 +141,6 @@ export class RbacRepository extends BaseService implements IRbacRepository {
     `).bind(projectId, userId).all<{ role_id: string }>();
 
     if (!roleResults || roleResults.length === 0) {
-      if (this.env.SESSION_CACHE) {
-        await this.env.SESSION_CACHE.put(cacheKey, JSON.stringify({ permissions: [] }), { expirationTtl: 300 });
-      }
       return [];
     }
 

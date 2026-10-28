@@ -92,7 +92,7 @@ describe('RbacRepository Unit Tests', () => {
       expect(mockPrepare).not.toHaveBeenCalled();
     });
 
-    it('returns false and caches empty list on cache miss with no user roles', async () => {
+    it('returns false and does not cache in KV on cache miss with no user roles', async () => {
       mockKV.get.mockResolvedValue(null);
       mockAll.mockResolvedValue({ results: [] }); // No roles found
 
@@ -100,11 +100,7 @@ describe('RbacRepository Unit Tests', () => {
       const hasPerm = await repo.checkPermission('u1', 'proj-123', 'write:project');
 
       expect(hasPerm).toBe(false);
-      expect(mockKV.put).toHaveBeenCalledWith(
-        'rbac:v2:proj-123:u1',
-        JSON.stringify({ permissions: [] }),
-        { expirationTtl: 300 }
-      );
+      expect(mockKV.put).not.toHaveBeenCalled();
     });
 
     it('resolves permission via default owner role on cache miss', async () => {
