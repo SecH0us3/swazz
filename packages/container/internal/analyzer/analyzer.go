@@ -77,26 +77,31 @@ var analysisInputPool = sync.Pool{
 	},
 }
 
-// AcquireInput retrieves a pooled AnalysisInput.
-func AcquireInput() *AnalysisInput {
-	return analysisInputPool.Get().(*AnalysisInput)
+// maxPooledSentCap bounds the []string backing array retained across pooled inputs
+// so a single payload with many string leaves does not pin a large slice indefinitely.
+const maxPooledSentCap = 256
+
+// AcquireInput retrieves a pooled AnalysisInput initialized from init while
+// preserving the pooled sent slice capacity.
+func AcquireInput(init AnalysisInput) *AnalysisInput {
+	in := analysisInputPool.Get().(*AnalysisInput)
+	init.sent = in.sent
+	*in = init
+	return in
 }
 
-// ReleaseInput resets per-response references and cached views on in and returns it to the pool.
+// ReleaseInput cleans up internal views, resets all fields on in, and returns it to the pool.
 func ReleaseInput(in *AnalysisInput) {
 	if in == nil {
 		return
 	}
-	in.SentPayload = nil
-	in.ResponseBody = nil
-	in.ResponseHeaders = nil
-	in.Endpoint = ""
-	in.Method = ""
-	clear(in.sent)
-	in.sent = in.sent[:0]
-	in.sentDone = false
-	in.payloadStr = ""
-	in.payloadDone = false
+	in.release()
+	var s []string
+	if cap(in.sent) <= maxPooledSentCap {
+		clear(in.sent)
+		s = in.sent[:0]
+	}
+	*in = AnalysisInput{sent: s}
 	analysisInputPool.Put(in)
 }
 

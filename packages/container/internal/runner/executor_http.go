@@ -491,11 +491,21 @@ func (r *Runner) executeRequest(
 
 		if r.config.Settings.AnalyzeResponseBody {
 			baselineSize, multiplier, baselineTime := r.anomalyBaselines(method, originalPath, profile, r.config.Settings)
-			input := acquireAnalysisInput(
-				result.Payload, rawBodyBytes, resp.Header, duration, profile,
-				originalPath, method, responseSize, baselineSize, multiplier,
-				baselineTime, r.config.Settings.TimeAnomalyThresholdMs, r.config.Settings,
-			)
+			input := analyzer.AcquireInput(analyzer.AnalysisInput{
+				SentPayload:     result.Payload,
+				ResponseBody:    rawBodyBytes,
+				ResponseHeaders: resp.Header,
+				Duration:        duration,
+				Profile:         profile,
+				Endpoint:        originalPath,
+				Method:          method,
+				ResponseSize:    responseSize,
+				BaselineSize:    baselineSize,
+				SizeMultiplier:  multiplier,
+				BaselineTimeMs:  baselineTime,
+				TimeThresholdMs: r.config.Settings.TimeAnomalyThresholdMs,
+				Settings:        r.config.Settings,
+			})
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
 			analyzer.ReleaseInput(input)
 			if (logger.IsDebugEnabled() || r.config.Settings.Debug) && len(result.AnalyzerFindings) > 0 {
@@ -509,36 +519,6 @@ func (r *Runner) executeRequest(
 
 		return result
 	}
-}
-
-func acquireAnalysisInput(
-	sentPayload any,
-	responseBody []byte,
-	responseHeaders http.Header,
-	duration int64,
-	profile swagger.FuzzingProfile,
-	endpoint, method string,
-	responseSize, baselineSize int64,
-	sizeMultiplier float64,
-	baselineTimeMs int64,
-	timeThresholdMs int,
-	settings swagger.Settings,
-) *analyzer.AnalysisInput {
-	in := analyzer.AcquireInput()
-	in.SentPayload = sentPayload
-	in.ResponseBody = responseBody
-	in.ResponseHeaders = responseHeaders
-	in.Duration = duration
-	in.Profile = profile
-	in.Endpoint = endpoint
-	in.Method = method
-	in.ResponseSize = responseSize
-	in.BaselineSize = baselineSize
-	in.SizeMultiplier = sizeMultiplier
-	in.BaselineTimeMs = baselineTimeMs
-	in.TimeThresholdMs = timeThresholdMs
-	in.Settings = settings
-	return in
 }
 
 // oobUUIDsInRequest returns the UUIDs (OOB callback tokens) a request carries in its URL, header

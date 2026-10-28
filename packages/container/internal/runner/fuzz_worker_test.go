@@ -66,32 +66,42 @@ func TestBuildFuzzIteration_EnforcesMaxPayloadSize(t *testing.T) {
 	})
 }
 
-// minEncodedSize decides, without encoding, that a payload is over the size cap; it may only do
-// so when the real encoding is over it too, so it must never exceed the encoded length.
-func TestMinEncodedSize_IsALowerBound(t *testing.T) {
+// encodedSizeBounds brackets the length of v's JSON encoding: lo must never exceed the encoded
+// length, and hi must never fall below it.
+func TestEncodedSizeBounds(t *testing.T) {
 	cases := []any{
 		"",
 		strings.Repeat("A", 1000),
 		`quotes " and \ backslashes <script>&`,
 		"multi-byte あ🔥",
 		map[string]any{},
+		map[string]any(nil),
+		[]any(nil),
+		[]string(nil),
+		map[string]string(nil),
+		map[string]any{"": []any{map[string]any(nil), []string(nil), []any(nil), map[string]string(nil)}},
 		map[string]any{"body": map[string]any{"name": "x", "tags": []any{"a", "b", 1, nil, true}}},
 		map[string]any{"queryParams": map[string]any{"q": 1.5, "s": "v"}, "pathParams": map[string]string{"id": "42", "x": ""}},
 		[]any{},
 		[]any{map[string]any{"k": []any{}}, "z"},
+		[]string{"a", "<b\xff>", "\u2028"},
 		map[string]string{},
 		nil,
 		42,
+		-1.2345678901234567e-6,
 	}
 	for _, v := range cases {
 		encoded, err := json.Marshal(v)
 		require.NoError(t, err)
-		assert.LessOrEqual(t, minEncodedSize(v, 1<<30), len(encoded), "%#v", v)
+		lo, hi := encodedSizeBounds(v, 1<<30)
+		assert.LessOrEqual(t, lo, len(encoded), "lo > len(encoded) for %#v", v)
+		assert.GreaterOrEqual(t, hi, len(encoded), "hi < len(encoded) for %#v", v)
 	}
 
 	// Over the cap: decided without encoding.
 	big := map[string]any{"body": map[string]any{"a": strings.Repeat("A", 2000), "b": strings.Repeat("B", 2000)}}
-	assert.Greater(t, minEncodedSize(big, 1000), 1000)
+	lo, _ := encodedSizeBounds(big, 1000)
+	assert.Greater(t, lo, 1000)
 }
 
 // The size check is the same for both fuzz paths: an encoding over the cap does not fit, one at
@@ -179,6 +189,7 @@ func TestSizedPayloadHash_Equivalence(t *testing.T) {
 		{body: map[string]any{"inf32": float32(math.Inf(1))}},
 		{body: map[string]any{"nan32": float32(math.NaN())}},
 		{body: map[string]any{"customSlice": []string{"a", "<b\xff>", "\u2028c"}}},
+		{body: map[string]any{"": []any{map[string]any(nil), []string(nil), []any(nil), map[string]string(nil)}}},
 		{
 			body:        map[string]any{"a": strings.Repeat("A", 120)},
 			pathParams:  map[string]string{"p": strings.Repeat("<", 30)},

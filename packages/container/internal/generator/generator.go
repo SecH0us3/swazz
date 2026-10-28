@@ -335,9 +335,10 @@ func (g *Generator) GenerateArrayItem(propertyName string, schema *swagger.Schem
 	return g.Generate(propertyName, schema)
 }
 
-// GenerateSecurityHeaders returns a map of header name → fuzz value for
-// security-critical HTTP headers not defined in the API spec.
+// GenerateSecurityHeaders returns a newly allocated map of header name → fuzz value
+// for security-critical HTTP headers not defined in the API spec.
 // Only active during MALICIOUS profile. Returns nil for other profiles.
+// The returned map is owned by the caller and may be aliased or mutated directly.
 func (g *Generator) GenerateSecurityHeaders() map[string]string {
 	if g.profile != swagger.ProfileMalicious {
 		return nil

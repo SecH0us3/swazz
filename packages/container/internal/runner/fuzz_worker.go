@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -152,6 +151,7 @@ func mergeSecurityHeaders(built *generatedPayload, gen *generator.Generator) {
 		return
 	}
 	if built.headers == nil {
+		// Safe to alias: GenerateSecurityHeaders returns a newly allocated map per call.
 		built.headers = secHeaders
 		return
 	}
@@ -221,26 +221,9 @@ func encodePayloadFields(buf *bytes.Buffer, p generatedPayload) error {
 	return nil
 }
 
-var errPayloadTooLarge = errors.New("payload exceeds size cap")
-
-type cappedCountWriter struct {
-	n   int
-	max int
-}
-
-func (w *cappedCountWriter) Write(p []byte) (int, error) {
-	// json.Encoder appends a single trailing '\n' to each Encode call;
-	// the caller deducts that byte after Encode returns.
-	w.n += len(p)
-	if w.n-1 > w.max {
-		return len(p), errPayloadTooLarge
-	}
-	return len(p), nil
-}
-
 // payloadFits reports whether p's JSON encoding fits within maxBytes without
 // allocating or hashing when the bounds walk already decides, or by encoding
-// to a counting writer when the upper bound is loose.
+// into a pooled buffer without hashing when the upper bound is loose.
 func payloadFits(p generatedPayload, maxBytes int) bool {
 	lo, hi := payloadEncodedBounds(p, maxBytes)
 	if lo > maxBytes {
@@ -250,27 +233,14 @@ func payloadFits(p generatedPayload, maxBytes int) bool {
 		return true
 	}
 
-	cw := cappedCountWriter{n: 2, max: maxBytes}
-	enc := json.NewEncoder(&cw)
-	hasPrev := false
-	for _, f := range payloadFields(p) {
-		if !f.present {
-			continue
-		}
-		if hasPrev {
-			cw.n++
-		}
-		cw.n += len(f.key) + 3
-		if cw.n > maxBytes {
-			return false
-		}
-		if err := enc.Encode(f.val); err != nil {
-			return false
-		}
-		cw.n-- // strip json.Encoder's trailing '\n'
-		hasPrev = true
+	buf := bufPool.Get().(*bytes.Buffer)
+	defer PutBuffer(buf)
+	buf.Reset()
+
+	if err := encodePayloadFields(buf, p); err != nil {
+		return false
 	}
-	return cw.n <= maxBytes
+	return buf.Len() <= maxBytes
 }
 
 func payloadEncodedBounds(p generatedPayload, limit int) (lo, hi int) {
@@ -306,6 +276,10 @@ func payloadEncodedBounds(p generatedPayload, limit int) (lo, hi int) {
 	return lo, hi
 }
 
+// encodedSizeBounds returns lower and upper bounds (lo, hi) on the length of v's JSON encoding
+// the way json.Encoder writes it (no indentation, HTML escaping enabled). A value with lo > limit
+// is guaranteed to exceed limit without encoding; a value with hi <= limit is guaranteed to fit.
+// The walk stops early once lo exceeds limit.
 func encodedSizeBounds(v any, limit int) (lo, hi int) {
 	switch t := v.(type) {
 	case nil:
@@ -327,6 +301,9 @@ func encodedSizeBounds(v any, limit int) (lo, hi int) {
 	case string:
 		return len(t) + 2, len(t)*6 + 2
 	case []string:
+		if t == nil {
+			return 4, 4
+		}
 		lo = 2 + commas(len(t))
 		hi = lo
 		for _, s := range t {
@@ -338,6 +315,9 @@ func encodedSizeBounds(v any, limit int) (lo, hi int) {
 		}
 		return lo, hi
 	case map[string]any:
+		if t == nil {
+			return 4, 4
+		}
 		lo = 2 + commas(len(t))
 		hi = lo
 		for k, item := range t {
@@ -355,6 +335,9 @@ func encodedSizeBounds(v any, limit int) (lo, hi int) {
 		}
 		return lo, hi
 	case []any:
+		if t == nil {
+			return 4, 4
+		}
 		lo = 2 + commas(len(t))
 		hi = lo
 		for _, item := range t {
@@ -367,6 +350,9 @@ func encodedSizeBounds(v any, limit int) (lo, hi int) {
 		}
 		return lo, hi
 	case map[string]string:
+		if t == nil {
+			return 4, 4
+		}
 		lo = 2 + commas(len(t))
 		hi = lo
 		for k, item := range t {
@@ -394,12 +380,12 @@ func (r *Runner) buildFuzzIteration(
 	seenHashes map[uint32]bool,
 ) (built generatedPayload, hash uint32, duplicate bool) {
 	const maxRetries = 10
-	hash = payloads.HashStr("empty")
 
 	if !hasFields(&endpoint) {
 		// No fields to generate — only headers differ per iteration.
 		built = generatedPayload{headers: buildHeaders(endpoint, selectGen(gen, safeGen, isSecHeaderIter))}
 		if enableDedup {
+			hash = payloads.HashStr("empty")
 			duplicate = seenHashes[hash]
 		}
 		return built, hash, duplicate
@@ -412,24 +398,22 @@ func (r *Runner) buildFuzzIteration(
 			if !payloadFits(attempt, maxPayloadSize) {
 				continue
 			}
-			return attempt, hash, false
+			return attempt, 0, false
 		}
 
 		h, fits := sizedPayloadHash(attempt, maxPayloadSize)
 		if !fits {
 			continue
 		}
-		hash = h
-
-		if seenHashes[hash] {
+		if seenHashes[h] {
 			continue
 		}
 
-		return attempt, hash, false
+		return attempt, h, false
 	}
 
 	// All retries exhausted — treat as duplicate to skip.
-	return generatedPayload{}, hash, true
+	return generatedPayload{}, 0, true
 }
 
 // isSecurityHeaderIteration reports whether iteration i should use a safe
@@ -439,15 +423,6 @@ func isSecurityHeaderIteration(gen *generator.Generator, profile swagger.Fuzzing
 		return false
 	}
 	return i >= gen.BodyIterations()
-}
-
-// minEncodedSize returns a lower bound on the length of v's JSON encoding, the way the payload
-// size check encodes it (json.Encoder: no indentation). It counts only what any encoding has
-// (string content, quotes, colons, commas, brackets); escaping only adds to it, so a value it puts
-// above the cap is certainly above it. It stops counting once the bound exceeds limit.
-func minEncodedSize(v any, limit int) int {
-	lo, _ := encodedSizeBounds(v, limit)
-	return lo
 }
 
 // commas is how many separators a JSON object or array of n entries has.
