@@ -212,4 +212,3 @@ func TestClient_GeneratePatches_InvalidEndpointURL(t *testing.T) {
 	assert.Nil(t, report)
 	assert.Contains(t, err.Error(), "invalid WAF check endpoint")
 }
-

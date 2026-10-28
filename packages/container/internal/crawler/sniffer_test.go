@@ -396,4 +396,3 @@ func TestSniffer_WebMcpToOpenAPIAndHAR(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(harRaw), "webmcp://tool/delete_account")
 }
-

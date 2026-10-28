@@ -86,7 +86,7 @@ func (r *Runner) executeRequest(
 
 	// Merge headers: generatedHeaders < global headers
 	isBody := !isNoBodyMethod(method)
-	mergedHeaders := make(map[string]string)
+	mergedHeaders := make(map[string]string, len(generatedHeaders)+len(headers)+2)
 	for k, v := range generatedHeaders {
 		mergedHeaders[k] = r.subStateVars(v)
 	}
@@ -256,7 +256,7 @@ func (r *Runner) executeRequest(
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 				RequestURI: requestURIOf(rawURL),
-				Method: method, Profile: profile, Status: 0, Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize,
+				Method:     method, Profile: profile, Status: 0, Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize,
 				Error: err.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				RequestHeaders: mergedHeaders,
 			}
@@ -321,8 +321,8 @@ func (r *Runner) executeRequest(
 			}
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-				RequestURI: requestURIOf(rawURL),
-				Method: method, Profile: profile, Status: 0, Duration: duration,
+				RequestURI: req.URL.RequestURI(),
+				Method:     method, Profile: profile, Status: 0, Duration: duration,
 				Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				RequestHeaders: mergedHeaders,
 			}
@@ -365,8 +365,8 @@ func (r *Runner) executeRequest(
 				timer.Stop()
 				return &swagger.FuzzResult{
 					ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-					RequestURI: requestURIOf(rawURL),
-					Method: method, Profile: profile, Status: 429, Duration: duration,
+					RequestURI: req.URL.RequestURI(),
+					Method:     method, Profile: profile, Status: 429, Duration: duration,
 					Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 					RequestHeaders: mergedHeaders,
 				}
@@ -465,7 +465,7 @@ func (r *Runner) executeRequest(
 			ID:              uuid.New().String(),
 			Endpoint:        originalPath,
 			ResolvedPath:    resolvedPath,
-			RequestURI:      requestURIOf(rawURL),
+			RequestURI:      req.URL.RequestURI(),
 			Method:          method,
 			Profile:         profile,
 			Status:          resp.StatusCode,
@@ -491,7 +491,7 @@ func (r *Runner) executeRequest(
 
 		if r.config.Settings.AnalyzeResponseBody {
 			baselineSize, multiplier, baselineTime := r.anomalyBaselines(method, originalPath, profile, r.config.Settings)
-			input := &analyzer.AnalysisInput{
+			input := analyzer.AcquireInput(analyzer.AnalysisInput{
 				SentPayload:     result.Payload,
 				ResponseBody:    rawBodyBytes,
 				ResponseHeaders: resp.Header,
@@ -505,8 +505,9 @@ func (r *Runner) executeRequest(
 				BaselineTimeMs:  baselineTime,
 				TimeThresholdMs: r.config.Settings.TimeAnomalyThresholdMs,
 				Settings:        r.config.Settings,
-			}
+			})
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
+			analyzer.ReleaseInput(input)
 			if (logger.IsDebugEnabled() || r.config.Settings.Debug) && len(result.AnalyzerFindings) > 0 {
 				r.logDebug("Analyzer: Found findings for %s %s: %v", method, originalPath, result.AnalyzerFindings)
 			}

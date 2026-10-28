@@ -31,14 +31,14 @@ type AnalysisInput struct {
 	Settings        swagger.Settings
 
 	// Views derived from the fields above, computed on first use and shared by every analyzer
-	// of one Analyze call. An input belongs to one response and one goroutine: build a new one
-	// per response rather than reusing or sharing it.
-	lowered     *[]byte // from loweredPool; returned by release
-	loweredDone bool
-	sent        []string
-	sentDone    bool
-	payloadStr  string
-	payloadDone bool
+	// of one Analyze call. An input belongs to one response and one goroutine at a time; use
+	// AcquireInput and ReleaseInput to pool instances across responses.
+	lowered      *[]byte // from loweredPool; returned by release
+	loweredDone  bool
+	sent         []string
+	sentDone     bool
+	payloadStr   string
+	payloadDone  bool
 	bigrams      *bigramIndex // from bigramPool; returned by release
 	bigramsDone  bool
 	needleChecks int
@@ -69,6 +69,45 @@ func (in *AnalysisInput) release() {
 	}
 	in.bigramsDone = false
 	in.needleChecks = 0
+}
+
+var analysisInputPool = sync.Pool{
+	New: func() any {
+		return new(AnalysisInput)
+	},
+}
+
+// maxPooledSentCap bounds the []string backing array retained across pooled inputs
+// so a single payload with many string leaves does not pin a large slice indefinitely.
+const maxPooledSentCap = 256
+
+// AcquireInput retrieves a pooled AnalysisInput initialized from fields while
+// preserving the pooled sent slice capacity.
+func AcquireInput(fields AnalysisInput) *AnalysisInput {
+	in := analysisInputPool.Get().(*AnalysisInput)
+	fields.sent = in.sent
+	*in = fields
+	return in
+}
+
+// ReleaseInput cleans up internal views, resets all fields on in, and returns it to the pool.
+func ReleaseInput(in *AnalysisInput) {
+	if in == nil {
+		return
+	}
+	in.release()
+	*in = AnalysisInput{sent: reusableSent(in.sent)}
+	analysisInputPool.Put(in)
+}
+
+// reusableSent returns s emptied for the next pooled input, or nil when its backing array is
+// too large to keep.
+func reusableSent(s []string) []string {
+	if cap(s) > maxPooledSentCap {
+		return nil
+	}
+	clear(s)
+	return s[:0]
 }
 
 // bigramIndex is a 65,536-bit set (8 KiB) tracking all 2-byte bigrams present in the response body.
@@ -141,10 +180,10 @@ var (
 	kelvinSign = []byte("\u212a")
 )
 
-// sentStrings returns the string leaves of SentPayload (see extractStrings).
+// sentStrings returns the string leaves of SentPayload (see extractStringsInto).
 func (in *AnalysisInput) sentStrings() []string {
 	if !in.sentDone {
-		in.sent = extractStrings(in.SentPayload)
+		in.sent = extractStringsInto(in.sent[:0], in.SentPayload)
 		in.sentDone = true
 	}
 	return in.sent

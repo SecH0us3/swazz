@@ -6,7 +6,6 @@
 package generator
 
 import (
-	"fmt"
 	"math/rand/v2"
 	"strings"
 	"sync"
@@ -336,9 +335,10 @@ func (g *Generator) GenerateArrayItem(propertyName string, schema *swagger.Schem
 	return g.Generate(propertyName, schema)
 }
 
-// GenerateSecurityHeaders returns a map of header name → fuzz value for
-// security-critical HTTP headers not defined in the API spec.
+// GenerateSecurityHeaders returns a newly allocated map of header name → fuzz value
+// for security-critical HTTP headers not defined in the API spec.
 // Only active during MALICIOUS profile. Returns nil for other profiles.
+// The returned map is owned by the caller and may be aliased or mutated directly.
 func (g *Generator) GenerateSecurityHeaders() map[string]string {
 	if g.profile != swagger.ProfileMalicious {
 		return nil
@@ -348,10 +348,10 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 	defer g.mu.Unlock()
 
 	if g.mSecHeaderIdxs == nil {
-		g.mSecHeaderIdxs = make(map[string]int)
+		g.mSecHeaderIdxs = make(map[string]int, 16)
 	}
 
-	headers := make(map[string]string)
+	headers := make(map[string]string, 16)
 	for _, def := range payloads.SecurityHeaderPayloads {
 		if !g.isCategoryEnabled(def.Category) {
 			continue
@@ -367,9 +367,11 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 				u := uuid.New().String()
 				url := g.oobURL(u)
 
-				endpoint := "Header: " + headerName
+				var endpoint string
 				if g.Endpoint != "" {
-					endpoint = fmt.Sprintf("%s (Header: %s)", g.Endpoint, headerName)
+					endpoint = g.Endpoint + " (Header: " + headerName + ")"
+				} else {
+					endpoint = "Header: " + headerName
 				}
 				g.OOBStore.RegisterUUID(u, &oob.OOBContext{
 					SessionID: g.RunID,

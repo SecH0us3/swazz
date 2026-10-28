@@ -135,7 +135,7 @@ func (r *Runner) executeWebSocketRequest(
 		if b, ok := payload.([]byte); ok {
 			sent = string(b)
 		}
-		input := &analyzer.AnalysisInput{
+		input := analyzer.AcquireInput(analyzer.AnalysisInput{
 			SentPayload:     sent,
 			ResponseBody:    body,
 			ResponseHeaders: resHeaders,
@@ -149,8 +149,9 @@ func (r *Runner) executeWebSocketRequest(
 			BaselineTimeMs:  baselineTime,
 			TimeThresholdMs: settings.TimeAnomalyThresholdMs,
 			Settings:        settings,
-		}
+		})
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
+		analyzer.ReleaseInput(input)
 	}
 
 	return result

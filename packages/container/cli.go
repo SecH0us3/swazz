@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"swazz-engine/internal/agent"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/config"
@@ -25,7 +26,6 @@ import (
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"swazz-engine/internal/wafcheck"
-	"strings"
 	"syscall"
 	"time"
 
@@ -232,7 +232,6 @@ func runCLIErr(args []string) error {
 	if err := r.RunAuthSequence(ctx); err != nil {
 		log.Fatalf("Authentication failed: %v", err)
 	}
-
 
 	// Results are classified as they arrive and only their findings are kept: holding every
 	// result of a long scan until it ends grew without bound.
