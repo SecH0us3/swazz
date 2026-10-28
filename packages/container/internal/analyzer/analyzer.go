@@ -81,12 +81,12 @@ var analysisInputPool = sync.Pool{
 // so a single payload with many string leaves does not pin a large slice indefinitely.
 const maxPooledSentCap = 256
 
-// AcquireInput retrieves a pooled AnalysisInput initialized from init while
+// AcquireInput retrieves a pooled AnalysisInput initialized from fields while
 // preserving the pooled sent slice capacity.
-func AcquireInput(init AnalysisInput) *AnalysisInput {
+func AcquireInput(fields AnalysisInput) *AnalysisInput {
 	in := analysisInputPool.Get().(*AnalysisInput)
-	init.sent = in.sent
-	*in = init
+	fields.sent = in.sent
+	*in = fields
 	return in
 }
 
@@ -96,13 +96,18 @@ func ReleaseInput(in *AnalysisInput) {
 		return
 	}
 	in.release()
-	var s []string
-	if cap(in.sent) <= maxPooledSentCap {
-		clear(in.sent)
-		s = in.sent[:0]
-	}
-	*in = AnalysisInput{sent: s}
+	*in = AnalysisInput{sent: reusableSent(in.sent)}
 	analysisInputPool.Put(in)
+}
+
+// reusableSent returns s emptied for the next pooled input, or nil when its backing array is
+// too large to keep.
+func reusableSent(s []string) []string {
+	if cap(s) > maxPooledSentCap {
+		return nil
+	}
+	clear(s)
+	return s[:0]
 }
 
 // bigramIndex is a 65,536-bit set (8 KiB) tracking all 2-byte bigrams present in the response body.

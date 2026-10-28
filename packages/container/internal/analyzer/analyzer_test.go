@@ -61,16 +61,22 @@ func TestAcquireAndReleaseInput_ReuseCycle(t *testing.T) {
 	assert.Equal(t, "map[only:third]", inB.payloadText())
 }
 
-func TestReleaseInput_DropsOversizedSentSlice(t *testing.T) {
+func TestReusableSent_DropsOversizedSlice(t *testing.T) {
 	items := make([]any, maxPooledSentCap+50)
 	for i := range items {
 		items[i] = "leaf"
 	}
 
 	in := AcquireInput(AnalysisInput{SentPayload: items})
+	defer ReleaseInput(in)
 	require.Len(t, in.sentStrings(), len(items))
 	require.Greater(t, cap(in.sent), maxPooledSentCap)
 
-	ReleaseInput(in)
-	assert.Nil(t, in.sent, "oversized sent backing array must be dropped on release")
+	assert.Nil(t, reusableSent(in.sent), "oversized sent backing array must be dropped on release")
+
+	small := []string{"a", "b"}
+	kept := reusableSent(small)
+	assert.Empty(t, kept)
+	assert.Equal(t, cap(small), cap(kept), "small backing array is kept for reuse")
+	assert.Equal(t, []string{"", ""}, small, "kept strings are cleared so they can be collected")
 }

@@ -150,18 +150,15 @@ func (r *Runner) executeGRPCRequest(
 
 	if r != nil && r.config != nil && r.config.Settings.AnalyzeResponseBody && r.analyzer != nil {
 		input := analyzer.AcquireInput(analyzer.AnalysisInput{
-			SentPayload:     result.Payload,
-			ResponseBody:    rawBodyBytes,
-			Duration:        duration,
-			Profile:         profile,
-			Endpoint:        originalPath,
-			Method:          "GRPC",
-			ResponseSize:    responseSize,
-			BaselineSize:    0,
-			SizeMultiplier:  5.0,
-			BaselineTimeMs:  0,
-			TimeThresholdMs: 0,
-			Settings:        r.config.Settings,
+			SentPayload:    result.Payload,
+			ResponseBody:   rawBodyBytes,
+			Duration:       duration,
+			Profile:        profile,
+			Endpoint:       originalPath,
+			Method:         "GRPC",
+			ResponseSize:   responseSize,
+			SizeMultiplier: 5.0,
+			Settings:       r.config.Settings,
 		})
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
 		analyzer.ReleaseInput(input)

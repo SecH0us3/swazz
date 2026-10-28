@@ -224,18 +224,15 @@ func (r *Runner) executeMCPRequest(
 
 	if r.config.Settings.AnalyzeResponseBody {
 		input := analyzer.AcquireInput(analyzer.AnalysisInput{
-			SentPayload:     result.Payload,
-			ResponseBody:    resBytes,
-			Duration:        duration.Milliseconds(),
-			Profile:         profile,
-			Endpoint:        originalPath,
-			Method:          methodType,
-			ResponseSize:    result.ResponseSize,
-			BaselineSize:    0,
-			SizeMultiplier:  5.0,
-			BaselineTimeMs:  0,
-			TimeThresholdMs: 0,
-			Settings:        r.config.Settings,
+			SentPayload:    result.Payload,
+			ResponseBody:   resBytes,
+			Duration:       duration.Milliseconds(),
+			Profile:        profile,
+			Endpoint:       originalPath,
+			Method:         methodType,
+			ResponseSize:   result.ResponseSize,
+			SizeMultiplier: 5.0,
+			Settings:       r.config.Settings,
 		})
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
 		analyzer.ReleaseInput(input)
