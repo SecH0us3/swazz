@@ -85,3 +85,77 @@ func TestOOBUUIDsInRequest(t *testing.T) {
 	}, got)
 	assert.Empty(t, oobUUIDsInRequest("http://h/", nil, nil))
 }
+
+func TestOOBUUIDsInRequest_Boundaries(t *testing.T) {
+	const validUUID = "11111111-2222-4333-8444-555555555555"
+
+	// Boundary 1: Body exactly 36 bytes (exact UUID)
+	assert.Equal(t, []string{validUUID}, oobUUIDsInRequest("http://h/", nil, []byte(validUUID)))
+
+	// Boundary 2: Body 35 bytes (1 byte shorter than minimum UUID)
+	assert.Empty(t, oobUUIDsInRequest("http://h/", nil, []byte(validUUID[:35])))
+
+	// Boundary 3: Body >= 36 bytes but only 2 hyphens (typical JSON date/identifier)
+	assert.Empty(t, oobUUIDsInRequest("http://h/", nil, []byte(`{"date":"2026-10-29","action":"update"}`)))
+
+	// Boundary 4: Standard headers with hyphens but < 36 chars or < 4 hyphens
+	headers := map[string]string{
+		"Content-Type":  "application/json",
+		"User-Agent":    "Mozilla/5.0-Custom-Agent",
+		"X-Request-Id":  "req-12345-abcde",
+		"Authorization": "Bearer token-without-uuid",
+	}
+	assert.Empty(t, oobUUIDsInRequest("http://h/", headers, nil))
+
+	// Boundary 5: Header with exact UUID value
+	headers["X-OOB-Callback"] = validUUID
+	assert.Equal(t, []string{validUUID}, oobUUIDsInRequest("http://h/", headers, nil))
+
+	// Boundary 6: URL < 36 chars with hyphens
+	assert.Empty(t, oobUUIDsInRequest("http://h/a-b-c-d", nil, nil))
+
+	// Boundary 7: URL >= 36 chars with < 4 hyphens
+	assert.Empty(t, oobUUIDsInRequest("http://example.com/api/v1/items-with-name", nil, nil))
+}
+
+func TestOOBUUIDsInRequest_Equivalence(t *testing.T) {
+	unoptimized := func(rawURL string, headers map[string]string, body []byte) []string {
+		var matches []string
+		matches = append(matches, uuidRegex.FindAllString(rawURL, -1)...)
+		for k, v := range headers {
+			matches = append(matches, uuidRegex.FindAllString(k, -1)...)
+			matches = append(matches, uuidRegex.FindAllString(v, -1)...)
+		}
+		for _, m := range uuidRegex.FindAll(body, -1) {
+			matches = append(matches, string(m))
+		}
+		return matches
+	}
+
+	testCases := []struct {
+		url     string
+		headers map[string]string
+		body    []byte
+	}{
+		{"", nil, nil},
+		{"http://example.com", nil, nil},
+		{"http://example.com/11111111-2222-4333-8444-555555555555", nil, nil},
+		{"http://example.com/item-123-abc", map[string]string{"Content-Type": "application/json"}, []byte(`{"date":"2026-10-29"}`)},
+		{
+			"http://target/api/oob/aaaaaaaa-1111-4222-8333-444444444444",
+			map[string]string{
+				"X-bbbbbbbb-2222-4333-8444-555555555555": "normal-value",
+				"X-Normal-Header":                        "cccccccc-3333-4444-8555-666666666666",
+			},
+			[]byte(`{"data":"dddddddd-4444-4555-8666-777777777777","extra":"some-text-with-hyphens"}`),
+		},
+	}
+
+	for _, tc := range testCases {
+		got := oobUUIDsInRequest(tc.url, tc.headers, tc.body)
+		want := unoptimized(tc.url, tc.headers, tc.body)
+		sort.Strings(got)
+		sort.Strings(want)
+		assert.Equal(t, want, got)
+	}
+}

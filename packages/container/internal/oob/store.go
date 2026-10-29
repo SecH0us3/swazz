@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"unicode/utf8"
 
 	"swazz-engine/internal/boundedmap"
@@ -48,7 +47,6 @@ const MaxPendingFieldBytes = 256
 type Store struct {
 	mu      sync.RWMutex
 	m       *boundedmap.Map[string, *OOBContext]
-	count   atomic.Int32
 	onDrop  func() // called on the first drop after the store is made or cleared
 	dropped bool
 }
@@ -85,7 +83,6 @@ func (s *Store) RegisterUUID(uuid string, ctx *OOBContext) {
 		s.dropped = true
 		notify = s.onDrop
 	}
-	s.count.Store(int32(s.m.Len()))
 	s.mu.Unlock()
 	if notify != nil {
 		notify()
@@ -110,9 +107,6 @@ func (s *Store) GetAndRemoveUUID(uuid string) (*OOBContext, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ctx, ok := s.m.Delete(uuid)
-	if ok {
-		s.count.Store(int32(s.m.Len()))
-	}
 	return ctx, ok
 }
 
@@ -123,7 +117,6 @@ func (s *Store) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.m.Clear()
-	s.count.Store(0)
 	s.dropped = false
 }
 
@@ -131,7 +124,9 @@ func (s *Store) Size() int {
 	if s == nil {
 		return 0
 	}
-	return int(s.count.Load())
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.m.Len()
 }
 
 // TakePending removes and returns at most n tokens still waiting for a callback, the most recently
@@ -153,7 +148,6 @@ func (s *Store) TakePending(n int) []PendingToken {
 			all = append(all, taken{k, ctx})
 		}
 	}
-	s.count.Store(int32(s.m.Len()))
 	s.mu.Unlock()
 
 	// Formatted outside the lock: callbacks and registrations must not wait on it.
