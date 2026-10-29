@@ -75,7 +75,6 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	}
 
 	var findings []swagger.AnalysisFinding
-	// Lowercased (Unicode-aware) only once a sent string is a known XSS payload.
 	var bodyLower []byte
 
 	for _, payloadStr := range sentStrings {
@@ -90,7 +89,7 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		}
 
 		if bodyLower == nil {
-			bodyLower = bytes.ToLower(input.ResponseBody)
+			bodyLower = input.lowerBody()
 		}
 		if bytes.Contains(bodyLower, payloadLower) {
 			findings = append(findings, swagger.AnalysisFinding{

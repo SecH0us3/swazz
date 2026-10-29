@@ -282,7 +282,7 @@ func (r *Runner) executeRequest(
 		}
 
 		// Look for OOB payloads to register the actual request details
-		if profile == swagger.ProfileMalicious {
+		if profile == swagger.ProfileMalicious && r.oobStore != nil && r.oobStore.Size() > 0 {
 			if matches := oobUUIDsInRequest(rawURL, mergedHeaders, reqBody); len(matches) > 0 {
 				reqLog := &swagger.RequestLog{
 					Method:       method,
@@ -524,13 +524,22 @@ func (r *Runner) executeRequest(
 // oobUUIDsInRequest returns the UUIDs (OOB callback tokens) a request carries in its URL, header
 // names and values, and body: every part of the wire request a payload can reach.
 func oobUUIDsInRequest(rawURL string, headers map[string]string, body []byte) []string {
-	matches := uuidRegex.FindAllString(rawURL, -1)
-	for k, v := range headers {
-		matches = append(matches, uuidRegex.FindAllString(k, -1)...)
-		matches = append(matches, uuidRegex.FindAllString(v, -1)...)
+	var matches []string
+	if strings.ContainsRune(rawURL, '-') {
+		matches = uuidRegex.FindAllString(rawURL, -1)
 	}
-	for _, m := range uuidRegex.FindAll(body, -1) {
-		matches = append(matches, string(m))
+	for k, v := range headers {
+		if strings.ContainsRune(k, '-') {
+			matches = append(matches, uuidRegex.FindAllString(k, -1)...)
+		}
+		if strings.ContainsRune(v, '-') {
+			matches = append(matches, uuidRegex.FindAllString(v, -1)...)
+		}
+	}
+	if len(body) >= 36 && bytes.IndexByte(body, '-') >= 0 {
+		for _, m := range uuidRegex.FindAll(body, -1) {
+			matches = append(matches, string(m))
+		}
 	}
 	return matches
 }

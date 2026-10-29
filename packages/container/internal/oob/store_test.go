@@ -222,3 +222,25 @@ func TestPayloadText_Bounded(t *testing.T) {
 		t.Fatalf("string payload = %q", got)
 	}
 }
+
+func TestStore_ConcurrentRegisterAndSize(t *testing.T) {
+	s := NewStoreWithLimit(100)
+	done := make(chan struct{})
+
+	go func() {
+		for i := 0; i < 500; i++ {
+			s.RegisterUUID(strings.Repeat("u", 10), &OOBContext{})
+			_ = s.Size()
+		}
+		close(done)
+	}()
+
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			_ = s.Size()
+		}
+	}
+}
