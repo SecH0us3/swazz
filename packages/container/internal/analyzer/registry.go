@@ -52,6 +52,7 @@ func NewRegistry(sstiStore *sstistore.Store) *AnalyzerRegistry {
 
 // Analyze runs the inputs against all registered checkers and combines their findings.
 func (r *AnalyzerRegistry) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
+	defer input.release()
 	var findings []swagger.AnalysisFinding
 	for _, a := range r.analyzers {
 		res := a.Analyze(input)

@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { createChromeAISession } from './chromeAiService.js';
+import { aiDeadline, openChromeAISessionWithin, type AiFallbackReason } from './chromeAiService.js';
 
 export interface FindingOverviewItem {
   ruleId: string;
@@ -27,6 +27,8 @@ export interface ExecutiveSummaryResult {
   summary: string;
   model: string;
   simulated: boolean;
+  /** Why a simulated summary was not written by the on-device model. */
+  fallbackReason?: AiFallbackReason;
 }
 
 /**
@@ -89,20 +91,35 @@ ${input.topFindings.slice(0, 4).map(f => `- **${f.ruleId}** (\`${f.endpoint}\`):
  * Compresses finding metrics into a compact digest (< 400 tokens) and queries
  * Chrome Built-in Prompt API (Gemini Nano on-device), with deterministic fallback.
  */
-export async function generateExecutiveSummary(input: ReportStatsInput): Promise<ExecutiveSummaryResult> {
+/** On-device generation of the summary; past this the rule-based summary is used. */
+export const EXECUTIVE_SUMMARY_TIMEOUT_MS = 90_000;
+
+export interface ExecutiveSummaryOptions {
+  /** Aborts the generation; the result is then the rule-based summary. */
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export async function generateExecutiveSummary(
+  input: ReportStatsInput,
+  options: ExecutiveSummaryOptions = {},
+): Promise<ExecutiveSummaryResult> {
   const fallback = generateAlgorithmicExecutiveSummary(input);
+  if (options.signal?.aborted) return fallback;
+  const deadline = aiDeadline(options.timeoutMs ?? EXECUTIVE_SUMMARY_TIMEOUT_MS, options.signal);
 
   let session: any = null;
   try {
-    session = await createChromeAISession(`You are a Principal Application Security Auditor drafting an Executive Summary for an API Security & Fuzzing Audit Report.
+    const opened = await openChromeAISessionWithin(`You are a Principal Application Security Auditor drafting an Executive Summary for an API Security & Fuzzing Audit Report.
 Review the concise statistical scan digest and provide a clear, professional 2-3 paragraph Executive Summary in Markdown:
 1. Overall Security Posture & Risk Level (Critical, Elevated, or Low).
 2. Primary Attack Surface & Key Vulnerability Highlights.
 3. Prioritized Strategic Recommendations for engineering leadership.
-Be direct, factual, and concise. Avoid fluffy preamble.`);
-    if (!session) {
-      return fallback;
+Be direct, factual, and concise. Avoid fluffy preamble.`, deadline);
+    if (opened.status !== 'ready') {
+      return { ...fallback, fallbackReason: opened.status };
     }
+    session = opened.session;
 
     // Create a compact digest to easily fit inside Gemini Nano's 4K context window
     const compactDigest = {
@@ -123,7 +140,7 @@ Be direct, factual, and concise. Avoid fluffy preamble.`);
     const promptText = `Generate the Executive Summary for this API Security Audit:
 ${JSON.stringify(compactDigest, null, 2)}`;
 
-    const response = await session.prompt(promptText);
+    const response: string = await deadline.run(session.prompt(promptText, { signal: deadline.signal }));
 
     if (response && response.trim().length > 30) {
       return {
@@ -133,9 +150,16 @@ ${JSON.stringify(compactDigest, null, 2)}`;
       };
     }
   } catch (err) {
+    if (deadline.timedOut()) {
+      return { ...fallback, fallbackReason: 'timeout' };
+    }
+    if (options.signal?.aborted) {
+      return fallback;
+    }
     // eslint-disable-next-line no-console
     console.warn('[ExecutiveSummary] Chrome AI inference failed, using fallback:', err);
   } finally {
+    deadline.dispose();
     if (session && typeof session.destroy === 'function') {
       try {
         session.destroy();
@@ -145,5 +169,5 @@ ${JSON.stringify(compactDigest, null, 2)}`;
     }
   }
 
-  return fallback;
+  return { ...fallback, fallbackReason: 'failed' };
 }

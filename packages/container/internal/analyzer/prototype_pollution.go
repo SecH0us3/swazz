@@ -8,7 +8,6 @@ package analyzer
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"swazz-engine/internal/swagger"
 )
@@ -21,15 +20,8 @@ var (
 	protoErrorRx      = regexp.MustCompile(`(?i)(cannot\s+(?:create|set|assign\s+to\s+read\s+only)\s+property\s+['"]?polluted['"]?|cannot\s+set\s+properties\s+of\s+undefined|object\.prototype\.__proto__|prototype\s+pollution)`)
 )
 
-func (a *PrototypePollutionAnalyzer) isProtoPayload(payload any) bool {
-	if payload == nil {
-		return false
-	}
-	payloadStr := fmt.Sprintf("%v", payload)
-	return strings.Contains(payloadStr, "__proto__") ||
-		strings.Contains(payloadStr, "constructor.prototype") ||
-		strings.Contains(payloadStr, "prototype.polluted") ||
-		strings.Contains(payloadStr, "polluted")
+func (a *PrototypePollutionAnalyzer) isProtoPayload(input *AnalysisInput) bool {
+	return input.payloadContains("__proto__", "constructor.prototype", "prototype.polluted", "polluted")
 }
 
 func (a *PrototypePollutionAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -38,7 +30,7 @@ func (a *PrototypePollutionAnalyzer) Analyze(input *AnalysisInput) []swagger.Ana
 	}
 
 	// Fast pre-filter: skip scanning if no prototype pollution indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "polluted", "prototype", "__proto__", "cannot create property", "cannot set property", "cannot assign") {
+	if !input.containsAnyLower("polluted", "prototype", "__proto__", "cannot create property", "cannot set property", "cannot assign") {
 		return nil
 	}
 
@@ -73,7 +65,7 @@ func (a *PrototypePollutionAnalyzer) Analyze(input *AnalysisInput) []swagger.Ana
 	}
 
 	// 2. Check for reflected polluted properties when prototype payloads were sent
-	if a.isProtoPayload(input.SentPayload) {
+	if a.isProtoPayload(input) && input.containsAnyLower("polluted") {
 		if loc := protoReflectionRx.FindIndex(input.ResponseBody); loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])
 			start := loc[0] - 50

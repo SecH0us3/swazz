@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RbacRepository } from '../../../src/repositories/rbac';
+import { RbacRepository, negativeRbacCache } from '../../../src/repositories/rbac';
 import { Env } from '../../../src/env';
 
 describe('RbacRepository Unit Tests', () => {
@@ -18,6 +18,7 @@ describe('RbacRepository Unit Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    negativeRbacCache.clear();
 
     mockAll = vi.fn();
     mockBind = vi.fn().mockReturnValue({
@@ -92,19 +93,18 @@ describe('RbacRepository Unit Tests', () => {
       expect(mockPrepare).not.toHaveBeenCalled();
     });
 
-    it('returns false and caches empty list on cache miss with no user roles', async () => {
+    it('returns false and caches empty roles in isolate memory without writing to KV or hitting D1 repeatedly', async () => {
       mockKV.get.mockResolvedValue(null);
       mockAll.mockResolvedValue({ results: [] }); // No roles found
 
       const repo = new RbacRepository(mockEnv);
-      const hasPerm = await repo.checkPermission('u1', 'proj-123', 'write:project');
+      expect(await repo.checkPermission('u1', 'proj-123', 'write:project')).toBe(false);
+      expect(mockKV.put).not.toHaveBeenCalled();
+      expect(mockPrepare).toHaveBeenCalledTimes(1);
 
-      expect(hasPerm).toBe(false);
-      expect(mockKV.put).toHaveBeenCalledWith(
-        'rbac:v2:proj-123:u1',
-        JSON.stringify({ permissions: [] }),
-        { expirationTtl: 300 }
-      );
+      // Second call for the same non-member is served from isolate negative cache (0 D1 queries)
+      expect(await repo.checkPermission('u1', 'proj-123', 'write:project')).toBe(false);
+      expect(mockPrepare).toHaveBeenCalledTimes(1);
     });
 
     it('resolves permission via default owner role on cache miss', async () => {

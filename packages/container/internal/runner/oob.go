@@ -11,8 +11,58 @@ import (
 	"time"
 
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/oob"
 	"swazz-engine/internal/swagger"
 )
+
+// maxHandedOverOOBTokens bounds the tokens a run hands to the coordinator when it ends (the most
+// recently sent are kept), and oobPendingBatchSize how many go in one event, which keeps each
+// event well under the coordinator's 128 KB message limit.
+const (
+	maxHandedOverOOBTokens = 2000
+	oobPendingBatchSize    = 25
+)
+
+// OOBPendingBatch is the data of an EventOOBPending event.
+type OOBPendingBatch struct {
+	Tokens []oob.PendingToken `json:"tokens"`
+}
+
+// handOverPendingOOB sends the run's unanswered OOB tokens, in batches, before the run's end
+// event: the coordinator accepts a run's events only until it ends. A callback that arrives
+// later is then reported by the coordinator instead of being lost with the run's store.
+// Only a run whose OOB server is the coordinator hands its tokens over (HandOverOOBTokens): with
+// another server, or in CLI mode, nothing could report a later callback.
+func (r *Runner) handOverPendingOOB() {
+	if !r.handOverOOB.Load() {
+		return
+	}
+	waiting := r.oobStore.Size()
+	tokens := r.oobStore.TakePending(maxHandedOverOOBTokens)
+	if len(tokens) == 0 {
+		return
+	}
+	if waiting > len(tokens) {
+		r.logWarn("[OOB] %d OOB tokens were still waiting when the run ended; only the %d most recent can be reported if their callback comes later", waiting, len(tokens))
+	}
+	for start := 0; start < len(tokens); start += oobPendingBatchSize {
+		end := min(start+oobPendingBatchSize, len(tokens))
+		r.Broadcast(Event{Type: EventOOBPending, Data: OOBPendingBatch{Tokens: tokens[start:end]}})
+	}
+}
+
+// announceOOBHandOver tells the coordinator, with an empty batch, that the run will hand its
+// tokens over when it ends. It is sent at the start of the grace period, well before the tokens
+// leave the store, so a callback that comes as they move is looked up again rather than lost.
+func (r *Runner) announceOOBHandOver() {
+	if r.handOverOOB.Load() {
+		r.Broadcast(Event{Type: EventOOBPending, Data: OOBPendingBatch{Tokens: []oob.PendingToken{}}})
+	}
+}
+
+// HandOverOOBTokens makes the run hand its unanswered OOB tokens to the coordinator when it ends.
+// The agent calls it for a run whose OOB callbacks go to the coordinator.
+func (r *Runner) HandOverOOBTokens() { r.handOverOOB.Store(true) }
 
 // HandleOOBTrigger is called when an Out-of-Band trigger message is received from the coordinator.
 func (r *Runner) HandleOOBTrigger(uuid string) {

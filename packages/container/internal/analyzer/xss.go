@@ -16,37 +16,33 @@ import (
 
 type XSSAnalyzer struct{}
 
-// maliciousXSSSet is a pre-built set for O(1) payload lookups instead of O(N) slice scan.
-var maliciousXSSSet map[string]struct{}
+// maliciousXSSSet maps each XSS payload to its lowercased form, for O(1) lookups instead of an
+// O(N) slice scan.
+var maliciousXSSSet map[string][]byte
 
 func init() {
-	maliciousXSSSet = make(map[string]struct{}, len(payloads.MaliciousXSS))
+	maliciousXSSSet = make(map[string][]byte, len(payloads.MaliciousXSS))
 	for _, x := range payloads.MaliciousXSS {
 		if s, ok := x.(string); ok {
-			maliciousXSSSet[s] = struct{}{}
+			maliciousXSSSet[s] = []byte(strings.ToLower(s))
 		}
 	}
 }
 
-func extractStrings(v any) []string {
-	var stringsList []string
-	extractStringsHelper(v, &stringsList)
-	return stringsList
-}
-
-func extractStringsHelper(v any, out *[]string) {
+func extractStringsInto(out []string, v any) []string {
 	switch val := v.(type) {
 	case string:
-		*out = append(*out, val)
+		out = append(out, val)
 	case map[string]any:
 		for _, item := range val {
-			extractStringsHelper(item, out)
+			out = extractStringsInto(out, item)
 		}
 	case []any:
 		for _, item := range val {
-			extractStringsHelper(item, out)
+			out = extractStringsInto(out, item)
 		}
 	}
+	return out
 }
 
 func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -54,7 +50,7 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	sentStrings := extractStrings(input.SentPayload)
+	sentStrings := input.sentStrings()
 	if len(sentStrings) == 0 {
 		return nil
 	}
@@ -79,7 +75,10 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	}
 
 	var findings []swagger.AnalysisFinding
-	bodyLower := bytes.ToLower(input.ResponseBody)
+	// Lowercased only once a sent string is a known XSS payload. When the body holds
+	// Unicode runes that fold to ASCII letters (e.g. U+212A KELVIN SIGN or U+017F LONG S),
+	// fall back to bytes.ToLower; otherwise reuse the pooled ASCII-lowered body.
+	var bodyLower []byte
 
 	for _, payloadStr := range sentStrings {
 		if payloadStr == "" {
@@ -87,11 +86,18 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		}
 
 		// O(1) lookup in pre-built set instead of O(N) slice scan
-		if _, ok := maliciousXSSSet[payloadStr]; !ok {
+		payloadLower, ok := maliciousXSSSet[payloadStr]
+		if !ok {
 			continue
 		}
 
-		payloadLower := []byte(strings.ToLower(payloadStr))
+		if bodyLower == nil {
+			if input.hasUnicodeFoldRunes() {
+				bodyLower = bytes.ToLower(input.ResponseBody)
+			} else {
+				bodyLower = input.lowerBody()
+			}
+		}
 		if bytes.Contains(bodyLower, payloadLower) {
 			findings = append(findings, swagger.AnalysisFinding{
 				RuleID:           "swazz/reflected-xss",

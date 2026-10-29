@@ -7,7 +7,7 @@ import { UNCACHED_PARSE } from './handlers/parse';
 import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
-import { ScansRepository } from '../repositories/scans';
+import { ScansRepository, sanitizeOobPending } from '../repositories/scans';
 import { ulid } from 'ulidx';
 import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, markScanFinished } from './utils';
 import { resumeRuns } from './resume';
@@ -257,6 +257,16 @@ export class WebSocketHandler {
             msg.payload = { type: 'error', data: { message: runnerErrorText(msg.payload) || UNKNOWN_FAILURE } };
           }
 
+          if (msg.type === 'event' && msg.payload?.type === 'oob_pending') {
+            // Stored at once, here only: a callback can come seconds after the run ends
+            // (handlers/oob.ts). The findings queue keeps only the event's token count.
+            this.stateManager.noteOobHandOver(runId);
+            const tokens = sanitizeOobPending(msg.payload.data);
+            this.state.waitUntil(new ScansRepository(this.env).storeOobPending(runId, tokens).catch(err => {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to store handed-over OOB tokens", { error: err, runId });
+            }));
+          }
+
           // exec and seq make the stored event idempotent (eventIdFor), whichever path stores it.
           const body = sequenced
             ? { scanId: runId, type: msg.type, payload: msg.payload, exec: msg.exec, seq: msg.seq }
@@ -300,7 +310,8 @@ export class WebSocketHandler {
           }
 
           const clientSet = this.stateManager.clients.get(runId);
-          if (clientSet) {
+          // The run's unanswered OOB tokens are for the coordinator (oob_pending), not the dashboard.
+          if (clientSet && msg.payload?.type !== 'oob_pending') {
             // A runner error ({"error": ...}) has no type of its own; the dashboard needs one to
             // end the scan and show why (see utils/runnerMessages.ts).
             const outMsg = msg.type === 'error'

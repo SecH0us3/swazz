@@ -8,9 +8,10 @@ import { BaseService } from './base';
 import { dispatchWebhook } from '../utils/webhooks';
 import { sendScanCompletedDigestEmail } from '../services/email';
 import { WorkersAIService } from '../services/ai';
-import { logError } from '../../../common/logging/logger';
+import { logError, logWarn } from '../../../common/logging/logger';
 import { eventIdFor, isValidExec } from '../coordinator/delivery';
 import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
+import { isValidId } from '../utils/validation';
 
 // A position in a project's scan list, newest first: the last scan of the page before.
 export interface ScansCursor {
@@ -106,6 +107,26 @@ function normalizeAIRelevance(val: unknown): boolean {
 }
 
 const MAX_FINDINGS_PER_EVENT = 1000;
+
+// A run's unanswered OOB tokens (runner/oob.go): at most this many per event and per scan, each
+// field cut to OOB_FIELD_LIMIT characters, kept OOB_PENDING_DAYS after the scan.
+const MAX_OOB_TOKENS_PER_EVENT = 100;
+const MAX_OOB_TOKENS_PER_SCAN = 2000;
+const OOB_FIELD_LIMIT = 256;
+export const OOB_PENDING_DAYS = 7;
+
+/** The valid tokens of an oob_pending event; anything malformed is dropped. */
+export function sanitizeOobPending(data: unknown): Array<{ token: string; endpoint: string; payload: string }> {
+  const tokens = (data as any)?.tokens;
+  if (!Array.isArray(tokens)) return [];
+  const text = (v: unknown) => (typeof v === 'string' ? v : '').slice(0, OOB_FIELD_LIMIT);
+  const out: Array<{ token: string; endpoint: string; payload: string }> = [];
+  for (const t of tokens.slice(0, MAX_OOB_TOKENS_PER_EVENT)) {
+    if (!t || typeof t !== 'object' || !isValidId((t as any).uuid)) continue;
+    out.push({ token: (t as any).uuid, endpoint: text((t as any).endpoint), payload: text((t as any).payload) });
+  }
+  return out;
+}
 const FINDING_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const FINDING_TEXT_LIMIT = 64 * 1024;
 
@@ -151,9 +172,39 @@ const ERROR_EVENT_SQL = "(type = 'error' OR (type = 'event' AND json_extract(pay
 // D1 allows at most 100 bound parameters per statement.
 const EVENT_ID_LOOKUP_CHUNK = 90;
 
+/** Whether the event is a transient progress heartbeat or a [Fuzz Progress] log line that is coalesced per scan. */
+function isCoalescedProgressEvent(eventType: string, payload: any): 'progress' | 'fuzz_progress' | null {
+  if (eventType !== 'event' || !payload || typeof payload !== 'object') return null;
+  if (payload.type === 'progress') return 'progress';
+  if (payload.type === 'runner_log' && typeof payload.data?.message === 'string') {
+    const msg = payload.data.message;
+    if (msg.startsWith('[Fuzz Progress]') || (msg.startsWith('{') && msg.includes('"totalRequests"'))) {
+      return 'fuzz_progress';
+    }
+  }
+  return null;
+}
+
+/** A sequenced event's place in its runner's stream, or null for an unsequenced one. */
+function eventOrder(body: any): { exec: string; seq: number } | null {
+  const { exec, seq } = body ?? {};
+  if (!isValidExec(exec) || typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return null;
+  return { exec, seq };
+}
+
+/**
+ * Whether a coalesced progress event may replace the one already kept: a queue redelivery or a
+ * retried batch can bring an older event after a newer one. Mirrors the upsert's WHERE clause.
+ */
+function supersedes(next: { exec: string; seq: number } | null, kept: { exec: string; seq: number } | null): boolean {
+  return next === null || kept === null || next.exec !== kept.exec || next.seq > kept.seq;
+}
+
 /** The stable scan_events id of a sequenced runner event, or undefined for any other. */
 function storedEventId(body: any): string | undefined {
-  const { scanId, exec, seq } = body ?? {};
+  const { scanId, type, payload, exec, seq } = body ?? {};
+  const eventType = typeof type === 'string' && type ? type : 'event';
+  if (isCoalescedProgressEvent(eventType, payload) !== null) return undefined;
   if (typeof scanId !== 'string' || scanId === '' || !isValidExec(exec)) return undefined;
   if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return undefined;
   return eventIdFor(scanId, exec, seq);
@@ -729,6 +780,8 @@ export class ScansRepository extends BaseService implements IScansRepository {
       for (const r of results ?? []) alreadyStored.add(r.id);
     }
     const seenInBatch = new Set<string>();
+    const droppedForMissingScan = new Set<string>();
+    const coalescedInBatch = new Map<string, { index: number; order: { exec: string; seq: number } | null }>();
 
     for (const [index, msg] of messages.entries()) {
       const stableId = eventIds[index];
@@ -738,18 +791,83 @@ export class ScansRepository extends BaseService implements IScansRepository {
       }
       const id = stableId ?? crypto.randomUUID();
       const { scanId, type, payload } = msg.body;
-      // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
-      const payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
+      // A scan deleted while its runner still reported (its project or account went) keeps no
+      // events or findings: nothing would ever delete them (scanDeletion.ts). The inserts below
+      // check again, for a scan deleted while this batch is prepared.
+      const projInfo = scanToProject[scanId];
+      if (!projInfo) {
+        droppedForMissingScan.add(scanId);
+        continue;
+      }
+      const oobTokens = payload && payload.type === 'oob_pending' ? sanitizeOobPending(payload.data) : null;
       const eventType = typeof type === 'string' && type ? type : 'event';
-      
+      const coalescedKind = isCoalescedProgressEvent(eventType, payload);
+
+      // Transient progress heartbeats and [Fuzz Progress] log lines are coalesced per scan via
+      // deterministic IDs so a 6-hour scan keeps at most one row of each in D1 while still
+      // showing the latest [Fuzz Progress] line in getRunnerLogs.
+      if (coalescedKind !== null) {
+        const dedupId = `${scanId}:${coalescedKind}`;
+        const order = eventOrder(msg.body);
+        const kept = coalescedInBatch.get(dedupId);
+        if (kept !== undefined && !supersedes(order, kept.order)) {
+          continue;
+        }
+        // The kept row records its event's place (_exec, _seq) so an older event never replaces
+        // a newer one. Another exec is a resumed run and always replaces.
+        const basePayload = coalescedKind === 'progress' ? { type: 'progress' } : payload;
+        const coalescedPayload = JSON.stringify(
+          order ? { ...basePayload, _exec: order.exec, _seq: order.seq } : basePayload
+        );
+        const stmt = this.db.prepare(
+          `INSERT INTO scan_events (id, scan_id, type, payload, created_at)
+           SELECT ?, ?, ?, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)
+           ON CONFLICT(id) DO UPDATE SET type = excluded.type, payload = excluded.payload, created_at = excluded.created_at
+           WHERE json_extract(excluded.payload, '$._seq') IS NULL
+              OR json_extract(scan_events.payload, '$._seq') IS NULL
+              OR json_extract(excluded.payload, '$._exec') IS NOT json_extract(scan_events.payload, '$._exec')
+              OR json_extract(excluded.payload, '$._seq') > json_extract(scan_events.payload, '$._seq')`
+        ).bind(dedupId, scanId, eventType, coalescedPayload, scanId);
+        if (kept === undefined) {
+          coalescedInBatch.set(dedupId, { index: statements.length, order });
+          statements.push(stmt);
+        } else {
+          statements[kept.index] = stmt;
+          kept.order = order;
+        }
+        continue;
+      }
+
+      // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
+      // The OOB tokens themselves are stored by the coordinator as the event arrives
+      // (storeOobPending); stored again here, a token already reported would come back. The event
+      // log keeps only their count.
+      // High-volume events (result, checkpoint, complete) only need their event type in
+      // scan_events to prevent database bloat; full payloads are processed in-memory.
+      let payloadStr: string;
+      if (oobTokens) {
+        payloadStr = JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } });
+      } else if (
+        eventType === 'event' &&
+        payload &&
+        typeof payload === 'object' &&
+        (payload.type === 'result' ||
+          payload.type === 'checkpoint' ||
+          payload.type === 'complete')
+      ) {
+        payloadStr = JSON.stringify({ type: payload.type });
+      } else {
+        payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
+      }
+
       statements.push(
         this.db.prepare(
-          `INSERT OR IGNORE INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
-        ).bind(id, scanId, eventType, payloadStr)
+          `INSERT OR IGNORE INTO scan_events (id, scan_id, type, payload)
+           SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+        ).bind(id, scanId, eventType, payloadStr, scanId)
       );
 
-      const projInfo = scanToProject[scanId];
-      const projectId = projInfo?.projectId;
+      const projectId = projInfo.projectId;
 
       if (payload && payload.type === 'complete') {
         const stats = JSON.stringify(payload.data || {});
@@ -812,11 +930,16 @@ export class ScansRepository extends BaseService implements IScansRepository {
           statements.push(
             this.db.prepare(
               `INSERT OR IGNORE INTO findings (id, scan_id, rule_id, level, message, evidence)
-               VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(finding.id, scanId, finding.ruleId, finding.level, finding.message, finding.evidence)
+               SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+            ).bind(finding.id, scanId, finding.ruleId, finding.level, finding.message, finding.evidence, scanId)
           );
         }
       }
+    }
+
+    if (droppedForMissingScan.size > 0) {
+      // Its runner may still be running: deleting a scan does not stop it.
+      logWarn({ env: this.env, executionCtx: ctx }, 'FindingsQueue', 'Dropped events of scans that no longer exist', { scanIds: [...droppedForMissingScan].slice(0, 20) });
     }
 
     const results: any[] = statements.length > 0 ? ((await this.db.batch(statements)) ?? []) : [];
@@ -841,6 +964,51 @@ export class ScansRepository extends BaseService implements IScansRepository {
       );
     }
     return { ended };
+  }
+
+  /**
+   * Stores a run's handed-over OOB tokens (sanitizeOobPending), in one statement per event. OR
+   * IGNORE: a token stored twice keeps its first row. Nothing is stored for a scan that does not
+   * exist, and the LIMIT caps a scan's rows whatever the runner sends.
+   */
+  async storeOobPending(scanId: string, tokens: Array<{ token: string; endpoint: string; payload: string }>): Promise<void> {
+    if (tokens.length === 0) return;
+    await this.db.prepare(
+      `INSERT OR IGNORE INTO oob_pending (scan_id, token, endpoint, payload)
+       SELECT ?, json_extract(value, '$.token'), json_extract(value, '$.endpoint'), json_extract(value, '$.payload')
+       FROM json_each(?)
+       WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)
+       LIMIT max(0, ? - (SELECT COUNT(*) FROM oob_pending WHERE scan_id = ?))`
+    ).bind(scanId, JSON.stringify(tokens), scanId, MAX_OOB_TOKENS_PER_SCAN, scanId).run();
+  }
+
+  /**
+   * Reports an OOB callback that arrived after its scan's run ended: if the scan still exists and
+   * handed the token over no more than OOB_PENDING_DAYS ago, the scan gets a swazz/oob-interaction
+   * finding and the token's row is removed. False when the scan holds no such token.
+   */
+  async recordLateOobCallback(scanId: string, token: string): Promise<boolean> {
+    // A read first: most callbacks that reach here match nothing, and must not cost a write.
+    const pending = await this.db.prepare(
+      `SELECT 1 AS found FROM oob_pending
+       WHERE scan_id = ? AND token = ? AND created_at > datetime('now', ?) AND EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+    ).bind(scanId, token, `-${OOB_PENDING_DAYS} days`, scanId).first<{ found: number }>();
+    if (!pending) return false;
+
+    const message = "'Out-of-Band (OOB) Interaction detected after the scan ended: the target application initiated an external connection in response to the payload sent to ' || COALESCE(NULLIF(endpoint, ''), 'an unknown endpoint') || ': ' || COALESCE(payload, '')";
+    // One transaction: the finding is written and the token consumed together, or neither. The id
+    // is scoped to the scan, so no other tenant's finding can claim it. A token is either matched
+    // by the live runner or handed over, never both, so it cannot also have a live finding.
+    await this.db.batch([
+      this.db.prepare(
+        `INSERT OR IGNORE INTO findings (id, scan_id, rule_id, level, message, evidence)
+         SELECT ?, scan_id, 'swazz/oob-interaction', 'error', ${message}, ?
+         FROM oob_pending
+         WHERE scan_id = ? AND token = ?`
+      ).bind(`oob-${scanId}-${token}`, `Late callback triggered with token/UUID: ${token}`, scanId, token),
+      this.db.prepare('DELETE FROM oob_pending WHERE scan_id = ? AND token = ?').bind(scanId, token),
+    ]);
+    return true;
   }
 
   async saveWAFPatchReport(scanId: string, report: unknown): Promise<void> {

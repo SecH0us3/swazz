@@ -9,13 +9,14 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"runtime"
 	"strings"
 	"swazz-engine/internal/agent"
 	"time"
 
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/wizard"
+
+	"github.com/google/uuid"
 )
 
 //go:embed LICENSE
@@ -136,7 +137,9 @@ func extractPprofAddr() string {
 }
 
 func main() {
-	runtime.GOMAXPROCS(2)
+	// Before any goroutine starts: uuid.New() then draws from a buffered pool instead of
+	// reading crypto/rand for every finding ID and OOB token.
+	uuid.EnableRandPool()
 
 	pprofAddr := extractPprofAddr()
 	if pprofAddr != "" {
@@ -239,6 +242,8 @@ func printHelp() {
 	fmt.Println("  --name <name>                (Optional) Name to identify this runner")
 	fmt.Println("  --dangerous-no-container     Allow running directly on the host machine without Docker")
 	fmt.Println("  --allow-private-networks     Let every job reach private/loopback addresses (only if you are the runner's only user)")
+	fmt.Println("  --trusted-proxy <ip:port>    Let jobs use this private proxy (e.g. Burp on 127.0.0.1:8080) from their proxy list; their")
+	fmt.Println("                               targets are still checked. Repeatable or comma-separated (only if you are the runner's only user)")
 	fmt.Println("  --log-level <level>          Log level: debug, info, warn, error (default: info)")
 	fmt.Println("  --log-filter <substring>     Only output log lines containing the substring (case-insensitive)")
 	fmt.Println("  --disable-telemetry          Disable reporting anonymous global scan count telemetry")
@@ -258,6 +263,7 @@ func printHelp() {
 	fmt.Println("  --waf-patch-output <path>    File to save generated WAF virtual patch rules")
 	fmt.Println("  --ignore-config <path>       Path to ignore rules file (default: swazz.ignore.json)")
 	fmt.Println("  --allow-private-ips          Allow requests to private IP addresses (default: false)")
+	fmt.Println("  --trusted-proxy <ip:port>    Allow this private proxy from settings.proxy_list (e.g. 127.0.0.1:8080); targets are still checked")
 	fmt.Println("  --log-level <level>          Log level: debug, info, warn, error (default: info)")
 	fmt.Println("  --quiet, -q                  Silence all progress output (only show errors)")
 	fmt.Println("  --progress-on-change         Only print progress when the active endpoint changes")

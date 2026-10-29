@@ -81,12 +81,12 @@ func (r *Runner) executeRequest(
 		return r.executeGRPCRequest(ctx, baseURL, resolvedPath, originalPath, payload, profile, generatedHeaders)
 	}
 	if method == "WS" || strings.HasPrefix(baseURL, "ws://") || strings.HasPrefix(baseURL, "wss://") {
-		return r.executeWebSocketRequest(ctx, baseURL, resolvedPath, originalPath, payload, profile, headers, generatedHeaders)
+		return r.executeWebSocketRequest(ctx, baseURL, resolvedPath, originalPath, method, payload, profile, headers, generatedHeaders)
 	}
 
 	// Merge headers: generatedHeaders < global headers
 	isBody := !isNoBodyMethod(method)
-	mergedHeaders := make(map[string]string)
+	mergedHeaders := make(map[string]string, len(generatedHeaders)+len(headers)+2)
 	for k, v := range generatedHeaders {
 		mergedHeaders[k] = r.subStateVars(v)
 	}
@@ -207,6 +207,7 @@ func (r *Runner) executeRequest(
 		}
 
 		var bodyReader io.Reader
+		var reqBody []byte
 		if isBody && payload != nil {
 			if strings.Contains(effectiveCT, "x-www-form-urlencoded") {
 				if m, ok := payload.(map[string]any); ok {
@@ -214,24 +215,24 @@ func (r *Runner) executeRequest(
 					for k, v := range m {
 						vals.Set(k, toString(v))
 					}
-					bodyReader = strings.NewReader(vals.Encode())
-					payloadSize = len(vals.Encode())
+					reqBody = []byte(vals.Encode())
+					bodyReader = bytes.NewReader(reqBody)
 				}
 			}
 			if bodyReader == nil && strings.Contains(effectiveCT, "xml") {
 				if m, ok := payload.(map[string]any); ok {
 					xmlContent, _ := generator.ToXML(m, "request")
 					soapBody, _ := generator.WrapInSOAP(xmlContent)
-					bodyReader = strings.NewReader(soapBody)
-					payloadSize = len(soapBody)
+					reqBody = []byte(soapBody)
+					bodyReader = bytes.NewReader(reqBody)
 				}
 			}
 
 			if bodyReader == nil {
-				b, _ := json.Marshal(payload)
-				bodyReader = bytes.NewReader(b)
-				payloadSize = len(b)
+				reqBody, _ = json.Marshal(payload)
+				bodyReader = bytes.NewReader(reqBody)
 			}
+			payloadSize = len(reqBody)
 		}
 
 		if len(cookies) > 0 {
@@ -255,7 +256,7 @@ func (r *Runner) executeRequest(
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 				RequestURI: requestURIOf(rawURL),
-				Method: method, Profile: profile, Status: 0, Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize,
+				Method:     method, Profile: profile, Status: 0, Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize,
 				Error: err.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				RequestHeaders: mergedHeaders,
 			}
@@ -274,40 +275,25 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		var reqDump []byte
-		var dumpErr error
-		if logger.IsDebugEnabled() || r.config.Settings.Debug || profile == swagger.ProfileMalicious {
-			reqDump, dumpErr = httputil.DumpRequestOut(req, true)
-		}
-
-		if (logger.IsDebugEnabled() || r.config.Settings.Debug) && dumpErr == nil {
-			r.logDebug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
+		if logger.IsDebugEnabled() || r.config.Settings.Debug {
+			if reqDump, dumpErr := httputil.DumpRequestOut(req, true); dumpErr == nil {
+				r.logDebug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
+			}
 		}
 
 		// Look for OOB payloads to register the actual request details
-		if profile == swagger.ProfileMalicious {
-			if dumpErr == nil {
-				reqStr := string(reqDump)
-				matches := uuidRegex.FindAllString(reqStr, -1)
-				if len(matches) > 0 {
-					reqLog := &swagger.RequestLog{
-						Method:       method,
-						URL:          rawURL,
-						Headers:      mergedHeaders,
-						OriginalPath: originalPath,
-						ResolvedPath: req.URL.RequestURI(),
-					}
-					var body string
-					if parts := strings.SplitN(reqStr, "\r\n\r\n", 2); len(parts) == 2 {
-						body = parts[1]
-					} else if parts := strings.SplitN(reqStr, "\n\n", 2); len(parts) == 2 {
-						body = parts[1]
-					}
-					reqLog.Body = body
-
-					for _, uuidMatch := range matches {
-						r.oobStore.UpdateRequest(uuidMatch, reqLog)
-					}
+		if profile == swagger.ProfileMalicious && r.oobStore.Size() > 0 {
+			if matches := oobUUIDsInRequest(rawURL, mergedHeaders, reqBody); len(matches) > 0 {
+				reqLog := &swagger.RequestLog{
+					Method:       method,
+					URL:          rawURL,
+					Headers:      mergedHeaders,
+					OriginalPath: originalPath,
+					ResolvedPath: req.URL.RequestURI(),
+					Body:         string(reqBody),
+				}
+				for _, uuidMatch := range matches {
+					r.oobStore.UpdateRequest(uuidMatch, reqLog)
 				}
 			}
 		}
@@ -335,8 +321,8 @@ func (r *Runner) executeRequest(
 			}
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-				RequestURI: requestURIOf(rawURL),
-				Method: method, Profile: profile, Status: 0, Duration: duration,
+				RequestURI: req.URL.RequestURI(),
+				Method:     method, Profile: profile, Status: 0, Duration: duration,
 				Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				RequestHeaders: mergedHeaders,
 			}
@@ -344,6 +330,8 @@ func (r *Runner) executeRequest(
 
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
+			// Drained before closing so the connection is kept for the retry.
+			safenet.DrainBody(resp.Body, maxResponseRead)
 			resp.Body.Close() // #nosec G104 -- error from Body.Close irrelevant after 429 backoff
 			reqCancel()
 
@@ -377,8 +365,8 @@ func (r *Runner) executeRequest(
 				timer.Stop()
 				return &swagger.FuzzResult{
 					ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-					RequestURI: requestURIOf(rawURL),
-					Method: method, Profile: profile, Status: 429, Duration: duration,
+					RequestURI: req.URL.RequestURI(),
+					Method:     method, Profile: profile, Status: 429, Duration: duration,
 					Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 					RequestHeaders: mergedHeaders,
 				}
@@ -477,7 +465,7 @@ func (r *Runner) executeRequest(
 			ID:              uuid.New().String(),
 			Endpoint:        originalPath,
 			ResolvedPath:    resolvedPath,
-			RequestURI:      requestURIOf(rawURL),
+			RequestURI:      req.URL.RequestURI(),
 			Method:          method,
 			Profile:         profile,
 			Status:          resp.StatusCode,
@@ -502,16 +490,8 @@ func (r *Runner) executeRequest(
 		}
 
 		if r.config.Settings.AnalyzeResponseBody {
-			var baselineSize int64
-			if profile == swagger.ProfileMalicious {
-				baselineSize = r.getSizeBaselineMedian(method, originalPath)
-			}
-			multiplier := r.config.Settings.ResponseSizeAnomalyMultiplier
-			if multiplier <= 0 {
-				multiplier = 5.0
-			}
-			baselineTime := r.getTimeBaselineMedian(method, originalPath)
-			input := &analyzer.AnalysisInput{
+			baselineSize, multiplier, baselineTime := r.anomalyBaselines(method, originalPath, profile, r.config.Settings)
+			input := analyzer.AcquireInput(analyzer.AnalysisInput{
 				SentPayload:     result.Payload,
 				ResponseBody:    rawBodyBytes,
 				ResponseHeaders: resp.Header,
@@ -525,8 +505,9 @@ func (r *Runner) executeRequest(
 				BaselineTimeMs:  baselineTime,
 				TimeThresholdMs: r.config.Settings.TimeAnomalyThresholdMs,
 				Settings:        r.config.Settings,
-			}
+			})
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
+			analyzer.ReleaseInput(input)
 			if (logger.IsDebugEnabled() || r.config.Settings.Debug) && len(result.AnalyzerFindings) > 0 {
 				r.logDebug("Analyzer: Found findings for %s %s: %v", method, originalPath, result.AnalyzerFindings)
 			}
@@ -538,4 +519,45 @@ func (r *Runner) executeRequest(
 
 		return result
 	}
+}
+
+// mayHoldUUID reports whether s has length of at least 36 and contains at least 4 hyphens,
+// the minimum required for a canonical UUID (8-4-4-4-12).
+func mayHoldUUID[T ~string | ~[]byte](s T) bool {
+	if len(s) < 36 {
+		return false
+	}
+	count := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '-' {
+			count++
+			if count == 4 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// oobUUIDsInRequest returns the UUIDs (OOB callback tokens) a request carries in its URL, header
+// names and values, and body: every part of the wire request a payload can reach.
+func oobUUIDsInRequest(rawURL string, headers map[string]string, body []byte) []string {
+	var matches []string
+	if mayHoldUUID(rawURL) {
+		matches = uuidRegex.FindAllString(rawURL, -1)
+	}
+	for k, v := range headers {
+		if mayHoldUUID(k) {
+			matches = append(matches, uuidRegex.FindAllString(k, -1)...)
+		}
+		if mayHoldUUID(v) {
+			matches = append(matches, uuidRegex.FindAllString(v, -1)...)
+		}
+	}
+	if mayHoldUUID(body) {
+		for _, m := range uuidRegex.FindAll(body, -1) {
+			matches = append(matches, string(m))
+		}
+	}
+	return matches
 }

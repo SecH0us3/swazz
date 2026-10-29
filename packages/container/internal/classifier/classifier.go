@@ -158,76 +158,11 @@ func (c *Classifier) Classify(result *swagger.FuzzResult) *Finding {
 
 // ClassifyAll classifies a slice of results, filtering out ignored ones.
 func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
-	maxPerDefect := 5
-	defectCounts := make(map[string]int)
-	var findings []*Finding
-
+	col := c.NewCollector()
 	for _, r := range results {
-		// 1. Standard status-code finding
-		sf := c.Classify(r)
-		if sf != nil && !IsIgnored(sf, c.ignoreRules) {
-			defectKey := fmt.Sprintf("%s::%s %s", sf.RuleID, sf.Method, sf.Endpoint)
-			count := defectCounts[defectKey]
-			if count < maxPerDefect {
-				// Truncate huge response bodies
-				if body, ok := sf.ResponseBody.(string); ok && len(body) > 50000 {
-					sf.ResponseBody = body[:50000] + "\n... [TRUNCATED BY SWAZZ]"
-				}
-				findings = append(findings, sf)
-				defectCounts[defectKey] = count + 1
-			}
-		}
-
-		// 2. Response body analyzer findings
-		for _, af := range r.AnalyzerFindings {
-			source := "response_body"
-			switch {
-			case strings.HasPrefix(af.RuleID, "swazz/crlf-") || strings.HasPrefix(af.RuleID, "swazz/header-") || af.RuleID == "swazz/crlf-injection":
-				source = "response_headers"
-			case af.RuleID == "swazz/no-rate-limit" || af.RuleID == "swazz/rate-limit-active":
-				source = "rate_limiting"
-			case af.RuleID == "swazz/bola-idor" || af.RuleID == "swazz/unauthorized-access":
-				source = "access_control"
-			}
-			afOWASP, afOWASPAPI, afCWE := ResolveTaxonomy(&af, r.Method, r.Endpoint)
-			f := &Finding{
-				ID:               r.ID,
-				RuleID:           af.RuleID,
-				Level:            Severity(af.Level),
-				Endpoint:         r.Endpoint,
-				ResolvedPath:     r.ResolvedPath,
-				Method:           r.Method,
-				Profile:          r.Profile,
-				Status:           r.Status,
-				Duration:         r.Duration,
-				Payload:          r.Payload,
-				ResponseBody:     r.ResponseBody,
-				Error:            af.Evidence, // Store evidence matched fragment here
-				Timestamp:        r.Timestamp,
-				Source:           source,
-				OWASPCategory:    afOWASP,
-				OWASPAPICategory: afOWASPAPI,
-				CWEIDs:           afCWE,
-			}
-
-			if IsIgnored(f, c.ignoreRules) {
-				continue
-			}
-
-			defectKey := fmt.Sprintf("%s::%s %s", f.RuleID, f.Method, f.Endpoint)
-			count := defectCounts[defectKey]
-			if count < maxPerDefect {
-				// Truncate huge response bodies
-				if body, ok := f.ResponseBody.(string); ok && len(body) > 50000 {
-					f.ResponseBody = body[:50000] + "\n... [TRUNCATED BY SWAZZ]"
-				}
-				findings = append(findings, f)
-				defectCounts[defectKey] = count + 1
-			}
-		}
+		col.Add(r)
 	}
-
-	return findings
+	return col.Findings()
 }
 
 func (c *Classifier) resolveLevel(result *swagger.FuzzResult) Severity {

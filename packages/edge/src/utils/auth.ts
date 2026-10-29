@@ -18,7 +18,9 @@ declare module 'hono' {
 }
 
 const KV_POSITIVE_TTL = 300; // 5 minutes
-const KV_NEGATIVE_TTL = 60;  // 1 minute
+const NEGATIVE_API_KEY_TTL_MS = 60_000; // 1 minute in-memory negative cache
+const MAX_NEGATIVE_API_KEY_ENTRIES = 1000;
+export const negativeApiKeyCache = new Map<string, number>();
 
 /** `bytes` random bytes from the CSPRNG, as lowercase hex. */
 export function randomHex(bytes: number): string {
@@ -65,7 +67,16 @@ export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Conte
     const hashedToken = await hashApiKey(token);
     const cacheKey = `apikey:${hashedToken}`;
 
-    // 1. Try KV cache first (if available)
+    // 1. Check isolate-local negative cache first to prevent D1 cache-miss storms without KV writes
+    const negExpiry = negativeApiKeyCache.get(cacheKey);
+    if (negExpiry !== undefined) {
+      if (Date.now() < negExpiry) {
+        return null;
+      }
+      negativeApiKeyCache.delete(cacheKey);
+    }
+
+    // 2. Try KV positive cache (if available)
     if (kv) {
       try {
         const cached = await kv.get(cacheKey);
@@ -80,20 +91,28 @@ export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Conte
       }
     }
 
-    // 2. Cache miss — query D1
+    // 3. Cache miss — query D1
     try {
       const { AuthRepository: AuthRepoClass } = await import('../repositories/auth');
       const authRepo = new AuthRepoClass(c.env);
       const userId = await authRepo.verifyApiKey(hashedToken, token);
 
-      // 3. Write to KV (positive or negative cache)
-      if (kv) {
-        try {
-          const ttl = userId ? KV_POSITIVE_TTL : KV_NEGATIVE_TTL;
-          await kv.put(cacheKey, JSON.stringify({ userId }), { expirationTtl: ttl });
-        } catch {
-          // KV write failed — non-critical, continue
+      // 4. Positive match -> KV; Negative match -> bounded isolate-local memory (zero KV writes)
+      if (userId) {
+        negativeApiKeyCache.delete(cacheKey);
+        if (kv) {
+          try {
+            await kv.put(cacheKey, JSON.stringify({ userId }), { expirationTtl: KV_POSITIVE_TTL });
+          } catch {
+            // KV write failed — non-critical, continue
+          }
         }
+      } else {
+        if (negativeApiKeyCache.size >= MAX_NEGATIVE_API_KEY_ENTRIES) {
+          const oldestKey = negativeApiKeyCache.keys().next().value;
+          if (oldestKey !== undefined) negativeApiKeyCache.delete(oldestKey);
+        }
+        negativeApiKeyCache.set(cacheKey, Date.now() + NEGATIVE_API_KEY_TTL_MS);
       }
 
       return userId;

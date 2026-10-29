@@ -31,6 +31,7 @@ import { FEATURE_REPORT_EXPORTS, FEATURE_CLOUD_HISTORY } from '@swazz/shared';
 import { sanitizeTargetUrl } from '../utils/url.js';
 import { useToast } from '../hooks/useToast.js';
 import { ScanIssueBanner } from './ScanIssueBanner.js';
+import type { ExecutiveSummaryResult } from '../services/executiveSummaryService.js';
 
 // Helper to compute deduplicated count for Grouped Errors
 function getGroupedFindingsCount(rows: ResultSummary[]): number {
@@ -127,7 +128,7 @@ interface MainWorkspaceProps {
     handleExport: (runId: string | null, baseUrl?: string) => void;
     handleExportHTML: (runId: string | null) => void;
     handleExportMD: (runId: string | null) => void;
-    getRunExecutiveSummary?: (runId: string) => Promise<{ summary: string; model: string }>;
+    getRunExecutiveSummary?: (runId: string, signal?: AbortSignal) => Promise<ExecutiveSummaryResult>;
     handleLoadRun: (runId: string, importedRun?: any) => void;
     handleDeleteRun: (runId: string) => void;
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;

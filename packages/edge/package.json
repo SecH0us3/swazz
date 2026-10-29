@@ -5,18 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler queues create swazz-scan-queue || true && wrangler queues create swazz-findings-queue || true && wrangler d1 migrations apply swazz_db --remote && wrangler deploy",
+    "deploy": "wrangler queues create swazz-scan-queue || true && wrangler queues create swazz-findings-queue || true && wrangler queues create swazz-findings-dlq || true && wrangler d1 migrations apply swazz_db --remote && wrangler deploy",
     "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260930.1",
-    "@vitest/coverage-istanbul": "^4.1.11",
-    "@vitest/coverage-v8": "^4.1.10",
-    "@vitest/snapshot": "^4.1.9",
+    "@vitest/coverage-istanbul": "^4.1.12",
+    "@vitest/coverage-v8": "^4.1.12",
+    "@vitest/snapshot": "^4.1.12",
     "miniflare": "^5.20260811.1-alpha",
     "pretty-format": "^30.5.1",
-    "vitest": "^4.1.11",
+    "vitest": "^4.1.12",
     "workerd": "^1.20260930.1"
   },
   "dependencies": {

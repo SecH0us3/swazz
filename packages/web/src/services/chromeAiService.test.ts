@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   isChromeAIAvailable,
   createChromeAISession,
+  aiFallbackNote,
+  aiDeadline,
   getChromeAIStatus,
   openChromeAISession,
   explainFindingWithChromeAI,
@@ -26,6 +28,40 @@ describe('Chrome AI & Algorithmic Fallback Service', () => {
   afterEach(() => {
     (window as any).ai = originalAi;
     delete (globalThis as any).LanguageModel;
+  });
+
+  it('explains each AI fallback reason', () => {
+    expect(aiFallbackNote('unavailable', 'summary')).toBe('On-device AI (Chrome Prompt API) is not available in this browser, so a rule-based summary was used.');
+    expect(aiFallbackNote('timeout', 'template')).toBe('On-device AI took too long, so a rule-based template was used.');
+    expect(aiFallbackNote('downloadable', 'template')).toContain('not downloaded');
+    expect(aiFallbackNote('failed', 'template')).toContain('failed');
+  });
+
+  describe('aiDeadline', () => {
+    it('aborts and rejects pending work when the time is up', async () => {
+      const d = aiDeadline(10);
+      await expect(d.run(new Promise(() => {}))).rejects.toThrow('aborted');
+      expect(d.signal.aborted).toBe(true);
+      expect(d.timedOut()).toBe(true);
+      d.dispose();
+    });
+
+    it('follows the caller abort without counting it as a timeout', async () => {
+      const outer = new AbortController();
+      const d = aiDeadline(10_000, outer.signal);
+      const pending = d.run(new Promise(() => {}));
+      outer.abort();
+      await expect(pending).rejects.toThrow('aborted');
+      expect(d.timedOut()).toBe(false);
+      d.dispose();
+    });
+
+    it('passes finished work through', async () => {
+      const d = aiDeadline(10_000);
+      await expect(d.run(Promise.resolve(42))).resolves.toBe(42);
+      d.dispose();
+      expect(d.signal.aborted).toBe(false);
+    });
   });
 
   describe('current Prompt API (global LanguageModel)', () => {

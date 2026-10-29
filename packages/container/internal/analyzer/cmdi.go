@@ -17,6 +17,17 @@ type CmdiAnalyzer struct{}
 // unixIdRegex matches the output of the Unix `id` command, e.g. "uid=1000(alex) gid=1000(alex) groups=..."
 var unixIdRegex = regexp.MustCompile(`(uid|gid|groups)=\d+\([\w\-]+\)`)
 
+// unixIdLiterals are case-sensitive substrings of which one appears in every unixIdRegex match.
+var unixIdLiterals = []string{"id=", "groups="}
+
+// findUnixID returns the first unixIdRegex match in body, skipping the regex when no match can exist.
+func findUnixID(body []byte) []byte {
+	if !containsAnyLiteral(body, unixIdLiterals) {
+		return nil
+	}
+	return unixIdRegex.Find(body)
+}
+
 // cmdiSignatures contains common indicators of Windows command execution in the response body.
 var cmdiSignatures = [][]byte{
 	[]byte("Microsoft Windows [Version"),
@@ -36,7 +47,7 @@ func (a *CmdiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	var findings []swagger.AnalysisFinding
 
 	// Check for Unix id command output pattern (e.g. uid=1000(alex))
-	if match := unixIdRegex.Find(input.ResponseBody); len(match) > 0 {
+	if match := findUnixID(input.ResponseBody); len(match) > 0 {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:           "swazz/cmdi-leak",
 			Level:            "error",

@@ -61,6 +61,8 @@ To connect your AI assistant, configure the Swazz MCP server in your editor's or
 
 If you are connecting your AI assistant directly to a deployed Swazz instance in the cloud, you can use the built-in HTTP/SSE transport of the coordinator without running any local process.
 
+An SSE connection belongs to the account that opened it: its messages endpoint (`/api/mcp/message?connectionId=...`) only accepts requests made with that same account's credentials, and answers any other caller with `404`, so the client must send the same API key or session on both.
+
 #### A. Claude Desktop
 
 Add the server to your `claude_desktop_config.json` (located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):

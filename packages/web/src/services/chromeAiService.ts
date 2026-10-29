@@ -103,6 +103,20 @@ const PROMPT_LANGUAGES = {
  */
 export type ChromeAIStatus = 'ready' | 'downloadable' | 'unavailable';
 
+/** Why an AI feature fell back to its rule-based output instead of the on-device model's. */
+export type AiFallbackReason = 'unavailable' | 'downloadable' | 'failed' | 'timeout';
+
+/** The sentence telling the user why their rule-based `what` was used. */
+export function aiFallbackNote(reason: AiFallbackReason, what: 'template' | 'summary'): string {
+  const cause = {
+    unavailable: 'On-device AI (Chrome Prompt API) is not available in this browser',
+    downloadable: 'Chrome has not downloaded its on-device model (Gemini Nano) yet',
+    failed: 'On-device AI failed or returned nothing usable',
+    timeout: 'On-device AI took too long',
+  }[reason];
+  return `${cause}, so a rule-based ${what} was used.`;
+}
+
 async function statusOf(api: PromptApi): Promise<ChromeAIStatus> {
   try {
     let avail: string | undefined;
@@ -148,6 +162,56 @@ export async function openChromeAISession(systemPrompt: string, signal?: AbortSi
     ? await api.factory.create({ systemPrompt, signal })
     : await api.factory.create({ ...PROMPT_LANGUAGES, initialPrompts: [{ role: 'system', content: systemPrompt }], signal });
   return { session, status: 'ready', legacy: api.legacy };
+}
+
+/**
+ * A bound on one on-device AI job: `signal` aborts when the caller's signal does or the time is up.
+ * `run` races a Prompt API promise against that, because a call that ignores its signal must still
+ * not hold the caller. `dispose` must be called when the job ends.
+ */
+export interface AiDeadline {
+  signal: AbortSignal;
+  run<T>(work: Promise<T>): Promise<T>;
+  timedOut(): boolean;
+  dispose(): void;
+}
+
+export function aiDeadline(timeoutMs: number, outer?: AbortSignal): AiDeadline {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  outer?.addEventListener('abort', abort, { once: true });
+  if (outer?.aborted) controller.abort();
+  let expired = false;
+  const timer = setTimeout(() => {
+    expired = true;
+    controller.abort();
+  }, timeoutMs);
+  const aborted = new Promise<never>((_, reject) => {
+    if (controller.signal.aborted) reject(new Error('aborted'));
+    controller.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+  });
+  aborted.catch(() => {});
+  return {
+    signal: controller.signal,
+    run: work => Promise.race([work, aborted]),
+    timedOut: () => expired,
+    dispose: () => {
+      clearTimeout(timer);
+      outer?.removeEventListener('abort', abort);
+    },
+  };
+}
+
+/**
+ * openChromeAISession bounded by a deadline. A session that create() hands over after the deadline
+ * gave up is destroyed when it arrives: nothing else holds it.
+ */
+export async function openChromeAISessionWithin(systemPrompt: string, deadline: AiDeadline): Promise<ChromeAISessionResult> {
+  const opening = openChromeAISession(systemPrompt, deadline.signal);
+  opening.then(o => {
+    if (deadline.signal.aborted) o.session?.destroy?.();
+  }, () => {});
+  return deadline.run(opening);
 }
 
 /** openChromeAISession for callers that only need the session, or null when the model is not ready. */

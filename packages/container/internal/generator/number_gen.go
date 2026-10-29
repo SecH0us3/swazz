@@ -6,6 +6,7 @@
 package generator
 
 import (
+	"slices"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/swagger"
 )
@@ -19,10 +20,7 @@ func (g *Generator) generateNumber(typ string) any {
 			}
 		} else {
 			if g.isCategoryEnabled(payloads.CatBoundaryNumbers) {
-				// Merged integers + numbers for float types
-				merged := append([]any{}, payloads.BoundaryIntegers...)
-				merged = append(merged, payloads.BoundaryNumbers...)
-				return seqPick(&g.mu, merged, &g.bNumIdx)
+				return seqPick(&g.mu, boundaryFloats, &g.bNumIdx)
 			}
 		}
 	case swagger.ProfileMalicious:
@@ -37,3 +35,6 @@ func (g *Generator) generateNumber(typ string) any {
 	}
 	return payloads.FloatRange(0, 1000)
 }
+
+// boundaryFloats are the boundary values for float types: the integers, then the numbers.
+var boundaryFloats = slices.Concat(payloads.BoundaryIntegers, payloads.BoundaryNumbers)

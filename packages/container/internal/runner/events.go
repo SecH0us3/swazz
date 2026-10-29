@@ -26,6 +26,9 @@ const (
 	EventComplete   = "complete"
 	EventError      = "error"
 	EventCheckpoint = "checkpoint"
+	// EventOOBPending carries OOBPendingBatch: OOB tokens still unanswered when the run ends, so
+	// the coordinator can report a callback that arrives later.
+	EventOOBPending = "oob_pending"
 )
 
 // Event represents a streaming event sent to subscribers.
@@ -127,7 +130,8 @@ func (r *Runner) broadcastLoop() {
 }
 
 func isCriticalEvent(evt Event) bool {
-	return evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError || evt.Type == EventCheckpoint
+	return evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError ||
+		evt.Type == EventCheckpoint || evt.Type == EventOOBPending
 }
 
 func (r *Runner) processEvents(nodes *EventNode, lagging map[chan Event]*subLag) {

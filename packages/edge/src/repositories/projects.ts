@@ -7,6 +7,7 @@ import { Env } from '../env';
 import { Project, Webhook } from '../types';
 import { ulid } from 'ulidx';
 import { BaseService } from './base';
+import { deleteScansWhere, purgeScanChildren } from './scanDeletion';
 
 export interface IProjectRepository {
   getProjects(userId: string | null): Promise<Project[]>;
@@ -207,11 +208,12 @@ export class ProjectRepository extends BaseService implements IProjectRepository
     if (typeof projectId !== 'string') {
       throw new TypeError('projectId must be a string');
     }
+    await purgeScanChildren(this.db, 'project_id = ?', [projectId]);
     await this.db.batch([
       this.db.prepare('DELETE FROM projects WHERE id = ?').bind(projectId),
       this.db.prepare('DELETE FROM project_members WHERE project_id = ?').bind(projectId),
       this.db.prepare('DELETE FROM scan_configs WHERE project_id = ?').bind(projectId),
-      this.db.prepare('DELETE FROM scans WHERE project_id = ?').bind(projectId),
+      ...deleteScansWhere(this.db, 'project_id = ?', [projectId]),
     ]);
   }
 

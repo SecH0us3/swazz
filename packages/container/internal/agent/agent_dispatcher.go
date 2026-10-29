@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"swazz-engine/internal/config"
+	"swazz-engine/internal/logger"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -522,8 +523,9 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		return
 	}
 	runCfg.RunID = dispatch.RunID
+	coordinatorOOB := inferOOBServerURL(d.coordinatorURL)
 	if runCfg.Settings.OOBServerURL == "" {
-		runCfg.Settings.OOBServerURL = inferOOBServerURL(d.coordinatorURL)
+		runCfg.Settings.OOBServerURL = coordinatorOOB
 	}
 
 	var client *http.Client
@@ -533,6 +535,10 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		client = safenet.NewSafeHTTPClient(time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond)
 	}
 	r := runner.New(runCfg, client)
+	if callbacksReachCoordinator(runCfg.Settings.OOBServerURL, coordinatorOOB) {
+		// The coordinator can still report a callback that arrives after the run ends.
+		r.HandOverOOBTokens()
+	}
 
 	d.activeRunnersMu.Lock()
 	if d.held.Load() {
@@ -586,20 +592,20 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					res = &rVal
 				}
 				if res != nil {
-					severity := "ignore"
-					description := fmt.Sprintf("HTTP %d", res.Status)
-					if len(res.AnalyzerFindings) > 0 {
-						severity = res.AnalyzerFindings[0].Level
-						description = res.AnalyzerFindings[0].Message
-					} else {
-						finding := liveCls.Classify(res)
-						if finding != nil {
+					// One line per request: at debug only, since this goroutine forwards every
+					// result of the run and falling behind stalls the run's event stream.
+					if logger.IsDebugEnabled() {
+						severity := "ignore"
+						description := fmt.Sprintf("HTTP %d", res.Status)
+						if len(res.AnalyzerFindings) > 0 {
+							severity = res.AnalyzerFindings[0].Level
+							description = res.AnalyzerFindings[0].Message
+						} else if finding := liveCls.Classify(res); finding != nil {
 							severity = string(finding.Level)
-							description = fmt.Sprintf("HTTP %d", res.Status)
 						}
+						logDebug("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s",
+							runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 					}
-					logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s",
-						runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 					ev.Data = runner.ToSSE(res)
 				} else {
 					logError("Received result event but ev.Data is not a recognized FuzzResult type: %T", ev.Data)

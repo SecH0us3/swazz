@@ -11568,6 +11568,12 @@ kbd {
   font-weight: 600;
 }
 
+.exec-summary-fallback-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
 .exec-summary-markdown-container {
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);

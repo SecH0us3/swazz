@@ -90,7 +90,7 @@ func (g *Generator) generateStringInternal(format, propName string, inArray bool
 			if strVal, ok := val.(string); ok {
 				if strings.Contains(strVal, "{{OOB_URL}}") {
 					u := uuid.New().String()
-					url := g.oobURL(u)
+					oobLink := g.oobURL(u)
 
 					endpoint := g.Endpoint
 					if endpoint == "" {
@@ -102,13 +102,16 @@ func (g *Generator) generateStringInternal(format, propName string, inArray bool
 						Payload:   strVal,
 					})
 
-					strVal = strings.ReplaceAll(strVal, "{{OOB_URL}}", url)
+					strVal = strings.ReplaceAll(strVal, "{{OOB_URL}}", oobLink)
 				}
-				if strings.Contains(strVal, "7*7") || strings.Contains(strVal, "7+'7'") {
-					strVal = g.randomizeAndRegisterSSTI(strVal)
-				}
+				// The expression is registered under the string actually sent, so it is registered
+				// only after any semantic wrapping.
+				strVal, ssti, isSSTI := g.randomizeSSTI(strVal)
 				if g.settings.SemanticMutationEnabled() && format != "" {
-					return g.GenerateSemanticValue(format, strVal)
+					strVal = g.GenerateSemanticValue(format, strVal)
+				}
+				if isSSTI {
+					g.registerSentSSTI(strVal, ssti)
 				}
 				return strVal
 			}
@@ -189,18 +192,24 @@ func (g *Generator) fallbackRandom(propName string) any {
 	return payloads.RandomString(payloads.IntRange(3, 10))
 }
 
-func (g *Generator) oobURL(uuidStr string) string {
-	baseURL := g.oobServerURL
-	if baseURL == "" {
-		baseURL = "http://localhost:8080/api/oob"
-	} else {
-		if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
-			baseURL = "http://" + baseURL
-		}
-		if !strings.Contains(baseURL, "/api/oob") {
-			baseURL = strings.TrimRight(baseURL, "/") + "/api/oob"
-		}
+// OOBBaseURL is the callback base an OOB payload uses for a configured OOB server URL: a missing
+// scheme becomes http, and the coordinator's /api/oob route is appended when absent. Compare OOB
+// servers through it, as payloads see them.
+func OOBBaseURL(server string) string {
+	if server == "" {
+		return "http://localhost:8080/api/oob"
 	}
+	if !strings.HasPrefix(server, "http://") && !strings.HasPrefix(server, "https://") {
+		server = "http://" + server
+	}
+	if !strings.Contains(server, "/api/oob") {
+		server = strings.TrimRight(server, "/") + "/api/oob"
+	}
+	return strings.TrimRight(server, "/")
+}
+
+func (g *Generator) oobURL(uuidStr string) string {
+	baseURL := OOBBaseURL(g.oobServerURL)
 	if g.RunID != "" {
 		return fmt.Sprintf("%s/%s/%s", strings.TrimRight(baseURL, "/"), g.RunID, uuidStr)
 	}
@@ -209,46 +218,52 @@ func (g *Generator) oobURL(uuidStr string) string {
 
 var sstiPrimes = []int{11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97}
 
-func (g *Generator) randomizeAndRegisterSSTI(s string) string {
+// randomizeSSTI replaces a 7*7 or 7+'7' probe in s with a random expression and returns the new
+// string with the result that expression evaluates to; ok is false when s has no probe or the run
+// has no store. The caller registers the string it finally sends.
+func (g *Generator) randomizeSSTI(s string) (newS string, ctx sstistore.SSTIContext, ok bool) {
 	// Without a run's store nothing could match a random expression; the fixed 7*7 / 7+'7' probe is
 	// what the analyzer's static fallback recognises.
 	if g.SSTIStore == nil {
-		return s
+		return s, ctx, false
 	}
+	var probe string
+	switch {
+	case strings.Contains(s, "7*7"):
+		probe = "7*7"
+	case strings.Contains(s, "7+'7'"):
+		probe = "7+'7'"
+	default:
+		return s, ctx, false
+	}
+
 	p1 := sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 	p2 := sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 	for p1 == p2 {
 		p2 = sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 	}
 
-	var rawExpr string
-	var expected string
-
-	if strings.Contains(s, "7*7") {
-		if rand.Float64() < 0.5 { // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
-			rawExpr = fmt.Sprintf("%d*%d", p1, p2)
-			expected = fmt.Sprintf("%d", p1*p2)
-		} else {
-			rawExpr = fmt.Sprintf("%d+%d", p1, p2)
-			expected = fmt.Sprintf("%d", p1+p2)
-		}
-		newS := strings.ReplaceAll(s, "7*7", rawExpr)
-		g.SSTIStore.Register(newS, sstistore.SSTIContext{
-			RawExpr:  rawExpr,
-			Expected: expected,
-		})
-		return newS
-	} else if strings.Contains(s, "7+'7'") {
-		rawExpr = fmt.Sprintf("%d+'%d'", p1, p2)
-		expected = fmt.Sprintf("%d%d", p1, p2)
-		newS := strings.ReplaceAll(s, "7+'7'", rawExpr)
-		g.SSTIStore.Register(newS, sstistore.SSTIContext{
-			RawExpr:  rawExpr,
-			Expected: expected,
-		})
-		return newS
+	switch {
+	case probe == "7+'7'":
+		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d+'%d'", p1, p2), Expected: fmt.Sprintf("%d%d", p1, p2)}
+	case rand.Float64() < 0.5: // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
+		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d*%d", p1, p2), Expected: fmt.Sprintf("%d", p1*p2)}
+	default:
+		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d+%d", p1, p2), Expected: fmt.Sprintf("%d", p1+p2)}
 	}
-	return s
+	return strings.ReplaceAll(s, probe, ctx.RawExpr), ctx, true
+}
+
+// registerSentSSTI records the expression a sent string carries, under that string, which is what
+// the SSTI analyzer looks up. It records it only when the expression is in the string verbatim: a
+// wrapper that drops it (a phone number keeps only the digits) or URL-encodes it would otherwise
+// let any response that happens to contain the expected number read as an evaluated template,
+// since the analyzer's reflection check knows only the raw expression. Non-goal: an encoded
+// expression the target decodes and evaluates is not detected.
+func (g *Generator) registerSentSSTI(sent string, ctx sstistore.SSTIContext) {
+	if strings.Contains(sent, ctx.RawExpr) {
+		g.SSTIStore.Register(sent, ctx)
+	}
 }
 
 // GenerateSemanticValue returns a semantic format-wrapped payload for a given vector.

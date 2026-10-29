@@ -258,25 +258,24 @@ func (r *Runner) runActiveParameterFuzzing(
 
 			// A skipped payload still takes its iteration index, so a resume's iterToSkip
 			// (a count of walked iterations) lines up with what was sent.
-			payloadHash, fits := sizedPayloadHash(built, maxPayload)
-			if !fits || (enableDedup && seenHashes[payloadHash]) {
-				r.progress.totalPlanned.Add(-1)
-				globalIterIdx++
-				continue
-			}
-			if enableDedup {
+			if !enableDedup {
+				if !payloadFits(built, maxPayload) {
+					r.progress.totalPlanned.Add(-1)
+					globalIterIdx++
+					continue
+				}
+			} else {
+				payloadHash, fits := sizedPayloadHash(built, maxPayload)
+				if !fits || seenHashes[payloadHash] {
+					r.progress.totalPlanned.Add(-1)
+					globalIterIdx++
+					continue
+				}
 				seenHashes[payloadHash] = true
 			}
 
 			if isSecHeaderIter {
-				if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
-					if built.headers == nil {
-						built.headers = make(map[string]string, len(secHeaders))
-					}
-					for k, v := range secHeaders {
-						built.headers[k] = v
-					}
-				}
+				mergeSecurityHeaders(&built, gen)
 			}
 
 			r.waitIfPaused(ctx)

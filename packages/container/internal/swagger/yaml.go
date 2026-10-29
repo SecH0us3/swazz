@@ -8,10 +8,18 @@ package swagger
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	errEmptyYAMLData   = errors.New("empty data")
+	errAlreadyJSON     = errors.New("already JSON")
+	errNilYAMLContent  = errors.New("nil YAML content")
+	errInvalidYAMLKind = errors.New("invalid YAML: content is not a map or slice")
 )
 
 // IsYAML heuristic checks if the input is YAML but not JSON.
@@ -26,11 +34,11 @@ func IsYAML(data []byte) bool {
 func ConvertYAMLToJSON(data []byte) (json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("empty data")
+		return nil, errEmptyYAMLData
 	}
 	// Fast-path: if it starts with '{' or '[', it is already JSON.
 	if trimmed[0] == '{' || trimmed[0] == '[' {
-		return nil, fmt.Errorf("already JSON")
+		return nil, errAlreadyJSON
 	}
 
 	var val any
@@ -39,12 +47,12 @@ func ConvertYAMLToJSON(data []byte) (json.RawMessage, error) {
 	}
 
 	if val == nil {
-		return nil, fmt.Errorf("nil YAML content")
+		return nil, errNilYAMLContent
 	}
 
 	rv := reflect.ValueOf(val)
 	if rv.Kind() != reflect.Map && rv.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("invalid YAML: content is not a map or slice")
+		return nil, errInvalidYAMLKind
 	}
 
 	cleaned := cleanYAMLObj(val)

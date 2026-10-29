@@ -6,6 +6,7 @@
 package analyzer
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"swazz-engine/internal/swagger"
@@ -17,24 +18,30 @@ type CustomRule struct {
 	Name    string // e.g. "Auth Token Leak"
 	Pattern string // regex string
 	Message string // human-readable message
+	// Literals, when set, are case-sensitive strings of which at least one appears in every
+	// match of Pattern: a body containing none of them is skipped without running the regex.
+	// Leave it empty if unsure; the rule then always runs.
+	Literals []string
 }
 
 // CustomRules is a registry where developers can easily add new custom group detectors.
 // Add a new CustomRule struct here to detect specific patterns in HTTP response bodies.
 var CustomRules = []CustomRule{
 	{
-		RuleID:  "swazz/sensitive-data-leak",
-		Level:   "warning",
-		Name:    "LFI / Path Traversal Leak",
-		Pattern: `(?m)(root:x:0:0:|\[boot loader\]\s*timeout=)`,
-		Message: "Sensitive file contents (LFI/Path Traversal) detected in response body.",
+		RuleID:   "swazz/sensitive-data-leak",
+		Level:    "warning",
+		Name:     "LFI / Path Traversal Leak",
+		Pattern:  `(?m)(root:x:0:0:|\[boot loader\]\s*timeout=)`,
+		Message:  "Sensitive file contents (LFI/Path Traversal) detected in response body.",
+		Literals: []string{"root:x:0:0:", "[boot loader]"},
 	},
 	{
-		RuleID:  "swazz/rce-leak",
-		Level:   "error",
-		Name:    "Remote Code Execution (RCE) Leak",
-		Pattern: `(?m)(uid=\d+\(.*?\)\s+gid=\d+|bash:\s+.*:\s+command not found)`,
-		Message: "System command execution output (RCE) detected in response body.",
+		RuleID:   "swazz/rce-leak",
+		Level:    "error",
+		Name:     "Remote Code Execution (RCE) Leak",
+		Pattern:  `(?m)(uid=\d+\(.*?\)\s+gid=\d+|bash:\s+.*:\s+command not found)`,
+		Message:  "System command execution output (RCE) detected in response body.",
+		Literals: []string{"uid=", "command not found"},
 	},
 }
 
@@ -72,6 +79,9 @@ func (a *CustomAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding
 
 	var findings []swagger.AnalysisFinding
 	for _, cr := range a.compiled {
+		if !containsAnyLiteral(input.ResponseBody, cr.rule.Literals) {
+			continue
+		}
 		loc := cr.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])
@@ -98,4 +108,17 @@ func (a *CustomAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding
 	}
 
 	return findings
+}
+
+// containsAnyLiteral reports whether body contains any of literals; no literals means no filter.
+func containsAnyLiteral(body []byte, literals []string) bool {
+	if len(literals) == 0 {
+		return true
+	}
+	for _, l := range literals {
+		if bytes.Contains(body, []byte(l)) {
+			return true
+		}
+	}
+	return false
 }

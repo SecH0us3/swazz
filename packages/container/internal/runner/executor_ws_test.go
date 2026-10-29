@@ -58,8 +58,13 @@ func wsURL(srv *httptest.Server) string {
 // newWSRunner returns a runner that may reach the in-process (loopback) targets.
 func newWSRunner() *Runner {
 	return &Runner{
-		config:   &swagger.Config{Security: swagger.SecurityConfig{AllowPrivateIPs: true}},
-		analyzer: analyzer.NewRegistry(nil),
+		config: &swagger.Config{
+			Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+			Settings: swagger.Settings{AnalyzeResponseBody: true},
+		},
+		analyzer:      analyzer.NewRegistry(nil),
+		sizeBaselines: &sync.Map{},
+		timeBaselines: &sync.Map{},
 	}
 }
 
@@ -82,7 +87,7 @@ func TestExecuteWebSocketRequest_HealthyTargetYieldsNoWSFindings(t *testing.T) {
 
 	r := newWSRunner()
 	res := r.executeWebSocketRequest(
-		context.Background(), wsURL(srv), "/ws", "/ws",
+		context.Background(), wsURL(srv), "/ws", "/ws", "WS",
 		map[string]any{"action": "update", "id": 1},
 		swagger.ProfileRandom, nil, nil,
 	)
@@ -110,7 +115,7 @@ func TestExecuteWebSocketRequest_PanicInResponseIsDetected(t *testing.T) {
 
 	r := newWSRunner()
 	res := r.executeWebSocketRequest(
-		context.Background(), wsURL(srv), "/ws", "/ws",
+		context.Background(), wsURL(srv), "/ws", "/ws", "WS",
 		map[string]any{"action": "update", "id": -1},
 		swagger.ProfileRandom, nil, nil,
 	)
@@ -130,7 +135,7 @@ func TestExecuteWebSocketRequest_InternalErrorCloseIsDetected(t *testing.T) {
 
 	r := newWSRunner()
 	res := r.executeWebSocketRequest(
-		context.Background(), wsURL(srv), "/ws", "/ws",
+		context.Background(), wsURL(srv), "/ws", "/ws", "WS",
 		map[string]any{"action": "update", "id": -1},
 		swagger.ProfileRandom, nil, nil,
 	)
@@ -164,7 +169,7 @@ func TestExecuteWebSocketRequest_SendsMergedHeaders(t *testing.T) {
 		Security:      swagger.SecurityConfig{AllowPrivateIPs: true},
 	}, analyzer: analyzer.NewRegistry(nil)}
 	res := r.executeWebSocketRequest(
-		context.Background(), wsURL(srv), "/ws", "/ws",
+		context.Background(), wsURL(srv), "/ws", "/ws", "WS",
 		map[string]any{"ping": true},
 		swagger.ProfileRandom, nil, map[string]string{"X-Generated": "gen"},
 	)
@@ -188,7 +193,7 @@ func TestExecuteWebSocketRequest_BlocksPrivateTarget(t *testing.T) {
 
 	r := &Runner{config: &swagger.Config{}, analyzer: analyzer.NewRegistry(nil)}
 	res := r.executeWebSocketRequest(
-		context.Background(), wsURL(srv), "/ws", "/ws",
+		context.Background(), wsURL(srv), "/ws", "/ws", "WS",
 		map[string]any{"ping": true}, swagger.ProfileRandom, nil, nil,
 	)
 
@@ -224,7 +229,7 @@ func TestExecuteWebSocketRequest_SameEndpointRunsInParallel(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i] = r.executeWebSocketRequest(context.Background(), wsURL(srv), "/ws", "/ws",
+			results[i] = r.executeWebSocketRequest(context.Background(), wsURL(srv), "/ws", "/ws", "WS",
 				map[string]any{"i": i}, swagger.ProfileRandom, nil, nil)
 		}()
 	}
@@ -234,4 +239,116 @@ func TestExecuteWebSocketRequest_SameEndpointRunsInParallel(t *testing.T) {
 		assert.Empty(t, res.Error)
 		assert.Equal(t, http.StatusOK, res.Status)
 	}
+}
+
+// With response analysis off, the answer's body is not analysed, as an HTTP, gRPC or MCP one is
+// not; the close code still is: a crash is a transport finding, not a body one.
+func TestExecuteWebSocketRequest_BodyNotAnalysedWhenDisabled(t *testing.T) {
+	srv := newWSTarget(t, func(ctx context.Context, c *websocket.Conn, _ []byte) {
+		_ = c.Write(ctx, websocket.MessageText,
+			[]byte("panic: index out of range\n\ngoroutine 1 [running]:\nmain.handler(0x0)\n\t/app/main.go:87 +0x1a4"))
+		c.Close(websocket.StatusInternalError, "internal error")
+	})
+	crash := newWSTarget(t, func(_ context.Context, c *websocket.Conn, _ []byte) {
+		c.Close(websocket.StatusInternalError, "internal error")
+	})
+
+	r := newWSRunner()
+	r.config.Settings.AnalyzeResponseBody = false
+	res := r.executeWebSocketRequest(
+		context.Background(), wsURL(srv), "/ws", "/ws", "WS",
+		map[string]any{"action": "update"},
+		swagger.ProfileRandom, nil, nil,
+	)
+	assert.NotContains(t, findingRuleIDs(res), "swazz/ws-internal-error-leak")
+
+	res = r.executeWebSocketRequest(
+		context.Background(), wsURL(crash), "/ws", "/ws", "WS",
+		map[string]any{"action": "update"},
+		swagger.ProfileRandom, nil, nil,
+	)
+	assert.Contains(t, findingRuleIDs(res), "swazz/ws-crash-detected")
+}
+
+// A slow answer is compared with the endpoint's time baseline; an exchange that timed out is not,
+// since a target that ignores a message says nothing about how long it takes to answer one.
+func TestExecuteWebSocketRequest_TimeBaseline(t *testing.T) {
+	slow := newWSTarget(t, func(ctx context.Context, c *websocket.Conn, _ []byte) {
+		time.Sleep(400 * time.Millisecond)
+		_ = c.Write(ctx, websocket.MessageText, []byte("ok"))
+		c.Close(websocket.StatusNormalClosure, "")
+	})
+	silent := newWSTarget(t, func(_ context.Context, _ *websocket.Conn, _ []byte) {
+		time.Sleep(700 * time.Millisecond) // past the 400ms exchange timeout, then gone
+	})
+
+	r := newWSRunner()
+	r.config.Settings.TimeAnomalyThresholdMs = 200
+	r.config.Settings.TimeoutMs = 3000
+	for range 5 {
+		r.recordTimeBaseline("WS", "/ws", 5)
+	}
+	res := r.executeWebSocketRequest(
+		context.Background(), wsURL(slow), "/ws", "/ws", "WS",
+		"' OR SLEEP(5)--", swagger.ProfileMalicious, nil, nil,
+	)
+	slowIDs := findingRuleIDs(res)
+
+	r.config.Settings.TimeoutMs = 400
+	res = r.executeWebSocketRequest(
+		context.Background(), wsURL(silent), "/ws", "/ws", "WS",
+		"' OR SLEEP(5)--", swagger.ProfileMalicious, nil, nil,
+	)
+	require.NotEmpty(t, res.Error, "the silent target times out")
+	for _, id := range findingRuleIDs(res) {
+		assert.NotContains(t, id, "time-based", "a timed-out exchange was reported as a timing finding")
+	}
+	assert.Condition(t, func() bool {
+		for _, id := range slowIDs {
+			if strings.Contains(id, "time-based") {
+				return true
+			}
+		}
+		return false
+	}, "a slow answer to a timing payload is reported: %v", slowIDs)
+}
+
+// A malicious payload whose answer is far larger than the endpoint's usual one is flagged against
+// the size baseline the RANDOM profile recorded under the endpoint's method and path.
+func TestExecuteWebSocketRequest_ResponseSizeAnomalyAgainstBaseline(t *testing.T) {
+	big := strings.Repeat("x", 20_000)
+	srv := newWSTarget(t, func(ctx context.Context, c *websocket.Conn, _ []byte) {
+		_ = c.Write(ctx, websocket.MessageText, []byte(big))
+		c.Close(websocket.StatusNormalClosure, "")
+	})
+
+	r := newWSRunner()
+	for range 5 {
+		r.recordSizeBaseline("WS", "/ws", 500)
+	}
+	res := r.executeWebSocketRequest(
+		context.Background(), wsURL(srv), "/ws", "/ws", "WS",
+		map[string]any{"q": "<script>"},
+		swagger.ProfileMalicious, nil, nil,
+	)
+
+	require.Empty(t, res.Error)
+	assert.Contains(t, findingRuleIDs(res), "swazz/response-size-anomaly")
+}
+
+// The payload checks see what was sent: a reflected script tag in a WebSocket answer is reported.
+func TestExecuteWebSocketRequest_ReflectedPayloadIsDetected(t *testing.T) {
+	srv := newWSTarget(t, func(ctx context.Context, c *websocket.Conn, msg []byte) {
+		_ = c.Write(ctx, websocket.MessageText, []byte("<html>you said "+string(msg)+"</html>"))
+		c.Close(websocket.StatusNormalClosure, "")
+	})
+
+	r := newWSRunner()
+	res := r.executeWebSocketRequest(
+		context.Background(), wsURL(srv), "/ws", "/ws", "WS",
+		"<script>alert(1)</script>", swagger.ProfileMalicious, nil, nil,
+	)
+
+	require.Empty(t, res.Error)
+	assert.Contains(t, findingRuleIDs(res), "swazz/reflected-xss")
 }

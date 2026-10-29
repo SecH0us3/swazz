@@ -1355,6 +1355,9 @@ func TestRunner_MaxScanDurationExcludesHeldTime(t *testing.T) {
 			Concurrency:          1,
 			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
 			MaxScanDurationMin:   1000, // 1s here: the scan itself needs far less, even under -race
+			// The pre-scan WAF check calls the real WAF-checker API and does not wait for a hold:
+			// a slow network outlasted the hold, ran into the scan's time and stopped it.
+			EnableWAFCheck: boolPtr(false),
 		},
 	}, nil)
 	defer r.Close()

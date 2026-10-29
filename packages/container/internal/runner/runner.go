@@ -192,6 +192,8 @@ type Runner struct {
 	// several scans at once, and each must only ever clear or match its own.
 	oobStore  *oob.Store
 	sstiStore *sstistore.Store
+	// handOverOOB: the run's unanswered OOB tokens go to the coordinator when it ends (oob.go).
+	handOverOOB atomic.Bool
 
 	mcpClient      mcp.Client
 	mcpMutex       sync.Mutex
@@ -268,6 +270,12 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		regexCache:     make(map[string]*regexp.Regexp),
 		mcpRateLimiter: mcp.NewRateLimiter(100, 50),
 	}
+	r.oobStore.OnFirstDrop(func() {
+		r.logWarn("[OOB] The run has more pending OOB tokens than it keeps (%d); the oldest are dropped, and their callbacks will not be reported", oob.DefaultMaxEntries)
+	})
+	r.sstiStore.OnFirstDrop(func() {
+		r.logWarn("[SSTI] The run has sent more SSTI probes than it keeps (%d); responses to the oldest are no longer checked", sstistore.DefaultMaxEntries)
+	})
 	r.analyzer = analyzer.NewRegistry(r.sstiStore)
 	if config.MCPServer != nil {
 		client, err := mcp.NewClientFromConfig(
@@ -478,6 +486,7 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	// Wait a brief grace period for any late OOB network interactions to complete
 	if !r.stopped() && r.oobStore.Size() > 0 {
+		r.announceOOBHandOver()
 		logger.Info("Waiting a 5-second grace period for pending OOB interactions...")
 		select {
 		case <-runCtx.Done():

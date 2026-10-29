@@ -448,6 +448,7 @@ func TestExecuteWebSocketRequest(t *testing.T) {
 		"ws://127.0.0.1:59998",
 		"/chat",
 		"/chat",
+		"WS",
 		map[string]string{"message": "hello"},
 		swagger.ProfileRandom,
 		nil,
@@ -538,4 +539,36 @@ func TestExecuteRequest_DrainKeepsConnectionReuseWithinTheCap(t *testing.T) {
 	assert.EqualValues(t, maxResponseRead+1, get(maxResponseRead*2).ResponseSize)
 	get(small)
 	assert.EqualValues(t, 2, conns.Load(), "a connection whose body was cut off is not reused")
+}
+
+// A 429's body is read before the retry, so the retry goes out on the same connection rather
+// than paying for a new one while the target is rate-limiting.
+func TestExecuteRequest_RetryAfter429ReusesTheConnection(t *testing.T) {
+	var conns, requests atomic.Int32
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			// 2 MB: more than the Transport reads by itself when a body is closed unread.
+			_, _ = w.Write(bytes.Repeat([]byte("slow down "), 200_000))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+	r := New(&swagger.Config{BaseURL: srv.URL, Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{TimeoutMs: 5000, EnableAdaptiveRateLimit: true}}, srv.Client())
+	t.Cleanup(r.Close)
+
+	res := r.executeRequest(context.Background(), srv.URL, "/limited", "/limited", "GET", nil, nil, nil, swagger.ProfileRandom, nil, nil, "")
+	require.NotNil(t, res)
+	assert.Equal(t, 200, res.Status)
+	assert.EqualValues(t, 2, requests.Load(), "the 429 was retried once")
+	assert.EqualValues(t, 1, conns.Load(), "the retry reused the 429's connection")
 }
