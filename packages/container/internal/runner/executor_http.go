@@ -521,26 +521,9 @@ func (r *Runner) executeRequest(
 	}
 }
 
-// hasUUIDHyphens reports whether b has length of at least 36 and contains at least 4 hyphens,
+// mayHoldUUID reports whether s has length of at least 36 and contains at least 4 hyphens,
 // the minimum required for a canonical UUID (8-4-4-4-12).
-func hasUUIDHyphens(b []byte) bool {
-	if len(b) < 36 {
-		return false
-	}
-	count := 0
-	for _, c := range b {
-		if c == '-' {
-			count++
-			if count == 4 {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// hasUUIDHyphensStr reports whether s has length of at least 36 and contains at least 4 hyphens.
-func hasUUIDHyphensStr(s string) bool {
+func mayHoldUUID[T ~string | ~[]byte](s T) bool {
 	if len(s) < 36 {
 		return false
 	}
@@ -560,18 +543,18 @@ func hasUUIDHyphensStr(s string) bool {
 // names and values, and body: every part of the wire request a payload can reach.
 func oobUUIDsInRequest(rawURL string, headers map[string]string, body []byte) []string {
 	var matches []string
-	if hasUUIDHyphensStr(rawURL) {
+	if mayHoldUUID(rawURL) {
 		matches = uuidRegex.FindAllString(rawURL, -1)
 	}
 	for k, v := range headers {
-		if hasUUIDHyphensStr(k) {
+		if mayHoldUUID(k) {
 			matches = append(matches, uuidRegex.FindAllString(k, -1)...)
 		}
-		if hasUUIDHyphensStr(v) {
+		if mayHoldUUID(v) {
 			matches = append(matches, uuidRegex.FindAllString(v, -1)...)
 		}
 	}
-	if hasUUIDHyphens(body) {
+	if mayHoldUUID(body) {
 		for _, m := range uuidRegex.FindAll(body, -1) {
 			matches = append(matches, string(m))
 		}
