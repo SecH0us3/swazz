@@ -21,6 +21,19 @@ import (
 
 const DefaultEndpoint = "https://waf.secmy.app"
 
+// defaultEndpoint is what NewClient uses for an empty endpoint. It is always DefaultEndpoint
+// outside tests; SetDefaultEndpointForTesting swaps it so test binaries never reach the real API.
+var defaultEndpoint = DefaultEndpoint
+
+// SetDefaultEndpointForTesting points clients created with an empty endpoint at endpoint and
+// returns a function that restores the previous default. It is not synchronized: call it only
+// from TestMain, before any test runs and after they have all finished (see wafchecktest).
+func SetDefaultEndpointForTesting(endpoint string) (restore func()) {
+	prev := defaultEndpoint
+	defaultEndpoint = endpoint
+	return func() { defaultEndpoint = prev }
+}
+
 // maxResponseBytes caps how much of a third-party response we buffer into memory.
 const maxResponseBytes = 10 << 20
 
@@ -81,7 +94,7 @@ type Client struct {
 // NewClient creates a client for the WAF-checker API. An empty endpoint defaults to DefaultEndpoint.
 func NewClient(endpoint string) *Client {
 	if endpoint == "" {
-		endpoint = DefaultEndpoint
+		endpoint = defaultEndpoint
 	}
 	return &Client{
 		endpoint: strings.TrimRight(endpoint, "/"),

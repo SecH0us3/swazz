@@ -9,8 +9,12 @@ import (
 	"testing"
 
 	"go.uber.org/goleak"
+
+	"swazz-engine/internal/wafcheck/wafchecktest"
 )
 
+// TestMain keeps every test off the production WAF-checker API (see wafchecktest), then
+// checks for leaked goroutines once the stub is closed.
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	goleak.VerifyTestMain(wafchecktest.Wrap(m))
 }
