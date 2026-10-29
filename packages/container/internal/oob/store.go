@@ -106,7 +106,8 @@ func (s *Store) GetAndRemoveUUID(uuid string) (*OOBContext, bool) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.m.Delete(uuid)
+	ctx, ok := s.m.Delete(uuid)
+	return ctx, ok
 }
 
 func (s *Store) Clear() {
