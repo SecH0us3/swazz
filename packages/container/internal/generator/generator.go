@@ -55,6 +55,9 @@ type Generator struct {
 	OOBStore  *oob.Store
 	SSTIStore *sstistore.Store
 	settings  swagger.Settings
+
+	// sentOOB holds the OOB tokens registered since the last TakeOOBTokens, under mu.
+	sentOOB []string
 }
 
 // New creates a new Generator.
@@ -373,7 +376,7 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 				} else {
 					endpoint = "Header: " + headerName
 				}
-				g.OOBStore.RegisterUUID(u, &oob.OOBContext{
+				g.registerOOBLocked(u, &oob.OOBContext{
 					SessionID: g.RunID,
 					Endpoint:  endpoint,
 					Payload:   val,
@@ -390,6 +393,31 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 		return nil
 	}
 	return headers
+}
+
+// registerOOBLocked registers an OOB token in the run's store and records it for TakeOOBTokens.
+// The caller holds g.mu.
+func (g *Generator) registerOOBLocked(u string, ctx *oob.OOBContext) {
+	if g.OOBStore == nil {
+		// Nothing could match a callback, or take the request details for it.
+		return
+	}
+	g.OOBStore.RegisterUUID(u, ctx)
+	g.sentOOB = append(g.sentOOB, u)
+}
+
+// TakeOOBTokens returns the OOB tokens this generator has registered since the last call and
+// forgets them. A generator builds one request at a time: taken after a request's values are
+// generated, they are the tokens that request carries, so the runner can log the request for each
+// one without searching the wire request for them. The tokens of a request built and then
+// discarded (a payload over the size cap, a duplicate) are taken with it, so they are not
+// attributed to the next request.
+func (g *Generator) TakeOOBTokens() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := g.sentOOB
+	g.sentOOB = nil
+	return out
 }
 
 // BodyIterations returns the number of iterations needed for body fuzzing.

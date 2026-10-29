@@ -538,7 +538,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 			built := buildSafePayload(ep, safeGen)
 			resolvedPath := fillPathParamsFromMap(ep.Path, built.pathParams)
 
-			result := r.executeRequest(
+			result := r.executeGeneratedRequest(
 				ctx,
 				r.config.BaseURL, resolvedPath, ep.Path, ep.Method,
 				r.config.GlobalHeaders, r.config.Cookies,
@@ -546,7 +546,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 				swagger.FuzzingProfile("BASELINE"),
 				built.queryParams,
 				built.headers,
-				ep.ContentType,
+				ep.ContentType, built.oobTokens,
 			)
 
 			r.logDebug("Baseline run: method=%s path=%s status=%d size=%d err=%v",

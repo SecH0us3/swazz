@@ -35,6 +35,15 @@ import (
 // above the size baselines the response-size-anomaly analyzer compares against.
 const maxResponseRead = 8 << 20
 
+// sentOOBTokens is what the caller of a request knows of the OOB callback tokens it carries.
+type sentOOBTokens struct {
+	ids []string
+	// known is false when the caller cannot say: a MALICIOUS request is then searched for UUIDs.
+	known bool
+}
+
+// executeRequest sends a request whose OOB tokens its caller does not know (a replay through
+// ExecuteRequest, a test): a MALICIOUS one is searched for them.
 func (r *Runner) executeRequest(
 	ctx context.Context,
 	baseURL, resolvedPath, originalPath, method string,
@@ -44,6 +53,47 @@ func (r *Runner) executeRequest(
 	queryParams map[string]any,
 	generatedHeaders map[string]string,
 	contentType string,
+) *swagger.FuzzResult {
+	return r.sendRequest(ctx, baseURL, resolvedPath, originalPath, method, headers, cookies,
+		payload, profile, queryParams, generatedHeaders, contentType, sentOOBTokens{})
+}
+
+// executeGeneratedRequest sends a request built by the run's generators, which carries exactly the
+// OOB tokens oobTokens (generatedPayload.oobTokens): the request is logged for each of them, and
+// is not searched for others.
+//
+// A token reaches the wire request unchanged on every path a generated value takes: path params
+// and query values are escaped, and a UUID's hex digits and hyphens are unreserved; variable
+// substitution only replaces {{name}} references. A value can be dropped before sending (a global
+// header or the CSRF token overwriting a generated one, a path param cut at 256 bytes): its token
+// then never reaches the target, so no callback ever shows the request logged for it. A token
+// echoed by the target and sent again through a chaining variable keeps the request that first
+// carried it.
+func (r *Runner) executeGeneratedRequest(
+	ctx context.Context,
+	baseURL, resolvedPath, originalPath, method string,
+	headers, cookies map[string]string,
+	payload any,
+	profile swagger.FuzzingProfile,
+	queryParams map[string]any,
+	generatedHeaders map[string]string,
+	contentType string,
+	oobTokens []string,
+) *swagger.FuzzResult {
+	return r.sendRequest(ctx, baseURL, resolvedPath, originalPath, method, headers, cookies,
+		payload, profile, queryParams, generatedHeaders, contentType, sentOOBTokens{ids: oobTokens, known: true})
+}
+
+func (r *Runner) sendRequest(
+	ctx context.Context,
+	baseURL, resolvedPath, originalPath, method string,
+	headers, cookies map[string]string,
+	payload any,
+	profile swagger.FuzzingProfile,
+	queryParams map[string]any,
+	generatedHeaders map[string]string,
+	contentType string,
+	oobTokens sentOOBTokens,
 ) *swagger.FuzzResult {
 	if r.waitWhileHeld(ctx) {
 		// Stopped while held: the request was never sent, and must not pass for a timeout.
@@ -281,20 +331,22 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		// Look for OOB payloads to register the actual request details
-		if profile == swagger.ProfileMalicious {
-			if matches := oobUUIDsInRequest(rawURL, mergedHeaders, reqBody); len(matches) > 0 {
-				reqLog := &swagger.RequestLog{
-					Method:       method,
-					URL:          rawURL,
-					Headers:      mergedHeaders,
-					OriginalPath: originalPath,
-					ResolvedPath: req.URL.RequestURI(),
-					Body:         string(reqBody),
-				}
-				for _, uuidMatch := range matches {
-					r.oobStore.UpdateRequest(uuidMatch, reqLog)
-				}
+		// Log the request for the OOB tokens it carries, so a callback shows what was sent.
+		tokens := oobTokens.ids
+		if !oobTokens.known && profile == swagger.ProfileMalicious {
+			tokens = oobUUIDsInRequest(rawURL, mergedHeaders, reqBody)
+		}
+		if len(tokens) > 0 {
+			reqLog := &swagger.RequestLog{
+				Method:       method,
+				URL:          rawURL,
+				Headers:      mergedHeaders,
+				OriginalPath: originalPath,
+				ResolvedPath: req.URL.RequestURI(),
+				Body:         string(reqBody),
+			}
+			for _, token := range tokens {
+				r.oobStore.UpdateRequest(token, reqLog)
 			}
 		}
 
