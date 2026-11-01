@@ -222,3 +222,53 @@ func TestPayloadText_Bounded(t *testing.T) {
 		t.Fatalf("string payload = %q", got)
 	}
 }
+
+func TestStore_Size(t *testing.T) {
+	var nilStore *Store
+	if got := nilStore.Size(); got != 0 {
+		t.Fatalf("nil store size = %d, want 0", got)
+	}
+
+	s := NewStoreWithLimit(100)
+	if got := s.Size(); got != 0 {
+		t.Fatalf("empty store size = %d, want 0", got)
+	}
+
+	// Register unique tokens
+	s.RegisterUUID("tok-1", &OOBContext{})
+	s.RegisterUUID("tok-2", &OOBContext{})
+	s.RegisterUUID("tok-3", &OOBContext{})
+	if got := s.Size(); got != 3 {
+		t.Fatalf("store size = %d, want 3", got)
+	}
+
+	// Re-registering existing key should not increase size
+	s.RegisterUUID("tok-1", &OOBContext{})
+	if got := s.Size(); got != 3 {
+		t.Fatalf("store size after re-register = %d, want 3", got)
+	}
+
+	// Remove one
+	_, ok := s.GetAndRemoveUUID("tok-2")
+	if !ok {
+		t.Fatalf("expected tok-2 to be found")
+	}
+	if got := s.Size(); got != 2 {
+		t.Fatalf("store size after remove = %d, want 2", got)
+	}
+
+	// TakePending
+	taken := s.TakePending(1)
+	if len(taken) != 1 {
+		t.Fatalf("taken count = %d, want 1", len(taken))
+	}
+	if got := s.Size(); got != 1 {
+		t.Fatalf("store size after take = %d, want 1", got)
+	}
+
+	// Clear
+	s.Clear()
+	if got := s.Size(); got != 0 {
+		t.Fatalf("store size after clear = %d, want 0", got)
+	}
+}

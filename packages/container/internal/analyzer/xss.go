@@ -75,7 +75,9 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	}
 
 	var findings []swagger.AnalysisFinding
-	// Lowercased (Unicode-aware) only once a sent string is a known XSS payload.
+	// Lowercased only once a sent string is a known XSS payload. When the body holds
+	// Unicode runes that fold to ASCII letters (e.g. U+212A KELVIN SIGN or U+017F LONG S),
+	// fall back to bytes.ToLower; otherwise reuse the pooled ASCII-lowered body.
 	var bodyLower []byte
 
 	for _, payloadStr := range sentStrings {
@@ -90,7 +92,11 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		}
 
 		if bodyLower == nil {
-			bodyLower = bytes.ToLower(input.ResponseBody)
+			if input.hasUnicodeFoldRunes() {
+				bodyLower = bytes.ToLower(input.ResponseBody)
+			} else {
+				bodyLower = input.lowerBody()
+			}
 		}
 		if bytes.Contains(bodyLower, payloadLower) {
 			findings = append(findings, swagger.AnalysisFinding{

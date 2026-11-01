@@ -333,7 +333,7 @@ func (r *Runner) sendRequest(
 
 		// Log the request for the OOB tokens it carries, so a callback shows what was sent.
 		tokens := oobTokens.ids
-		if !oobTokens.known && profile == swagger.ProfileMalicious {
+		if !oobTokens.known && profile == swagger.ProfileMalicious && r.oobStore.Size() > 0 {
 			tokens = oobUUIDsInRequest(rawURL, mergedHeaders, reqBody)
 		}
 		if len(tokens) > 0 {
@@ -573,16 +573,43 @@ func (r *Runner) sendRequest(
 	}
 }
 
+// mayHoldUUID reports whether s has length of at least 36 and contains at least 4 hyphens,
+// the minimum required for a canonical UUID (8-4-4-4-12).
+func mayHoldUUID[T ~string | ~[]byte](s T) bool {
+	if len(s) < 36 {
+		return false
+	}
+	count := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '-' {
+			count++
+			if count == 4 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // oobUUIDsInRequest returns the UUIDs (OOB callback tokens) a request carries in its URL, header
 // names and values, and body: every part of the wire request a payload can reach.
 func oobUUIDsInRequest(rawURL string, headers map[string]string, body []byte) []string {
-	matches := uuidRegex.FindAllString(rawURL, -1)
-	for k, v := range headers {
-		matches = append(matches, uuidRegex.FindAllString(k, -1)...)
-		matches = append(matches, uuidRegex.FindAllString(v, -1)...)
+	var matches []string
+	if mayHoldUUID(rawURL) {
+		matches = uuidRegex.FindAllString(rawURL, -1)
 	}
-	for _, m := range uuidRegex.FindAll(body, -1) {
-		matches = append(matches, string(m))
+	for k, v := range headers {
+		if mayHoldUUID(k) {
+			matches = append(matches, uuidRegex.FindAllString(k, -1)...)
+		}
+		if mayHoldUUID(v) {
+			matches = append(matches, uuidRegex.FindAllString(v, -1)...)
+		}
+	}
+	if mayHoldUUID(body) {
+		for _, m := range uuidRegex.FindAll(body, -1) {
+			matches = append(matches, string(m))
+		}
 	}
 	return matches
 }
