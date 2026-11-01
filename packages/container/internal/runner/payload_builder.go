@@ -32,6 +32,9 @@ type generatedPayload struct {
 	queryParams map[string]any
 	headers     map[string]string
 	pathParams  map[string]string
+	// oobTokens are the OOB callback tokens the fuzz generator put in these values, in any of
+	// them: executeGeneratedRequest logs the request for each without searching it.
+	oobTokens []string
 }
 
 func buildPathParams(ep swagger.EndpointConfig, gen *generator.Generator) map[string]string {
@@ -77,7 +80,7 @@ func buildFuzzPayload(
 	isRandom bool,
 ) generatedPayload {
 	if !hasFields(&ep) {
-		return generatedPayload{headers: buildHeaders(ep, selectGen(gen, safeGen, isSecHeaderIter))}
+		return generatedPayload{headers: buildHeaders(ep, selectGen(gen, safeGen, isSecHeaderIter)), oobTokens: gen.TakeOOBTokens()}
 	}
 
 	isBody := !isNoBodyMethod(ep.Method)
@@ -107,6 +110,8 @@ func buildFuzzPayload(
 
 	out.headers = buildHeaders(ep, selectGen(gen, safeGen, isSecHeaderIter))
 	out.pathParams = buildPathParams(ep, bodyGen)
+	// Only the fuzz generator sends OOB tokens: safeGen is a RANDOM one.
+	out.oobTokens = gen.TakeOOBTokens()
 	return out
 }
 

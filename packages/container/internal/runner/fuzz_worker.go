@@ -89,18 +89,18 @@ func (r *Runner) fuzzEndpoint(
 		}
 		wg.Add(1)
 
-		it, p, qp, gh, pp := i, built.body, built.queryParams, built.headers, built.pathParams
+		it, p, qp, gh, pp, ot := i, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens
 		r.goWorker(func() {
 			defer r.limiter.Release()
 			defer wg.Done()
 
 			resolvedPath := fillPathParamsFromMap(endpoint.Path, pp)
-			result := r.executeRequest(
+			result := r.executeGeneratedRequest(
 				ctx,
 				r.config.BaseURL, resolvedPath, endpoint.Path, endpoint.Method,
 				r.config.GlobalHeaders, r.config.Cookies,
 				p, profile, qp, gh,
-				endpoint.ContentType,
+				endpoint.ContentType, ot,
 			)
 
 			if len(result.AnalyzerFindings) > 0 {
@@ -147,6 +147,7 @@ func (r *Runner) fuzzEndpoint(
 
 func mergeSecurityHeaders(built *generatedPayload, gen *generator.Generator) {
 	secHeaders := gen.GenerateSecurityHeaders()
+	built.oobTokens = append(built.oobTokens, gen.TakeOOBTokens()...)
 	if secHeaders == nil {
 		return
 	}
@@ -383,7 +384,7 @@ func (r *Runner) buildFuzzIteration(
 
 	if !hasFields(&endpoint) {
 		// No fields to generate — only headers differ per iteration.
-		built = generatedPayload{headers: buildHeaders(endpoint, selectGen(gen, safeGen, isSecHeaderIter))}
+		built = generatedPayload{headers: buildHeaders(endpoint, selectGen(gen, safeGen, isSecHeaderIter)), oobTokens: gen.TakeOOBTokens()}
 		if enableDedup {
 			hash = payloads.HashStr("empty")
 			duplicate = seenHashes[hash]

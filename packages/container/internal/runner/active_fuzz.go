@@ -214,6 +214,7 @@ func buildMutatedPayload(
 		mutated.pathParams[field.Path[0]] = capPathParam(fuzzedVal)
 	}
 
+	mutated.oobTokens = gen.TakeOOBTokens()
 	return mutated
 }
 
@@ -288,18 +289,18 @@ func (r *Runner) runActiveParameterFuzzing(
 			}
 			wg.Add(1)
 
-			it, p, qp, gh, pp := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams
+			it, p, qp, gh, pp, ot := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens
 			r.goWorker(func() {
 				defer r.limiter.Release()
 				defer wg.Done()
 
 				resolvedPath := fillPathParamsFromMap(endpoint.Path, pp)
-				result := r.executeRequest(
+				result := r.executeGeneratedRequest(
 					ctx,
 					r.config.BaseURL, resolvedPath, endpoint.Path, endpoint.Method,
 					r.config.GlobalHeaders, r.config.Cookies,
 					p, profile, qp, gh,
-					endpoint.ContentType,
+					endpoint.ContentType, ot,
 				)
 
 				if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {
