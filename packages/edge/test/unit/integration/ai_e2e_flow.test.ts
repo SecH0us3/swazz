@@ -3,6 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
+import { rbacCacheKey } from '../../../src/repositories/rbac';
 import { describe, it, expect, beforeEach } from 'vitest';
 import app from '../../../src/index';
 import { clearDevSentEmails, getDevSentEmails } from '../../../src/services/email';
@@ -166,7 +167,7 @@ describe('Workers AI End-to-End Workflow', () => {
     );
 
     // Seed RBAC permissions in cache
-    kvStore.set(`rbac:${projectId}:${userId}`, JSON.stringify({
+    kvStore.set(rbacCacheKey(projectId, userId), JSON.stringify({
       permissions: ['get:/api/projects/:id/scans', 'post:/api/projects/:id/scans']
     }));
 
@@ -257,7 +258,7 @@ describe('Workers AI End-to-End Workflow', () => {
     // Pre-seed KV with 50 previous requests
     const hourlyBucket = Math.floor(Date.now() / 3600000);
     kvStore.set(`ratelimit:ai_analyze:${userId}:${hourlyBucket}`, '50');
-    kvStore.set(`rbac:${projectId}:${userId}`, JSON.stringify({
+    kvStore.set(rbacCacheKey(projectId, userId), JSON.stringify({
       permissions: ['get:/api/projects/:id/scans', 'post:/api/projects/:id/scans']
     }));
 

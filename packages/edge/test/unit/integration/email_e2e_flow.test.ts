@@ -95,7 +95,7 @@ describe('Email End-to-End Workflow', () => {
       STORAGE: {} as any,
       COORDINATOR_DO: {} as any,
       JWT_SECRET: 'test-secret',
-      TURNSTILE_SECRET: 'turnstile-test-key',
+      TURNSTILE_SECRET: '1x00000000000000000000000000000000', // dummy secret: siteverify is skipped
       NODE_ENV: 'test',
       SCAN_QUEUE: {} as any,
       FINDINGS_QUEUE: {} as any,

@@ -414,7 +414,7 @@ describe('Projects Routes', () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(mockResult);
-      expect(mockServices.createProjectMemberAccount).toHaveBeenCalledWith('proj_1', { username: 'testuser', roles: ['editor'], is_interactive: true });
+      expect(mockServices.createProjectMemberAccount).toHaveBeenCalledWith('proj_1', { username: 'testuser', roles: ['editor'], is_interactive: true }, 'user_123');
     });
 
     it('should return bad request error status if service throws validation error', async () => {

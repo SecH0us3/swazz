@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Env } from './env';
-import { StateManager } from './coordinator/StateManager';
+import { StateManager, HEARTBEAT_PING, HEARTBEAT_PONG } from './coordinator/StateManager';
 import { RequestHandler } from './coordinator/RequestHandler';
 import { WebSocketHandler } from './coordinator/WebSocketHandler';
 import { QueueService } from './coordinator/QueueService';
@@ -21,6 +21,8 @@ export class RunnerCoordinator {
     this.state = state;
     this.env = env;
     
+    // Answered by the runtime without waking the object; see RUNNER_HEARTBEAT_TIMEOUT_MS.
+    state.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_PING, HEARTBEAT_PONG));
     this.stateManager = new StateManager(state);
     const queueService = new QueueService(env, state, this.stateManager);
     

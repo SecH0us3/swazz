@@ -9,30 +9,35 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"sync"
 
 	"nhooyr.io/websocket"
+
+	"swazz-engine/internal/security"
 )
 
+// Client sends one message per connection (see SendMessage). It keeps no connection, so it is
+// safe for concurrent use and has nothing to close.
 type Client struct {
-	mu   sync.Mutex
-	conn *websocket.Conn
+	// The HTTP client of the handshake; nil is the library's default (http.DefaultClient).
+	httpClient *http.Client
 }
 
-func NewClient() *Client {
-	return &Client{}
-}
-
-func (c *Client) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn != nil {
-		err := c.conn.Close(websocket.StatusNormalClosure, "")
-		c.conn = nil
-		return err
+// NewClient creates a WebSocket client. Unless allowPrivate is set, it refuses to connect to
+// private and reserved addresses, like the runner's HTTP client (see protectedHTTPClient).
+func NewClient(allowPrivate bool) *Client {
+	c := &Client{}
+	if !allowPrivate {
+		c.httpClient = protectedHTTPClient
 	}
-	return nil
+	return c
 }
+
+// protectedHTTPClient makes the handshake through security.NewSSRFProtectedTransport, the
+// transport the HTTP executor's guard is built from, so a WebSocket target cannot reach a private
+// or reserved address the HTTP one may not; the connection then stays on that checked socket. It
+// has no proxy: a proxy would resolve and dial the target itself, out of the check's reach. No
+// Timeout, which the WebSocket library refuses: the caller's context bounds the handshake.
+var protectedHTTPClient = &http.Client{Transport: security.NewSSRFProtectedTransport(false)}
 
 // MapWSCloseCodeToHTTPStatus maps RFC 6455 WebSocket close codes to HTTP status codes.
 func MapWSCloseCodeToHTTPStatus(code websocket.StatusCode) int {
@@ -52,10 +57,9 @@ func MapWSCloseCodeToHTTPStatus(code websocket.StatusCode) int {
 	}
 }
 
+// SendMessage opens a connection to endpoint, writes payload, reads one message back and closes
+// the connection.
 func (c *Client) SendMessage(ctx context.Context, endpoint string, payload []byte, headers map[string]string) ([]byte, int, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	httpHeader := http.Header{}
 	for k, v := range headers {
 		httpHeader.Set(k, v)
@@ -63,19 +67,25 @@ func (c *Client) SendMessage(ctx context.Context, endpoint string, payload []byt
 
 	conn, resp, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{
 		HTTPHeader: httpHeader,
+		HTTPClient: c.httpClient,
 	})
 	if err != nil {
+		if errors.Is(err, security.ErrSSRFBlocked) {
+			// Never contacted: a network error like the HTTP executor's, not a status of the target.
+			return nil, 0, err
+		}
 		if resp != nil {
 			return nil, resp.StatusCode, err
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, http.StatusGatewayTimeout, err
 		}
-		return nil, http.StatusInternalServerError, err
+		// No answer at all (refused, reset, DNS): a network error, not a 5xx of the target.
+		return nil, 0, err
 	}
-
-	// Close when done
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	// No close handshake: the library gives a peer that ignores the close frame seconds of its
+	// own (beyond ctx), which would hold every exchange with such a target past its timeout.
+	defer conn.CloseNow()
 
 	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {

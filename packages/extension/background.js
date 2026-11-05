@@ -207,7 +207,24 @@ function processCapturedRequest(reqData, senderTab, sender) {
         return;
     }
 
-    if (!isDomainTargeted(host, targetDomains)) {
+    const isWebMcp = parsedUrl.protocol === 'webmcp:';
+    if (isWebMcp) {
+        let senderHost = null;
+        if (senderTab && senderTab.url) {
+            try {
+                senderHost = new URL(senderTab.url).host;
+            } catch (e) {}
+        }
+        if (!senderHost || !isDomainTargeted(senderHost, targetDomains)) {
+            droppedOutOfScope++;
+            if (senderHost) {
+                lastDroppedHost = senderHost;
+                noteDroppedHost(senderHost);
+            }
+            scheduleFlush();
+            return;
+        }
+    } else if (!isDomainTargeted(host, targetDomains)) {
         droppedOutOfScope++;
         lastDroppedHost = host;
         noteDroppedHost(host);
@@ -225,16 +242,18 @@ function processCapturedRequest(reqData, senderTab, sender) {
     }
 
     const method = (reqData.method || 'GET').toUpperCase();
-    const path = parsedUrl.pathname || '/';
-    const normalized = normalizePath(path);
+    const path = isWebMcp ? reqData.url : (parsedUrl.pathname || '/');
+    const normalized = isWebMcp ? reqData.url : normalizePath(path);
 
     // Key is Method + Normalized Path (for grouping)
     const key = `${method}:${normalized}`;
 
     // Exclude common noise assets
-    const fileExtension = path.split('.').pop().toLowerCase();
-    const ignoredExtensions = ['js', 'css', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'woff', 'woff2', 'ttf', 'map'];
-    if (ignoredExtensions.includes(fileExtension)) return;
+    if (!isWebMcp) {
+        const fileExtension = path.split('.').pop().toLowerCase();
+        const ignoredExtensions = ['js', 'css', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'woff', 'woff2', 'ttf', 'map'];
+        if (ignoredExtensions.includes(fileExtension)) return;
+    }
 
     let existing = capturedRequests[key];
     if (!existing) {

@@ -9,11 +9,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
@@ -154,6 +156,66 @@ func TestStringGen_GenerateString_Boundary(t *testing.T) {
 		}
 	})
 
+	// Megabyte payloads that could not fit the payload size cap are not generated (no payload
+	// could carry them); the ones under it still are, at full length, and every remaining entry
+	// comes up once per pass, so the planned iterations cover them all.
+	t.Run("boundary megabyte payloads under the cap only", func(t *testing.T) {
+		const capBytes = 1 << 20 // 1 MiB: the 512KB payload fits, 1MB and up do not
+		settings := swagger.Settings{MaxPayloadSizeBytes: capBytes}
+		g := New(nil, swagger.ProfileBoundary, settings)
+		fitting := payloads.BoundaryStringsFitting(capBytes)
+		require.Equal(t, len(payloads.BoundaryStrings)-7, len(fitting), "the seven from 1MB to 100MB are left out")
+		assert.Equal(t, len(fitting), MinIterationsNeeded(swagger.ProfileBoundary, settings))
+
+		seen := make(map[string]bool)
+		for range fitting {
+			str, ok := g.generateString("", "").(string)
+			require.True(t, ok)
+			assert.Less(t, len(str), capBytes)
+			seen[str] = true
+		}
+		assert.Equal(t, len(fitting), len(seen), "one pass covers every fitting entry once")
+		assert.True(t, seen[strings.Repeat("A", 524_288)], "the 512KB payload fits and must be generated")
+	})
+
+	// Without a cap in the settings, the generator uses the runner's default one.
+	t.Run("boundary default cap matches the runner's", func(t *testing.T) {
+		g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
+		for range 2 * len(payloads.BoundaryStrings) {
+			str, ok := g.generateString("", "").(string)
+			require.True(t, ok)
+			assert.Less(t, len(str), swagger.DefaultMaxPayloadSizeBytes)
+		}
+	})
+
+	// Every boundary string is cut to leave room for the JSON around the field, so under a cap
+	// smaller than the 1 KB strings they still fit once wrapped instead of all being discarded.
+	t.Run("boundary strings leave room for the envelope", func(t *testing.T) {
+		const capBytes = 512
+		g := New(nil, swagger.ProfileBoundary, swagger.Settings{MaxPayloadSizeBytes: capBytes})
+		for range len(payloads.BoundaryStringsFitting(capBytes)) {
+			str, ok := g.generateString("", "").(string)
+			require.True(t, ok)
+			assert.LessOrEqual(t, len(str)+payloads.MinEnvelopeBytes, capBytes)
+		}
+	})
+
+	// Only the boundary profile rotates through the boundary list, so no other profile pays for it.
+	t.Run("boundary list built for boundary profile only", func(t *testing.T) {
+		assert.Nil(t, New(nil, swagger.ProfileRandom, swagger.Settings{}).boundaryStrings)
+		assert.NotEmpty(t, New(nil, swagger.ProfileBoundary, swagger.Settings{}).boundaryStrings)
+	})
+
+	// A cut never splits a multi-byte rune.
+	t.Run("boundary array item cut on a rune boundary", func(t *testing.T) {
+		g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
+		for range len(payloads.BoundaryStrings) {
+			str, ok := g.generateStringArrayItem("", "").(string)
+			require.True(t, ok)
+			assert.True(t, utf8.ValidString(str), "%q...", str[:min(len(str), 8)])
+		}
+	})
+
 	t.Run("boundary with category disabled falls back to random", func(t *testing.T) {
 		g := New(nil, swagger.ProfileBoundary, swagger.Settings{
 			PayloadCategories: map[swagger.FuzzingProfile][]string{
@@ -205,6 +267,7 @@ func TestStringGen_GenerateString_Malicious(t *testing.T) {
 			oobServerURL:              "http://oob.swazz.test:8080",
 			RunID:                     "test-run-123",
 			Endpoint:                  "/api/v1/ping",
+			OOBStore:                  oob.NewStore(),
 		}
 		val := g.generateString("", "")
 		str, ok := val.(string)
@@ -212,10 +275,10 @@ func TestStringGen_GenerateString_Malicious(t *testing.T) {
 		assert.NotContains(t, str, "{{OOB_URL}}")
 		assert.Contains(t, str, "http://oob.swazz.test:8080/api/oob/test-run-123/")
 
-		// Verify OOB registration in global store
+		// Verify OOB registration in the run's store
 		parts := strings.Split(str, "/")
 		registeredUUID := parts[len(parts)-1]
-		ctx, found := oob.GlobalStore.GetAndRemoveUUID(registeredUUID)
+		ctx, found := g.OOBStore.GetAndRemoveUUID(registeredUUID)
 		require.True(t, found)
 		assert.Equal(t, "test-run-123", ctx.SessionID)
 		assert.Equal(t, "/api/v1/ping", ctx.Endpoint)
@@ -226,12 +289,13 @@ func TestStringGen_GenerateString_Malicious(t *testing.T) {
 			profile:                   swagger.ProfileMalicious,
 			hasActiveMaliciousStrings: true,
 			cachedMaliciousStrings:    []any{"prefix_{{7*7}}_suffix"},
+			SSTIStore:                 sstistore.NewStore(),
 		}
 		val := g.generateString("", "")
 		str, ok := val.(string)
 		require.True(t, ok)
 		assert.NotContains(t, str, "{{7*7}}") // the SSTI probe token was replaced; random primes may incidentally contain "7*7"
-		ctx, found := sstistore.GlobalStore.Get(str)
+		ctx, found := g.SSTIStore.Get(str)
 		require.True(t, found)
 		assert.NotEmpty(t, ctx.RawExpr)
 		assert.NotEmpty(t, ctx.Expected)
@@ -341,6 +405,20 @@ func TestStringGen_OOBURL(t *testing.T) {
 		assert.Equal(t, "http://localhost:8080/api/oob/uuid-1234", url)
 	})
 
+	t.Run("without run stores the payload is still sent, unregistered", func(t *testing.T) {
+		g := &Generator{
+			profile:                   swagger.ProfileMalicious,
+			hasActiveMaliciousStrings: true,
+			cachedMaliciousStrings:    []any{"{{OOB_URL}}", "prefix_{{7*7}}_suffix"},
+		}
+		oobVal, ok := g.generateString("", "").(string)
+		require.True(t, ok)
+		assert.NotContains(t, oobVal, "{{OOB_URL}}")
+		sstiVal, ok := g.generateString("", "").(string)
+		require.True(t, ok)
+		assert.Equal(t, "prefix_{{7*7}}_suffix", sstiVal, "the fixed probe the static fallback detects is kept")
+	})
+
 	t.Run("custom host without scheme and without api/oob", func(t *testing.T) {
 		g := &Generator{oobServerURL: "interact.sh:443"}
 		url := g.oobURL("uuid-1234")
@@ -360,7 +438,7 @@ func TestStringGen_OOBURL(t *testing.T) {
 func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 	t.Parallel()
 
-	g := &Generator{}
+	g := &Generator{SSTIStore: sstistore.NewStore()}
 
 	t.Run("ssti multiplication expression 7*7", func(t *testing.T) {
 		input := "payload_{{7*7}}_test"
@@ -369,7 +447,7 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 		assert.True(t, strings.HasPrefix(out, "payload_{{"))
 		assert.True(t, strings.HasSuffix(out, "}}_test"))
 
-		ctx, found := sstistore.GlobalStore.Get(out)
+		ctx, found := g.SSTIStore.Get(out)
 		require.True(t, found)
 		assert.NotEmpty(t, ctx.RawExpr)
 		assert.NotEmpty(t, ctx.Expected)
@@ -382,7 +460,7 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 		assert.True(t, strings.HasPrefix(out, "expr_${"))
 		assert.True(t, strings.HasSuffix(out, "}_tail"))
 
-		ctx, found := sstistore.GlobalStore.Get(out)
+		ctx, found := g.SSTIStore.Get(out)
 		require.True(t, found)
 		assert.NotEmpty(t, ctx.RawExpr)
 		assert.NotEmpty(t, ctx.Expected)
@@ -393,4 +471,67 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 		out := g.randomizeAndRegisterSSTI(input)
 		assert.Equal(t, input, out)
 	})
+}
+
+// With semantic mutation the SSTI expression is registered under the wrapped string that is
+// sent, so the analyzer can still match it. A variant that drops or URL-encodes the expression
+// registers nothing.
+func TestStringGen_SSTIRegisteredAfterSemanticWrap(t *testing.T) {
+	t.Parallel()
+	tr := true
+	for _, format := range []string{"email", "date-time", "uri", "phone"} {
+		for _, probe := range []string{"{{7*7}}", "{{7+'7'}}"} {
+			t.Run(format+" "+probe, func(t *testing.T) {
+				t.Parallel()
+				g := &Generator{
+					profile:                   swagger.ProfileMalicious,
+					settings:                  swagger.Settings{EnableSemanticMutation: &tr},
+					hasActiveMaliciousStrings: true,
+					cachedMaliciousStrings:    []any{probe},
+					SSTIStore:                 sstistore.NewStore(),
+				}
+				registered := 0
+				for range 40 {
+					str, ok := g.generateString(format, "").(string)
+					require.True(t, ok)
+					if ctx, found := g.SSTIStore.Get(str); found {
+						registered++
+						assert.Contains(t, str, ctx.RawExpr, "registered without its expression")
+					}
+				}
+				switch format {
+				case "email":
+					// "<vector>"@example.com keeps the expression as is.
+					assert.NotZero(t, registered, "no wrapped email payload was registered")
+				case "date-time", "phone":
+					// Both variants of each URL-encode the expression or keep only its digits.
+					assert.Zero(t, registered, "a %s variant registered an expression it encodes or drops", format)
+				}
+			})
+		}
+	}
+}
+
+// A string that no longer holds the expression verbatim is not registered.
+func TestRegisterSentSSTI_NeedsTheExpression(t *testing.T) {
+	t.Parallel()
+	g := &Generator{SSTIStore: sstistore.NewStore()}
+	ctx := sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"}
+	for _, sent := range []string{"+1555233700;ext=%7B%7B23%2A37%7D%7D", "user+%7B%7B23%2A37%7D%7D@example.org"} {
+		g.registerSentSSTI(sent, ctx)
+		_, found := g.SSTIStore.Get(sent)
+		assert.False(t, found, sent)
+	}
+	g.registerSentSSTI(`"{{23*37}}"@example.com`, ctx)
+	_, found := g.SSTIStore.Get(`"{{23*37}}"@example.com`)
+	assert.True(t, found)
+}
+
+// randomizeAndRegisterSSTI randomizes s and registers it unwrapped, for tests of randomizeSSTI.
+func (g *Generator) randomizeAndRegisterSSTI(s string) string {
+	newS, ctx, ok := g.randomizeSSTI(s)
+	if ok {
+		g.registerSentSSTI(newS, ctx)
+	}
+	return newS
 }

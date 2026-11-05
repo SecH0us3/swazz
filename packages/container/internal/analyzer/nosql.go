@@ -33,7 +33,7 @@ func (a *NoSQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding
 	}
 
 	// Fast pre-filter: skip scanning if no NoSQL indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "mongo", "bson", "cast to", "casterror", "operator", "dynamodb", "couchdb", "badvalue", "referenceerror", "syntaxerror", "$where", "validationexception", "no_db_file", "database_does_not_exist") {
+	if !input.containsAnyLower("mongo", "bson", "cast to", "casterror", "operator", "dynamodb", "couchdb", "badvalue", "referenceerror", "syntaxerror", "$where", "validationexception", "no_db_file", "database_does_not_exist") {
 		return nil
 	}
 

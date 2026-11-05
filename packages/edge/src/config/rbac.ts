@@ -76,3 +76,16 @@ export const DEFAULT_ROLES: Record<string, { name: string; permissions: Permissi
     ]
   }
 };
+
+/** A role every project has, defined in code (owner, editor, viewer). */
+export function isBuiltInRole(roleId: string): boolean {
+  return Object.prototype.hasOwnProperty.call(DEFAULT_ROLES, roleId);
+}
+
+/**
+ * A role id no custom role may use or be edited through: the built-in roles plus 'runner', a
+ * retired pseudo-role that is neither assignable nor editable.
+ */
+export function isReservedRoleId(roleId: string): boolean {
+  return isBuiltInRole(roleId) || roleId === 'runner';
+}

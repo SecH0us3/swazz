@@ -10,13 +10,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"swazz-engine/internal/generator"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/triage"
 )
 
@@ -34,6 +35,21 @@ func logWarn(format string, v ...interface{}) {
 
 func logError(format string, v ...interface{}) {
 	logger.Error(format, v...)
+}
+
+// callbacksReachCoordinator reports whether OOB payloads built for server call back to the
+// coordinator's OOB route, comparing both as payloads see them (generator.OOBBaseURL), with the
+// host's case ignored.
+func callbacksReachCoordinator(server, coordinatorOOB string) bool {
+	if server == "" || coordinatorOOB == "" {
+		return false
+	}
+	a, errA := url.Parse(generator.OOBBaseURL(server))
+	b, errB := url.Parse(generator.OOBBaseURL(coordinatorOOB))
+	if errA != nil || errB != nil || a.Host == "" {
+		return false
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host) && a.Path == b.Path
 }
 
 func inferOOBServerURL(coordinatorURL string) string {
@@ -169,8 +185,7 @@ func sendTriageBatchToEdge(coordinatorURL, token, scanID string, results []*tria
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Edge API batch triage error (status %d): %s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("Edge API batch triage error (status %d): %s", resp.StatusCode, safenet.ReadErrorBody(resp.Body))
 	}
 
 	return nil

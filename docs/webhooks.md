@@ -4,7 +4,7 @@ Swazz supports outbound Webhook Notifications to deliver real-time scan updates 
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ Configuration {#configuration}
 
 You can configure webhooks under **Project Settings > Webhooks** in the dashboard.
 - **Target URL**: The HTTP/HTTPS endpoint capable of accepting incoming `POST` requests with JSON payloads.

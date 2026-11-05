@@ -25,6 +25,7 @@ import { useAppStore } from './store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
 import { useAuth } from './hooks/useAuth.js';
+import { capturePendingInvite } from './utils/invitations.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
 import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
 import { AuthModal } from './components/Auth/AuthModal.js';
@@ -37,6 +38,10 @@ import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
 import { TipsOffNotice } from './components/DidYouKnow/TipsOffNotice.js';
 import { explainFindingWithChromeAI, getAlgorithmicFindingAnalysis } from './services/chromeAiService.js';
 import { matchesFinding } from './utils/findings.js';
+import { useWebMcp } from './hooks/useWebMcp.js';
+import { scheduledFailureIssue } from './utils/scheduledFailures.js';
+import { UNKNOWN_FAILURE } from './services/runStream.js';
+import { fetchScansPage, fetchOlderScans } from './services/scansService.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -133,57 +138,12 @@ export default function App() {
         }
     }, [token]);
 
-    const inviteProcessingRef = useRef(false);
-
+    // An invitation link never accepts anything by itself (see utils/invitations.ts): remember the
+    // token so the header offers that invitation first, and take it out of the address bar.
     useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const inviteToken = urlParams.get('token');
-        if (inviteToken && token && !inviteProcessingRef.current) {
-            inviteProcessingRef.current = true;
-            fetch(`${PROXY_URL}/api/auth/invitations/accept`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: inviteToken })
-            })
-            .then(async res => {
-                if (res.ok) {
-                    const data = await res.json();
-                    showToast('Invitation accepted successfully', 'success');
-                    // Remove token from url
-                    const newUrl = new URL(window.location.href);
-                    newUrl.searchParams.delete('token');
-                    window.history.replaceState({}, '', newUrl);
-
-                    try {
-                        const projs = await fetchProjects();
-                        useAppStore.setState({ projects: projs });
-                        const acceptedProj = projs.find(p => p.id === data.project_id);
-                        if (acceptedProj) {
-                            useAppStore.setState({
-                                activeProject: acceptedProj,
-                                loadedRunId: null,
-                                liveRunId: null,
-                                historyStats: null,
-                                stats: null,
-                                liveCount: 0,
-                                selectedResult: null,
-                                heatmapFilter: null,
-                            });
-                        }
-                    } catch (err) {
-                        console.error('Failed to refresh projects after accept', err);
-                    }
-                } else {
-                    res.json().then(data => {
-                        showToast(`Failed to accept invitation: ${data.error}`, 'error');
-                    });
-                }
-            })
-            .catch(err => {
-                showToast(`Failed to accept invitation`, 'error');
-            });
-        }
-    }, [token]);
+        const cleanUrl = capturePendingInvite(window.location.href, sessionStorage);
+        if (cleanUrl) window.history.replaceState({}, '', cleanUrl);
+    }, []);
 
     useEffect(() => {
         const handleInviteAccepted = (e: Event) => {
@@ -248,9 +208,14 @@ export default function App() {
     const [triageScope, setTriageScope] = useState<'finding' | 'endpoint' | 'all'>('finding');
 
     const attemptedReconnections = useRef<Set<string>>(new Set());
+    // Projects whose older scans have been (or are being) read since the page loaded
+    // (checkActiveScan).
+    const historySynced = useRef<Set<string>>(new Set());
     const { start, stop, pause, resume, sendRequest, connectToExisting } = useRunner(PROXY_URL);
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
+    const runsRef = useRef(runs);
+    runsRef.current = runs;
 
     const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD, getRunExecutiveSummary } = useRunHistory({
         runs,
@@ -282,6 +247,13 @@ export default function App() {
         saveRun,
         getDb,
         showToast,
+    });
+
+    useWebMcp({
+        enabled: Boolean(token || isGuest),
+        updateConfig,
+        updateProfiles,
+        startScan: handleStart,
     });
 
     // Auto-hide and restore side panels when navigating to settings
@@ -333,42 +305,80 @@ export default function App() {
 
         let active = true;
 
+        // Saves the server's scans that the local history lacks or has stale. It reads runsRef, not
+        // runs: each save updates runs, which must not restart this effect (and its fetches).
+        const syncScans = async (scans: any[]) => {
+            for (const s of scans) {
+                if (!active) return;
+                const localRun = runsRef.current.find((r: any) => r.id === s.id);
+                const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
+                const serverCompletedAt = s.completed_at ? new Date(s.completed_at).getTime() : 0;
+
+                const failureReason = s.status === 'failed' ? (s.failure_reason || UNKNOWN_FAILURE) : undefined;
+                const lacksReason = !!failureReason && localRun?.failureReason !== failureReason;
+                if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer) || lacksReason) {
+                    const stats = s.summary_stats ? JSON.parse(s.summary_stats) : null;
+                    const startedAt = s.created_at ? new Date(s.created_at).getTime() : Date.now();
+                    const scanRun: ScanRun = {
+                        id: s.id,
+                        startedAt,
+                        completedAt: isCompletedOnServer ? (serverCompletedAt || Date.now()) : 0,
+                        baseUrl: s.target_url || '',
+                        stats,
+                        projectId: s.project_id,
+                        triggerType: s.trigger_type || 'manual',
+                        ...(failureReason ? { failureReason } : {}),
+                    };
+                    await saveRun(localRun && localRun.completedAt > 0 ? { ...localRun, failureReason } : scanRun);
+                }
+            }
+        };
+
+        // Once per project, the scans older than the newest page, in the background: a new browser
+        // gets its history without holding up the reconnect to a live scan.
+        const syncOlderScans = (projectId: string, cursor: string) => {
+            historySynced.current.add(projectId);
+            fetchOlderScans(token, projectId, cursor)
+                .then(async ({ scans, truncated }) => {
+                    await syncScans(scans);
+                    if (truncated) console.warn(`[swazz] Synced the newest ${scans.length} older scans of the project; earlier ones stay on the server only`);
+                })
+                .catch(err => {
+                    historySynced.current.delete(projectId); // tried again on the next check
+                    console.warn('[swazz] Failed to sync older scans:', err);
+                });
+        };
+
         const checkActiveScan = async () => {
             try {
-                const res = await fetch(`${PROXY_URL}/api/scans?project_id=${activeProject.id}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok && active) {
-                    const data = await res.json();
-                    const scans = data.scans || [];
-
-                    // Sync all scans to local IndexedDB to catch background/scheduled runs
-                    for (const s of scans) {
-                        const localRun = runs.find((r: any) => r.id === s.id);
-                        const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
-                        const serverCompletedAt = s.completed_at ? new Date(s.completed_at).getTime() : 0;
-
-                        if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer)) {
-                            const stats = s.summary_stats ? JSON.parse(s.summary_stats) : null;
-                            const startedAt = s.created_at ? new Date(s.created_at).getTime() : Date.now();
-                            const scanRun: ScanRun = {
-                                id: s.id,
-                                startedAt,
-                                completedAt: isCompletedOnServer ? (serverCompletedAt || Date.now()) : 0,
-                                baseUrl: s.target_url || '',
-                                stats,
-                                projectId: s.project_id,
-                                triggerType: s.trigger_type || 'manual'
-                            };
-                            await saveRun(scanRun);
-                        }
+                const projectId = activeProject.id;
+                // The newest page catches background and scheduled runs; the scans that have not
+                // ended are asked for apart, since a paused one can be behind any number of newer.
+                const [page, unfinished] = await Promise.all([
+                    fetchScansPage(token, projectId),
+                    fetchScansPage(token, projectId, { active: true }),
+                ]);
+                if (active) {
+                    const scans = page.scans;
+                    if (!historySynced.current.has(projectId)) {
+                        if (page.nextCursor) syncOlderScans(projectId, page.nextCursor);
+                        else historySynced.current.add(projectId);
                     }
 
-                    const activeScan = scans.find(
+                    // Sync scans to local IndexedDB to catch background/scheduled runs
+                    await syncScans([...scans, ...unfinished.scans.filter(u => !scans.some(s => s.id === u.id))]);
+
+                    // Scheduled scans run while nobody watches: say so when the latest ones failed.
+                    const scheduledIssue = scheduledFailureIssue(scans);
+                    if (scheduledIssue && !useAppStore.getState().scanIssue && !useAppStore.getState().isRunning) {
+                        useAppStore.setState({ scanIssue: scheduledIssue });
+                    }
+
+                    const activeScan = [...unfinished.scans, ...scans].find(
                         (s: any) => s.status === 'queued' || s.status === 'dispatched' || s.status === 'running' || s.status === 'paused'
                     );
                     const state = useAppStore.getState();
-                    if (activeScan && !state.isRunning && activeScan.id !== state.liveRunId && !attemptedReconnections.current.has(activeScan.id)) {
+                    if (active && activeScan && !state.isRunning && activeScan.id !== state.liveRunId && !attemptedReconnections.current.has(activeScan.id)) {
                         attemptedReconnections.current.add(activeScan.id);
                         const startedAt = activeScan.created_at ? new Date(activeScan.created_at).getTime() : Date.now();
                         await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url, activeScan.trigger_type, activeScan.status);
@@ -387,7 +397,7 @@ export default function App() {
             active = false;
             clearInterval(timer);
         };
-    }, [activeProject, handleConnectToExisting, runs, saveRun]);
+    }, [activeProject, handleConnectToExisting, saveRun]);
 
     const handleImportConfig = useCallback((jsonString: string) => {
         let parsed: any;

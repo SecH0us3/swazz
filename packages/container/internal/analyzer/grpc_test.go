@@ -77,7 +77,7 @@ func TestGRPCStatusAnalyzer(t *testing.T) {
 }
 
 func TestRegistry_GRPCAnalyzer(t *testing.T) {
-	reg := NewRegistry()
+	reg := NewRegistry(nil)
 	input := &AnalysisInput{
 		Method:       "GRPC",
 		Endpoint:     "/demo.UserService/GetUser",

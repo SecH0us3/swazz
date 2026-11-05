@@ -44,7 +44,7 @@ func (a *CRLFAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	sentStrings := extractStrings(input.SentPayload)
+	sentStrings := input.sentStrings()
 	if len(sentStrings) == 0 {
 		return nil
 	}
@@ -133,7 +133,7 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 	return findings
 }
 
-var payloadNormalizer = strings.NewReplacer(
+var payloadNormalizePairs = []string{
 	"%u000d", "%0d",
 	"%u000D", "%0D",
 	"%u000a", "%0a",
@@ -144,7 +144,30 @@ var payloadNormalizer = strings.NewReplacer(
 	"%e5%98%8a", "%0a",
 	"\u560d", "\r",
 	"\u560a", "\n",
+}
+
+var (
+	payloadNormalizer        = strings.NewReplacer(payloadNormalizePairs...)
+	payloadNormalizePrefixes []string
 )
+
+func init() {
+	seen := make(map[string]bool)
+	for i := 0; i < len(payloadNormalizePairs); i += 2 {
+		key := payloadNormalizePairs[i]
+		if len(key) == 0 {
+			continue
+		}
+		prefix := key[:1]
+		if key[0] >= 0x80 && len(key) >= 2 {
+			prefix = key[:2]
+		}
+		if !seen[prefix] {
+			seen[prefix] = true
+			payloadNormalizePrefixes = append(payloadNormalizePrefixes, prefix)
+		}
+	}
+}
 
 var suspiciousOrigins = []string{
 	"evil.com",
@@ -160,11 +183,26 @@ type injectedHeader struct {
 	value string
 }
 
+func needsPayloadNormalize(s string) bool {
+	for _, prefix := range payloadNormalizePrefixes {
+		if strings.Contains(s, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // extractInjectedHeaders parses CRLF payloads to find header name: value pairs.
 // It handles both raw CRLF (\r\n) and URL-encoded CRLF (%0d%0a) sequences.
 func (a *CRLFAnalyzer) extractInjectedHeaders(payload string) []injectedHeader {
-	// Normalize alternative/unicode CRLF representations to standard percent encoding or raw CRLF
-	normalizedPayload := payloadNormalizer.Replace(payload)
+	normalizedPayload := payload
+	if needsPayloadNormalize(payload) {
+		normalizedPayload = payloadNormalizer.Replace(payload)
+	}
+
+	if strings.IndexByte(normalizedPayload, '%') < 0 && strings.IndexByte(normalizedPayload, '\r') < 0 && strings.IndexByte(normalizedPayload, '\n') < 0 {
+		return nil
+	}
 
 	var results []injectedHeader
 
@@ -267,9 +305,14 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 // The first segment (before the first CRLF) is excluded since it's the original
 // value — only lines after CRLF injections are of interest.
 func splitOnCRLF(s string) []string {
-	// Normalize line endings to standard \n (LF)
-	normalized := crlfReplacer.Replace(s)
-
+	hasCR := strings.IndexByte(s, '\r') >= 0
+	if !hasCR && strings.IndexByte(s, '\n') < 0 {
+		return nil
+	}
+	normalized := s
+	if hasCR {
+		normalized = crlfReplacer.Replace(s)
+	}
 	parts := strings.Split(normalized, "\n")
 	if len(parts) <= 1 {
 		return nil

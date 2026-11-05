@@ -33,7 +33,7 @@ func TestDiscoverViaReflection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	res, err := DiscoverViaReflection(ctx, lis.Addr().String(), false, nil)
+	res, err := DiscoverViaReflection(ctx, lis.Addr().String(), false, nil, true)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.Equal(t, lis.Addr().String(), res.BasePath)
@@ -44,7 +44,7 @@ func TestDiscoverViaReflection_InvalidAddr(t *testing.T) {
 	defer cancel()
 
 	// Try to discover on an address where nothing is listening
-	_, err := DiscoverViaReflection(ctx, "127.0.0.1:54321", false, nil)
+	_, err := DiscoverViaReflection(ctx, "127.0.0.1:54321", false, nil, true)
 	assert.Error(t, err)
 }
 
@@ -67,7 +67,7 @@ func TestDiscoverViaReflection_WithHeaders(t *testing.T) {
 	headers := map[string]string{
 		"authorization": "Bearer test-token",
 	}
-	res, err := DiscoverViaReflection(ctx, "grpc://"+lis.Addr().String(), false, headers)
+	res, err := DiscoverViaReflection(ctx, "grpc://"+lis.Addr().String(), false, headers, true)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.Equal(t, "grpc://"+lis.Addr().String(), res.BasePath)

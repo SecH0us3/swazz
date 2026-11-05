@@ -7,6 +7,29 @@ import { RouteHandler, HandlerContext } from './types';
 import { ScansRepository } from '../../repositories/scans';
 import { logError } from '../../../../common/logging/logger';
 import { ulid } from 'ulidx';
+import { isRunnerOwnedBy } from '../runnerAccess';
+
+/**
+ * The swagger_cache key for a spec URL as one caller sees it. Entries are per user: a spec fetched
+ * with one tenant's credentials must not be served to another, and a result written by one
+ * tenant's runner must not become what another tenant imports.
+ */
+export function swaggerCacheKey(userId: string | undefined, url: string): string {
+  return `user:${userId || 'anonymous'}|${url}`;
+}
+
+/** Marks a pending parse whose result must not be written to swagger_cache. */
+export const UNCACHED_PARSE = 'rawSpec';
+
+/**
+ * Whether a parse may use swagger_cache at all. Anonymous callers would all share one bucket, and
+ * a spec fetched with the caller's own headers or cookies must not be stored where a later request
+ * without them could read it. Auth-disabled (local) mode has no tenants, so it may cache.
+ */
+export function isCacheableParse(body: { userId?: string; headers?: Record<string, string>; cookies?: Record<string, string> }, authDisabled: boolean): boolean {
+  const hasCredentials = Object.keys(body.headers || {}).length > 0 || Object.keys(body.cookies || {}).length > 0;
+  return !hasCredentials && (authDisabled || !!body.userId);
+}
 
 export class ParseHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
@@ -15,6 +38,7 @@ export class ParseHandler implements RouteHandler {
       rawSpec?: string;
       forceRebuild?: boolean;
       userPublicKey?: string;
+      userId?: string;
       headers?: Record<string, string>;
       cookies?: Record<string, string>;
     } | null = null;
@@ -40,10 +64,11 @@ export class ParseHandler implements RouteHandler {
       return new Response(JSON.stringify({ error: "Missing required parameter: url or rawSpec" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
     
-    if (body.url && !body.forceRebuild) {
+    const cacheable = !!body.url && isCacheableParse(body, String(context.env.AUTH_ENABLED) === 'false');
+    if (body.url && cacheable && !body.forceRebuild) {
       try {
         const scansRepo = new ScansRepository(context.env);
-        const cached = await scansRepo.getCachedSwagger(body.url);
+        const cached = await scansRepo.getCachedSwagger(swaggerCacheKey(body.userId, body.url));
           
         if (cached && cached.endpoints_r2_key) {
           const r2Object = await context.env.STORAGE.get(cached.endpoints_r2_key);
@@ -72,31 +97,30 @@ export class ParseHandler implements RouteHandler {
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) return new Response(JSON.stringify({ error: "No active runners connected to Coordinator" }), { status: 503 });
     const reqId = ulid();
-    context.stateManager.pendingParseUrls.set(reqId, body.url || 'rawSpec');
+    context.stateManager.pendingParseUrls.set(reqId, body.url && cacheable ? swaggerCacheKey(body.userId, body.url!) : UNCACHED_PARSE);
     
     let runnerWs = null;
-    if (body.userPublicKey) {
-      runnerWs = activeRunners.find(r => {
-        const tags = context.state.getTags(r);
-        return tags.includes(body.userPublicKey!);
-      });
-    }
-    if (!runnerWs) {
-      runnerWs = activeRunners.find(r => !context.stateManager.isPrivateRunner(r)) || null;
-    }
-
-    // If still no runner, fall back to any available runner.
-    // This handles cases where all connected runners are private (keyed) but the
-    // userPublicKey lookup failed (e.g. user hasn't saved their public key yet).
-    if (!runnerWs) {
+    if (String(context.env.AUTH_ENABLED) === 'false') {
+      // Auth-disabled (local) mode has no tenants: every runner is the operator's, as in dispatch.
       runnerWs = activeRunners[0] || null;
+    } else if (body.userId) {
+      runnerWs = activeRunners.find(r =>
+        !context.stateManager.isSharedRunner(r) && isRunnerOwnedBy(context.state.getTags(r), body.userId)
+      );
+    }
+    // The request carries the caller's target URL, headers and cookies, so it goes only to the
+    // caller's own runner or to an operator shared runner, never to another tenant's runner.
+    if (!runnerWs) {
+      runnerWs = activeRunners.find(r => context.stateManager.isSharedRunner(r)) || null;
     }
 
     if (!runnerWs) {
       context.stateManager.pendingParseUrls.delete(reqId);
+      context.stateManager.pendingParseRunners.delete(reqId);
       return new Response(JSON.stringify({ error: "No compatible runner connected to Coordinator" }), { status: 503, headers: { 'Content-Type': 'application/json' } });
     }
 
+    context.stateManager.pendingParseRunners.set(reqId, runnerWs);
     try {
       runnerWs.send(JSON.stringify({
         type: 'parse_request',
@@ -110,6 +134,7 @@ export class ParseHandler implements RouteHandler {
       }));
     } catch (err) {
       context.stateManager.pendingParseUrls.delete(reqId);
+      context.stateManager.pendingParseRunners.delete(reqId);
       return new Response(JSON.stringify({ error: "Failed to send parse request to runner" }), { status: 500 });
     }
     
@@ -119,6 +144,7 @@ export class ParseHandler implements RouteHandler {
         if (context.stateManager.pendingParses.has(reqId)) {
           context.stateManager.pendingParses.delete(reqId);
           context.stateManager.pendingParseUrls.delete(reqId);
+          context.stateManager.pendingParseRunners.delete(reqId);
           resolve(new Response(JSON.stringify({ error: "Parse timeout from Go runner" }), { status: 504 }));
         }
       }, 30000);

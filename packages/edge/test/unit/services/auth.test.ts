@@ -4,13 +4,14 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AuthService, parseTransports } from '../../../src/services/auth';
+import { AuthService, parseTransports, pickVerifiedGithubEmail, createOAuthState, verifyOAuthState } from '../../../src/services/auth';
+import { sign as signJwt } from 'hono/jwt';
 import { IAuthRepository } from '../../../src/repositories/auth';
 import { Env, AppEnv } from '../../../src/env';
 import { Context } from 'hono';
 import * as simplewebauthn from '@simplewebauthn/server';
 import { verifyTurnstile, hashPassword, verifyPassword, hashApiKey, hashUsername, verifyDummyPassword } from '../../../src/utils/auth';
-import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../../../src/utils/totp';
+import { generateTOTPSecret, matchTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../../../src/utils/totp';
 
 // Mock utils
 vi.mock('../../../src/utils/auth', async (importOriginal) => {
@@ -31,7 +32,7 @@ vi.mock('../../../src/utils/auth', async (importOriginal) => {
 
 vi.mock('../../../src/utils/totp', () => ({
   generateTOTPSecret: vi.fn(),
-  verifyTOTP: vi.fn(),
+  matchTOTP: vi.fn(),
   encryptTOTPSecret: vi.fn(),
   decryptTOTPSecret: vi.fn()
 }));
@@ -65,6 +66,9 @@ describe('AuthService', () => {
       getUserById: vi.fn(),
       updateUserApiKey: vi.fn(),
       updateUserPublicKey: vi.fn(),
+      isPublicKeyTakenByOther: vi.fn().mockResolvedValue(false),
+      consumeTotpCounter: vi.fn().mockResolvedValue(true),
+      consumePasskeyChallenge: vi.fn().mockResolvedValue(true),
       checkLoginRateLimit: vi.fn().mockResolvedValue({ locked: false, retryAfter: 0 }),
       getUserByUsername: vi.fn(),
       recordFailedLogin: vi.fn(),
@@ -263,17 +267,52 @@ describe('AuthService', () => {
       mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
-      vi.mocked(verifyTOTP).mockResolvedValue(true);
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
 
       const res = await service.login({ username: 'test', password: 'pw', two_factor_code: '123' }, '127.0.0.1', undefined, undefined, mockContext);
       expect(res.status).toBe('ok');
     });
     
+    it('refuses a valid 2fa code that was already used (replay)', async () => {
+      mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+      vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
+      mockRepo.consumeTotpCounter.mockResolvedValue(false);
+
+      await expect(service.login({ username: 'test', password: 'pw', two_factor_code: '123456' }, '127.0.0.1', undefined, undefined, mockContext)).rejects.toThrow('Invalid credentials|401');
+      expect(mockRepo.consumeTotpCounter).toHaveBeenCalledWith('u1', 57000000);
+    });
+
+    it('refuses a replayed code when disabling 2fa', async () => {
+      mockRepo.getUserById.mockResolvedValue({ username: 'test' });
+      mockRepo.getUserByUsername.mockResolvedValue({ password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+      vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
+      mockRepo.consumeTotpCounter.mockResolvedValue(false);
+
+      await expect(service.disable2FA('u1', { password: 'pw', code: '123456' })).rejects.toThrow('|401');
+      expect(mockRepo.updateUserTwoFactorSecret).not.toHaveBeenCalled();
+    });
+
+    it('stores a bounded User-Agent in login history', async () => {
+      mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+      vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
+      vi.mocked(matchTOTP).mockResolvedValue(null);
+      (mockContext.req.header as any).mockImplementation((name: string) => name === 'User-Agent' ? '=HYPERLINK("x")' + 'A'.repeat(5000) : undefined);
+
+      await expect(service.login({ username: 'test', password: 'pw', two_factor_code: 'bad' }, '127.0.0.1', undefined, undefined, mockContext)).rejects.toThrow('|401');
+      const meta = mockRepo.recordLoginHistory.mock.calls.at(-1)![4];
+      expect(meta.userAgent.length).toBe(512);
+    });
+
     it('fails 2fa code correctly', async () => {
       mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
-      vi.mocked(verifyTOTP).mockResolvedValue(false);
+      vi.mocked(matchTOTP).mockResolvedValue(null);
 
       await expect(service.login({ username: 'test', password: 'pw', two_factor_code: 'bad' }, '127.0.0.1', undefined, undefined, mockContext)).rejects.toThrow('Invalid credentials|401');
     });
@@ -297,7 +336,7 @@ describe('AuthService', () => {
       mockRepo.getUserByUsername.mockResolvedValue({ password_hash: 'hash', two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
-      vi.mocked(verifyTOTP).mockResolvedValue(true);
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
 
       const res = await service.verify2FA('u1', { password: 'pw', code: '123' });
       expect(res.status).toBe('ok');
@@ -309,7 +348,7 @@ describe('AuthService', () => {
       mockRepo.getUserByUsername.mockResolvedValue({ password_hash: 'hash', two_factor_enabled: 1, two_factor_secret: 'enc' });
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(decryptTOTPSecret).mockResolvedValue('secret');
-      vi.mocked(verifyTOTP).mockResolvedValue(true);
+      vi.mocked(matchTOTP).mockResolvedValue(57000000);
 
       const res = await service.disable2FA('u1', { password: 'pw', code: '123' });
       expect(res.status).toBe('ok');
@@ -394,6 +433,18 @@ describe('AuthService', () => {
       expect(res.token).toBeDefined();
     });
 
+    it('verifyPasskeyLogin spends the challenge before verifying and refuses a replay', async () => {
+      mockRepo.getPasskeyByCredentialId.mockResolvedValue({ user_id: 'u1', public_key: 'AAAA', counter: 0, transports: '' });
+      mockRepo.getUserById.mockResolvedValue({ username: 'u' });
+      mockSessionCacheGet.mockResolvedValue('chal-1');
+      mockRepo.consumePasskeyChallenge.mockResolvedValue(false); // already spent by the first login
+      vi.mocked(simplewebauthn.verifyAuthenticationResponse).mockClear();
+
+      await expect(service.verifyPasskeyLogin({ id: '1' }, 'ip', 'origin', 'rp', mockContext)).rejects.toThrow('Challenge expired or not found|400');
+      expect(mockRepo.consumePasskeyChallenge).toHaveBeenCalledWith('chal-1');
+      expect(simplewebauthn.verifyAuthenticationResponse).not.toHaveBeenCalled();
+    });
+
     it('generatePasskeyLoginOptions fails if non-interactive service account', async () => {
       mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', is_interactive: 0 });
       await expect(service.generatePasskeyLoginOptions({ username: 'u' }, 'ip', 'rp', mockContext))
@@ -432,7 +483,7 @@ describe('AuthService', () => {
 
   describe('Github OAuth', () => {
     it('handleGithubLogin generates url', async () => {
-      const url = await service.handleGithubLogin('u1', 'redirect');
+      const url = await service.handleGithubLogin('u1', 'redirect', 'n1');
       expect(url).toContain('https://github.com/login/oauth/authorize');
     });
 
@@ -441,11 +492,25 @@ describe('AuthService', () => {
       await expect(service.exchangeOauthToken({ code: 'code' }, mockContext)).rejects.toThrow('Invalid or expired exchange code|400');
     });
 
-    it('exchangeOauthToken succeeds', async () => {
-      mockSessionCacheGet.mockResolvedValue('jwt');
-      const res = await service.exchangeOauthToken({ code: 'code' }, mockContext);
+    it('exchangeOauthToken succeeds in the browser holding the code\'s binding', async () => {
+      mockSessionCacheGet.mockResolvedValue(JSON.stringify({ token: 'jwt', binding: 'b'.repeat(64) }));
+      const res = await service.exchangeOauthToken({ code: 'code' }, mockContext, 'b'.repeat(64));
       expect(res.status).toBe('ok');
       expect(res.token).toBe('jwt');
+    });
+
+    it.each([
+      ['no binding (a code sent to another browser)', undefined],
+      ['a different browser\'s binding', 'c'.repeat(64)],
+    ])('exchangeOauthToken refuses %s and still spends the code', async (_case, binding) => {
+      mockSessionCacheGet.mockResolvedValue(JSON.stringify({ token: 'attacker-jwt', binding: 'b'.repeat(64) }));
+      await expect(service.exchangeOauthToken({ code: 'code' }, mockContext, binding)).rejects.toThrow('Invalid or expired exchange code|400');
+      expect((mockEnv as any).SESSION_CACHE.delete).toHaveBeenCalledWith('oauth_code:code');
+    });
+
+    it('exchangeOauthToken refuses a code stored before codes were browser-bound', async () => {
+      mockSessionCacheGet.mockResolvedValue('legacy-plain-jwt');
+      await expect(service.exchangeOauthToken({ code: 'code' }, mockContext, 'anything')).rejects.toThrow('|400');
     });
     
     it('handleGithubCallback handles bad state payload', async () => {
@@ -454,8 +519,7 @@ describe('AuthService', () => {
     });
 
     it('handleGithubCallback handles full login flow', async () => {
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'login', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'login', userId: null }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -472,14 +536,20 @@ describe('AuthService', () => {
       mockRepo.checkUsernameExists.mockResolvedValue(false);
       mockRepo.createGithubUser.mockResolvedValue({ id: 'u1' });
 
-      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('exchange_code');
       expect(mockRepo.createGithubUser).toHaveBeenCalled();
+      // The code is bound to this browser: the route puts the secret in a cookie, KV keeps both.
+      const code = new URL(res.redirectUrl).searchParams.get('exchange_code');
+      expect(res.exchangeBinding?.code).toBe(code);
+      expect(res.exchangeBinding?.secret).toMatch(/^[0-9a-f]{64}$/);
+      const [key, value] = (mockEnv as any).SESSION_CACHE.put.mock.calls.at(-1);
+      expect(key).toBe(`oauth_code:${code}`);
+      expect(JSON.parse(value).binding).toBe(res.exchangeBinding?.secret);
     });
 
     it('handleGithubCallback handles linking user', async () => {
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'link', userId: 'u1', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'link', userId: 'u1' }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -496,14 +566,13 @@ describe('AuthService', () => {
 
       mockRepo.linkGithubUser.mockResolvedValue(true);
 
-      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('status=github_linked');
       expect(mockRepo.linkGithubUser).toHaveBeenCalledWith('u1', '12345');
     });
 
     it('handleGithubCallback link fails if non-interactive service account', async () => {
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'link', userId: 'u1', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'link', userId: 'u1' }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -520,13 +589,12 @@ describe('AuthService', () => {
 
       mockRepo.getUserById.mockResolvedValue({ username: 'u', is_interactive: 0 });
 
-      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('error=' + encodeURIComponent('Linking GitHub is not allowed for non-interactive service accounts'));
     });
 
     it('handleGithubCallback login fails if non-interactive service account', async () => {
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'login', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'login', userId: null }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -540,13 +608,13 @@ describe('AuthService', () => {
 
       mockRepo.getUserByGithubId.mockResolvedValue({ id: 'u1', is_interactive: 0 });
 
-      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('error=' + encodeURIComponent('Interactive login restricted for this account'));
     });
 
     it('handleGitlabLogin returns authorization URL', async () => {
       mockEnv.GITLAB_CLIENT_ID = 'gl-client';
-      const url = await service.handleGitlabLogin('u1', 'http://redirect');
+      const url = await service.handleGitlabLogin('u1', 'http://redirect', 'n1');
       expect(url).toContain('https://gitlab.com/oauth/authorize');
       expect(url).toContain('client_id=gl-client');
     });
@@ -556,8 +624,7 @@ describe('AuthService', () => {
       mockEnv.GITLAB_CLIENT_SECRET = 'gl-secret';
       mockEnv.GITLAB_REDIRECT_URI = 'http://localhost/api/auth/callback/gitlab';
 
-      const { sign } = await import('hono/jwt');
-      const state = await sign({ action: 'link', userId: 'u1', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+      const state = await createOAuthState('test-secret', { action: 'link', userId: 'u1' }, 'n1');
 
       const mockFetch = vi.fn();
       global.fetch = mockFetch;
@@ -572,7 +639,7 @@ describe('AuthService', () => {
       mockRepo.getUserById.mockResolvedValue({ username: 'u1', is_interactive: 1 });
       mockRepo.linkGitlabUser.mockResolvedValue(true);
 
-      const res = await service.handleGitlabCallback('code', state, 'http://front', mockContext);
+      const res = await service.handleGitlabCallback('code', state, 'http://front', mockContext, 'n1');
       expect(res.redirectUrl).toContain('status=gitlab_linked');
       expect(mockRepo.linkGitlabUser).toHaveBeenCalledWith('u1', '98765');
     });
@@ -604,5 +671,50 @@ describe('AuthService', () => {
       expect(parseTransports(null)).toBeUndefined();
       expect(parseTransports(undefined)).toBeUndefined();
     });
+  });
+});
+
+describe('pickVerifiedGithubEmail', () => {
+  it('prefers the verified primary address', () => {
+    expect(pickVerifiedGithubEmail([
+      { email: 'other@x.io', primary: false, verified: true },
+      { email: 'main@x.io', primary: true, verified: true },
+    ])).toBe('main@x.io');
+  });
+
+  it('never takes an unverified address, even the primary one', () => {
+    expect(pickVerifiedGithubEmail([{ email: 'victim@corp.io', primary: true, verified: false }])).toBeNull();
+    expect(pickVerifiedGithubEmail([
+      { email: 'victim@corp.io', primary: true, verified: false },
+      { email: 'mine@x.io', primary: false, verified: true },
+    ])).toBe('mine@x.io');
+  });
+
+  it('returns null for a malformed response', () => {
+    expect(pickVerifiedGithubEmail({ message: 'Bad credentials' })).toBeNull();
+    expect(pickVerifiedGithubEmail(null)).toBeNull();
+  });
+});
+
+describe('OAuth state is bound to the browser that started the flow', () => {
+  it('accepts a state whose nonce matches the browser cookie', async () => {
+    const state = await createOAuthState('k', { action: 'login', userId: null }, 'browser-nonce');
+    expect(await verifyOAuthState('k', state, 'browser-nonce')).toEqual({ action: 'login', userId: null });
+  });
+
+  it('rejects an attacker\'s state replayed in a browser that did not start the flow', async () => {
+    const attackerState = await createOAuthState('k', { action: 'login', userId: null }, 'attacker-nonce');
+    expect(await verifyOAuthState('k', attackerState, 'victim-nonce')).toBeNull();
+    expect(await verifyOAuthState('k', attackerState, undefined)).toBeNull();
+  });
+
+  it('rejects a session JWT, or any token signed with the session key, as a state', async () => {
+    const sessionLike = await signJwt({ action: 'login', nonce: 'n', typ: 'oauth_state', exp: Math.floor(Date.now() / 1000) + 60 }, 'k');
+    expect(await verifyOAuthState('k', sessionLike, 'n')).toBeNull();
+  });
+
+  it('a link state for one account cannot be completed in another browser', async () => {
+    const linkState = await createOAuthState('k', { action: 'link', userId: 'attacker' }, 'attacker-nonce');
+    expect(await verifyOAuthState('k', linkState, 'victim-nonce')).toBeNull();
   });
 });

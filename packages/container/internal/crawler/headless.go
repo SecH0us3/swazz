@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	cdpRuntime "github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
@@ -128,6 +130,59 @@ func InjectCookies(ctx context.Context, targetURL string, cookies map[string]str
 	return chromedp.Run(ctx, actions...)
 }
 
+// browserStartTimeout bounds Chrome's DevTools handshake on each start attempt; a loaded CI
+// runner can take well over chromedp's default 20s.
+const browserStartTimeout = 45 * time.Second
+
+// browserStartAttempts is how often startBrowser launches Chrome before giving up.
+const browserStartAttempts = 2
+
+var errBrowserStartTimeout = errors.New("browser did not start")
+
+// isTransientStartError reports whether a start failure is worth another launch: Chrome came up
+// but missed or dropped its DevTools handshake, as it can on a loaded machine. A crash or a bad
+// executable fails the same way again, so it is not retried.
+func isTransientStartError(err error) bool {
+	msg := err.Error()
+	return errors.Is(err, errBrowserStartTimeout) ||
+		strings.Contains(msg, "websocket url timeout reached") ||
+		strings.Contains(msg, "could not dial")
+}
+
+// startBrowser launches Chrome and opens its first tab, retrying once when Chrome misses its
+// DevTools handshake. The crawl's page budget starts only once the browser is up, so a slow start
+// no longer eats it. The returned cancel closes the browser.
+func startBrowser(ctx context.Context, opts []chromedp.ExecAllocatorOption) (context.Context, context.CancelFunc, error) {
+	opts = append(opts[:len(opts):len(opts)], chromedp.WSURLReadTimeout(browserStartTimeout))
+	var lastErr error
+	for range browserStartAttempts {
+		allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+		browserCtx, browserCancel := chromedp.NewContext(allocCtx)
+		cancel := func() { browserCancel(); allocCancel() }
+
+		// The first Run starts the browser. Its context must not carry a timeout, which would
+		// close the browser when it fires, so the start is bounded from outside instead.
+		done := make(chan error, 1)
+		go func() { done <- chromedp.Run(browserCtx) }()
+		timer := time.NewTimer(browserStartTimeout + 10*time.Second)
+		select {
+		case lastErr = <-done:
+		case <-timer.C:
+			cancel()
+			lastErr = fmt.Errorf("%w within %v: %w", errBrowserStartTimeout, browserStartTimeout+10*time.Second, <-done)
+		}
+		timer.Stop()
+		if lastErr == nil {
+			return browserCtx, cancel, nil
+		}
+		cancel()
+		if ctx.Err() != nil || !isTransientStartError(lastErr) {
+			break
+		}
+	}
+	return nil, nil, fmt.Errorf("failed to start the browser: %w", lastErr)
+}
+
 // Crawl executes the headless browser crawling process on the target URL.
 func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, error) {
 	startTime := time.Now()
@@ -144,6 +199,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		chromedp.DisableGPU,
 		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("enable-features", "WebMCP"),
 	)
 
 	if c.config.Headless {
@@ -158,17 +214,21 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		allocOpts = append(allocOpts, chromedp.UserAgent(c.config.UserAgent))
 	}
 
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, allocOpts...)
-	defer allocCancel()
-
-	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
+	browserCtx, browserCancel, err := startBrowser(ctx, allocOpts)
+	if err != nil {
+		return nil, err
+	}
 	defer browserCancel()
 
 	pageTimeout := time.Duration(c.config.TimeoutPerPage) * time.Second
 	if pageTimeout <= 0 {
 		pageTimeout = 30 * time.Second
 	}
-	runCtx, runCancel := context.WithTimeout(browserCtx, pageTimeout*time.Duration(c.config.MaxPages))
+	maxPages := c.config.MaxPages
+	if maxPages <= 0 {
+		maxPages = 50
+	}
+	runCtx, runCancel := context.WithTimeout(browserCtx, pageTimeout*time.Duration(maxPages))
 	defer runCancel()
 
 	// Enable CDP network domain listening
@@ -204,6 +264,26 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		}
 	}
 
+	// WebMCP discovery: the page-side hook reports each registerTool call through
+	// a CDP binding, so tools are captured as they happen (across navigations and
+	// even if the crawl later times out) rather than read back once at the end.
+	webmcp := newWebMcpCollector(c.sniffer)
+	chromedp.ListenTarget(runCtx, func(ev interface{}) {
+		if e, ok := ev.(*cdpRuntime.EventBindingCalled); ok && e.Name == webMcpBindingName {
+			webmcp.add(e.Payload)
+		}
+	})
+	if err := chromedp.Run(runCtx,
+		page.Enable(),
+		cdpRuntime.AddBinding(webMcpBindingName),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, err := page.AddScriptToEvaluateOnNewDocument(webMcpHookScript).Do(ctx)
+			return err
+		}),
+	); err != nil {
+		fmt.Printf("Warning: failed to install WebMCP discovery hook: %v\n", err)
+	}
+
 	// Navigate to target URL
 	if err := chromedp.Run(runCtx, chromedp.Navigate(targetURL)); err != nil {
 		return nil, fmt.Errorf("failed to navigate to target URL %s: %w", targetURL, err)
@@ -215,10 +295,6 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 	clickCounts := make(map[string]int)
 
 	pagesVisited := 0
-	maxPages := c.config.MaxPages
-	if maxPages <= 0 {
-		maxPages = 50
-	}
 
 	maxClicks := c.config.MaxClicksPerUrl
 	if maxClicks <= 0 {
@@ -330,6 +406,11 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 
 Done:
 	durationMs := time.Since(startTime).Milliseconds()
+
+	// Final sweep for tools registered before the hook could wrap registerTool.
+	// runCtx may already be expired (that is one way to reach Done), so use a
+	// short context of its own off the still-live browser context.
+	c.collectWebMcpTools(browserCtx, webmcp)
 
 	return &CrawlerResult{
 		Endpoints:    c.sniffer.GetEndpoints(),

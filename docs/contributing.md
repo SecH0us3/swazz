@@ -13,8 +13,8 @@ This guide outlines the local development setup, coding standards, and testing w
 ## 🛠 Prerequisites
 
 Ensure you have the following installed on your local machine:
-- **Go** (version 1.21 or later)
-- **Node.js** (version 18 or later)
+- **Go** 1.26 or later (see `packages/container/go.mod`)
+- **Node.js** 22.12 or later (CI uses Node 25)
 - **npm** (Node Package Manager)
 
 ---

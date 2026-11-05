@@ -4,6 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import React, { useState } from 'react';
+import { DOCS } from '../../utils/docsLinks.js';
+import { DocsLink } from '../Shared/DocsLink.js';
 import type { WAFPatchReport } from '../../types.js';
 import { tokenizeCode, type CodeLang } from '../../utils/syntaxHighlight.js';
 
@@ -77,6 +79,7 @@ export function WafPatchViewer({ report }: WafPatchViewerProps) {
                     <div className="waf-rules-title-group">
                         <span className="waf-rules-title-icon" aria-hidden="true">🛡️</span>
                         <span className="waf-rules-title">WAF Mitigation Rules</span>
+                        <DocsLink href={DOCS.wafAnalysis} title="WAF analysis & virtual patches" />
                     </div>
                     <div className="waf-rules-sub">
                         Generated virtual patch rules for {report.totalBypasses} bypass{report.totalBypasses === 1 ? '' : 'es'}

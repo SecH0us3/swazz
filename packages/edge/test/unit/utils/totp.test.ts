@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect } from 'vitest';
-import { base32Encode, base32Decode, generateTOTPSecret, generateTOTP, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../../../src/utils/totp';
+import { base32Encode, base32Decode, generateTOTPSecret, generateTOTP, verifyTOTP, matchTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../../../src/utils/totp';
 
 describe('TOTP Utils', () => {
   it('should encode and decode base32 correctly', () => {
@@ -33,6 +33,16 @@ describe('TOTP Utils', () => {
     
     const isInvalid = await verifyTOTP(secret, '000000');
     expect(isInvalid).toBe(false);
+  });
+
+  it('matchTOTP returns the time-step counter a code is valid for', async () => {
+    const secret = 'JBSWY3DPEHPK3PXP';
+    const token = await generateTOTP(secret);
+    const counter = await matchTOTP(secret, token);
+    expect(counter).not.toBeNull();
+    expect(Math.abs(counter! - Math.floor(Date.now() / 1000 / 30))).toBeLessThanOrEqual(1);
+    expect(await matchTOTP(secret, '000000')).toBeNull();
+    expect(await matchTOTP(secret, 'abcdef')).toBeNull();
   });
 
   it('should encrypt and decrypt TOTP secrets using AES-256-GCM', async () => {

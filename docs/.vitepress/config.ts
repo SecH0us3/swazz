@@ -24,7 +24,9 @@ export default withMermaid(defineConfig({
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/installation' },
       { text: 'Usage', link: '/usage' },
-      { text: 'Recipes', link: '/recipes' }
+      { text: 'Recipes', link: '/recipes' },
+      { text: 'Blog', link: 'https://yoursec.substack.com/t/swazz' },
+      { text: 'Open Dashboard', link: 'https://swazz.secmy.app' }
     ],
     sidebar: [
       {
@@ -32,7 +34,8 @@ export default withMermaid(defineConfig({
         items: [
           { text: 'Installation 🛠', link: '/installation' },
           { text: 'Basic Usage 🧭', link: '/usage' },
-          { text: 'Docker Guide 🐳', link: '/docker_images' }
+          { text: 'Docker Guide 🐳', link: '/docker_images' },
+          { text: 'Pricing & Licensing 💳', link: '/PRICING' }
         ]
       },
       {
@@ -45,7 +48,10 @@ export default withMermaid(defineConfig({
         text: 'Core Guides & Integrations',
         items: [
           { text: 'Deployment & Production 🚀', link: '/deployment' },
+          { text: 'Kubernetes (Helm) ☸️', link: '/kubernetes' },
           { text: 'CI/CD Pipelines ⚡️', link: '/ci_cd' },
+          { text: 'Webhooks 🔔', link: '/webhooks' },
+          { text: 'MCP Server 🤖', link: '/mcp' },
           { text: 'AI Auto-Fix & Remediation 🤖', link: '/ai_remediation' },
           { text: 'DefectDojo Integration 🛡', link: '/defectdojo' },
           { text: 'Browser Extension 🧩', link: '/browser_extension' }
@@ -68,7 +74,8 @@ export default withMermaid(defineConfig({
           { text: 'KV Caching Research 💾', link: '/cloudflare_kv_cache_research' },
           { text: 'Logging & Analytics 📈', link: '/logging' },
           { text: 'Environment Variables ⚙️', link: '/env_variables' },
-          { text: 'Key Backup & Recovery 🔑', link: '/encryption_backup' }
+          { text: 'Key Backup & Recovery 🔑', link: '/encryption_backup' },
+          { text: 'Slow Query Log 🐢', link: '/slow_queries' }
         ]
       },
       {
@@ -84,6 +91,10 @@ export default withMermaid(defineConfig({
     socialLinks: [
       { icon: 'github', link: 'https://github.com/SecH0us3/swazz' }
     ],
+    editLink: {
+      pattern: 'https://github.com/SecH0us3/swazz/edit/master/docs/:path',
+      text: 'Edit this page on GitHub'
+    },
     footer: {
       message: 'Released under the Business Source License 1.1.',
       copyright: 'Copyright © 2026 SecH0us3'

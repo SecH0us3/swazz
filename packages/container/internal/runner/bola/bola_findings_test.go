@@ -254,42 +254,6 @@ func TestFindings_ArePrefixesRelated(t *testing.T) {
 	}
 }
 
-func TestFindings_MergeUniqueStrings(t *testing.T) {
-	t.Parallel()
-
-	t.Run("empty inputs produce empty output", func(t *testing.T) {
-		res := mergeUniqueStrings(nil, nil)
-		assert.Empty(t, res)
-	})
-
-	t.Run("disjoint slices are combined without loss", func(t *testing.T) {
-		a := []string{"alpha", "beta"}
-		b := []string{"gamma", "delta"}
-		res := mergeUniqueStrings(a, b)
-		assert.Len(t, res, 4)
-		for _, s := range []string{"alpha", "beta", "gamma", "delta"} {
-			assert.Contains(t, res, s)
-		}
-	})
-
-	t.Run("overlapping slices are deduplicated", func(t *testing.T) {
-		a := []string{"id", "userId", "email"}
-		b := []string{"email", "name", "id"}
-		res := mergeUniqueStrings(a, b)
-		assert.Len(t, res, 4)
-		for _, s := range []string{"id", "userId", "email", "name"} {
-			assert.Contains(t, res, s)
-		}
-	})
-
-	t.Run("internal duplicates in input are removed", func(t *testing.T) {
-		a := []string{"item", "item"}
-		b := []string{"item"}
-		res := mergeUniqueStrings(a, b)
-		assert.Equal(t, []string{"item"}, res)
-	})
-}
-
 func TestFindings_ContainsFold(t *testing.T) {
 	t.Parallel()
 

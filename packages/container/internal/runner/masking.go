@@ -8,7 +8,6 @@ package runner
 import (
 	"math/rand"
 	"strings"
-	"sync/atomic"
 )
 
 // sensitiveKeyPatterns contains patterns for keys that may contain sensitive data
@@ -45,8 +44,7 @@ func maskSensitiveArgs(args map[string]any) map[string]any {
 }
 
 var (
-	proxyCounter uint32
-	userAgents   = []string{
+	userAgents = []string{
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
 		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5.2 Safari/605.1.15",
 		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -57,13 +55,4 @@ var (
 func getRandomUserAgent() string {
 	// #nosec G404 -- Randomness here is just for user agent rotation, not security
 	return userAgents[rand.Intn(len(userAgents))]
-}
-
-func getNextProxy(proxies []string) string {
-	if len(proxies) == 0 {
-		return ""
-	}
-	idx := atomic.AddUint32(&proxyCounter, 1)
-	// #nosec G115 -- Length of proxies list will never exceed max uint32
-	return proxies[idx%uint32(len(proxies))]
 }

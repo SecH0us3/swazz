@@ -6,10 +6,12 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env, AppEnv } from './env';
-import { logInfo, logWarn, logError } from '../../common/logging/logger';
+import { logInfo, logWarn, logError, getBufferedLogs } from '../../common/logging/logger';
 import { getUserIdFromRequest, getDeleteRequestedAt, safeCompare } from './utils/auth';
 import { AuthRepository } from './repositories/auth';
-import { getDB } from './utils/db';
+import { RunnersRepository } from './repositories/runners';
+import { redeemStreamTicket } from './services/runners';
+import { getDB, getBufferedSlowQueries } from './utils/db';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
 import { registerRbacRoutes } from './routes/rbac';
@@ -114,6 +116,22 @@ app.use('/api/*', async (c, next) => {
     return await next();
   }
 
+  // A browser's WebSocket carries a one-time ticket instead of a session: it is redeemed here, and
+  // the request then goes through the same checks as any other, as the user it was issued to.
+  const ticket = c.req.query('ticket');
+  if (ticket !== undefined) {
+    // Only a WebSocket upgrade spends a ticket: any other request with one is refused untouched.
+    if (c.req.header('Upgrade') !== 'websocket') {
+      return new Response('Expected Upgrade: websocket', { status: 426 });
+    }
+    const streamRunId = c.req.method === 'GET' ? /^\/api\/runs\/([^/]+)\/events$/.exec(path)?.[1] : undefined;
+    const ticketUser = streamRunId ? await redeemStreamTicket(new RunnersRepository(c.env), ticket, streamRunId) : null;
+    if (!ticketUser) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    c.set('streamTicketUser', ticketUser);
+  }
+
   if (c.env.AUTH_ENABLED === 'true') {
     const userId = await getUserIdFromRequest(c);
     if (!userId) {
@@ -182,18 +200,7 @@ app.get('/api/admin/logs', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  if (!c.env.SESSION_CACHE) {
-    return c.json([]);
-  }
-
-  const raw = await c.env.SESSION_CACHE.get('admin:logs');
-  if (!raw) return c.json([]);
-
-  try {
-    return c.json(JSON.parse(raw));
-  } catch {
-    return c.json([]);
-  }
+  return c.json(getBufferedLogs());
 });
 
 app.get('/api/admin/slow-queries', async (c) => {
@@ -208,18 +215,7 @@ app.get('/api/admin/slow-queries', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  if (!c.env.SESSION_CACHE) {
-    return c.json([]);
-  }
-
-  const raw = await c.env.SESSION_CACHE.get('admin:slow-queries');
-  if (!raw) return c.json([]);
-
-  try {
-    return c.json(JSON.parse(raw));
-  } catch {
-    return c.json([]);
-  }
+  return c.json(getBufferedSlowQueries());
 });
 // Add Security Headers middleware
 
@@ -305,6 +301,19 @@ Swazz is an advanced, high-performance Smart API Fuzzer designed to identify cra
 
   return c.json({ service: 'swazz-edge', status: 'ok' });
 });
+/** Ends scans whose runner went away for good (coordinator/watchdog.ts). */
+async function runStalledScanWatchdog(env: Env, ctx: any): Promise<void> {
+  try {
+    // Without active scans there is nothing to watch: leave the coordinator asleep.
+    if (!(await new ScansRepository(env).hasActiveScans())) return;
+    const stub = env.COORDINATOR_DO.get(env.COORDINATOR_DO.idFromName('global-coordinator'));
+    const res = await stub.fetch(new Request('http://do/watchdog', { method: 'POST' }));
+    if (!res.ok) logError({ env, executionCtx: ctx }, 'Watchdog', `Stalled scan watchdog failed with status ${res.status}`);
+  } catch (err) {
+    logError({ env, executionCtx: ctx }, 'Watchdog', 'Stalled scan watchdog failed', { error: err });
+  }
+}
+
 app.get('/health', (c) => c.json({ service: 'swazz-edge', status: 'ok' }));
 
 app.all('/api/oob/:runId/:uuid', async (c) => {
@@ -510,6 +519,14 @@ app.post('/api/dev/emails/clear', (c) => {
   return c.json({ success: true });
 });
 
+/** Backoff before a failed findings message is redelivered: 10s, 20s, 40s… capped at 5 minutes. */
+export function findingsRetryDelay(msg: { attempts?: number }, storageQuotaExceeded: boolean): number {
+  // A full database does not free itself within seconds.
+  if (storageQuotaExceeded) return 300;
+  const attempts = Number(msg.attempts || 1);
+  return Math.min(300, 10 * 2 ** Math.max(0, attempts - 1));
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     return app.fetch(request, env, ctx);
@@ -519,6 +536,7 @@ export default {
     ctx.waitUntil(cleanupScheduledDeletions(env, ctx));
     ctx.waitUntil(cleanupSecurityTables(getDB(env, undefined, ctx), env, ctx));
     ctx.waitUntil(handleScheduledScans(env));
+    ctx.waitUntil(runStalledScanWatchdog(env, ctx));
   },
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
     if (batch.queue === 'swazz-scan-queue') {
@@ -532,7 +550,8 @@ export default {
               runId: msg.body.runId,
               configKey: msg.body.configKey,
               config: msg.body.config,
-              userPublicKey: msg.body.userPublicKey || ""
+              userPublicKey: msg.body.userPublicKey || "",
+              userId: msg.body.userId || ""
             }),
           });
           const doRes = await stub.fetch(doReq);
@@ -553,15 +572,57 @@ export default {
         }
       }
     } else if (batch.queue === 'swazz-findings-queue') {
+      const scansRepo = new ScansRepository(env);
       try {
-        const scansRepo = new ScansRepository(env);
         await scansRepo.processFindingsQueueMessages(batch.messages, ctx);
         for (const msg of batch.messages) {
           msg.ack();
         }
       } catch (err) {
-        logError({ env, executionCtx: ctx }, "Queue", "Failed to bulk insert findings and events", { error: err });
-        throw err;
+        // A failed message is never acked: past max_retries (wrangler.toml) the platform moves it
+        // to the dead-letter queue, where it waits to be replayed instead of being dropped.
+        const bulkErrMsg = String((err as any)?.message || err || '');
+        if (bulkErrMsg.includes('Exceeded maximum DB size')) {
+          // Every per-message write would fail the same way: skip them and defer the whole batch.
+          for (const msg of batch.messages) {
+            msg.retry({ delaySeconds: findingsRetryDelay(msg, true) });
+          }
+          logError({ env, executionCtx: ctx }, "Queue", `D1 storage quota exceeded; deferred ${batch.messages.length} findings messages`, {
+            totalCount: batch.messages.length,
+            sampleScanId: batch.messages[0]?.body?.scanId,
+            error: err
+          });
+          return;
+        }
+
+        // The batch mixes every tenant's events, so one bad message must not cost the others:
+        // fall back to one message at a time and retry only the ones that still fail.
+        let failedCount = 0;
+        let sampleScanId: string | undefined;
+        let firstErr: any = null;
+
+        for (const msg of batch.messages) {
+          try {
+            await scansRepo.processFindingsQueueMessages([msg], ctx);
+            msg.ack();
+          } catch (msgErr: any) {
+            failedCount++;
+            if (!firstErr) firstErr = msgErr;
+            if (!sampleScanId && msg.body?.scanId) sampleScanId = msg.body.scanId;
+
+            const errMsg = String(msgErr?.message || msgErr || '');
+            msg.retry({ delaySeconds: findingsRetryDelay(msg, errMsg.includes('Exceeded maximum DB size')) });
+          }
+        }
+
+        if (failedCount > 0) {
+          logError({ env, executionCtx: ctx }, "Queue", `Failed to persist findings events for ${failedCount}/${batch.messages.length} messages`, {
+            failedCount,
+            totalCount: batch.messages.length,
+            sampleScanId,
+            error: firstErr
+          });
+        }
       }
     }
   }

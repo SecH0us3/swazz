@@ -67,7 +67,9 @@ func (r *Runner) executeGRPCRequest(
 	if r != nil {
 		client = r.getGRPCClient(cleanAddr, isTLS, mergedHeaders)
 	} else {
-		client = swazzGrpc.NewClient(cleanAddr, isTLS, mergedHeaders)
+		// No runner to cache and close it: this call's own client.
+		client = swazzGrpc.NewClient(cleanAddr, isTLS, mergedHeaders, false)
+		defer client.Close()
 	}
 
 	method := resolvedPath
@@ -147,21 +149,19 @@ func (r *Runner) executeGRPCRequest(
 	}
 
 	if r != nil && r.config != nil && r.config.Settings.AnalyzeResponseBody && r.analyzer != nil {
-		input := &analyzer.AnalysisInput{
-			SentPayload:     result.Payload,
-			ResponseBody:    rawBodyBytes,
-			Duration:        duration,
-			Profile:         profile,
-			Endpoint:        originalPath,
-			Method:          "GRPC",
-			ResponseSize:    responseSize,
-			BaselineSize:    0,
-			SizeMultiplier:  5.0,
-			BaselineTimeMs:  0,
-			TimeThresholdMs: 0,
-			Settings:        r.config.Settings,
-		}
+		input := analyzer.AcquireInput(analyzer.AnalysisInput{
+			SentPayload:    result.Payload,
+			ResponseBody:   rawBodyBytes,
+			Duration:       duration,
+			Profile:        profile,
+			Endpoint:       originalPath,
+			Method:         "GRPC",
+			ResponseSize:   responseSize,
+			SizeMultiplier: 5.0,
+			Settings:       r.config.Settings,
+		})
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
+		analyzer.ReleaseInput(input)
 	}
 
 	return result

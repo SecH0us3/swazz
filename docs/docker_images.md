@@ -83,4 +83,5 @@ Adds the .NET 8 SDK to the CI image for compiling or testing C# projects during 
    ```bash
    docker run --memory="512m" --cpus="1.0" swazz-runner:latest
    ```
+   The engine runs as many threads as the CPU limit allows (`--cpus`, or a Kubernetes CPU limit), so raising it speeds up CPU-bound scans. Set `GOMAXPROCS` to pin the thread count yourself.
 3. **Network Isolation:** For ultimate security, consider running the runner in a network namespace that can only reach your target application and the Swazz API, blocking outbound access to untrusted domains.

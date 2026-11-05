@@ -7,12 +7,14 @@ package generator
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"swazz-engine/internal/generator/payloads"
+	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 )
 
@@ -407,15 +409,29 @@ func TestBodyIterations(t *testing.T) {
 
 func TestRandomizeAndRegisterSSTI(t *testing.T) {
 	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+	g.SSTIStore = sstistore.NewStore()
 
 	res := g.randomizeAndRegisterSSTI("{{7*7}}")
 	assert.NotEqual(t, "{{7*7}}", res)
+	_, ok := g.SSTIStore.Get(res)
+	assert.True(t, ok, "the random expression is registered in the run's store")
 
 	res2 := g.randomizeAndRegisterSSTI("no-ssti-here")
 	assert.Equal(t, "no-ssti-here", res2)
 
 	res3 := g.randomizeAndRegisterSSTI("{{7+'7'}}")
 	assert.NotEqual(t, "{{7+'7'}}", res3)
+	ctx, ok := g.SSTIStore.Get(res3)
+	require.True(t, ok, "the string-concat expression is registered")
+	var a, b int
+	_, err := fmt.Sscanf(ctx.RawExpr, "%d+'%d'", &a, &b)
+	require.NoError(t, err)
+	assert.Equal(t, fmt.Sprintf("%d%d", a, b), ctx.Expected, "concatenated, not summed")
+
+	// With no store nothing could match a random expression: the fixed probe is kept.
+	g.SSTIStore = nil
+	assert.Equal(t, "{{7*7}}", g.randomizeAndRegisterSSTI("{{7*7}}"))
+	assert.Equal(t, "{{7+'7'}}", g.randomizeAndRegisterSSTI("{{7+'7'}}"))
 }
 
 func TestGenerateSemanticValue(t *testing.T) {

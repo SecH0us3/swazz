@@ -6,7 +6,6 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,9 +13,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
+	"sort"
 	"strings"
 	"swazz-engine/internal/config"
+	"swazz-engine/internal/logger"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"swazz-engine/internal/ai"
@@ -47,6 +50,8 @@ type WSMessageIn struct {
 	Payload json.RawMessage `json:"payload"`
 	RunID   string          `json:"runId,omitempty"`
 	UUID    string          `json:"uuid,omitempty"`
+	Seq     uint64          `json:"seq,omitempty"`
+	Exec    string          `json:"exec,omitempty"`
 }
 
 type JobDispatchPayload struct {
@@ -58,6 +63,9 @@ type WSEventOut struct {
 	Type    string      `json:"type"`
 	RunID   string      `json:"runId"`
 	Payload interface{} `json:"payload"`
+	// Seq and Exec number a run's events for acknowledged delivery (see agent_delivery.go).
+	Seq  uint64 `json:"seq,omitempty"`
+	Exec string `json:"exec,omitempty"`
 }
 
 type WSEventPayload struct {
@@ -70,22 +78,53 @@ type AgentDispatcher struct {
 	coordinatorURL   string
 	token            string
 	disableTelemetry bool
-	outChan          chan<- interface{}
-	activeRunners    map[string]*runner.Runner
-	activeRunnersMu  sync.Mutex
-	parseReqSem      chan struct{}
+
+	// outbox queues everything for the coordinator; its pump feeds outChan (agent_outbox.go).
+	outbox          *outbox
+	activeRunners   map[string]*runner.Runner
+	activeRunnersMu sync.Mutex
+	// held: every scan is held (runner.Hold) until the outbox drains. Changed, and runners held or
+	// released, only under activeRunnersMu.
+	held         atomic.Bool
+	holdingSince time.Time
+	stopPump     chan struct{}
+	closeOnce    sync.Once
+	parseReqSem  chan struct{}
+	delivery     *deliveryLog
+	sendMu       sync.Mutex
+
+	// Recycling (--recycle-when-idle): once no scan runs and everything sent was delivered, the
+	// agent exits, for its supervisor (Docker's restart policy) to start a clean process.
+	recycleWhenIdle bool
+	recycling       atomic.Bool
+	// Whether anything is still waiting to reach the coordinator (pendingOutput) or has not even
+	// been written yet (unwrittenOutput); set by the session.
+	pendingOutput   func() bool
+	unwrittenOutput func() bool
+	exit            func(code int)
 }
 
 // NewAgentDispatcher creates a new dispatcher instance.
 func NewAgentDispatcher(coordinatorURL, token string, disableTelemetry bool, outChan chan<- interface{}) *AgentDispatcher {
-	return &AgentDispatcher{
+	d := &AgentDispatcher{
 		coordinatorURL:   coordinatorURL,
 		token:            token,
 		disableTelemetry: disableTelemetry,
-		outChan:          outChan,
+		outbox:           newOutbox(),
 		activeRunners:    make(map[string]*runner.Runner),
 		parseReqSem:      make(chan struct{}, 10),
+		delivery:         newDeliveryLog(),
+		exit:             os.Exit,
+		stopPump:         make(chan struct{}),
 	}
+	go d.outbox.pump(outChan, d.stopPump, d.releaseScans)
+	return d
+}
+
+// Close stops moving queued messages on. The agent's dispatcher lives as long as the process;
+// tests close theirs.
+func (d *AgentDispatcher) Close() {
+	d.closeOnce.Do(func() { close(d.stopPump) })
 }
 
 // StopAllRunners stops all running jobs cleanly.
@@ -97,27 +136,242 @@ func (d *AgentDispatcher) StopAllRunners() {
 	}
 }
 
-// SendWSEvent sends an event payload to the coordinator.
-func (d *AgentDispatcher) SendWSEvent(runID, typ string, payload interface{}) {
-	d.outChan <- WSEventOut{
-		Type:  "event",
-		RunID: runID,
-		Payload: WSEventPayload{
-			Type: typ,
-			Data: payload,
-		},
+// ActiveRunIDs lists the runs this agent is executing right now.
+func (d *AgentDispatcher) ActiveRunIDs() []string {
+	d.activeRunnersMu.Lock()
+	defer d.activeRunnersMu.Unlock()
+	ids := make([]string, 0, len(d.activeRunners))
+	for id := range d.activeRunners {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// ResumeRunIDs lists the runs a new connection claims: those still executing, then those whose
+// events are not all acknowledged yet (a run may have finished while its last events, possibly
+// "complete", were lost with the previous connection), the most recently active first. The
+// coordinator honours only so many claims; executing runs must not lose their place to finished ones.
+func (d *AgentDispatcher) ResumeRunIDs() []string {
+	ids := d.ActiveRunIDs()
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		seen[id] = true
+	}
+	for _, id := range d.delivery.undeliveredRuns() {
+		if !seen[id] {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func (d *AgentDispatcher) isActive(runID string) bool {
+	d.activeRunnersMu.Lock()
+	defer d.activeRunnersMu.Unlock()
+	_, ok := d.activeRunners[runID]
+	return ok
+}
+
+// queueEvent numbers a run event and queues it for sending. sendMu makes the two one step: runs
+// send events from several goroutines, and a higher seq queued before a lower one would be lost.
+// Queueing never blocks under sendMu; past the outbox's high mark every scan is held until the
+// queue drains (see agent_outbox.go). At the outbox's hard limit it waits, so it must not be
+// called from the connection's read loop (Dispatch), which is what drains the outbox in the end.
+func (d *AgentDispatcher) queueEvent(msg WSEventOut) {
+	d.outbox.waitRoom()
+	d.sendMu.Lock()
+	stamped, ok := d.delivery.stamp(msg)
+	full := ok && d.outbox.push(stamped)
+	d.sendMu.Unlock()
+	if !ok {
+		logWarn("Dropping a late %s event of an earlier execution of run %s", msg.Type, msg.RunID)
+		return
+	}
+	if full {
+		d.holdScans()
 	}
 }
 
-// SendWSError sends an error event to the coordinator.
-func (d *AgentDispatcher) SendWSError(runID, errStr string) {
-	d.outChan <- WSEventOut{
-		Type:  "error",
-		RunID: runID,
-		Payload: map[string]string{
-			"error": errStr,
-		},
+// queueReply queues a reply to a coordinator request (a parse result) ahead of the run events:
+// someone is waiting for it, and it must not wait out a backlog of scan events.
+func (d *AgentDispatcher) queueReply(msg interface{}) {
+	d.outbox.pushReply(msg)
+}
+
+// holdScans holds every scan, and those that start meanwhile, until the outbox drains to its low
+// mark (releaseScans): the coordinator is not taking events as fast as the scans make them.
+func (d *AgentDispatcher) holdScans() {
+	if d.held.Load() {
+		return
 	}
+	d.activeRunnersMu.Lock()
+	if !d.held.Load() {
+		d.held.Store(true)
+		d.holdingSince = time.Now()
+		logWarn("%d messages are waiting for the coordinator; holding every scan until they are sent", d.outbox.pending())
+		for _, r := range d.activeRunners {
+			if r != nil {
+				r.Hold()
+			}
+		}
+	}
+	d.activeRunnersMu.Unlock()
+	// The pump releases the scans when a hand-off leaves the queue at its low mark. If it drained
+	// before holding was set, no hand-off is left to see that.
+	if d.outbox.queued() <= d.outbox.low {
+		d.releaseScans()
+	}
+}
+
+// releaseScans ends holdScans.
+func (d *AgentDispatcher) releaseScans() {
+	if !d.held.Load() {
+		return
+	}
+	d.activeRunnersMu.Lock()
+	defer d.activeRunnersMu.Unlock()
+	if !d.held.Load() {
+		return
+	}
+	d.held.Store(false)
+	logInfo("The coordinator caught up; resuming the scans held for %v", time.Since(d.holdingSince).Round(time.Second))
+	for _, r := range d.activeRunners {
+		if r != nil {
+			r.Release()
+		}
+	}
+}
+
+func eventOut(runID, exec, typ string, payload interface{}) WSEventOut {
+	return WSEventOut{
+		Type:    "event",
+		RunID:   runID,
+		Payload: WSEventPayload{Type: typ, Data: payload},
+		Exec:    exec,
+	}
+}
+
+func errorOut(runID, exec, errStr string) WSEventOut {
+	return WSEventOut{
+		Type:    "error",
+		RunID:   runID,
+		Payload: map[string]string{"error": errStr},
+		Exec:    exec,
+	}
+}
+
+// SendWSEvent sends an event payload to the coordinator, as part of the run's current execution.
+func (d *AgentDispatcher) SendWSEvent(runID, typ string, payload interface{}) {
+	d.queueEvent(eventOut(runID, "", typ, payload))
+}
+
+// SendWSError sends an error event to the coordinator, as part of the run's current execution.
+func (d *AgentDispatcher) SendWSError(runID, errStr string) {
+	d.queueEvent(errorOut(runID, "", errStr))
+}
+
+// sendEventOf sends an event of one execution of the run; dropped once a newer execution started.
+func (d *AgentDispatcher) sendEventOf(runID, exec, typ string, payload interface{}) {
+	d.queueEvent(eventOut(runID, exec, typ, payload))
+}
+
+// sendErrorOf sends an error of one execution of the run; dropped once a newer execution started.
+func (d *AgentDispatcher) sendErrorOf(runID, exec, errStr string) {
+	d.queueEvent(errorOut(runID, exec, errStr))
+}
+
+// finishExecution makes sure the coordinator and the dashboard learn that an execution ended. A
+// run that ended without its terminal event reaching them would otherwise look like it was still
+// running, forever. It waits until the run's events have all been forwarded (behind a backlog
+// queued while the coordinator connection was down, say: a terminal event of its own could not
+// get out sooner either), then:
+//   - the run's own terminal event went out (a panic in the run is reported as an error by the
+//     runner itself): nothing more;
+//   - it did not (dropped by a forwarder that fell behind): a run that returned normally is
+//     reported complete, with the runner's final stats; a panic outside the run, as an error.
+//
+// Messages are for the user: no stack traces or internal detail, which stay in the agent's log.
+func (d *AgentDispatcher) finishExecution(runID string, panicked bool, terminal func() bool, subDone <-chan struct{}, finalStats func() interface{}, sendEvent func(string, interface{}), sendError func(string)) {
+	<-subDone
+	if terminal() {
+		return
+	}
+	if !panicked {
+		logWarn("Run %s ended without its completion being forwarded; reporting it now", runID)
+		sendEvent("complete", finalStats())
+		return
+	}
+	sendEvent("runner_log", map[string]interface{}{
+		"level":     "error",
+		"message":   "[Runner] ❌ " + runner.RunPanicMessage,
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+	sendError(runner.RunPanicMessage)
+}
+
+// recycleDrainTimeout bounds how long an idle agent waits for its last events to be delivered
+// before it recycles; recyclePollInterval is how often it checks.
+var (
+	recycleDrainTimeout = 2 * time.Minute
+	recyclePollInterval = 200 * time.Millisecond
+)
+
+// EnableRecycleWhenIdle makes the agent exit (code 0) once no scan runs and everything it sent
+// was delivered, so a supervisor restarts it as a clean process: no state of past scans (global
+// stores, caches, memory, temporary files) carries over to the next. It needs a restart policy
+// (Docker's --restart unless-stopped, a Kubernetes Deployment), or the runner stays down.
+func (d *AgentDispatcher) EnableRecycleWhenIdle() {
+	d.recycleWhenIdle = true
+}
+
+// maybeRecycle starts recycling if the agent is idle. A scan dispatched while it waits for
+// delivery cancels it. Non-goal: a dispatch that arrives in the instant before the exit is
+// lost with the process; the coordinator sees the connection close and hands it to a runner.
+func (d *AgentDispatcher) maybeRecycle() {
+	if !d.recycleWhenIdle || len(d.ActiveRunIDs()) > 0 || !d.recycling.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		// Once it exits, it stays recycling: exit does not return in the agent, and in a test a
+		// second maybeRecycle must not exit again.
+		exited := false
+		defer func() {
+			if !exited {
+				d.recycling.Store(false)
+			}
+		}()
+		// The deadline bounds only the wait for acknowledgements, from the last write on: what was
+		// never written would be lost with the process, so the agent waits for it however long the
+		// coordinator is away.
+		deadline := time.Now().Add(recycleDrainTimeout)
+		for d.pendingOutput != nil && d.pendingOutput() {
+			if d.unwritten() {
+				deadline = time.Now().Add(recycleDrainTimeout)
+			} else if !time.Now().Before(deadline) {
+				break
+			}
+			if len(d.ActiveRunIDs()) > 0 {
+				return
+			}
+			time.Sleep(recyclePollInterval)
+		}
+		if len(d.ActiveRunIDs()) > 0 {
+			logInfo("A new scan arrived; not recycling")
+			return
+		}
+		logInfo("No scan is running: exiting so the runner restarts as a clean process (--recycle-when-idle)")
+		exited = true
+		d.exit(0)
+	}()
+}
+
+// unwritten reports whether some message has not been written to a connection yet.
+func (d *AgentDispatcher) unwritten() bool {
+	if d.unwrittenOutput != nil {
+		return d.unwrittenOutput()
+	}
+	return d.outbox.pending() > 0 || d.delivery.anyQueued()
 }
 
 // Dispatch routes an incoming message from the coordinator to the appropriate handler.
@@ -133,6 +387,8 @@ func (d *AgentDispatcher) Dispatch(ctx context.Context, wsMsg WSMessageIn) {
 		d.handleJobCommand(wsMsg)
 	case "parse_request":
 		d.handleParseRequest(wsMsg)
+	case "ack":
+		d.delivery.ack(wsMsg.RunID, wsMsg.Exec, wsMsg.Seq)
 	default:
 		logWarn("Unknown message type received: %s", wsMsg.Type)
 	}
@@ -214,6 +470,32 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 
 	logInfo("Received job dispatch for runID: %s", dispatch.RunID)
 
+	// After a reconnect the coordinator may hand back a run this agent is still executing;
+	// starting it again would run the scan twice and orphan the first runner.
+	d.activeRunnersMu.Lock()
+	_, running := d.activeRunners[dispatch.RunID]
+	d.activeRunnersMu.Unlock()
+	if running {
+		logWarn("Ignoring job dispatch for run %s: it is already running on this agent", dispatch.RunID)
+		return
+	}
+	// A new execution of the run, numbered from 1 under its own exec id. Its events carry that id
+	// from here on, so late events of an earlier execution still draining cannot pass as this one's.
+	exec := d.delivery.reset(dispatch.RunID)
+	// Every execution ends in a terminal event (complete or error) that the coordinator and the
+	// dashboard can see, however it ends; see finishExecution.
+	var terminal atomic.Bool
+	sendEvent := func(typ string, payload interface{}) {
+		if typ == "complete" || typ == "error" {
+			terminal.Store(true)
+		}
+		d.sendEventOf(dispatch.RunID, exec, typ, payload)
+	}
+	sendError := func(errStr string) {
+		terminal.Store(true)
+		d.sendErrorOf(dispatch.RunID, exec, errStr)
+	}
+
 	if dispatch.Config.LicenseKey != "" {
 		jobLic, licErr := license.LoadAndVerify(dispatch.Config.LicenseKey)
 		if licErr != nil {
@@ -230,17 +512,20 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 	if err != nil {
 		logError("Failed to build runner config: %v", err)
 		errMsg := fmt.Sprintf("[Runner] Cannot start scan: %v. Please import an OpenAPI/Swagger schema, capture endpoints, or set a target URL with spec.", err)
-		d.SendWSEvent(dispatch.RunID, "runner_log", map[string]interface{}{
-			"level":     "ERROR",
-			"message":   errMsg,
-			"timestamp": time.Now().Format(time.RFC3339),
-		})
-		d.SendWSError(dispatch.RunID, err.Error())
+		go func() { // off the read loop: queueing may wait for room (queueEvent)
+			sendEvent("runner_log", map[string]interface{}{
+				"level":     "ERROR",
+				"message":   errMsg,
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+			sendError(err.Error())
+		}()
 		return
 	}
 	runCfg.RunID = dispatch.RunID
+	coordinatorOOB := inferOOBServerURL(d.coordinatorURL)
 	if runCfg.Settings.OOBServerURL == "" {
-		runCfg.Settings.OOBServerURL = inferOOBServerURL(d.coordinatorURL)
+		runCfg.Settings.OOBServerURL = coordinatorOOB
 	}
 
 	var client *http.Client
@@ -250,8 +535,15 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		client = safenet.NewSafeHTTPClient(time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond)
 	}
 	r := runner.New(runCfg, client)
+	if callbacksReachCoordinator(runCfg.Settings.OOBServerURL, coordinatorOOB) {
+		// The coordinator can still report a callback that arrives after the run ends.
+		r.HandOverOOBTokens()
+	}
 
 	d.activeRunnersMu.Lock()
+	if d.held.Load() {
+		r.Hold()
+	}
 	d.activeRunners[dispatch.RunID] = r
 	d.activeRunnersMu.Unlock()
 
@@ -280,8 +572,17 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 
 	// Sub to events
 	sub := r.Subscribe()
+	subDone := make(chan struct{})
 	go func(runID string) {
+		defer close(subDone)
 		defer r.Unsubscribe(sub)
+		defer func() {
+			// A broken event must not take the agent (and every other run on it) down; the run
+			// still ends with a terminal event (finishExecution).
+			if p := recover(); p != nil {
+				logError("Event forwarding for run %s panicked: %v\n%s", runID, p, debug.Stack())
+			}
+		}()
 		for ev := range sub {
 			if ev.Type == "result" {
 				var res *swagger.FuzzResult
@@ -291,20 +592,20 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					res = &rVal
 				}
 				if res != nil {
-					severity := "ignore"
-					description := fmt.Sprintf("HTTP %d", res.Status)
-					if len(res.AnalyzerFindings) > 0 {
-						severity = res.AnalyzerFindings[0].Level
-						description = res.AnalyzerFindings[0].Message
-					} else {
-						finding := liveCls.Classify(res)
-						if finding != nil {
+					// One line per request: at debug only, since this goroutine forwards every
+					// result of the run and falling behind stalls the run's event stream.
+					if logger.IsDebugEnabled() {
+						severity := "ignore"
+						description := fmt.Sprintf("HTTP %d", res.Status)
+						if len(res.AnalyzerFindings) > 0 {
+							severity = res.AnalyzerFindings[0].Level
+							description = res.AnalyzerFindings[0].Message
+						} else if finding := liveCls.Classify(res); finding != nil {
 							severity = string(finding.Level)
-							description = fmt.Sprintf("HTTP %d", res.Status)
 						}
+						logDebug("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s",
+							runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 					}
-					logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s",
-						runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 					ev.Data = runner.ToSSE(res)
 				} else {
 					logError("Received result event but ev.Data is not a recognized FuzzResult type: %T", ev.Data)
@@ -320,7 +621,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					msg = string(statsJSON)
 					logInfo("[Fuzz Progress] Run %s: %s", runID, msg)
 				}
-				d.SendWSEvent(runID, "runner_log", map[string]interface{}{
+				sendEvent("runner_log", map[string]interface{}{
 					"level":     "info",
 					"message":   msg,
 					"timestamp": time.Now().Format(time.RFC3339),
@@ -337,26 +638,40 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					msg = string(statsJSON)
 					logInfo("[Fuzz Complete] Run %s: %s", runID, msg)
 				}
-				d.SendWSEvent(runID, "runner_log", map[string]interface{}{
-					"level":     "warning",
+				sendEvent("runner_log", map[string]interface{}{
+					"level":     "info",
 					"message":   msg,
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
 			} else if ev.Type == "error" {
 				logError("[Fuzz Error] Run %s: %v", runID, ev.Data)
-				d.SendWSEvent(runID, "runner_log", map[string]interface{}{
+				sendEvent("runner_log", map[string]interface{}{
 					"level":     "error",
 					"message":   fmt.Sprintf("%v", ev.Data),
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
 			}
-			d.SendWSEvent(runID, ev.Type, ev.Data)
+			sendEvent(ev.Type, ev.Data)
 		}
 	}(dispatch.RunID)
 
 	go func(runID string) {
+		defer func() {
+			panicked := recover()
+			if panicked != nil {
+				logError("Runner for %s panicked: %v\n%s", runID, panicked, debug.Stack())
+				r.Close()
+			}
+			// It no longer runs here, even while its last events are still being forwarded: a
+			// new dispatch of the run must not be ignored as "already running".
+			d.activeRunnersMu.Lock()
+			delete(d.activeRunners, runID)
+			d.activeRunnersMu.Unlock()
+			d.finishExecution(runID, panicked != nil, terminal.Load, subDone, func() interface{} { return r.GetStats() }, sendEvent, sendError)
+			d.maybeRecycle()
+		}()
 		sendRunnerLog := func(level, msg string) {
-			d.SendWSEvent(runID, "runner_log", map[string]interface{}{
+			sendEvent("runner_log", map[string]interface{}{
 				"level":     level,
 				"message":   msg,
 				"timestamp": time.Now().Format(time.RFC3339),
@@ -364,7 +679,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		}
 
 		logInfo("Starting fuzz runner for runID: %s", runID)
-		sendRunnerLog("warning", fmt.Sprintf("Starting fuzz runner for runID: %s", runID))
+		sendRunnerLog("info", fmt.Sprintf("Starting fuzz runner for runID: %s", runID))
 		if r.Config() != nil && r.Config().Settings.UseLLMPrepass {
 			msg := fmt.Sprintf("[AI] 🤖 Pre-Scan LLM Batching enabled (Gateway: %s)", r.Config().Settings.AIGatewayURL)
 			logInfo("%s", msg)
@@ -378,7 +693,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		IncrementGlobalScanTelemetry(tURL, d.disableTelemetry)
 		if err := r.Start(ctx); err != nil {
 			logError("Runner failed: %v", err)
-			d.SendWSError(runID, err.Error())
+			sendError(err.Error())
 		}
 
 		// Post-scan Smart Triage (LLM False Positive Classifier)
@@ -407,7 +722,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 
 		// Post-scan WAF Mitigation (Virtual Patch Generation)
 		if wafResult := r.GetWAFCheckResult(); wafResult != nil && wafResult.Detection.Detected {
-			findings := liveCls.ClassifyAll(r.Results())
+			findings := liveCls.ClassifyAll(r.WholeResults()) // patches are built from payloads
 			items := classifier.ToAuditResultItems(findings)
 			if len(items) > 0 {
 				client := wafcheck.NewClient(r.Config().Settings.WAFCheckEndpoint)
@@ -429,10 +744,6 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 
 		r.Close()
 		logInfo("Runner for %s finished", runID)
-
-		d.activeRunnersMu.Lock()
-		delete(d.activeRunners, runID)
-		d.activeRunnersMu.Unlock()
 	}(dispatch.RunID)
 }
 
@@ -480,7 +791,7 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 			isTLS := strings.HasPrefix(strings.ToLower(reqPayload.URL), "grpcs://")
 			grpcCtx, grpcCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer grpcCancel()
-			grpcResult, grpcErr := grpc.DiscoverViaReflection(grpcCtx, reqPayload.URL, isTLS, reqPayload.Headers)
+			grpcResult, grpcErr := grpc.DiscoverViaReflection(grpcCtx, reqPayload.URL, isTLS, reqPayload.Headers, safenet.AllowLocalNetwork)
 			if grpcErr != nil {
 				err = fmt.Errorf("failed to discover gRPC service via reflection: %w", grpcErr)
 			} else {
@@ -527,10 +838,9 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 				} else {
 					defer resp.Body.Close()
 					if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-						limitReader := io.LimitReader(resp.Body, 4096)
-						bodyBytes, _ := io.ReadAll(limitReader)
-						err = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, string(bytes.TrimSpace(bodyBytes)))
-						data = bodyBytes
+						body := safenet.ReadErrorBody(resp.Body)
+						err = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, body)
+						data = []byte(body)
 					} else {
 						limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
 						data, err = io.ReadAll(limitReader)
@@ -808,6 +1118,6 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 				}
 			}
 		}
-		d.outChan <- msgPayload
+		d.queueReply(msgPayload)
 	}()
 }

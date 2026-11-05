@@ -63,17 +63,3 @@ func TestGetRandomUserAgent(t *testing.T) {
 	assert.NotEmpty(t, ua)
 	assert.True(t, slices.Contains(userAgents, ua))
 }
-
-func TestProxyRotation(t *testing.T) {
-	proxies := []string{"http://proxy1:8080", "http://proxy2:8080"}
-
-	p1 := getNextProxy(proxies)
-	p2 := getNextProxy(proxies)
-	p3 := getNextProxy(proxies)
-
-	assert.NotEmpty(t, p1)
-	assert.NotEmpty(t, p2)
-	assert.NotEmpty(t, p3)
-	assert.Equal(t, "", getNextProxy(nil))
-	assert.Equal(t, "", getNextProxy([]string{}))
-}

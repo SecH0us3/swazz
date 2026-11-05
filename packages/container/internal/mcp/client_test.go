@@ -8,16 +8,20 @@ package mcp
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 
 	"github.com/stretchr/testify/assert"
@@ -864,4 +868,262 @@ func TestSSEClient_Errors(t *testing.T) {
 
 	_, _, err = client.GetPrompt(ctx, "test", nil, nil)
 	assert.Error(t, err)
+}
+
+// An error answer to a request reads only the start of its body into the error: the MCP server
+// under test controls it.
+func TestSSEClient_ErrorBodyIsCapped(t *testing.T) {
+	big := strings.Repeat("x", 1<<20)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, "event: endpoint\ndata: /message\n\n")
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			<-r.Context().Done()
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(big))
+	}))
+	defer ts.Close()
+
+	client := NewSSEClient(ts.URL, true, nil, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer func() { _ = client.Close() }()
+
+	err := client.Connect(ctx) // the initialize request gets the 500
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "status 500")
+	assert.Less(t, len(err.Error()), safenet.MaxErrorBodyBytes+256, "the response body is cut")
+	// The request carries tool arguments, which may hold secrets: it is not echoed into the error.
+	assert.NotContains(t, err.Error(), "jsonrpc")
+}
+
+// The HTTP client fails a response past maxResponseBytes instead of parsing a truncated one, and
+// cuts an error body.
+func TestHTTPClient_BodyIsCapped(t *testing.T) {
+	for _, tc := range []struct {
+		status  int
+		wantErr string
+	}{
+		{http.StatusOK, "larger than"},
+		{http.StatusInternalServerError, "status 500"},
+	} {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBytes+1)))
+			}))
+			defer ts.Close()
+			client := NewHTTPClient(ts.URL+"/mcp", true, nil)
+			_, err := client.ListTools(context.Background())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+			assert.Less(t, len(err.Error()), safenet.MaxErrorBodyBytes+256)
+		})
+	}
+}
+
+// The event stream outlives the per-request timeout: http.Client.Timeout used to cut it after
+// 30 s, failing every MCP call of a longer scan.
+func TestSSEClient_StreamOutlivesRequestTimeout(t *testing.T) {
+	old := sseRequestTimeout
+	sseRequestTimeout = 300 * time.Millisecond
+	defer func() { sseRequestTimeout = old }()
+
+	writeChan := make(chan string, 10)
+	defer close(writeChan)
+	ts := httptest.NewServer(&mockSSEServer{writeChan: writeChan})
+	defer ts.Close()
+
+	client := NewSSEClient(ts.URL, true, nil, nil)
+	require.Zero(t, client.httpClient.Timeout, "an overall timeout would cut the stream")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, client.Connect(ctx))
+	defer func() { _ = client.Close() }()
+
+	time.Sleep(3 * sseRequestTimeout)
+	tools, err := client.ListTools(ctx)
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	assert.Equal(t, "sse_tool", tools[0].Name)
+}
+
+// With the stream's own timeout gone, a server that never answers must still not hang a caller
+// whose ctx has no deadline (the runner's): neither while connecting nor waiting for a response.
+func TestSSEClient_BoundedWithoutCallerDeadline(t *testing.T) {
+	old := sseRequestTimeout
+	sseRequestTimeout = 300 * time.Millisecond
+	defer func() { sseRequestTimeout = old }()
+
+	t.Run("no response headers", func(t *testing.T) {
+		release := make(chan struct{})
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+		}))
+		defer ts.Close()
+		defer close(release)
+
+		start := time.Now()
+		err := NewSSEClient(ts.URL, true, nil, nil).Connect(context.Background())
+		assert.Error(t, err)
+		assert.Less(t, time.Since(start), 5*time.Second)
+	})
+
+	t.Run("no response on the stream", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				w.WriteHeader(http.StatusAccepted) // accepted, never answered
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+		}))
+		defer ts.Close()
+
+		start := time.Now()
+		err := NewSSEClient(ts.URL, true, nil, nil).Connect(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no response to initialize")
+		assert.Less(t, time.Since(start), 5*time.Second)
+	})
+}
+
+// The write endpoint the server announces is resolved against the SSE URL itself and must keep
+// its origin (scheme, host, port with defaults applied).
+func TestSameOriginEndpoint(t *testing.T) {
+	base, err := url.Parse("https://mcp.example/sse")
+	require.NoError(t, err)
+	ok := map[string]string{
+		"/messages?session=1":             "https://mcp.example/messages?session=1",
+		"messages?session_id=1":           "https://mcp.example/messages?session_id=1",
+		"?session=1":                      "https://mcp.example/sse?session=1",
+		"https://mcp.example/m":           "https://mcp.example/m",
+		"https://mcp.example:443/m?s=abc": "https://mcp.example:443/m?s=abc",
+	}
+	for ep, want := range ok {
+		got, accepted := sameOriginEndpoint(base, ep)
+		assert.True(t, accepted, ep)
+		assert.Equal(t, want, got, ep)
+	}
+	for _, ep := range []string{
+		"https://evil.example/collect", "//evil.example/collect", "http://mcp.example/message",
+		"http://mcp.example:443/message", "https://mcp.example:8443/message",
+		"https://mcp.example@evil.example/x", "%zz",
+	} {
+		_, accepted := sameOriginEndpoint(base, ep)
+		assert.False(t, accepted, ep)
+	}
+}
+
+// A redirect may not carry the client's headers to another origin.
+func TestCheckSameOriginRedirect(t *testing.T) {
+	first, _ := http.NewRequest(http.MethodPost, "https://mcp.example/messages", nil)
+	same, _ := http.NewRequest(http.MethodPost, "https://mcp.example:443/other", nil)
+	cross, _ := http.NewRequest(http.MethodPost, "http://evil.example/collect", nil)
+	downgrade, _ := http.NewRequest(http.MethodPost, "http://mcp.example/messages", nil)
+	assert.NoError(t, checkSameOriginRedirect(same, []*http.Request{first}))
+	assert.Error(t, checkSameOriginRedirect(cross, []*http.Request{first}))
+	assert.Error(t, checkSameOriginRedirect(downgrade, []*http.Request{first}))
+
+	plain, _ := http.NewRequest(http.MethodGet, "http://mcp.example/sse", nil)
+	upgrade, _ := http.NewRequest(http.MethodGet, "https://mcp.example/sse", nil)
+	assert.NoError(t, checkSameOriginRedirect(upgrade, []*http.Request{plain}), "http to https on the same host")
+	plain8080, _ := http.NewRequest(http.MethodGet, "http://mcp.example:8080/sse", nil)
+	otherPort, _ := http.NewRequest(http.MethodGet, "https://mcp.example:9443/collect", nil)
+	assert.Error(t, checkSameOriginRedirect(otherPort, []*http.Request{plain8080}), "an upgrade keeps the service's port")
+}
+
+// The TLS settings of one client never leak into http.DefaultTransport.
+func TestNewSSEClient_DoesNotModifyDefaultTransport(t *testing.T) {
+	before := http.DefaultTransport.(*http.Transport).TLSClientConfig
+	c := NewSSEClient("https://mcp.example/sse", true, nil, &tls.Config{InsecureSkipVerify: true}) // #nosec G402 -- test
+	assert.Same(t, before, http.DefaultTransport.(*http.Transport).TLSClientConfig)
+	assert.NotSame(t, http.DefaultTransport, c.httpClient.Transport)
+}
+
+// A caller's deadline longer than the client's timeout is honoured: a slow tool call that answers
+// within it succeeds.
+func TestSSEClient_CallerDeadlineWins(t *testing.T) {
+	old := sseRequestTimeout
+	sseRequestTimeout = 300 * time.Millisecond
+	defer func() { sseRequestTimeout = old }()
+
+	writeChan := make(chan string, 10)
+	defer close(writeChan)
+	srv := &mockSSEServer{writeChan: writeChan}
+	slow := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			body, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(body), `"tools/list"`) {
+				time.Sleep(600 * time.Millisecond) // past the client's timeout, within the caller's
+			}
+			r.Body = io.NopCloser(strings.NewReader(string(body)))
+		}
+		srv.ServeHTTP(w, r)
+	})
+	ts := httptest.NewServer(slow)
+	defer ts.Close()
+
+	client := NewSSEClient(ts.URL, true, nil, nil)
+	require.NoError(t, client.Connect(context.Background()))
+	defer func() { _ = client.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	tools, err := client.ListTools(ctx)
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+}
+
+// Once the server drops the stream, calls fail at once instead of waiting for a response.
+func TestSSEClient_FailsFastAfterStreamEnds(t *testing.T) {
+	writeChan := make(chan string, 10)
+	srv := &mockSSEServer{writeChan: writeChan}
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	client := NewSSEClient(ts.URL, true, nil, nil)
+	require.NoError(t, client.Connect(context.Background()))
+	defer func() { _ = client.Close() }()
+
+	close(writeChan) // the server ends the stream
+	require.Eventually(t, func() bool {
+		client.pendingMu.Lock()
+		defer client.pendingMu.Unlock()
+		return client.streamEnded
+	}, 5*time.Second, 10*time.Millisecond)
+
+	start := time.Now()
+	_, err := client.ListTools(context.Background())
+	assert.ErrorIs(t, err, io.ErrClosedPipe)
+	assert.Less(t, time.Since(start), time.Second)
+}
+
+// An announced endpoint off the stream's origin fails Connect with the reason, rather than
+// falling back to a URL without the server's session id.
+func TestSSEClient_RejectsForeignEndpoint(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "event: endpoint\ndata: https://evil.example/collect?session=1\n\n")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer ts.Close()
+
+	err := NewSSEClient(ts.URL, true, nil, nil).Connect(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "evil.example")
 }

@@ -23,6 +23,7 @@ describe('Runners Routes Unit Tests', () => {
       connect: vi.fn(),
       getRunners: vi.fn(),
       connectClient: vi.fn(),
+      issueStreamTicket: vi.fn(),
       queueRun: vi.fn(),
       stopRun: vi.fn(),
       pauseRun: vi.fn(),
@@ -86,6 +87,38 @@ describe('Runners Routes Unit Tests', () => {
       const res = await app.request('/api/runs/r1/events');
       expect(res.status).toBe(404);
       expect(await res.text()).toBe('fail');
+    });
+
+    // The ticket is redeemed by the auth middleware, which hands the route its user; the
+    // route itself passes no ticket on.
+    it('does not pass a ticket to connectClient', async () => {
+      (mockServices.connectClient as any).mockResolvedValue(new Response('connected'));
+      await app.request('/api/runs/r1/events?ticket=abc');
+      expect((mockServices.connectClient as any).mock.calls[0]).toHaveLength(5);
+    });
+  });
+
+  describe('POST /api/runs/:id/stream-ticket', () => {
+    it('returns an uncacheable ticket for the caller', async () => {
+      (mockServices.issueStreamTicket as any).mockResolvedValue({ ticket: 't'.repeat(64), expiresIn: 30 });
+      const res = await app.request('/api/runs/r1/stream-ticket', { method: 'POST' });
+      expect(res.status).toBe(201);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(await res.json()).toEqual({ ticket: 't'.repeat(64), expiresIn: 30 });
+      expect(mockServices.issueStreamTicket).toHaveBeenCalledWith('r1', 'user_123');
+    });
+
+    it('maps a refusal to its status', async () => {
+      (mockServices.issueStreamTicket as any).mockRejectedValue(new Error('Forbidden|403'));
+      const res = await app.request('/api/runs/r1/stream-ticket', { method: 'POST' });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'Forbidden' });
+    });
+
+    it('rejects an invalid run id without issuing anything', async () => {
+      const res = await app.request('/api/runs/bad%20id/stream-ticket', { method: 'POST' });
+      expect(res.status).toBe(404);
+      expect(mockServices.issueStreamTicket).not.toHaveBeenCalled();
     });
   });
 

@@ -240,7 +240,7 @@ describe('scheduler util', () => {
       await handleScheduledScans(mockEnv as Env);
 
       expect(repoInstance.triggerScheduledScan).toHaveBeenCalled();
-      expect(repoInstance.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
+      expect(repoInstance.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
 
       consoleSpy.mockRestore();
       vi.useRealTimers();

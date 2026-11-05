@@ -15,7 +15,7 @@ describe('AboutPage Component', () => {
         render(<AboutPage />);
 
         expect(screen.getByRole('heading', { level: 1, name: /Swazz API Fuzzer/i })).toBeInTheDocument();
-        expect(screen.getByText(/A high-performance smart fuzzer for REST APIs/i)).toBeInTheDocument();
+        expect(screen.getByText(/A high-performance smart fuzzer for REST, GraphQL, gRPC/i)).toBeInTheDocument();
         expect(screen.getByText('🎯 Smart Fuzzing')).toBeInTheDocument();
         expect(screen.getByText('🔍 Detections')).toBeInTheDocument();
         expect(screen.getByText('⚙️ Architecture')).toBeInTheDocument();
@@ -30,5 +30,9 @@ describe('AboutPage Component', () => {
         const docsLink = screen.getByRole('link', { name: /Documentation/i });
         expect(docsLink).toHaveAttribute('href', 'https://sech0us3.github.io/swazz/');
         expect(docsLink).toHaveAttribute('target', '_blank');
+
+        const blogLink = screen.getByRole('link', { name: /Blog/i });
+        expect(blogLink).toHaveAttribute('href', 'https://yoursec.substack.com/t/swazz');
+        expect(blogLink).toHaveAttribute('target', '_blank');
     });
 });

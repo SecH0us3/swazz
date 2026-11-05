@@ -22,7 +22,17 @@ export default defineConfig({
   use: {
     video: {
       mode: 'on',
-      size: { width: 1920, height: 1080 }
+      size: { width: 1920, height: 1080 },
+      fps: 60,
+      show: {
+        actions: {
+          style: {
+            point: 'width: 20px; height: 20px; border-radius: 50%; background: rgba(139, 92, 246, 0.75); border: 2px solid #fff;',
+            highlight: 'outline: 2px solid #8b5cf6; background: rgba(139, 92, 246, 0.15);',
+            title: 'font-size: 15px; font-family: Inter, sans-serif;',
+          },
+        },
+      },
     }
   },
   projects: [

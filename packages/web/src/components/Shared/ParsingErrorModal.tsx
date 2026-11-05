@@ -4,6 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import React, { useState, useEffect } from 'react';
+import { DOCS } from '../../utils/docsLinks.js';
+import { DocsLink } from './DocsLink.js';
 import type { ParsingErrorDetails } from '../../services/swaggerService.js';
 
 interface ParsingErrorModalProps {
@@ -82,6 +84,7 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
             <div className="parsing-error-dialog" onClick={(e) => e.stopPropagation()}>
                 <div className="parsing-error-header">
                     <h3>Specification Parsing Failure</h3>
+                    <DocsLink href={DOCS.specFormats} label="Supported API formats" />
                     <button className="parsing-error-close" onClick={onClose} aria-label="Close modal">
                         &times;
                     </button>

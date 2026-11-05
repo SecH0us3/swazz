@@ -12,9 +12,24 @@ import { AdminLogsTab } from './UserSettings/AdminLogsTab.js';
 import { McpTab } from './UserSettings/McpTab.js';
 import { TrafficCaptureTab } from './UserSettings/TrafficCaptureTab.js';
 import { LicenseTab } from './UserSettings/LicenseTab.js';
+import { DocsLink, SettingsResourceLinks } from './Shared/DocsLink.js';
+import { DOCS } from '../utils/docsLinks.js';
+
+type UserSettingsSubTab = 'account' | 'security' | 'danger' | 'admin' | 'mcp' | 'traffic_capture' | 'license';
+
+// The documentation page that explains each settings section.
+export const USER_SETTINGS_DOCS: Record<UserSettingsSubTab, { label: string; href: string }> = {
+    account: { label: 'Getting started', href: DOCS.installation },
+    security: { label: 'Security model', href: DOCS.securityReview },
+    license: { label: 'Pricing & licensing', href: DOCS.pricing },
+    traffic_capture: { label: 'Browser extension', href: DOCS.browserExtension },
+    mcp: { label: 'MCP server', href: DOCS.mcp },
+    admin: { label: 'Logging & analytics', href: DOCS.logging },
+    danger: { label: 'Account deletion', href: DOCS.accountDeletion },
+};
 
 export function UserSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'account' | 'security' | 'danger' | 'admin' | 'mcp' | 'traffic_capture' | 'license'>('account');
+    const [activeSubTab, setActiveSubTab] = useState<UserSettingsSubTab>('account');
 
     return (
         <div className="settings-page">
@@ -25,6 +40,9 @@ export function UserSettings() {
                     <p className="settings-header-desc">
                         Manage your account details, security settings, and personal options.
                     </p>
+                    <div className="settings-section-docs">
+                        <DocsLink href={USER_SETTINGS_DOCS[activeSubTab].href} label={`Docs: ${USER_SETTINGS_DOCS[activeSubTab].label}`} />
+                    </div>
                 </div>
                 <button 
                     className="btn btn-secondary settings-back-btn" 
@@ -116,6 +134,7 @@ export function UserSettings() {
                         </svg>
                         Danger Zone
                     </button>
+                    <SettingsResourceLinks />
                 </div>
 
                 {/* Tab Content Cards */}

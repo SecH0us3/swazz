@@ -13,6 +13,9 @@ hero:
       text: Get Started 🚀
       link: /installation
     - theme: alt
+      text: Open Dashboard
+      link: https://swazz.secmy.app
+    - theme: alt
       text: Actionable Recipes 🍳
       link: /recipes
     - theme: alt

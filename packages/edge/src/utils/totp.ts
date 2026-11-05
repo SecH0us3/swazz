@@ -189,9 +189,23 @@ export async function verifyTOTP(
   timeStep = 30,
   window = 1
 ): Promise<boolean> {
-  const cleanToken = token.trim();
+  return (await matchTOTP(secret, token, timeStep, window)) !== null;
+}
+
+/**
+ * Returns the time-step counter the token is valid for, or null. Callers that accept a code must
+ * also record that counter and refuse it (or an older one) next time, or the code stays reusable
+ * for the whole acceptance window.
+ */
+export async function matchTOTP(
+  secret: string,
+  token: string,
+  timeStep = 30,
+  window = 1
+): Promise<number | null> {
+  const cleanToken = typeof token === 'string' ? token.trim() : '';
   if (cleanToken.length !== 6 || !/^\d+$/.test(cleanToken)) {
-    return false;
+    return null;
   }
   
   const currentCounter = Math.floor(Date.now() / 1000 / timeStep);
@@ -226,9 +240,9 @@ export async function verifyTOTP(
     const computedToken = otp.toString().padStart(6, '0');
     
     if (computedToken === cleanToken) {
-      return true;
+      return counter;
     }
   }
   
-  return false;
+  return null;
 }

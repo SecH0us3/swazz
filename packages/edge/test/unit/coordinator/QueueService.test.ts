@@ -4,8 +4,10 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { QueueService } from '../../../src/coordinator/QueueService';
+import { QueueService, MAX_ACTIVE_JOBS_PER_RUNNER } from '../../../src/coordinator/QueueService';
 import { StateManager } from '../../../src/coordinator/StateManager';
+
+const deletedKeys = (state: any): string[] => state.storage.delete.mock.calls.flatMap((c: any[]) => c[0]);
 
 const mockGetActiveScans = vi.fn();
 const mockUpdateScanStatus = vi.fn();
@@ -48,7 +50,7 @@ describe('QueueService', () => {
 
     mockState = {
       getWebSockets: vi.fn().mockReturnValue([]),
-      getTags: vi.fn().mockReturnValue(['runner', 'key-123']),
+      getTags: vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-1']),
       storage: {
         get: vi.fn().mockResolvedValue(new Map()),
         delete: vi.fn().mockResolvedValue(true)
@@ -63,7 +65,7 @@ describe('QueueService', () => {
     };
     
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', target_url: 'http://example.com' }
     ]);
     mockUpdateScanStatus.mockResolvedValue(true);
     mockMarkFailedIfActive.mockResolvedValue(true);
@@ -82,12 +84,254 @@ describe('QueueService', () => {
     expect(sentMsg.payload.runId).toBe('scan-1');
     expect(sentMsg.payload.userPublicKey).toBe('key-123');
     expect(stateManager.jobs.get('scan-1')).toBe(mockWs);
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:scan-1');
+    expect(deletedKeys(mockState)).toContain('config:scan-1');
+    expect(deletedKeys(mockState)).toContain('user_public_key:scan-1');
   });
 
-  it('should not dispatch private scan if public key mismatches', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-different']);
+  it('dispatches every compatible queued scan on one reconnect, not only the first', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']); // shared runner
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-1', userPublicKey: null, status: 'dispatched', target_url: 'http://a.example.com' },
+      { id: 'scan-2', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' },
+      { id: 'scan-3', userPublicKey: 'key-other', status: 'queued', target_url: 'http://c.example.com' },
+      { id: 'scan-4', userPublicKey: null, status: 'queued', target_url: 'http://d.example.com' }
+    ]);
+    let attachment: any = {};
+    mockWs.deserializeAttachment = vi.fn(() => attachment);
+    mockWs.serializeAttachment = vi.fn((a: any) => { attachment = a; });
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    const sentRunIds = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]).payload.runId);
+    // scan-3 belongs to a private runner key and must stay queued
+    expect(sentRunIds).toEqual(['scan-1', 'scan-2', 'scan-4']);
+    expect(attachment.activeJobs).toEqual(['scan-1', 'scan-2', 'scan-4']);
+    expect(stateManager.jobs.has('scan-3')).toBe(false);
+    expect(mockUpdateScanStatus).toHaveBeenCalledWith('scan-4', 'dispatched');
+  });
+
+  it('stops at MAX_ACTIVE_JOBS_PER_RUNNER and leaves the rest queued', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    const scans = Array.from({ length: MAX_ACTIVE_JOBS_PER_RUNNER + 3 }, (_, i) => (
+      { id: `scan-${i}`, userPublicKey: null, status: 'queued', target_url: 'http://example.com' }
+    ));
+    mockGetActiveScans.mockResolvedValue(scans);
+    let attachment: any = { activeJobs: ['already-running'] };
+    mockWs.deserializeAttachment = vi.fn(() => attachment);
+    mockWs.serializeAttachment = vi.fn((a: any) => { attachment = a; });
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(MAX_ACTIVE_JOBS_PER_RUNNER - 1);
+    expect(attachment.activeJobs).toHaveLength(MAX_ACTIVE_JOBS_PER_RUNNER);
+    expect(stateManager.jobs.has(`scan-${MAX_ACTIVE_JOBS_PER_RUNNER - 1}`)).toBe(false);
+    expect(mockUpdateScanStatus).not.toHaveBeenCalledWith(`scan-${MAX_ACTIVE_JOBS_PER_RUNNER - 1}`, 'dispatched');
+  });
+
+  it('rolls back the assignment and stops when send fails, keeping later scans queued', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-1', userPublicKey: null, status: 'queued', target_url: 'http://a.example.com' },
+      { id: 'scan-2', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' },
+      { id: 'scan-3', userPublicKey: null, status: 'queued', target_url: 'http://c.example.com' }
+    ]);
+    let attachment: any = {};
+    mockWs.deserializeAttachment = vi.fn(() => attachment);
+    mockWs.serializeAttachment = vi.fn((a: any) => { attachment = a; });
+    mockWs.send = vi.fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => { throw new Error('socket closed'); });
+
+    const stateManager = new StateManager(mockState);
+    stateManager.runners.add(mockWs);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(2);
+    expect(stateManager.jobs.get('scan-1')).toBe(mockWs);
+    expect(stateManager.jobs.has('scan-2')).toBe(false);
+    expect(stateManager.jobs.has('scan-3')).toBe(false);
+    expect(stateManager.runners.has(mockWs)).toBe(false);
+    expect(attachment.activeJobs).toEqual(['scan-1']);
+    expect(mockUpdateScanStatus).not.toHaveBeenCalledWith('scan-2', 'dispatched');
+    expect(deletedKeys(mockState)).not.toContain('config:scan-2');
+  });
+
+  it('does not re-dispatch a scan already running on a connected runner', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-1', userPublicKey: null, status: 'dispatched', target_url: 'http://a.example.com' },
+      { id: 'scan-2', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' }
+    ]);
+    const stateManager = new StateManager(mockState);
+    const otherRunner: any = { send: vi.fn() };
+    stateManager.jobs.set('scan-1', otherRunner);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('scan-2');
+    expect(stateManager.jobs.get('scan-1')).toBe(otherRunner);
+  });
+
+  it('does not re-dispatch a recently finished scan still marked dispatched in D1 (Task 150 pitfall)', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    // scan-finished was just cleaned up from stateManager.jobs and moved to recentJobs,
+    // while FINDINGS_QUEUE has not yet updated its D1 status from 'dispatched' to 'completed'.
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-finished', userPublicKey: null, status: 'dispatched', target_url: 'http://a.example.com' },
+      { id: 'scan-other-recent', userPublicKey: null, status: 'dispatched', target_url: 'http://b.example.com' },
+      { id: 'scan-queued', userPublicKey: null, status: 'queued', target_url: 'http://c.example.com' }
+    ]);
+
+    let attachment: any = { activeJobs: [], recentJobs: ['scan-finished'] };
+    mockWs.deserializeAttachment = vi.fn(() => attachment);
+    mockWs.serializeAttachment = vi.fn((a: any) => { attachment = a; });
+
+    const otherRunner: any = {
+      deserializeAttachment: vi.fn().mockReturnValue({ activeJobs: [], recentJobs: ['scan-other-recent'] }),
+      send: vi.fn()
+    };
+
+    const stateManager = new StateManager(mockState);
+    stateManager.runners.add(mockWs);
+    stateManager.runners.add(otherRunner);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('scan-queued');
+    expect(stateManager.jobs.has('scan-finished')).toBe(false);
+    expect(stateManager.jobs.has('scan-other-recent')).toBe(false);
+    expect(stateManager.jobs.get('scan-queued')).toBe(mockWs);
+  });
+
+  it('skips dispatch if scan enters recentJobs during R2 await', async () => {
+    const configKey = `scans/configs/scan-1/${crypto.randomUUID()}.json`;
+    const mockStorageMap = new Map();
+    mockStorageMap.set('config_ref:scan-1', configKey);
+    mockStorageMap.set('config_meta:scan-1', { disableShared: false });
+    mockState.storage.get = vi.fn().mockImplementation(async (arg: any) => {
+      if (Array.isArray(arg)) return mockStorageMap;
+      return undefined;
+    });
+
+    let attachment: any = { activeJobs: [], recentJobs: [] };
+    mockWs.deserializeAttachment = vi.fn(() => attachment);
+    mockWs.serializeAttachment = vi.fn((a: any) => { attachment = a; });
+
+    mockEnv.STORAGE.get = vi.fn().mockImplementation(async () => {
+      attachment = { activeJobs: [], recentJobs: ['scan-1'] };
+      return {
+        text: async () => JSON.stringify({ base_url: 'http://example.com' })
+      };
+    });
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).not.toHaveBeenCalled();
+    expect(stateManager.jobs.has('scan-1')).toBe(false);
+  });
+
+  it('does not re-dispatch a finished scan when its runner disconnected before D1 update or after >20 completions pushed it out of recentJobs (Review #2 & #3)', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    mockGetActiveScans.mockResolvedValue([
+      // run-disconnected finished on runner A which then disconnected (no longer in stateManager.runners)
+      { id: 'run-disconnected', userPublicKey: null, status: 'dispatched', target_url: 'http://a.example.com' },
+      // run-evicted finished >20 jobs ago on runner B before FINDINGS_QUEUE updated D1
+      { id: 'run-evicted', userPublicKey: null, status: 'dispatched', target_url: 'http://b.example.com' },
+      { id: 'run-queued', userPublicKey: null, status: 'queued', target_url: 'http://c.example.com' }
+    ]);
+
+    const storageMap = new Map<string, any>([
+      ['finished_runs', ['run-disconnected', 'run-evicted']]
+    ]);
+    mockState.storage.get = vi.fn().mockImplementation(async (arg: any) => {
+      if (Array.isArray(arg)) return storageMap;
+      return storageMap.get(arg);
+    });
+
+    const stateManager = new StateManager(mockState);
+    stateManager.runners.add(mockWs);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('run-queued');
+    expect(stateManager.jobs.has('run-disconnected')).toBe(false);
+    expect(stateManager.jobs.has('run-evicted')).toBe(false);
+  });
+
+  it('batches storage.get into <= 128-key chunks when more than 32 scans are active (Review #1)', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    // 40 active scans * 5 keys each = 200 keys (> 128 DO limit)
+    const activeScans = Array.from({ length: 40 }, (_, i) => ({
+      id: `scan-${i}`,
+      userPublicKey: null,
+      status: i < 39 ? 'dispatched' : 'queued',
+      target_url: 'http://example.com'
+    }));
+    mockGetActiveScans.mockResolvedValue(activeScans);
+
+    const stateManager = new StateManager(mockState);
+    const otherRunner: any = { deserializeAttachment: vi.fn().mockReturnValue({ activeJobs: [] }), send: vi.fn() };
+    for (let i = 0; i < 39; i++) {
+      stateManager.jobs.set(`scan-${i}`, otherRunner);
+    }
+
+    mockState.storage.get = vi.fn().mockImplementation(async (keys: string[] | string) => {
+      if (Array.isArray(keys)) {
+        if (keys.length > 128) {
+          throw new Error('Too many keys in storage.get (> 128)');
+        }
+        return new Map();
+      }
+      return undefined;
+    });
+
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    await queueService.checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('scan-39');
+  });
+
+  it('coalesces overlapping checkAndDispatchQueuedScans calls for the same runner (Review #6)', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    let resolveScans!: (val: any) => void;
+    mockGetActiveScans
+      .mockImplementationOnce(() => new Promise(r => { resolveScans = r; }))
+      .mockResolvedValueOnce([]);
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    const p1 = queueService.checkAndDispatchQueuedScans(mockWs);
+    const p2 = queueService.checkAndDispatchQueuedScans(mockWs);
+    expect(p1).toBe(p2);
+
+    resolveScans([{ id: 'scan-1', userPublicKey: null, status: 'queued', target_url: 'http://example.com' }]);
+    await Promise.all([p1, p2]);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not dispatch a scan to a private runner owned by someone else, even with the same key', async () => {
+    // A user who copied the runner's key into their own profile must not get its jobs.
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-2']);
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
 
@@ -98,7 +342,7 @@ describe('QueueService', () => {
   });
 
   it('should dispatch public scan to shared runner (no public key tag)', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner']);
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
     mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: null, target_url: 'http://example.com' }
     ]);
@@ -114,8 +358,42 @@ describe('QueueService', () => {
     expect(stateManager.jobs.get('scan-1')).toBe(mockWs);
   });
 
+  it('leaves a scan queued for its owner\'s own busy runner instead of giving it to a shared runner', async () => {
+    const ownRunner = { send: vi.fn(), deserializeAttachment: vi.fn().mockReturnValue({ activeJobs: Array.from({ length: 10 }, (_, i) => `j${i}`) }), serializeAttachment: vi.fn() } as any;
+    mockState.getTags = vi.fn((socket: any) => socket === ownRunner ? ['runner', 'user_id:user-1'] : ['runner', 'shared']);
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-mine', user_id: 'user-1', userPublicKey: null, status: 'queued', target_url: 'http://a.example.com' },
+      { id: 'scan-other', user_id: 'user-2', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' }
+    ]);
+
+    const stateManager = new StateManager(mockState);
+    stateManager.runners.add(ownRunner);
+    stateManager.runners.add(mockWs);
+    await new QueueService(mockEnv, mockState, stateManager).checkAndDispatchQueuedScans(mockWs);
+
+    const sent = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]).payload.runId);
+    expect(sent).toEqual(['scan-other']);
+  });
+
+  it('fails a scan whose stored config is not an object and keeps dispatching the scans behind it', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
+    mockGetActiveScans.mockResolvedValue([
+      { id: 'scan-poison', userPublicKey: null, status: 'queued', target_url: 'http://a.example.com' },
+      { id: 'scan-good', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' }
+    ]);
+    const stored = new Map<string, any>([['config:scan-poison', 'x'], ['config:scan-good', { settings: {} }]]);
+    mockState.storage.get = vi.fn().mockResolvedValue(stored);
+
+    const stateManager = new StateManager(mockState);
+    await new QueueService(mockEnv, mockState, stateManager).checkAndDispatchQueuedScans(mockWs);
+
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-poison', expect.any(String));
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('scan-good');
+  });
+
   it('should not dispatch public scan to shared runner if disable_shared_runners is set to true', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner']);
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']);
     mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: null, target_url: 'http://example.com' }
     ]);
@@ -133,9 +411,9 @@ describe('QueueService', () => {
   });
 
   it('should fallback to fetching scan config from project in DB if not in DO storage', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-1']);
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
     ]);
     
     mockGetScanConfigByProject.mockResolvedValue(JSON.stringify({
@@ -155,9 +433,9 @@ describe('QueueService', () => {
   });
 
   it('should default base_url to target_url if not present in config', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-1']);
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', target_url: 'http://example.com' }
     ]);
 
     const stateManager = new StateManager(mockState);
@@ -172,7 +450,7 @@ describe('QueueService', () => {
 
   it('should handle DB errors during scan status update gracefully without failing execution', async () => {
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', target_url: 'http://example.com' }
     ]);
     mockUpdateScanStatus.mockRejectedValue(new Error('D1 connection failure'));
 
@@ -184,9 +462,9 @@ describe('QueueService', () => {
   });
 
   it('should handle errors during config fetching from DB gracefully', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123', 'user_id:user-1']);
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
     ]);
     mockGetScanConfigByProject.mockRejectedValue(new Error('DB failure'));
 
@@ -227,15 +505,15 @@ describe('QueueService', () => {
     expect(mockWs.send).toHaveBeenCalled();
     const sentMsg = JSON.parse(mockWs.send.mock.calls[0][0]);
     expect(sentMsg.payload.config.base_url).toBe('http://r2-config.com');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(mockEnv.STORAGE.delete).toHaveBeenCalledWith(configKey);
   });
 
   it('marks scan failed in D1 and deletes storage keys when R2 config retrieval fails (Issue 4c)', async () => {
     const configKey = `scans/configs/scan-1/${crypto.randomUUID()}.json`;
     mockGetActiveScans.mockResolvedValue([
-      { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
+      { id: 'scan-1', userPublicKey: 'key-123', user_id: 'user-1', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
     ]);
     const mockStorageMap = new Map();
     mockStorageMap.set('config_ref:scan-1', configKey);
@@ -252,10 +530,10 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockGetScanConfigByProject).not.toHaveBeenCalled();
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('user_public_key:scan-1');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1', expect.any(String));
+    expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
+    expect(deletedKeys(mockState)).toContain('user_public_key:scan-1');
     expect(mockLogError).toHaveBeenCalled();
   });
 
@@ -271,9 +549,9 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1', expect.any(String));
+    expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(mockLogError).toHaveBeenCalled();
   });
 
@@ -290,14 +568,14 @@ describe('QueueService', () => {
 
     expect(mockWs.send).not.toHaveBeenCalled();
     expect(mockEnv.STORAGE.get).not.toHaveBeenCalled();
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_ref:scan-1');
-    expect(mockState.storage.delete).toHaveBeenCalledWith('config_meta:scan-1');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1', expect.any(String));
+    expect(deletedKeys(mockState)).toContain('config_ref:scan-1');
+    expect(deletedKeys(mockState)).toContain('config_meta:scan-1');
     expect(mockLogError).toHaveBeenCalled();
   });
 
   it('compatibility uses meta without reading R2 for non-selected scans (Issue 4b)', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner']); // shared runner
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']); // shared runner
     mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: null, target_url: 'http://example1.com' },
       { id: 'scan-2', userPublicKey: null, target_url: 'http://example2.com' }
@@ -332,7 +610,7 @@ describe('QueueService', () => {
   });
 
   it('missing meta is treated as disableShared=true and not given to a shared runner (Issue 4b)', async () => {
-    mockState.getTags = vi.fn().mockReturnValue(['runner']); // shared runner
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'shared']); // shared runner
     mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: null, target_url: 'http://example.com' }
     ]);
@@ -443,7 +721,7 @@ describe('QueueService', () => {
     await queueService.checkAndDispatchQueuedScans(mockWs);
 
     expect(mockWs.send).not.toHaveBeenCalled();
-    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1');
+    expect(mockMarkFailedIfActive).toHaveBeenCalledWith('scan-1', expect.any(String));
     expect(mockState.storage.delete).not.toHaveBeenCalled();
   });
 

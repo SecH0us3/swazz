@@ -62,10 +62,20 @@ func IsRunningInContainer() bool {
 // mode to enforce isolation in shared/cloud environments.
 //
 // In local CLI mode (swazz-engine start), this function is never called.
+//
+// allowBypass (--dangerous-no-container) only skips the container check. It deliberately does
+// not open private networks: a shared runner started that way would otherwise ignore the
+// coordinator's per-scan allow_private_ips=false and let any tenant reach the host's network.
+// Private networks are opened explicitly with EnableLocalNetwork (--allow-private-networks) or
+// by the SWAZZ_DEV=1 development mode.
 func AssertRunningInContainer(allowBypass bool) {
-	if allowBypass || os.Getenv("SWAZZ_DEV") == "1" {
-		log.Println("WARNING: Bypassing container check (running in dangerous/development host mode)")
+	if os.Getenv("SWAZZ_DEV") == "1" {
+		log.Println("WARNING: SWAZZ_DEV=1: bypassing container check and allowing private networks (development mode)")
 		AllowLocalNetwork = true
+		return
+	}
+	if allowBypass {
+		log.Println("WARNING: Bypassing container check (running directly on the host)")
 		return
 	}
 	if !IsRunningInContainer() {
@@ -75,4 +85,11 @@ func AssertRunningInContainer(allowBypass bool) {
 			"       Alternatively, if you want to bypass this check on your host machine at your own risk, use:\n" +
 			"       swazz-engine run-agent --dangerous-no-container ...")
 	}
+}
+
+// EnableLocalNetwork lets every job dial private, loopback and link-local addresses, whatever the
+// job's own allow_private_ips says. Only for a runner whose operator is its only user.
+func EnableLocalNetwork() {
+	log.Println("WARNING: --allow-private-networks: every job may reach private, loopback and link-local addresses")
+	AllowLocalNetwork = true
 }

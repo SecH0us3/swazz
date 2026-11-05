@@ -5,6 +5,10 @@
 
 import { defineConfig, devices } from '@playwright/test';
 
+// SWAZZ_E2E_WEBMCP=0 runs the suite with WebMCP off, so helpers take their DOM fallbacks and the
+// real UI paths stay covered too. On by default.
+const webMcpEnabled = process.env.SWAZZ_E2E_WEBMCP !== '0';
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 300 * 1000,
@@ -41,6 +45,10 @@ export default defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
+        screen: undefined,
+        launchOptions: {
+          args: [webMcpEnabled ? '--enable-features=WebMCP' : '--disable-features=WebMCP'],
+        },
       },
     },
   ],

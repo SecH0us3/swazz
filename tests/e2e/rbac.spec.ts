@@ -121,9 +121,12 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
     // Wait for the main dashboard to load for User B
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // 9. Navigate to the invitation URL (using the token query parameter) to trigger invitation acceptance
-    // User B is already logged in, so the app auto-accepts the invitation on load
-    await page.goto(`/?token=${inviteToken}`);
+    // 9. Open the invitation link. It never accepts by itself (see url-param-csrf.spec.ts): the header
+    // banner offers this invitation and User B accepts it explicitly.
+    await page.goto(`/accept-invite?token=${inviteToken}`);
+    const inviteBanner = page.locator('.header-invitation-banner');
+    await expect(inviteBanner).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await inviteBanner.locator('.header-accept-btn').click();
 
     // Wait for toast notification confirming invitation acceptance
     await expect(page.locator('.toast:has-text("Invitation accepted successfully")')).toBeVisible({ timeout: TIMEOUTS.DEFAULT });

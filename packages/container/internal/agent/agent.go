@@ -28,17 +28,33 @@ import (
 // startAgent parses the arguments and connects to the coordinator
 func StartAgent(args []string) {
 	var coordinatorURL, token, tokenFile, name, keyPathOrHex, logLevelStr, logFilterStr string
-	var dangerousNoContainer bool
+	var dangerousNoContainer, allowPrivateNetworks bool
 	var hasQuiet, hasLogLevel bool
 	var disableTelemetry bool
+	var recycleWhenIdle bool
+	var trustedProxies []string
 
 	// Simple arg parsing
 	for i := 0; i < len(args); i++ {
+		if v, ok := strings.CutPrefix(args[i], "--trusted-proxy="); ok {
+			trustedProxies = append(trustedProxies, v)
+			continue
+		}
 		switch args[i] {
 		case "--dangerous-no-container":
 			dangerousNoContainer = true
+		case "--allow-private-networks":
+			allowPrivateNetworks = true
+		case "--trusted-proxy":
+			if i+1 >= len(args) {
+				log.Fatalf("Error: --trusted-proxy needs an ip:port value")
+			}
+			trustedProxies = append(trustedProxies, args[i+1])
+			i++
 		case "--disable-telemetry":
 			disableTelemetry = true
+		case "--recycle-when-idle":
+			recycleWhenIdle = true
 		case "--log-level", "-log-level":
 			if i+1 < len(args) {
 				logLevelStr = args[i+1]
@@ -87,6 +103,9 @@ func StartAgent(args []string) {
 	if os.Getenv("SWAZZ_DISABLE_TELEMETRY") == "true" {
 		disableTelemetry = true
 	}
+	if os.Getenv("SWAZZ_RECYCLE_WHEN_IDLE") == "true" {
+		recycleWhenIdle = true
+	}
 
 	var finalLevel string
 	envLevel := os.Getenv("SWAZZ_LOG_LEVEL")
@@ -119,6 +138,12 @@ func StartAgent(args []string) {
 	}
 
 	safenet.AssertRunningInContainer(dangerousNoContainer)
+	if allowPrivateNetworks {
+		safenet.EnableLocalNetwork()
+	}
+	if err := safenet.TrustProxies(trustedProxies); err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	coordinatorURL = resolveCoordinatorURL(coordinatorURL)
 	var err error
@@ -187,6 +212,9 @@ func StartAgent(args []string) {
 		agentVer = "v1.0.0"
 	}
 	q.Set("version", agentVer)
+	// Tells the coordinator this agent sends heartbeats, so a connection that stops sending them
+	// can be treated as dead.
+	q.Set("heartbeat", "1")
 	u.RawQuery = q.Encode()
 	urlWithParams := u.String()
 
@@ -211,10 +239,17 @@ func StartAgent(args []string) {
 	// (miniflare "Network connection lost"), which drops this WebSocket. Instead
 	// of terminating the agent, retry the connection with exponential backoff so
 	// the runner survives coordinator restarts.
+	// One session for the life of the process, so scans survive a reconnect.
+	session := newAgentSession(coordinatorURL, token, disableTelemetry)
+	if recycleWhenIdle {
+		session.dispatcher.EnableRecycleWhenIdle()
+		logInfo("Recycling when idle: the agent exits after its scans finish, for its supervisor to restart it clean")
+	}
 	backoff := 2 * time.Second
 	const maxBackoff = 30 * time.Second
 	for {
-		runErr := runAgentConnection(ctx, urlWithParams, opts, coordinatorURL, token, name, useSignatureAuth, privKey, pubKeyHex, disableTelemetry)
+		session.connectedAt = time.Time{}
+		runErr := session.runConnection(ctx, urlWithParams, opts, useSignatureAuth, privKey)
 		if runErr == nil {
 			return
 		}
@@ -224,12 +259,23 @@ func StartAgent(args []string) {
 		if errors.Is(runErr, errAgentAuthFatal) {
 			os.Exit(1)
 		}
+		backoff = backoffAfter(backoff, session.connectedAt, time.Now(), maxBackoff)
 		logError("Agent connection lost (%v). Reconnecting in %v...", runErr, backoff)
 		time.Sleep(backoff)
 		if backoff < maxBackoff {
 			backoff *= 2
 		}
 	}
+}
+
+// backoffAfter is the wait before the next connection attempt: it starts over at 2 s once a
+// connection had held up (it was set up at connectedAt and lasted past 2*maxBackoff), and stays at
+// backoff after an attempt that never got through its setup, however long that took.
+func backoffAfter(backoff time.Duration, connectedAt, now time.Time, maxBackoff time.Duration) time.Duration {
+	if !connectedAt.IsZero() && now.Sub(connectedAt) > 2*maxBackoff {
+		return 2 * time.Second
+	}
+	return backoff
 }
 
 // resolveAgentToken resolves the runner authentication token with the following priority:
@@ -283,4 +329,3 @@ func resolveCoordinatorURL(coordinatorFlag string) string {
 	}
 	return ""
 }
-

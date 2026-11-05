@@ -19,6 +19,7 @@ import (
 
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/generator"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
 
@@ -171,7 +172,7 @@ func Check(
 				return
 			}
 			defer resp.Body.Close()
-			_, _ = io.Copy(io.Discard, resp.Body)
+			safenet.DrainBody(resp.Body, safenet.MaxDrainBytes)
 
 			statusCodes[seq-1] = resp.StatusCode
 

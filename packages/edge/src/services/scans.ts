@@ -3,14 +3,25 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
+import { reportKeyForScan } from '../repositories/cleanup';
 import { Env } from '../env';
-import { IScansRepository } from '../repositories/scans';
+import { IScansRepository, ScansCursor } from '../repositories/scans';
 import { IRbacRepository } from '../repositories/rbac';
 import { sign, verify } from 'hono/jwt';
 import { ulid } from 'ulidx';
 import { isValidRunId, serializeScanConfig, writeScanConfig } from './scanConfigStore';
 
 import { WorkersAIService, type FindingAnalysisResult } from './ai';
+import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE, SCAN_NOT_QUEUED } from '../utils/runnerMessages';
+import { bytesToBase64Url, base64UrlToBytes } from '../utils/base64url';
+import { isValidId } from '../utils/validation';
+
+// The query of GET /api/scans: a page of the list, or (active=1) the scans that have not ended.
+export interface ScansPageQuery {
+  limit?: string;
+  cursor?: string;
+  active?: string;
+}
 
 export interface TriageUpdatePayload {
   finding_id: string;
@@ -28,7 +39,7 @@ export interface IScansService {
     clientIp: string,
     waitUntil?: (p: Promise<any>) => void
   ): Promise<{ id: string; status: string }>;
-  getScans(projectId: string, userId: string | null): Promise<{ scans: any[] }>;
+  getScans(projectId: string, userId: string | null, page?: ScansPageQuery): Promise<{ scans: any[]; next_cursor?: string }>;
   getScan(scanId: string, userId: string | null): Promise<{ scan: any }>;
   updateScan(scanId: string, body: any, userId: string | null): Promise<{ scan: any }>;
   generateUploadUrl(scanId: string, userId: string | null): Promise<any>;
@@ -57,6 +68,24 @@ export class ScansService implements IScansService {
     private rbacRepo: IRbacRepository
   ) {}
 
+  /** Gives each failed scan its failure_reason: the last error it reported, for the user. */
+  private async attachFailureReasons(scans: any[]): Promise<void> {
+    const failed = scans.filter(s => s && s.status === 'failed');
+    // The scan row carries it (cleaned up once more, as runner text); only scans that failed
+    // before it was kept need looking up.
+    const lacking: any[] = [];
+    for (const scan of failed) {
+      const stored = sanitizeRunnerText(scan.failure_reason);
+      if (stored) scan.failure_reason = stored;
+      else lacking.push(scan);
+    }
+    if (lacking.length === 0) return;
+    const reasons = await this.scansRepo.getFailureReasons(lacking.map(s => s.id));
+    for (const scan of lacking) {
+      scan.failure_reason = reasons.get(scan.id) ?? null;
+    }
+  }
+
   private async checkScanAccess(scan: any, userId: string | null, isAuthEnabled: boolean): Promise<void> {
     if (!isAuthEnabled) return;
     if (!userId) throw new Error('Unauthorized|401');
@@ -67,6 +96,24 @@ export class ScansService implements IScansService {
     }
 
     const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'get:/api/projects/:id/scans');
+    if (!hasAccess) throw new Error('Forbidden|403');
+  }
+
+  /**
+   * Write access to a scan. A project scan needs current project permission: having created it
+   * grants nothing once the creator's membership is gone. Only a standalone scan (no project)
+   * falls back to its creator, as in checkScanAccess.
+   */
+  private async checkScanWriteAccess(scan: any, userId: string | null | undefined, isAuthEnabled: boolean | undefined): Promise<void> {
+    if (!isAuthEnabled) return;
+    if (!userId) throw new Error('Unauthorized|401');
+
+    if (!scan.project_id) {
+      if (scan.user_id !== userId) throw new Error('Forbidden|403');
+      return;
+    }
+
+    const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
     if (!hasAccess) throw new Error('Forbidden|403');
   }
 
@@ -137,7 +184,7 @@ export class ScansService implements IScansService {
     } catch (err: any) {
       console.error("Failed to process scan config or queue scan in /api/scans:", err);
       try {
-        await this.scansRepo.updateScanStatus(id, 'failed');
+        await this.scansRepo.updateScanStatus(id, 'failed', undefined, undefined, SCAN_NOT_QUEUED);
       } catch (statusErr) {
         console.error("Failed to mark scan as failed after R2/queue error in /api/scans:", statusErr);
       }
@@ -178,7 +225,7 @@ export class ScansService implements IScansService {
     return { id, status: 'queued' };
   }
 
-  async getScans(projectId: string, userId: string | null) {
+  async getScans(projectId: string, userId: string | null, page: ScansPageQuery = {}) {
     if (!projectId) {
       throw new Error('Missing query parameter: project_id|400');
     }
@@ -192,8 +239,17 @@ export class ScansService implements IScansService {
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
-    const scans = await this.scansRepo.getScans(projectId);
-    return { scans };
+    const limit = parseScansLimit(page.limit);
+    if (page.active !== undefined && page.active !== '') {
+      if (page.active !== '1' || page.cursor) throw new Error('Invalid query parameter: active|400');
+      const scans = await this.scansRepo.getUnfinishedScans(projectId, limit);
+      await this.attachFailureReasons(scans);
+      return { scans };
+    }
+    const before = page.cursor === undefined || page.cursor === '' ? undefined : decodeScansCursor(page.cursor);
+    const { scans, next } = await this.scansRepo.getScans(projectId, limit, before);
+    await this.attachFailureReasons(scans);
+    return next ? { scans, next_cursor: encodeScansCursor(next) } : { scans };
   }
 
   async getScan(scanId: string, userId: string | null) {
@@ -205,9 +261,14 @@ export class ScansService implements IScansService {
       throw new Error('Unauthorized|401');
     }
     if (userId) {
-      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'get:/api/projects/:id/scans');
+      // A scan outside any project belongs to its creator (as in checkScanAccess): the dashboard
+      // polls its status when the live stream goes quiet.
+      const hasAccess = scan.project_id
+        ? await this.rbacRepo.checkPermission(userId, scan.project_id, 'get:/api/projects/:id/scans')
+        : scan.user_id === userId;
       if (!hasAccess) throw new Error('Forbidden|403');
     }
+    await this.attachFailureReasons([scan]);
 
     if (scan && typeof scan.waf_patch_report === 'string') {
       try {
@@ -250,7 +311,7 @@ export class ScansService implements IScansService {
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
-    const r2Key = `reports/${scanId}.enc`;
+    const r2Key = reportKeyForScan(scanId);
     const secret = this.env.JWT_SECRET;
     if (!secret) throw new Error('Internal server error: auth not configured|500');
 
@@ -318,7 +379,15 @@ export class ScansService implements IScansService {
 
     await this.checkScanAccess(scan, userId, isAuthEnabled);
 
-    const logs = await this.scansRepo.getRunnerLogs(scanId);
+    const rows = await this.scansRepo.getRunnerLogs(scanId);
+    // Errors read like the runner's own log lines, as one bounded line without internals.
+    const logs = (rows ?? []).map((row: any) => {
+      if (!isStoredError(row)) return row;
+      return {
+        ...row,
+        payload: JSON.stringify({ level: 'ERROR', message: runnerErrorText(row.payload) || UNKNOWN_FAILURE, timestamp: row.created_at }),
+      };
+    });
     return { logs };
   }
 
@@ -365,11 +434,7 @@ export class ScansService implements IScansService {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
 
-    if (isAuthEnabled) {
-      if (!userId) throw new Error('Unauthorized|401');
-      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
-      if (!hasAccess && scan.user_id !== userId) throw new Error('Forbidden|403');
-    }
+    await this.checkScanWriteAccess(scan, userId, isAuthEnabled);
 
     const updatedCount = await this.scansRepo.batchUpdateFindingsAI(scanId, updates);
     return { success: true, updated_count: updatedCount };
@@ -379,11 +444,7 @@ export class ScansService implements IScansService {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
 
-    if (isAuthEnabled) {
-      if (!userId) throw new Error('Unauthorized|401');
-      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
-      if (!hasAccess && scan.user_id !== userId) throw new Error('Forbidden|403');
-    }
+    await this.checkScanWriteAccess(scan, userId, isAuthEnabled);
 
     await this.scansRepo.saveWAFPatchReport(scanId, report);
     return { success: true };
@@ -457,3 +518,49 @@ export class ScansService implements IScansService {
   }
 }
 
+
+function isStoredError(row: any): boolean {
+  if (row?.type === 'error') return true;
+  try {
+    return JSON.parse(row?.payload)?.type === 'error';
+  } catch {
+    return false;
+  }
+}
+
+// The scan list is paged: the dashboard polls it every few seconds, and a project's scans pile up.
+export const DEFAULT_SCANS_PAGE = 50;
+export const MAX_SCANS_PAGE = 200;
+
+function parseScansLimit(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_SCANS_PAGE;
+  if (!/^\d+$/.test(raw)) throw new Error('Invalid query parameter: limit|400');
+  // Any larger number is clamped, however many digits it has.
+  const n = raw.length > 6 ? MAX_SCANS_PAGE : Number(raw);
+  if (n < 1) throw new Error('Invalid query parameter: limit|400');
+  return Math.min(n, MAX_SCANS_PAGE);
+}
+
+// The cursor is opaque to clients: the created_at and id of the last scan of the page before.
+// It only narrows a query bound to the project already checked, so a forged one shows nothing new;
+// one that does not decode is refused rather than read as "from the start".
+export function encodeScansCursor(c: ScansCursor): string {
+  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify([c.createdAt, c.id])));
+}
+
+function decodeScansCursor(raw: string): ScansCursor {
+  const invalid = new Error('Invalid query parameter: cursor|400');
+  if (raw.length > 256) throw invalid;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(base64UrlToBytes(raw)));
+  } catch {
+    throw invalid;
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 2) throw invalid;
+  const [createdAt, id] = parsed;
+  // created_at is CURRENT_TIMESTAMP ("YYYY-MM-DD HH:MM:SS").
+  if (typeof createdAt !== 'string' || !/^[0-9][0-9:. TZ+-]{0,39}$/.test(createdAt)) throw invalid;
+  if (!isValidId(id)) throw invalid;
+  return { createdAt, id };
+}

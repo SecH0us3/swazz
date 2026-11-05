@@ -3,13 +3,16 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
+import { UNCACHED_PARSE } from './handlers/parse';
 import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
-import { ScansRepository } from '../repositories/scans';
+import { ScansRepository, sanitizeOobPending } from '../repositories/scans';
 import { ulid } from 'ulidx';
-import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags } from './utils';
+import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags, markScanFinished } from './utils';
+import { resumeRuns } from './resume';
 import { logError, logWarn } from '../../../common/logging/logger';
+import { runnerErrorText, redactRunnerLogText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
 
 export class WebSocketHandler {
   constructor(
@@ -69,8 +72,10 @@ export class WebSocketHandler {
           if (isValid) {
             this.stateManager.pendingChallenges.delete(ws);
             this.stateManager.runners.add(ws);
-            const attachment = ws.deserializeAttachment() as { connectionId?: string } | null || {};
+            const { resume, ...attachment } = ws.deserializeAttachment() as { connectionId?: string; resume?: unknown } | null || {};
             ws.serializeAttachment({ ...attachment, authenticated: true });
+            // Runs claimed in the connection URL are handed over only now that the key is proven.
+            await resumeRuns({ env: this.env, state: this.state, stateManager: this.stateManager }, ws, resume);
             ws.send(JSON.stringify({ type: 'auth_ok' }));
             
             const versionTag = tags.find(t => t.startsWith('version:'));
@@ -100,14 +105,20 @@ export class WebSocketHandler {
         const msg = JSON.parse(messageStr);
         
         if (msg.type === 'parse_result') {
+          // Only the runner the request was sent to may answer it; anything else is ignored.
+          if (this.stateManager.pendingParseRunners.get(msg.reqId) !== ws) {
+            return;
+          }
+          this.stateManager.pendingParseRunners.delete(msg.reqId);
           const resolve = this.stateManager.pendingParses.get(msg.reqId);
+          // Per-user cache key (see swaggerCacheKey), so this runner can only fill its requester's cache.
           const urlStr = this.stateManager.pendingParseUrls.get(msg.reqId);
           this.stateManager.pendingParseUrls.delete(msg.reqId);
           
           if (resolve) {
             this.stateManager.pendingParses.delete(msg.reqId);
             
-            if (msg.payload && !msg.payload.error && urlStr && urlStr !== 'rawSpec') {
+            if (msg.payload && !msg.payload.error && urlStr && urlStr !== UNCACHED_PARSE) {
               const scansRepo = new ScansRepository(this.env);
               const storage = this.env.STORAGE;
               
@@ -169,6 +180,14 @@ export class WebSocketHandler {
             resolve(new Response(JSON.stringify(clientPayload), { status: 200, headers: { 'Content-Type': 'application/json' } }));
           }
         }
+        if (msg.type === 'ack_request') {
+          // Acknowledged delivery (delivery.ts): the tail of a run this connection owns.
+          const attachment = (ws.deserializeAttachment?.() || {}) as { activeJobs?: string[]; recentJobs?: string[] };
+          const owned = typeof msg.runId === 'string' && msg.runId !== '' &&
+            ((attachment.activeJobs ?? []).includes(msg.runId) || (attachment.recentJobs ?? []).includes(msg.runId));
+          if (owned) this.state.waitUntil(this.stateManager.delivery.requested(ws, msg.runId, msg.exec, msg.seq));
+          return;
+        }
         if (msg.type === 'event' || msg.type === 'error') {
           const runId = msg.runId;
 
@@ -195,54 +214,30 @@ export class WebSocketHandler {
                 return;
               }
             } else {
-              logError(
-                { env: this.env, executionCtx: this.state },
-                "Coordinator",
-                `Runner sent unauthorized or invalid runId: ${runId}`,
-                { tags, runId }
-              );
+              // A replay may repeat many refused events; log the first of each run per connection.
+              if (msg.seq === undefined || this.stateManager.delivery.firstRefusal(ws, runId)) {
+                logError(
+                  { env: this.env, executionCtx: this.state },
+                  "Coordinator",
+                  `Runner sent unauthorized or invalid runId: ${runId}`,
+                  { tags, runId }
+                );
+              }
               return;
             }
           }
 
-          if (this.env.JWT_SECRET === 'test-secret') {
-            // Local dev: write findings/events straight to D1, bypassing the
-            // queue emulation. Miniflare's queue broker is unstable under the
-            // high event volume of a fuzz run ("Unknown Internal Error (15000)")
-            // and can take down `wrangler dev` mid-session.
-            this.state.waitUntil(
-              (async () => {
-                try {
-                  const scansRepo = new ScansRepository(this.env);
-                  await scansRepo.processFindingsQueueMessages([{
-                    body: { scanId: runId, type: msg.type, payload: msg.payload }
-                  }]);
-                } catch (qErr) {
-                  logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist event to D1", { error: qErr });
-                }
-              })()
-            );
-          } else {
-            this.state.waitUntil(
-              this.env.FINDINGS_QUEUE.send({
-                scanId: runId,
-                type: msg.type,
-                payload: msg.payload
-              }).catch(qErr => {
-                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
-              })
-            );
-          }
-
-          const clientSet = this.stateManager.clients.get(runId);
-          if (clientSet) {
-            const outMsg = JSON.stringify(msg.payload);
-            for (const client of clientSet) {
-              try {
-                client.send(outMsg);
-              } catch (e) {
-                // client closed
-              }
+          // Acknowledged delivery (delivery.ts): a replayed event the coordinator already has is dropped.
+          const sequenced = msg.seq !== undefined;
+          if (sequenced) {
+            const verdict = await this.stateManager.delivery.accept(runId, msg.exec, msg.seq);
+            if (verdict === 'invalid') {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", `Runner sent an invalid seq for run ${runId}`, { tags, runId });
+              return;
+            }
+            if (verdict === 'duplicate') {
+              await this.stateManager.delivery.duplicate(ws, runId);
+              return;
             }
           }
 
@@ -251,6 +246,84 @@ export class WebSocketHandler {
             shouldCleanup = true;
           } else if (msg.type === 'event' && msg.payload && (msg.payload.type === 'complete' || msg.payload.type === 'error')) {
             shouldCleanup = true;
+          }
+
+          // A runner log line reaches users (the dashboard, the stored runner log, a scan's
+          // warnings): its URLs are kept to scheme and host, as they may carry credentials.
+          if (msg.type === 'event' && msg.payload?.type === 'runner_log' && msg.payload.data && typeof msg.payload.data.message === 'string') {
+            msg.payload = { ...msg.payload, data: { ...msg.payload.data, message: redactRunnerLogText(msg.payload.data.message) } };
+          } else if (msg.type === 'event' && msg.payload?.type === 'error') {
+            // An error from the runner's event bus: shown and stored like any runner error.
+            msg.payload = { type: 'error', data: { message: runnerErrorText(msg.payload) || UNKNOWN_FAILURE } };
+          }
+
+          if (msg.type === 'event' && msg.payload?.type === 'oob_pending') {
+            // Stored at once, here only: a callback can come seconds after the run ends
+            // (handlers/oob.ts). The findings queue keeps only the event's token count.
+            this.stateManager.noteOobHandOver(runId);
+            const tokens = sanitizeOobPending(msg.payload.data);
+            this.state.waitUntil(new ScansRepository(this.env).storeOobPending(runId, tokens).catch(err => {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to store handed-over OOB tokens", { error: err, runId });
+            }));
+          }
+
+          // exec and seq make the stored event idempotent (eventIdFor), whichever path stores it.
+          const body = sequenced
+            ? { scanId: runId, type: msg.type, payload: msg.payload, exec: msg.exec, seq: msg.seq }
+            : { scanId: runId, type: msg.type, payload: msg.payload };
+          const writeToD1 = async () => {
+            const scansRepo = new ScansRepository(this.env);
+            await scansRepo.processFindingsQueueMessages([{ body }]);
+          };
+          const persist = (async () => {
+            if (this.env.JWT_SECRET === 'test-secret') {
+              // Local dev: write findings/events straight to D1, bypassing the
+              // queue emulation. Miniflare's queue broker is unstable under the
+              // high event volume of a fuzz run ("Unknown Internal Error (15000)")
+              // and can take down `wrangler dev` mid-session.
+              try {
+                await writeToD1();
+              } catch (qErr) {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist event to D1", { error: qErr });
+              }
+              return;
+            }
+            try {
+              await this.env.FINDINGS_QUEUE.send(body);
+            } catch (qErr) {
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
+              // Straight to D1 instead: an acknowledged event must not be lost, and a terminal one
+              // must not leave the scan stuck as 'dispatched'.
+              try {
+                await writeToD1();
+              } catch (fallbackErr) {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist event to D1 after queue failure", { error: fallbackErr });
+              }
+            }
+          })();
+          this.state.waitUntil(persist);
+
+          if (sequenced) {
+            this.state.waitUntil(this.stateManager.delivery.persisted(runId, persist));
+            const ack = this.stateManager.delivery.processed(ws, runId, msg.exec, msg.seq, shouldCleanup);
+            if (ack) this.state.waitUntil(ack);
+          }
+
+          const clientSet = this.stateManager.clients.get(runId);
+          // The run's unanswered OOB tokens are for the coordinator (oob_pending), not the dashboard.
+          if (clientSet && msg.payload?.type !== 'oob_pending') {
+            // A runner error ({"error": ...}) has no type of its own; the dashboard needs one to
+            // end the scan and show why (see utils/runnerMessages.ts).
+            const outMsg = msg.type === 'error'
+              ? JSON.stringify({ type: 'error', data: { message: runnerErrorText(msg.payload) || UNKNOWN_FAILURE } })
+              : JSON.stringify(msg.payload);
+            for (const client of clientSet) {
+              try {
+                client.send(outMsg);
+              } catch (e) {
+                // client closed
+              }
+            }
           }
 
           if (shouldCleanup && runId) {
@@ -271,6 +344,15 @@ export class WebSocketHandler {
               recentJobs.shift();
             }
             ws.serializeAttachment({ ...attachment, activeJobs, recentJobs });
+            // Keeps the run's job_runner record until it is evicted from finished_runs, so a
+            // reconnecting agent can still deliver the run's late log lines (see resume.ts).
+            await markScanFinished(this.state.storage, runId);
+            const dispatchPromise = this.queueService.checkAndDispatchQueuedScans(ws);
+            if (typeof this.state.waitUntil === 'function') {
+              this.state.waitUntil(dispatchPromise);
+            } else {
+              await dispatchPromise;
+            }
           }
         }
       } catch (e) {

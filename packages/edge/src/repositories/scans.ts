@@ -8,7 +8,33 @@ import { BaseService } from './base';
 import { dispatchWebhook } from '../utils/webhooks';
 import { sendScanCompletedDigestEmail } from '../services/email';
 import { WorkersAIService } from '../services/ai';
-import { logError } from '../../../common/logging/logger';
+import { logError, logWarn } from '../../../common/logging/logger';
+import { eventIdFor, isValidExec } from '../coordinator/delivery';
+import { runnerErrorText, sanitizeRunnerText, UNKNOWN_FAILURE } from '../utils/runnerMessages';
+import { isValidId } from '../utils/validation';
+
+// A position in a project's scan list, newest first: the last scan of the page before.
+export interface ScansCursor {
+  createdAt: string;
+  id: string;
+}
+
+// The scan list leaves out what only one scan's page needs and can be large (the WAF patch report,
+// the resume checkpoint).
+const SCAN_LIST_COLUMNS = 'id, project_id, target_url, profile, status, summary_stats, report_url, is_encrypted, ' +
+  'created_at, completed_at, user_id, trigger_type, failure_reason, status_changed_at';
+
+// Statuses of a scan that has not ended yet.
+export const ACTIVE_SCAN_STATUSES = ['queued', 'dispatched', 'running', 'paused'] as const;
+
+// The scan list query, newest first. The row-value comparison lets SQLite seek the
+// (project_id, created_at, id) index to the cursor; the equivalent OR form makes it walk the index
+// from the newest row and filter, so a deep page would cost as much as OFFSET paging.
+export function scansPageSql(withCursor: boolean): string {
+  return `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ?` +
+    (withCursor ? ' AND (created_at, id) < (?, ?)' : '') +
+    ' ORDER BY created_at DESC, id DESC LIMIT ?';
+}
 
 export interface IScansRepository {
   createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null, triggerType?: string): Promise<void>;
@@ -28,12 +54,17 @@ export interface IScansRepository {
     ip: string | null
   ): Promise<void>;
   
-  getScans(projectId: string): Promise<any[]>;
+  getScans(projectId: string, limit: number, before?: ScansCursor): Promise<{ scans: any[]; next: ScansCursor | null }>;
+  getUnfinishedScans(projectId: string, limit: number): Promise<any[]>;
   getScan(scanId: string): Promise<any | null>;
   updateScan(scanId: string, fields: Record<string, any>): Promise<any>;
   updateScanReportUrl(scanId: string, reportUrl: string): Promise<void>;
   
   getRunnerLogs(scanId: string): Promise<any[]>;
+  getFailureReasons(scanIds: string[]): Promise<Map<string, string>>;
+  hasActiveScans(): Promise<boolean>;
+  changeActiveStatus(scanId: string, from: string[], to: 'paused' | 'dispatched'): Promise<boolean>;
+  getStalledActiveScans(idleMinutes: number, limit: number, owned?: string[], ownedIdleMinutes?: number): Promise<StalledScan[]>;
   getFindings(scanId: string): Promise<any[]>;
   getFindingDetails(findingId: string): Promise<any | null>;
   updateFinding(findingId: string, fields: Record<string, any>, ctx?: any): Promise<any>;
@@ -45,13 +76,13 @@ export interface IScansRepository {
   getCachedSwagger(url: string): Promise<{ base_path: string; endpoints_r2_key: string; fetched_at: string } | null>;
   getCachedSwaggerDetails(url: string): Promise<{ endpoints_hash: string; endpoints_r2_key: string; raw_spec_r2_key: string } | null>;
   upsertSwaggerCache(url: string, basePath: string, endpointsHash: string, endpointsR2Key: string | undefined, rawSpecR2Key: string | undefined): Promise<void>;
-  updateScanStatus(scanId: string, status: string, summaryStats?: string): Promise<void>;
-  markFailedIfActive(scanId: string): Promise<boolean>;
+  updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any, failureReason?: string): Promise<void>;
+  markFailedIfActive(scanId: string, reason?: string): Promise<boolean>;
   getScanStatus(scanId: string): Promise<string | null>;
   getQueuedScans(): Promise<any[]>;
   getActiveScans(): Promise<any[]>;
   getScanConfigByProject(projectId: string, profileName: string): Promise<string | null>;
-  processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<void>;
+  processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<ProcessedEvents>;
   batchUpdateFindingsAI(
     scanId: string,
     updates: Array<{
@@ -73,6 +104,110 @@ function normalizeAIRelevance(val: unknown): boolean {
     return norm === '1' || norm === '1.0' || norm === 'true' || norm === 'true positive' || norm === 'true_positive' || norm === 'tp';
   }
   return false;
+}
+
+const MAX_FINDINGS_PER_EVENT = 1000;
+
+// A run's unanswered OOB tokens (runner/oob.go): at most this many per event and per scan, each
+// field cut to OOB_FIELD_LIMIT characters, kept OOB_PENDING_DAYS after the scan.
+const MAX_OOB_TOKENS_PER_EVENT = 100;
+const MAX_OOB_TOKENS_PER_SCAN = 2000;
+const OOB_FIELD_LIMIT = 256;
+export const OOB_PENDING_DAYS = 7;
+
+/** The valid tokens of an oob_pending event; anything malformed is dropped. */
+export function sanitizeOobPending(data: unknown): Array<{ token: string; endpoint: string; payload: string }> {
+  const tokens = (data as any)?.tokens;
+  if (!Array.isArray(tokens)) return [];
+  const text = (v: unknown) => (typeof v === 'string' ? v : '').slice(0, OOB_FIELD_LIMIT);
+  const out: Array<{ token: string; endpoint: string; payload: string }> = [];
+  for (const t of tokens.slice(0, MAX_OOB_TOKENS_PER_EVENT)) {
+    if (!t || typeof t !== 'object' || !isValidId((t as any).uuid)) continue;
+    out.push({ token: (t as any).uuid, endpoint: text((t as any).endpoint), payload: text((t as any).payload) });
+  }
+  return out;
+}
+const FINDING_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+const FINDING_TEXT_LIMIT = 64 * 1024;
+
+/**
+ * Normalizes one runner-reported finding. Runners are tenant-controlled, so anything that is not
+ * an object is dropped and every field is coerced to a bounded string; the runner's id is kept
+ * (AI triage refers back to it) only when it is a plain identifier.
+ */
+export function sanitizeRunnerFinding(raw: unknown): { id: string; ruleId: string; level: string; message: string; evidence: string | null } | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const f = raw as Record<string, unknown>;
+  const text = (v: unknown, max: number) => (typeof v === 'string' ? v : v == null ? '' : String(v)).slice(0, max);
+  const ruleId = text(f.ruleId, 256);
+  if (!ruleId) return null;
+  const evidence = f.evidence == null || f.evidence === '' ? null : text(f.evidence, FINDING_TEXT_LIMIT);
+  return {
+    id: typeof f.id === 'string' && FINDING_ID_PATTERN.test(f.id) ? f.id : crypto.randomUUID(),
+    ruleId,
+    level: text(f.level, 32),
+    message: text(f.message, FINDING_TEXT_LIMIT),
+    evidence,
+  };
+}
+
+// The statuses of a scan that has not ended.
+const ACTIVE_STATUS_SQL = "status IN ('queued','dispatched','paused')";
+
+export interface StalledScan {
+  id: string;
+  status: 'dispatched' | 'paused';
+  idle_minutes: number;
+}
+
+/** What processing a batch of runner events changed. */
+export interface ProcessedEvents {
+  /** Scans this batch ended (completed or failed); a scan that had already ended is not listed. */
+  ended: string[];
+}
+
+// A stored runner error: the runner's error message, or an event of type "error".
+const ERROR_EVENT_SQL = "(type = 'error' OR (type = 'event' AND json_extract(payload, '$.type') = 'error'))";
+
+// D1 allows at most 100 bound parameters per statement.
+const EVENT_ID_LOOKUP_CHUNK = 90;
+
+/** Whether the event is a transient progress heartbeat or a [Fuzz Progress] log line that is coalesced per scan. */
+function isCoalescedProgressEvent(eventType: string, payload: any): 'progress' | 'fuzz_progress' | null {
+  if (eventType !== 'event' || !payload || typeof payload !== 'object') return null;
+  if (payload.type === 'progress') return 'progress';
+  if (payload.type === 'runner_log' && typeof payload.data?.message === 'string') {
+    const msg = payload.data.message;
+    if (msg.startsWith('[Fuzz Progress]') || (msg.startsWith('{') && msg.includes('"totalRequests"'))) {
+      return 'fuzz_progress';
+    }
+  }
+  return null;
+}
+
+/** A sequenced event's place in its runner's stream, or null for an unsequenced one. */
+function eventOrder(body: any): { exec: string; seq: number } | null {
+  const { exec, seq } = body ?? {};
+  if (!isValidExec(exec) || typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return null;
+  return { exec, seq };
+}
+
+/**
+ * Whether a coalesced progress event may replace the one already kept: a queue redelivery or a
+ * retried batch can bring an older event after a newer one. Mirrors the upsert's WHERE clause.
+ */
+function supersedes(next: { exec: string; seq: number } | null, kept: { exec: string; seq: number } | null): boolean {
+  return next === null || kept === null || next.exec !== kept.exec || next.seq > kept.seq;
+}
+
+/** The stable scan_events id of a sequenced runner event, or undefined for any other. */
+function storedEventId(body: any): string | undefined {
+  const { scanId, type, payload, exec, seq } = body ?? {};
+  const eventType = typeof type === 'string' && type ? type : 'event';
+  if (isCoalescedProgressEvent(eventType, payload) !== null) return undefined;
+  if (typeof scanId !== 'string' || scanId === '' || !isValidExec(exec)) return undefined;
+  if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1) return undefined;
+  return eventIdFor(scanId, exec, seq);
 }
 
 export class ScansRepository extends BaseService implements IScansRepository {
@@ -129,10 +264,26 @@ export class ScansRepository extends BaseService implements IScansRepository {
     ).run();
   }
 
-  async getScans(projectId: string): Promise<any[]> {
+  async getScans(projectId: string, limit: number, before?: ScansCursor): Promise<{ scans: any[]; next: ScansCursor | null }> {
+    // One more than the page, to tell whether another one follows.
+    const stmt = before
+      ? this.db.prepare(scansPageSql(true)).bind(projectId, before.createdAt, before.id, limit + 1)
+      : this.db.prepare(scansPageSql(false)).bind(projectId, limit + 1);
+    const { results } = await stmt.all<any>();
+    const scans = results || [];
+    if (scans.length <= limit) return { scans, next: null };
+    scans.length = limit;
+    const last = scans[limit - 1];
+    return { scans, next: { createdAt: last.created_at, id: last.id } };
+  }
+
+  // The project's scans that have not ended, newest first, however many newer ones there are.
+  async getUnfinishedScans(projectId: string, limit: number): Promise<any[]> {
+    const marks = ACTIVE_SCAN_STATUSES.map(() => '?').join(', ');
     const { results } = await this.db.prepare(
-      'SELECT * FROM scans WHERE project_id = ? ORDER BY created_at DESC'
-    ).bind(projectId).all();
+      `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ? AND status IN (${marks}) ` +
+      'ORDER BY created_at DESC, id DESC LIMIT ?'
+    ).bind(projectId, ...ACTIVE_SCAN_STATUSES, limit).all<any>();
     return results || [];
   }
 
@@ -144,7 +295,9 @@ export class ScansRepository extends BaseService implements IScansRepository {
   }
 
   async updateScan(scanId: string, fields: Record<string, any>): Promise<any> {
-    const allowedFields = ['status', 'summary_stats', 'report_url', 'completed_at'] as const;
+    // report_url is not client-writable: only uploadReport sets it (to reports/<scanId>.enc), and
+    // account-deletion cleanup deletes R2 objects by it.
+    const allowedFields = ['status', 'summary_stats', 'completed_at'] as const;
     const setClauses: string[] = [];
     const values: any[] = [];
 
@@ -173,11 +326,96 @@ export class ScansRepository extends BaseService implements IScansRepository {
       .run();
   }
 
+  /** The scan's runner log: runner_log events and errors, oldest first. */
   async getRunnerLogs(scanId: string): Promise<any[]> {
     const { results } = await this.db.prepare(
-      "SELECT * FROM scan_events WHERE scan_id = ? AND type = 'event' AND json_extract(payload, '$.type') = 'runner_log' ORDER BY created_at ASC"
+      `SELECT * FROM scan_events WHERE scan_id = ? AND (${ERROR_EVENT_SQL} OR (type = 'event' AND json_extract(payload, '$.type') = 'runner_log')) ORDER BY created_at ASC`
     ).bind(scanId).all();
     return results || [];
+  }
+
+  /**
+   * Each failed scan's reason, as user-facing text. Read from the scan row; scans that failed
+   * before failure_reason existed fall back to their most recent stored error.
+   */
+  async getFailureReasons(scanIds: string[]): Promise<Map<string, string>> {
+    const reasons = new Map<string, string>();
+    const ids = Array.from(new Set(scanIds));
+    const missing: string[] = [];
+    for (let i = 0; i < ids.length; i += EVENT_ID_LOOKUP_CHUNK) {
+      const chunk = ids.slice(i, i + EVENT_ID_LOOKUP_CHUNK);
+      const { results } = await this.db.prepare(
+        `SELECT id, failure_reason FROM scans WHERE id IN (${chunk.map(() => '?').join(',')})`
+      ).bind(...chunk).all<{ id: string; failure_reason: string | null }>();
+      for (const row of results ?? []) {
+        const text = sanitizeRunnerText(row.failure_reason);
+        if (text) reasons.set(row.id, text);
+        else missing.push(row.id);
+      }
+    }
+    for (let i = 0; i < missing.length; i += EVENT_ID_LOOKUP_CHUNK) {
+      const chunk = missing.slice(i, i + EVENT_ID_LOOKUP_CHUNK);
+      const { results } = await this.db.prepare(
+        `SELECT scan_id, payload FROM scan_events WHERE scan_id IN (${chunk.map(() => '?').join(',')}) AND ${ERROR_EVENT_SQL} ORDER BY created_at DESC`
+      ).bind(...chunk).all<{ scan_id: string; payload: string }>();
+      for (const row of results ?? []) {
+        if (reasons.has(row.scan_id)) continue;
+        const text = runnerErrorText(row.payload);
+        if (text) reasons.set(row.scan_id, text);
+      }
+      // Kept on the scan, so the events are searched once per scan, not on every listing.
+      await this.db.batch(chunk.map(id =>
+        this.db.prepare('UPDATE scans SET failure_reason = ? WHERE id = ? AND failure_reason IS NULL')
+          .bind(reasons.get(id) ?? UNKNOWN_FAILURE, id)
+      ));
+    }
+    return reasons;
+  }
+
+  /**
+   * Pauses or resumes an active scan: moves it from one of the `from` statuses to `to`. False
+   * if it is in none of them (it ended meanwhile, failed by the stalled scan watchdog say), so
+   * an ended scan is never made active again.
+   */
+  async changeActiveStatus(scanId: string, from: string[], to: 'paused' | 'dispatched'): Promise<boolean> {
+    const res = await this.db.prepare(
+      `UPDATE scans SET status = ?, status_changed_at = datetime('now') WHERE id = ? AND status IN (SELECT value FROM json_each(?))`
+    ).bind(to, scanId, JSON.stringify(from)).run();
+    return ((res?.meta as any)?.changes ?? 0) > 0;
+  }
+
+  /** Whether any scan is dispatched or paused (the stalled scan watchdog has work at all). */
+  async hasActiveScans(): Promise<boolean> {
+    const row = await this.db.prepare("SELECT 1 AS one FROM scans WHERE status IN ('dispatched', 'paused') LIMIT 1").first();
+    return !!row;
+  }
+
+  /**
+   * Candidates for the stalled scan watchdog: active scans with no activity (event, status change
+   * or creation, whichever is latest) for idleMinutes, with how long they have been idle.
+   *  - unowned: dispatched or paused scans none of the owned runIds;
+   *  - owned: dispatched (not paused) scans among the owned runIds, idle for ownedIdleMinutes.
+   * Owned scans never fill the unowned batch (owned paused scans would otherwise crowd out the
+   * orphaned ones, every pass).
+   */
+  async getStalledActiveScans(idleMinutes: number, limit: number, owned: string[] = [], ownedIdleMinutes = idleMinutes): Promise<StalledScan[]> {
+    const ownedJson = JSON.stringify(owned);
+    const select = (ownership: string, statuses: string, minutes: number) => this.db.prepare(
+      `SELECT id, status, CAST((julianday('now') - julianday(last_activity)) * 1440 AS INTEGER) AS idle_minutes FROM (
+         SELECT s.id, s.status, MAX(
+           COALESCE((SELECT MAX(e.created_at) FROM scan_events e WHERE e.scan_id = s.id), ''),
+           COALESCE(s.status_changed_at, ''),
+           s.created_at
+         ) AS last_activity
+         FROM scans s
+         WHERE s.status IN (${statuses}) AND s.id ${ownership} (SELECT value FROM json_each(?))
+       ) WHERE last_activity < datetime('now', ?) ORDER BY last_activity ASC LIMIT ?`
+    ).bind(ownedJson, `-${Math.max(1, Math.floor(minutes))} minutes`, limit).all<StalledScan>();
+    const [unowned, ownedSilent] = await Promise.all([
+      select('NOT IN', "'dispatched', 'paused'", idleMinutes),
+      owned.length > 0 ? select('IN', "'dispatched'", ownedIdleMinutes) : Promise.resolve({ results: [] as StalledScan[] }),
+    ]);
+    return [...(unowned.results ?? []), ...(ownedSilent.results ?? [])];
   }
 
   private mapFindingRow(row: any): any {
@@ -344,15 +582,20 @@ export class ScansRepository extends BaseService implements IScansRepository {
       .run();
   }
 
-  async updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any): Promise<void> {
+  /**
+   * Sets a scan's status, recording when it changed (the stalled scan watchdog counts idle time
+   * from it as well as from the scan's events). A failed scan gets failureReason, as the user is
+   * told why it failed.
+   */
+  async updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any, failureReason?: string): Promise<void> {
     if (status === 'completed' && summaryStats) {
-      await this.db.prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?").bind(summaryStats, scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ?, status_changed_at = datetime('now') WHERE id = ?").bind(summaryStats, scanId).run();
     } else if (status === 'failed') {
-      await this.db.prepare("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ?").bind(scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'failed', completed_at = datetime('now'), failure_reason = COALESCE(?, failure_reason), status_changed_at = datetime('now') WHERE id = ?").bind(failureReason ?? null, scanId).run();
     } else if (status === 'dispatched') {
-      await this.db.prepare("UPDATE scans SET status = 'dispatched' WHERE id = ?").bind(scanId).run();
+      await this.db.prepare("UPDATE scans SET status = 'dispatched', status_changed_at = datetime('now') WHERE id = ?").bind(scanId).run();
     } else {
-      await this.db.prepare('UPDATE scans SET status = ? WHERE id = ?').bind(status, scanId).run();
+      await this.db.prepare("UPDATE scans SET status = ?, status_changed_at = datetime('now') WHERE id = ?").bind(status, scanId).run();
     }
 
     try {
@@ -456,10 +699,11 @@ export class ScansRepository extends BaseService implements IScansRepository {
     }
   }
 
-  async markFailedIfActive(scanId: string): Promise<boolean> {
+  /** Fails an active scan, with the reason shown to the user; false if it had already ended. */
+  async markFailedIfActive(scanId: string, reason?: string): Promise<boolean> {
     const res = await this.db.prepare(
-      "UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ? AND status IN ('queued','dispatched','paused')"
-    ).bind(scanId).run();
+      `UPDATE scans SET status = 'failed', completed_at = datetime('now'), failure_reason = ? WHERE id = ? AND ${ACTIVE_STATUS_SQL}`
+    ).bind(reason ?? null, scanId).run();
     return ((res?.meta as any)?.changes ?? 0) > 0;
   }
 
@@ -497,9 +741,12 @@ export class ScansRepository extends BaseService implements IScansRepository {
     return row ? row.config_json : null;
   }
 
-  async processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<void> {
+  async processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<ProcessedEvents> {
     const statements: any[] = [];
-    const webhooksToDispatch: Array<{ projectId: string; eventType: string; payload: any }> = [];
+    // The status updates that end a scan, each with the webhook it fires if it does. They only
+    // apply to a scan that has not ended: its first terminal event wins, so a scan that was
+    // failed (by the stalled scan watchdog, say) does not flip to completed, nor fire twice.
+    const terminalUpdates: Array<{ statement: number; scanId: string; webhook: { projectId: string; eventType: string; payload: any } | null }> = [];
 
     const scanIds = Array.from(new Set(messages.map(m => m.body.scanId).filter(Boolean)));
     const scanToProject: Record<string, { projectId: string; targetUrl: string; profile: string }> = {};
@@ -519,29 +766,115 @@ export class ScansRepository extends BaseService implements IScansRepository {
       }
     }
 
-    for (const msg of messages) {
-      const id = crypto.randomUUID();
+    // Sequenced runner events carry a stable id (acknowledged delivery): one already stored was
+    // processed before (a replay after a coordinator restart, a queue redelivery, or the queue and
+    // its D1 fallback both succeeding), and none of its effects may repeat.
+    const eventIds = messages.map(m => storedEventId(m.body));
+    const alreadyStored = new Set<string>();
+    const stableIds = Array.from(new Set(eventIds.filter((id): id is string => id !== undefined)));
+    for (let i = 0; i < stableIds.length; i += EVENT_ID_LOOKUP_CHUNK) {
+      const chunk = stableIds.slice(i, i + EVENT_ID_LOOKUP_CHUNK);
+      const { results } = await this.db.prepare(
+        `SELECT id FROM scan_events WHERE id IN (${chunk.map(() => '?').join(',')})`
+      ).bind(...chunk).all<{ id: string }>();
+      for (const r of results ?? []) alreadyStored.add(r.id);
+    }
+    const seenInBatch = new Set<string>();
+    const droppedForMissingScan = new Set<string>();
+    const coalescedInBatch = new Map<string, { index: number; order: { exec: string; seq: number } | null }>();
+
+    for (const [index, msg] of messages.entries()) {
+      const stableId = eventIds[index];
+      if (stableId !== undefined) {
+        if (alreadyStored.has(stableId) || seenInBatch.has(stableId)) continue;
+        seenInBatch.add(stableId);
+      }
+      const id = stableId ?? crypto.randomUUID();
       const { scanId, type, payload } = msg.body;
-      const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
-      
+      // A scan deleted while its runner still reported (its project or account went) keeps no
+      // events or findings: nothing would ever delete them (scanDeletion.ts). The inserts below
+      // check again, for a scan deleted while this batch is prepared.
+      const projInfo = scanToProject[scanId];
+      if (!projInfo) {
+        droppedForMissingScan.add(scanId);
+        continue;
+      }
+      const oobTokens = payload && payload.type === 'oob_pending' ? sanitizeOobPending(payload.data) : null;
+      const eventType = typeof type === 'string' && type ? type : 'event';
+      const coalescedKind = isCoalescedProgressEvent(eventType, payload);
+
+      // Transient progress heartbeats and [Fuzz Progress] log lines are coalesced per scan via
+      // deterministic IDs so a 6-hour scan keeps at most one row of each in D1 while still
+      // showing the latest [Fuzz Progress] line in getRunnerLogs.
+      if (coalescedKind !== null) {
+        const dedupId = `${scanId}:${coalescedKind}`;
+        const order = eventOrder(msg.body);
+        const kept = coalescedInBatch.get(dedupId);
+        if (kept !== undefined && !supersedes(order, kept.order)) {
+          continue;
+        }
+        // The kept row records its event's place (_exec, _seq) so an older event never replaces
+        // a newer one. Another exec is a resumed run and always replaces.
+        const basePayload = coalescedKind === 'progress' ? { type: 'progress' } : payload;
+        const coalescedPayload = JSON.stringify(
+          order ? { ...basePayload, _exec: order.exec, _seq: order.seq } : basePayload
+        );
+        const stmt = this.db.prepare(
+          `INSERT INTO scan_events (id, scan_id, type, payload, created_at)
+           SELECT ?, ?, ?, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)
+           ON CONFLICT(id) DO UPDATE SET type = excluded.type, payload = excluded.payload, created_at = excluded.created_at
+           WHERE json_extract(excluded.payload, '$._seq') IS NULL
+              OR json_extract(scan_events.payload, '$._seq') IS NULL
+              OR json_extract(excluded.payload, '$._exec') IS NOT json_extract(scan_events.payload, '$._exec')
+              OR json_extract(excluded.payload, '$._seq') > json_extract(scan_events.payload, '$._seq')`
+        ).bind(dedupId, scanId, eventType, coalescedPayload, scanId);
+        if (kept === undefined) {
+          coalescedInBatch.set(dedupId, { index: statements.length, order });
+          statements.push(stmt);
+        } else {
+          statements[kept.index] = stmt;
+          kept.order = order;
+        }
+        continue;
+      }
+
+      // scan_events.type and payload are NOT NULL; a runner that omits either must not fail the batch.
+      // The OOB tokens themselves are stored by the coordinator as the event arrives
+      // (storeOobPending); stored again here, a token already reported would come back. The event
+      // log keeps only their count.
+      // High-volume events (result, checkpoint, complete) only need their event type in
+      // scan_events to prevent database bloat; full payloads are processed in-memory.
+      let payloadStr: string;
+      if (oobTokens) {
+        payloadStr = JSON.stringify({ type: 'oob_pending', data: { count: oobTokens.length } });
+      } else if (
+        eventType === 'event' &&
+        payload &&
+        typeof payload === 'object' &&
+        (payload.type === 'result' ||
+          payload.type === 'checkpoint' ||
+          payload.type === 'complete')
+      ) {
+        payloadStr = JSON.stringify({ type: payload.type });
+      } else {
+        payloadStr = (typeof payload === 'string' ? payload : JSON.stringify(payload)) ?? 'null';
+      }
+
       statements.push(
         this.db.prepare(
-          `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
-        ).bind(id, scanId, type, payloadStr)
+          `INSERT OR IGNORE INTO scan_events (id, scan_id, type, payload)
+           SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+        ).bind(id, scanId, eventType, payloadStr, scanId)
       );
 
-      const projInfo = scanToProject[scanId];
-      const projectId = projInfo?.projectId;
+      const projectId = projInfo.projectId;
 
       if (payload && payload.type === 'complete') {
         const stats = JSON.stringify(payload.data || {});
-        statements.push(
-          this.db.prepare(
-            `UPDATE scans SET status = ?, completed_at = datetime('now'), summary_stats = ? WHERE id = ?`
-          ).bind('completed', stats, scanId)
-        );
-        if (projectId) {
-          webhooksToDispatch.push({
+        terminalUpdates.push({
+          statement: statements.length,
+          scanId,
+          webhook: projectId ? {
             projectId,
             eventType: 'scan.completed',
             payload: {
@@ -551,8 +884,13 @@ export class ScansRepository extends BaseService implements IScansRepository {
               profile: projInfo.profile,
               summary_stats: payload.data || {}
             }
-          });
-        }
+          } : null,
+        });
+        statements.push(
+          this.db.prepare(
+            `UPDATE scans SET status = ?, completed_at = datetime('now'), summary_stats = ? WHERE id = ? AND ${ACTIVE_STATUS_SQL}`
+          ).bind('completed', stats, scanId)
+        );
       } else if (payload && payload.type === 'checkpoint') {
         const checkpointData = JSON.stringify(payload.data);
         statements.push(
@@ -561,13 +899,11 @@ export class ScansRepository extends BaseService implements IScansRepository {
           ).bind(checkpointData, scanId)
         );
       } else if (type === 'error' || (payload && payload.type === 'error')) {
-        statements.push(
-          this.db.prepare(
-            `UPDATE scans SET status = ?, completed_at = datetime('now') WHERE id = ?`
-          ).bind('failed', scanId)
-        );
-        if (projectId) {
-          webhooksToDispatch.push({
+        const reason = runnerErrorText(payload) || UNKNOWN_FAILURE;
+        terminalUpdates.push({
+          statement: statements.length,
+          scanId,
+          webhook: projectId ? {
             projectId,
             eventType: 'scan.failed',
             payload: {
@@ -576,32 +912,46 @@ export class ScansRepository extends BaseService implements IScansRepository {
               target_url: projInfo.targetUrl,
               profile: projInfo.profile
             }
-          });
-        }
+          } : null,
+        });
+        statements.push(
+          this.db.prepare(
+            `UPDATE scans SET status = ?, completed_at = datetime('now'), failure_reason = ? WHERE id = ? AND ${ACTIVE_STATUS_SQL}`
+          ).bind('failed', reason, scanId)
+        );
       }
 
       if (payload && payload.type === 'result' && payload.data && Array.isArray(payload.data.analyzerFindings)) {
-        for (const finding of payload.data.analyzerFindings) {
-          const findingId = finding.id || crypto.randomUUID();
+        for (const raw of payload.data.analyzerFindings.slice(0, MAX_FINDINGS_PER_EVENT)) {
+          const finding = sanitizeRunnerFinding(raw);
+          if (!finding) continue;
+          // OR IGNORE: a repeated or colliding id must never fail the whole batch, which mixes
+          // every tenant's events.
           statements.push(
             this.db.prepare(
-              `INSERT INTO findings (id, scan_id, rule_id, level, message, evidence)
-               VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(
-              findingId,
-              scanId,
-              finding.ruleId,
-              finding.level,
-              finding.message,
-              finding.evidence || null
-            )
+              `INSERT OR IGNORE INTO findings (id, scan_id, rule_id, level, message, evidence)
+               SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+            ).bind(finding.id, scanId, finding.ruleId, finding.level, finding.message, finding.evidence, scanId)
           );
         }
       }
     }
 
-    if (statements.length > 0) {
-      await this.db.batch(statements);
+    if (droppedForMissingScan.size > 0) {
+      // Its runner may still be running: deleting a scan does not stop it.
+      logWarn({ env: this.env, executionCtx: ctx }, 'FindingsQueue', 'Dropped events of scans that no longer exist', { scanIds: [...droppedForMissingScan].slice(0, 20) });
+    }
+
+    const results: any[] = statements.length > 0 ? ((await this.db.batch(statements)) ?? []) : [];
+
+    const ended: string[] = [];
+    const webhooksToDispatch: Array<{ projectId: string; eventType: string; payload: any }> = [];
+    for (const update of terminalUpdates) {
+      // Unknown (a driver that reports no change count) counts as changed, as before.
+      const changes = results[update.statement]?.meta?.changes;
+      if (typeof changes === 'number' && changes === 0) continue;
+      ended.push(update.scanId);
+      if (update.webhook) webhooksToDispatch.push(update.webhook);
     }
 
     if (webhooksToDispatch.length > 0) {
@@ -613,6 +963,52 @@ export class ScansRepository extends BaseService implements IScansRepository {
         )
       );
     }
+    return { ended };
+  }
+
+  /**
+   * Stores a run's handed-over OOB tokens (sanitizeOobPending), in one statement per event. OR
+   * IGNORE: a token stored twice keeps its first row. Nothing is stored for a scan that does not
+   * exist, and the LIMIT caps a scan's rows whatever the runner sends.
+   */
+  async storeOobPending(scanId: string, tokens: Array<{ token: string; endpoint: string; payload: string }>): Promise<void> {
+    if (tokens.length === 0) return;
+    await this.db.prepare(
+      `INSERT OR IGNORE INTO oob_pending (scan_id, token, endpoint, payload)
+       SELECT ?, json_extract(value, '$.token'), json_extract(value, '$.endpoint'), json_extract(value, '$.payload')
+       FROM json_each(?)
+       WHERE EXISTS (SELECT 1 FROM scans WHERE id = ?)
+       LIMIT max(0, ? - (SELECT COUNT(*) FROM oob_pending WHERE scan_id = ?))`
+    ).bind(scanId, JSON.stringify(tokens), scanId, MAX_OOB_TOKENS_PER_SCAN, scanId).run();
+  }
+
+  /**
+   * Reports an OOB callback that arrived after its scan's run ended: if the scan still exists and
+   * handed the token over no more than OOB_PENDING_DAYS ago, the scan gets a swazz/oob-interaction
+   * finding and the token's row is removed. False when the scan holds no such token.
+   */
+  async recordLateOobCallback(scanId: string, token: string): Promise<boolean> {
+    // A read first: most callbacks that reach here match nothing, and must not cost a write.
+    const pending = await this.db.prepare(
+      `SELECT 1 AS found FROM oob_pending
+       WHERE scan_id = ? AND token = ? AND created_at > datetime('now', ?) AND EXISTS (SELECT 1 FROM scans WHERE id = ?)`
+    ).bind(scanId, token, `-${OOB_PENDING_DAYS} days`, scanId).first<{ found: number }>();
+    if (!pending) return false;
+
+    const message = "'Out-of-Band (OOB) Interaction detected after the scan ended: the target application initiated an external connection in response to the payload sent to ' || COALESCE(NULLIF(endpoint, ''), 'an unknown endpoint') || ': ' || COALESCE(payload, '')";
+    // One transaction: the finding is written and the token consumed together, or neither. The id
+    // is scoped to the scan, so no other tenant's finding can claim it. A token is either matched
+    // by the live runner or handed over, never both, so it cannot also have a live finding.
+    await this.db.batch([
+      this.db.prepare(
+        `INSERT OR IGNORE INTO findings (id, scan_id, rule_id, level, message, evidence)
+         SELECT ?, scan_id, 'swazz/oob-interaction', 'error', ${message}, ?
+         FROM oob_pending
+         WHERE scan_id = ? AND token = ?`
+      ).bind(`oob-${scanId}-${token}`, `Late callback triggered with token/UUID: ${token}`, scanId, token),
+      this.db.prepare('DELETE FROM oob_pending WHERE scan_id = ? AND token = ?').bind(scanId, token),
+    ]);
+    return true;
   }
 
   async saveWAFPatchReport(scanId: string, report: unknown): Promise<void> {

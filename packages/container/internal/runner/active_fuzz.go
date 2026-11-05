@@ -6,16 +6,12 @@
 package runner
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	"swazz-engine/internal/generator"
-	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/swagger"
 )
 
@@ -218,28 +214,8 @@ func buildMutatedPayload(
 		mutated.pathParams[field.Path[0]] = capPathParam(fuzzedVal)
 	}
 
+	mutated.oobTokens = gen.TakeOOBTokens()
 	return mutated
-}
-
-// hashPayload hashes fuzzed payload parameters.
-func hashPayload(built generatedPayload) uint32 {
-	buf := bufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	payloadMap := make(map[string]any)
-	if built.body != nil {
-		payloadMap["body"] = built.body
-	}
-	if built.queryParams != nil {
-		payloadMap["queryParams"] = built.queryParams
-	}
-	if built.pathParams != nil {
-		payloadMap["pathParams"] = built.pathParams
-	}
-	_ = json.NewEncoder(buf).Encode(payloadMap)
-	payloadStr := strings.TrimSuffix(buf.String(), "\n")
-	h := payloads.HashStr(payloadStr)
-	PutBuffer(buf)
-	return h
 }
 
 // runActiveParameterFuzzing coordinates fuzzer execution for an endpoint using the active parameter strategy.
@@ -257,6 +233,7 @@ func (r *Runner) runActiveParameterFuzzing(
 	endpoints := r.config.Endpoints
 	baseIter := calcEffectiveIterations(profile, r.config.Settings, &endpoint)
 	enableDedup := profile == swagger.ProfileRandom
+	maxPayload := r.config.Settings.PayloadSizeCap()
 	delay := time.Duration(r.config.Settings.DelayBetweenRequestMs) * time.Millisecond
 
 	baseline := buildSafePayload(endpoint, safeGen)
@@ -280,28 +257,30 @@ func (r *Runner) runActiveParameterFuzzing(
 
 			built := buildMutatedPayload(baseline, field, selectGen(gen, safeGen, isSecHeaderIter))
 
-			payloadHash := hashPayload(built)
-			if enableDedup && seenHashes[payloadHash] {
-				r.progress.totalPlanned.Add(-1)
-				continue
-			}
-			if enableDedup {
+			// A skipped payload still takes its iteration index, so a resume's iterToSkip
+			// (a count of walked iterations) lines up with what was sent.
+			if !enableDedup {
+				if !payloadFits(built, maxPayload) {
+					r.progress.totalPlanned.Add(-1)
+					globalIterIdx++
+					continue
+				}
+			} else {
+				payloadHash, fits := sizedPayloadHash(built, maxPayload)
+				if !fits || seenHashes[payloadHash] {
+					r.progress.totalPlanned.Add(-1)
+					globalIterIdx++
+					continue
+				}
 				seenHashes[payloadHash] = true
 			}
 
 			if isSecHeaderIter {
-				if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
-					if built.headers == nil {
-						built.headers = make(map[string]string, len(secHeaders))
-					}
-					for k, v := range secHeaders {
-						built.headers[k] = v
-					}
-				}
+				mergeSecurityHeaders(&built, gen)
 			}
 
-			r.waitIfPaused()
-			if r.stopped() {
+			r.waitIfPaused(ctx)
+			if r.stopped() || ctx.Err() != nil {
 				break
 			}
 
@@ -310,17 +289,18 @@ func (r *Runner) runActiveParameterFuzzing(
 			}
 			wg.Add(1)
 
-			go func(it int, p any, qp map[string]any, gh map[string]string, pp map[string]string) {
+			it, p, qp, gh, pp, ot := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens
+			r.goWorker(func() {
 				defer r.limiter.Release()
 				defer wg.Done()
 
 				resolvedPath := fillPathParamsFromMap(endpoint.Path, pp)
-				result := r.executeRequest(
+				result := r.executeGeneratedRequest(
 					ctx,
 					r.config.BaseURL, resolvedPath, endpoint.Path, endpoint.Method,
 					r.config.GlobalHeaders, r.config.Cookies,
 					p, profile, qp, gh,
-					endpoint.ContentType,
+					endpoint.ContentType, ot,
 				)
 
 				if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {
@@ -328,21 +308,23 @@ func (r *Runner) runActiveParameterFuzzing(
 					r.recordTimeBaseline(endpoint.Method, endpoint.Path, result.Duration)
 				}
 
-				r.statsChan <- statsMsg{
+				// A result of a run that has ended (a worker finalise gave up waiting for) is dropped
+				// whole: not counted, streamed or kept.
+				if !r.sendStats(statsMsg{
 					result:           result,
 					currentIteration: it + 1,
 					totalIterations:  totalPlanned,
 					endpoint:         endpoint.Method + " " + endpoint.Path,
 					profile:          string(profile),
+				}) {
+					return
 				}
 				r.Broadcast(Event{Type: EventResult, Data: result})
 
 				if result.Status >= 200 && result.Status < 300 {
-					r.resultsMu.Lock()
-					r.allResults = append(r.allResults, result)
-					r.resultsMu.Unlock()
+					r.retainActiveResult(result)
 				}
-			}(globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams)
+			})
 
 			globalIterIdx++
 			if delay > 0 {

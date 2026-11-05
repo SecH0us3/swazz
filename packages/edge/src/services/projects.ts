@@ -6,6 +6,8 @@
 import { Env } from '../env';
 import { IProjectRepository } from '../repositories/projects';
 import { IRbacRepository } from '../repositories/rbac';
+import { assertCanGrant } from './rbac';
+import { isBuiltInRole } from '../config/rbac';
 import { signWebhookPayload } from '../utils/webhooks';
 import { validateWebhookUrl, safeFetchWebhook } from '../utils/ssrf';
 import { ulid } from 'ulidx';
@@ -36,7 +38,7 @@ export interface IProjectService {
   updateProjectWebhook(projectId: string, webhookId: string, body: any): Promise<any>;
   deleteProjectWebhook(projectId: string, webhookId: string): Promise<any>;
   testProjectWebhook(projectId: string, webhookId: string): Promise<any>;
-  createProjectMemberAccount(projectId: string, body: any): Promise<ProjectMemberAccountResult>;
+  createProjectMemberAccount(projectId: string, body: any, callerId: string | null): Promise<ProjectMemberAccountResult>;
 }
 
 export class ProjectService implements IProjectService {
@@ -329,7 +331,7 @@ export class ProjectService implements IProjectService {
     }
   }
 
-  async createProjectMemberAccount(projectId: string, body: any): Promise<ProjectMemberAccountResult> {
+  async createProjectMemberAccount(projectId: string, body: any, callerId: string | null): Promise<ProjectMemberAccountResult> {
     if (!body || typeof body !== 'object') {
       throw new Error('Invalid request body|400');
     }
@@ -367,14 +369,16 @@ export class ProjectService implements IProjectService {
 
     const uniqueRoles = Array.from(new Set(roles));
 
-    const defaultRoles = ['owner', 'editor', 'viewer'];
-    const customRoles = uniqueRoles.filter(r => !defaultRoles.includes(r));
+    const customRoles = uniqueRoles.filter(r => !isBuiltInRole(r));
     if (customRoles.length > 0) {
       const existingCustom = await this.rbacRepo.checkCustomRolesExist(projectId, customRoles);
       if (existingCustom.length !== customRoles.length) {
         throw new Error('One or more custom roles are invalid|400');
       }
     }
+
+    // The caller receives the new account's credentials, so it may hold no more than they do.
+    await assertCanGrant(this.rbacRepo, projectId, callerId, { roles: uniqueRoles });
 
     const authRepo = new AuthRepository(this.env);
     const usernameHash = await hashUsername(cleanUsername);

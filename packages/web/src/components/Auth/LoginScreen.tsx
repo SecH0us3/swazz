@@ -10,6 +10,7 @@ import { LandingShowcase } from '../LandingShowcase.js';
 import { AuthModal } from './AuthModal.js';
 import { Logo } from '../Common/Logo.js';
 import './LoginScreen.css';
+import { BLOG_URL, DOCS, REPO_URL } from '../../utils/docsLinks.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -327,9 +328,9 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                         <a href="#solutions" className="nav-link">Solutions</a>
                         <a href="#pricing" className="nav-link">Pricing</a>
                         <div className="nav-divider"></div>
-                        <a href="https://sech0us3.github.io/swazz/" className="nav-link" target="_blank" rel="noopener noreferrer">Docs</a>
-                        <a href="https://yoursec.substack.com/" className="nav-link" target="_blank" rel="noopener noreferrer">Blog</a>
-                        <a href="https://github.com/SecH0us3/swazz" className="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>
+                        <a href={DOCS.home} className="nav-link" target="_blank" rel="noopener noreferrer">Docs</a>
+                        <a href={BLOG_URL} className="nav-link" target="_blank" rel="noopener noreferrer">Blog</a>
+                        <a href={REPO_URL} className="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>
                     </nav>
                 </div>
                 <div className="landing-nav-right">

@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile, switchDashboardTab } from './helpers';
 
 test.describe('2026 Security Analyzers & PoC Generator E2E Tests', () => {
   test('should load 2026 endpoints, detect vulnerabilities, and export PoC exploit scripts', async ({ page }) => {
@@ -45,9 +45,7 @@ test.describe('2026 Security Analyzers & PoC Generator E2E Tests', () => {
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 5. Switch to Logs tab
-    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
-    await expect(requestLogsTab).toBeVisible();
-    await requestLogsTab.click();
+    await switchDashboardTab(page, 'Logs');
 
     // Click on the first log item to open Request Inspector Detail modal
     const firstLogRow = page.locator('.row-wrap').first();

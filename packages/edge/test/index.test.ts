@@ -13,7 +13,8 @@ import { splitSql } from "../src/splitSql";
 import { ulid } from "ulidx";
 import { sign } from "hono/jwt";
 import { hashApiKey } from "../src/utils/auth";
-import { getDB } from "../src/utils/db";
+import { getDB, getBufferedSlowQueries, clearBufferedSlowQueries } from "../src/utils/db";
+import { logInfo, clearBufferedLogs } from "../../common/logging/logger";
 import { getSharedTestKeyPair, signSharedLicenseToken, activateSharedLicense } from "./utils/license";
 
 const originalFetch = app.fetch;
@@ -393,8 +394,6 @@ describe("D1 Database Migrations & API", () => {
     await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(pid).run();
   });
 
-
-
   it("blocks login after 5 failed attempts (rate limiting)", async () => {
     // Attempt 5 bad logins
     for (let i = 0; i < 5; i++) {
@@ -465,14 +464,22 @@ describe("D1 Database Migrations & API", () => {
     expect(members?.role).toBe('owner');
 
     // 4. Create a scan with a report URL for the project
-    const reportUrl = 'reports/test-scan-report.enc';
     const scanId = 'scan-to-be-deleted';
+    const reportUrl = `reports/${scanId}.enc`;
     await env.DB.prepare('INSERT INTO scans (id, project_id, target_url, profile, status, user_id, report_url) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .bind(scanId, projectId, 'http://test.com', 'default', 'pending', userId, reportUrl)
       .run();
 
     // Write a mock report file to storage
     await env.STORAGE.put(reportUrl, "encrypted fuzzer report contents");
+
+    // A second scan whose report_url was pointed at another tenant's object must not get that
+    // object deleted along with this account.
+    const victimKey = 'reports/someone-elses-scan.enc';
+    await env.STORAGE.put(victimKey, "another tenant's report");
+    await env.DB.prepare('INSERT INTO scans (id, project_id, target_url, profile, status, user_id, report_url) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind('scan-pointing-elsewhere', projectId, 'http://test.com', 'default', 'pending', userId, victimKey)
+      .run();
 
     // 5. Create a runner
     const runnerId = 'runner-to-be-deleted';
@@ -593,6 +600,7 @@ describe("D1 Database Migrations & API", () => {
     const scanPost = await env.DB.prepare('SELECT id FROM scans WHERE id = ?').bind(scanId).first();
     const runnerPost = await env.DB.prepare('SELECT id FROM runners WHERE id = ?').bind(runnerId).first();
     const storagePost = await env.STORAGE.get(reportUrl);
+    expect(await env.STORAGE.get(victimKey)).not.toBeNull();
 
     expect(userPost).toBeNull();
     expect(projPost).toBeNull();
@@ -688,6 +696,19 @@ describe("D1 Database Migrations & API", () => {
     const loginRes4 = await appFetchWrapper(loginReq4 as any, testEnv);
     expect(loginRes4.status).toBe(401);
 
+    // The code that enabled 2FA was used once already; replaying it must fail.
+    const replayRes = await appFetchWrapper(new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "Password123!", two_factor_code: validCode })
+    }) as any, testEnv);
+    expect(replayRes.status).toBe(401);
+
+    // Each code is single-use per 30 s step, so move the clock on before asking for a new one.
+    const realNow = Date.now();
+    let clockOffset = 30_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => realNow + clockOffset);
+
     const freshCode = await generateTOTP(setupBody.secret);
     const loginReq5 = new Request("http://localhost/api/auth/login", {
       method: "POST",
@@ -711,6 +732,7 @@ describe("D1 Database Migrations & API", () => {
     const disableRes1 = await appFetchWrapper(disableReq1 as any, testEnv);
     expect(disableRes1.status).toBe(401);
 
+    clockOffset += 30_000;
     const disableCode = await generateTOTP(setupBody.secret);
     const disableReq2 = new Request("http://localhost/api/auth/2fa/disable", {
       method: "POST",
@@ -722,6 +744,7 @@ describe("D1 Database Migrations & API", () => {
     });
     const disableRes2 = await appFetchWrapper(disableReq2 as any, testEnv);
     expect(disableRes2.status).toBe(200);
+    nowSpy.mockRestore();
 
     const loginReq6 = new Request("http://localhost/api/auth/login", {
       method: "POST",
@@ -791,7 +814,7 @@ describe("D1 Database Migrations & API", () => {
 
 describe("Anonymous Limits", () => {
   let userToken: string;
-  const testEnv = { ...env, /* as unknown as Env */ AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined };
+  const testEnv = { ...env, /* as unknown as Env */ AUTH_ENABLED: 'false', PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined };
 
   beforeAll(async () => {
     // Register and login to get a valid token
@@ -811,10 +834,23 @@ describe("Anonymous Limits", () => {
     const body = await loginRes.json() as { token: string };
     userToken = body.token;
 
-    // Prep swagger_cache and R2 for parse testing
+    // Prep swagger_cache and R2 for parse testing. Cache entries are per user and anonymous
+    // parses bypass the cache, so seed the logged-in user's scope and connect a shared runner
+    // that answers the anonymous requests.
+    const limitUser = await env.DB.prepare("SELECT id FROM users WHERE username = 'limituser'").first<{ id: string }>();
     await env.DB.prepare('INSERT OR REPLACE INTO swagger_cache (url, base_path, endpoints_hash, endpoints_r2_key, raw_spec_r2_key) VALUES (?, ?, ?, ?, ?)')
-      .bind('http://example.com/swagger.json', '/api', 'hash123', 'specs/parsed/test.json', 'specs/raw/test.json')
+      .bind(`user:${limitUser!.id}|http://example.com/swagger.json`, '/api', 'hash123', 'specs/parsed/test.json', 'specs/raw/test.json')
       .run();
+    const stub = env.COORDINATOR_DO.get(env.COORDINATOR_DO.idFromName('global-coordinator'));
+    const runnerRes = await stub.fetch(new Request("http://localhost/connect-runner?name=AnonLimitParser&shared=1", { headers: { "Upgrade": "websocket" } }) as any);
+    const runnerWs = runnerRes.webSocket!;
+    runnerWs.accept();
+    runnerWs.addEventListener("message", (evt) => {
+      const msg = JSON.parse(evt.data as string);
+      if (msg.type === "parse_request") {
+        runnerWs.send(JSON.stringify({ type: "parse_result", reqId: msg.reqId, payload: { basePath: "/api", endpoints: [{ path: "/users", method: "GET" }] } }));
+      }
+    });
     await env.STORAGE.put('specs/parsed/test.json', JSON.stringify([{ path: '/users', method: 'GET' }]));
   });
 
@@ -1027,7 +1063,7 @@ describe("Projects & Runners API", () => {
     const stub = env.COORDINATOR_DO.get(id);
 
     // 1. Connect a shared runner (no public_key)
-    const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunner1", {
+    const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunner1&shared=1", {
       headers: { "Upgrade": "websocket" }
     });
     const connectSharedRes = await stub.fetch(connectSharedReq as any);
@@ -1046,7 +1082,8 @@ describe("Projects & Runners API", () => {
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
 
-    const connectPrivateReq = new Request(`http://localhost/connect-runner?name=PrivateRunner1&public_key=${pubKeyHex}`, {
+    const caller = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind("projuser").first<{ id: string }>();
+    const connectPrivateReq = new Request(`http://localhost/connect-runner?name=PrivateRunner1&public_key=${pubKeyHex}&user_id=${caller!.id}`, {
       headers: { "Upgrade": "websocket" }
     });
     const connectPrivateRes = await stub.fetch(connectPrivateReq as any);
@@ -1098,12 +1135,35 @@ describe("Projects & Runners API", () => {
     const sharedRunner = body.runners.find(r => r.name === 'SharedRunner1');
     expect(sharedRunner).toBeDefined();
     expect(sharedRunner.isShared).toBe(true);
-    expect(sharedRunner.publicKey).toBeNull();
+    // Shared runners are listed without anything that identifies or targets them.
+    expect(sharedRunner.publicKey).toBeUndefined();
+    expect(sharedRunner.connectionId).toBeUndefined();
+    expect(sharedRunner.activeJobs).toBeUndefined();
 
     const privateRunner = body.runners.find(r => r.name === 'PrivateRunner1');
     expect(privateRunner).toBeDefined();
     expect(privateRunner.isShared).toBe(false);
+    expect(privateRunner.isMine).toBe(true);
     expect(privateRunner.publicKey).toBe(pubKeyHex);
+    expect(privateRunner).not.toHaveProperty('ownerId');
+  });
+
+  it("GET /api/runners hides other tenants' private runners", async () => {
+    const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = env.COORDINATOR_DO.get(id);
+    const otherKey = 'ab'.repeat(32);
+    const res = await stub.fetch(new Request(`http://localhost/connect-runner?name=SomeoneElsesRunner&public_key=${otherKey}&user_id=someone-else`, {
+      headers: { "Upgrade": "websocket" }
+    }) as any);
+    expect(res.status).toBe(101);
+    res.webSocket!.accept();
+
+    const listRes = await appFetchWrapper(new Request("http://localhost/api/runners", {
+      headers: { "Authorization": `Bearer ${userToken}` }
+    }) as any, testEnv);
+    const listText = await listRes.text();
+    expect(listText).not.toContain('SomeoneElsesRunner');
+    expect(listText).not.toContain(otherKey);
   });
 
   describe("GET /api/projects/:id/analytics", () => {
@@ -1169,24 +1229,13 @@ describe("Projects & Runners API", () => {
       expect(res.status).toBe(401);
     });
 
-    it("returns 500 when database query fails during restart", async () => {
-      const originalPrepare = testEnv.DB.prepare;
-      testEnv.DB.prepare = () => {
-        throw new Error("DB Query Error");
-      };
-
-      try {
-        const req = new Request("http://localhost/api/runners/some-conn-id/restart", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${userToken}` }
-        });
-        const res = await appFetchWrapper(req as any, testEnv);
-        expect(res.status).toBe(500);
-        const body = await res.json() as { error: string };
-        expect(body.error).toBe("Internal Server Error");
-      } finally {
-        testEnv.DB.prepare = originalPrepare;
-      }
+    it("returns 404 for a runner that is not connected", async () => {
+      const req = new Request("http://localhost/api/runners/01HZZZZZZZZZZZZZZZZZZZZZZZ/restart", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userToken}` }
+      });
+      const res = await appFetchWrapper(req as any, testEnv);
+      expect(res.status).toBe(404);
     });
 
     it("returns 403 when trying to restart shared runner or owned runner without public_key", async () => {
@@ -1194,20 +1243,16 @@ describe("Projects & Runners API", () => {
       const stub = env.COORDINATOR_DO.get(id);
 
       // Connect shared runner
-      const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunnerRestart", {
+      const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunnerRestart&shared=1", {
         headers: { "Upgrade": "websocket" }
       });
       const connectSharedRes = await stub.fetch(connectSharedReq as any);
       const sharedWs = connectSharedRes.webSocket!;
       sharedWs.accept();
 
-      // Get connectionId
-      const listReq = new Request("http://localhost/api/runners" as any, {
-        headers: { "Authorization": `Bearer ${userToken}` }
-      });
-      const listRes = await appFetchWrapper(listReq as any, testEnv);
-      const listBody = await listRes.json() as { runners: any[] };
-      const sharedRunner = listBody.runners.find(r => r.name === 'SharedRunnerRestart');
+      // The public list no longer exposes shared runners' connection ids; read it from the coordinator.
+      const doList = await (await stub.fetch(new Request("http://do/runners") as any)).json() as { runners: any[] };
+      const sharedRunner = doList.runners.find(r => r.name === 'SharedRunnerRestart');
       expect(sharedRunner).toBeDefined();
       expect(sharedRunner.connectionId).toBeDefined();
 
@@ -1385,7 +1430,7 @@ describe("KV Session Cache", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "kvtestuser", password: "TestPass123!" }),
     });
-    const regRes = await appFetchWrapper(regReq as any, { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env);
+    const regRes = await appFetchWrapper(regReq as any, { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env);
     const regBody = await regRes.json() as any;
     userToken.set(regBody.token);
     testUserId = regBody.id;
@@ -1394,7 +1439,7 @@ describe("KV Session Cache", () => {
 
   it("authenticates via API key and populates KV cache on first request", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Use /api/projects which relies on getUserIdFromRequest middleware
     const req = new Request("http://localhost/api/projects", {
@@ -1413,7 +1458,7 @@ describe("KV Session Cache", () => {
 
   it("serves from KV cache on subsequent requests without querying D1 for api_key", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Pre-populate the KV cache
     const hashedKey = await hashApiKey(testApiKey);
@@ -1442,9 +1487,9 @@ describe("KV Session Cache", () => {
     expect(apiKeyQueryCalled).toBe(false);
   });
 
-  it("negatively caches invalid API keys to prevent cache-miss storms", async () => {
+  it("does not write negative cache to KV for invalid API keys to prevent billing attacks", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     const fakeKey = "swazz_live_invalidkey123456789";
     const req = new Request("http://localhost/api/projects", {
@@ -1453,16 +1498,14 @@ describe("KV Session Cache", () => {
     const res = await appFetchWrapper(req as any, kvEnv);
     expect(res.status).toBe(401);
 
-    // Verify negative cache entry was written
+    // Verify negative cache entry was NOT written to KV
     const hashedFakeKey = await hashApiKey(fakeKey);
     const cached = await mockKV.get(`apikey:${hashedFakeKey}`);
-    expect(cached).not.toBeNull();
-    const parsed = JSON.parse(cached!);
-    expect(parsed.userId).toBeNull();
+    expect(cached).toBeNull();
   });
 
   it("gracefully falls back to D1 when SESSION_CACHE is not bound", async () => {
-    const noKvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
+    const noKvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
     const req = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${testApiKey}` },
     });
@@ -1472,7 +1515,7 @@ describe("KV Session Cache", () => {
 
   it("invalidates old KV cache entry when API key is regenerated", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     const hashedOldKey = await hashApiKey(testApiKey);
     // Pre-populate KV with the current API key
@@ -1503,7 +1546,7 @@ describe("KV Session Cache", () => {
 
   it("cleanupScheduledDeletions invalidates deleted users' API keys from KV", async () => {
     const mockKV = createMockKV();
-    const cleanupEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+    const cleanupEnv = { ...env, /* as unknown as Env */ PASSWORD_AUTH_ENABLED: 'true', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Register a throwaway user for deletion
     const regReq = new Request("http://localhost/api/auth/register", {
@@ -1813,6 +1856,9 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
 
     it("processes FINDINGS_QUEUE messages correctly in bulk", async () => {
       const scanId = "findings-scan-id";
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, ?, ?, ?)"
+      ).bind(scanId, "proj-findings-bulk", "http://test.com", "default", "dispatched").run();
       const mockMessages = [
         {
           body: { scanId, type: "event", payload: { type: "progress", progress: 50 } },
@@ -1838,6 +1884,36 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(results.length).toBe(2);
       expect(results[0].type).toBe("event");
       expect(results[1].type).toBe("error");
+    });
+
+    it("acknowledges but does not store events of a scan that no longer exists", async () => {
+      const scanId = "findings-scan-deleted";
+      const mockMessages = [
+        {
+          body: {
+            scanId,
+            type: "event",
+            payload: {
+              type: "result",
+              data: {
+                id: "req-gone",
+                analyzerFindings: [{ ruleId: "swazz/sensitive-data-leak", level: "warning", message: "leak", evidence: "x" }]
+              }
+            }
+          },
+          ack: vi.fn(),
+        },
+        { body: { scanId, type: "event", payload: { type: "progress", progress: 10 } }, ack: vi.fn() },
+      ];
+
+      await app.queue({ queue: "swazz-findings-queue", messages: mockMessages } as any, testEnv as any, {} as any);
+
+      expect(mockMessages[0].ack).toHaveBeenCalled();
+      expect(mockMessages[1].ack).toHaveBeenCalled();
+      const events = await env.DB.prepare("SELECT COUNT(*) AS n FROM scan_events WHERE scan_id = ?").bind(scanId).first<{ n: number }>();
+      const findings = await env.DB.prepare("SELECT COUNT(*) AS n FROM findings WHERE scan_id = ?").bind(scanId).first<{ n: number }>();
+      expect(events?.n).toBe(0);
+      expect(findings?.n).toBe(0);
     });
 
     it("extracts findings from result events and populates findings table in D1", async () => {
@@ -1995,7 +2071,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const id = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(id);
 
-        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerShared", {
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerShared&shared=1", {
           headers: { "Upgrade": "websocket" }
         });
         const connectRes = await stub.fetch(connectReq as any);
@@ -2041,7 +2117,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const id = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(id);
 
-        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedPrivateCheck", {
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedPrivateCheck&shared=1", {
           headers: { "Upgrade": "websocket" }
         });
         const connectRes = await stub.fetch(connectReq as any);
@@ -2076,7 +2152,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const id = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(id);
 
-        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedDisabledCheck", {
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedDisabledCheck&shared=1", {
           headers: { "Upgrade": "websocket" }
         });
         const connectRes = await stub.fetch(connectReq as any);
@@ -2121,7 +2197,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const id = env.COORDINATOR_DO.idFromName('global-coordinator');
         const stub = env.COORDINATOR_DO.get(id);
 
-        const connectReq = new Request(`http://localhost/connect-runner?name=QueueRunnerPrivate&public_key=${pubKeyHex}`, {
+        const connectReq = new Request(`http://localhost/connect-runner?name=QueueRunnerPrivate&public_key=${pubKeyHex}&user_id=${userId}`, {
           headers: { "Upgrade": "websocket" }
         });
         const connectRes = await stub.fetch(connectReq as any);
@@ -2403,6 +2479,8 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         // 2. Add as a member of the project
         await testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'viewer')")
           .bind(projectId, memberUserId).run();
+        await testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'viewer')")
+          .bind(projectId, memberUserId).run();
 
         // 3. Owner fetches login history for memberUserId - succeeds (200 OK)
         const resOwner = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/members/${memberUserId}/login-history` as any, {
@@ -2634,6 +2712,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         await testEnv.DB.batch([
           testEnv.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Owner Project', 'Private Project')").bind(projectId),
           testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, userIdOwner),
+          testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, userIdOwner),
           testEnv.DB.prepare("INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, 'http://example.com', 'default', 'completed')").bind(scanId, projectId),
           testEnv.DB.prepare("INSERT INTO findings (id, scan_id, rule_id, level, message, evidence) VALUES (?, ?, 'swazz/bola-idor', 'High', 'Vulnerability', 'evidence')").bind(findingId, scanId)
         ]);
@@ -2755,7 +2834,8 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       await testEnv.DB.batch([
         testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, is_guest) VALUES (?, ?, 'hash', 1)").bind(guestUserId, guestUsername),
         testEnv.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Guest Proj', '')").bind(projectId),
-        testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, guestUserId)
+        testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, guestUserId),
+        testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, guestUserId)
       ]);
 
       const payload = {
@@ -2822,34 +2902,25 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
     });
 
     it("should return logs when valid admin secret is provided", async () => {
-      const mockKV = createMockKV();
-      const mockLogs = [{ timestamp: new Date().toISOString(), level: 'info', module: 'test', msg: 'hello' }];
-      await mockKV.put('admin:logs', JSON.stringify(mockLogs));
-
-      const customEnv = {
-        ...testEnv,
-        SESSION_CACHE: mockKV as any
-      };
+      clearBufferedLogs();
+      logInfo(testEnv, 'test', 'hello');
 
       const req = new Request("http://localhost/api/admin/logs", {
         headers: { 'Authorization': `Bearer admin-secret` }
       });
-      const res = await appFetchWrapper(req, customEnv);
+      const res = await appFetchWrapper(req, testEnv);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
       expect(data.length).toBe(1);
       expect(data[0].msg).toBe('hello');
     });
 
-    it("should return empty list if SESSION_CACHE is not bound", async () => {
-      const customEnv = {
-        ...testEnv,
-        SESSION_CACHE: undefined
-      };
+    it("should return empty list if no logs are buffered", async () => {
+      clearBufferedLogs();
       const req = new Request("http://localhost/api/admin/logs", {
         headers: { 'Authorization': `Bearer admin-secret` }
       });
-      const res = await appFetchWrapper(req, customEnv);
+      const res = await appFetchWrapper(req, testEnv);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
       expect(data).toEqual([]);
@@ -2897,29 +2968,38 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(res.status).toBe(401);
     });
 
-    it("should return empty list if SESSION_CACHE is not bound", async () => {
-      const customEnv = {
-        ...testEnv,
-        SESSION_CACHE: undefined
-      };
+    it("should return empty list if no slow queries are buffered", async () => {
+      clearBufferedSlowQueries();
       const req = new Request("http://localhost/api/admin/slow-queries", {
         headers: { 'Authorization': `Bearer admin-secret` }
       });
-      const res = await appFetchWrapper(req, customEnv);
+      const res = await appFetchWrapper(req, testEnv);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
       expect(data).toEqual([]);
     });
 
     it("should return slow queries when valid admin secret is provided", async () => {
-      const mockKV = createMockKV();
-      const mockQueries = [{ event: 'slow_query', query: 'SELECT * FROM users', duration: 250, threshold: 200, timestamp: new Date().toISOString() }];
-      await mockKV.put('admin:slow-queries', JSON.stringify(mockQueries));
+      clearBufferedSlowQueries();
+      const mockDb = {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => {
+              await new Promise(resolve => setTimeout(resolve, 50));
+              return { success: true };
+            }
+          })
+        })
+      };
 
       const customEnv = {
         ...testEnv,
-        SESSION_CACHE: mockKV as any
+        DB: mockDb as any,
+        SLOW_QUERY_THRESHOLD_MS: 10
       };
+
+      const db = getDB(customEnv);
+      await db.prepare('SELECT * FROM users').bind().first();
 
       const req = new Request("http://localhost/api/admin/slow-queries", {
         headers: { 'Authorization': `Bearer admin-secret` }
@@ -2932,6 +3012,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
     });
 
     it("should intercept D1 queries and record slow queries when threshold is exceeded", async () => {
+      clearBufferedSlowQueries();
       const mockKV = createMockKV();
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -2970,17 +3051,17 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(parsedLog.payload.threshold).toBe(10);
       expect(parsedLog.payload.duration).toBeGreaterThanOrEqual(10);
 
-      // Verify it was saved to SESSION_CACHE
-      const cached = await mockKV.get('admin:slow-queries');
-      expect(cached).not.toBeNull();
-      const parsedCache = JSON.parse(cached!);
-      expect(parsedCache.length).toBe(1);
-      expect(parsedCache[0].query).toBe('SELECT * FROM dummy');
+      // Verify it was saved to in-memory buffer, not to SESSION_CACHE
+      const buffered = getBufferedSlowQueries();
+      expect(buffered.length).toBe(1);
+      expect(buffered[0].query).toBe('SELECT * FROM dummy');
+      expect(await mockKV.get('admin:slow-queries')).toBeNull();
 
       warnSpy.mockRestore();
     });
 
     it("should record slow queries for exec, batch, dump, and other statement methods", async () => {
+      clearBufferedSlowQueries();
       const mockKV = createMockKV();
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -3041,14 +3122,13 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
 
       expect(warnSpy).toHaveBeenCalledTimes(6);
       
-      // Verify KV cache has all queries
-      const cached = await mockKV.get('admin:slow-queries');
-      expect(cached).not.toBeNull();
-      const parsedCache = JSON.parse(cached!);
-      expect(parsedCache.length).toBe(6);
+      // Verify in-memory buffer has all queries and KV was not written
+      const buffered = getBufferedSlowQueries();
+      expect(buffered.length).toBe(6);
+      expect(await mockKV.get('admin:slow-queries')).toBeNull();
 
       // Verify some queries
-      const queries = parsedCache.map((q: any) => q.query);
+      const queries = buffered.map((q: any) => q.query);
       expect(queries).toContain('SELECT * FROM all');
       expect(queries).toContain('SELECT * FROM run');
       expect(queries).toContain('SELECT * FROM raw');
@@ -3485,6 +3565,30 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(resChunkStr).toContain("data: {");
       expect(resChunkStr).toContain('"id":42');
       expect(resChunkStr).toContain("swazz_list_projects");
+
+      // 5. Another user cannot write into this connection: it is answered like a missing one.
+      const otherId = `u_mcp_other_${Math.floor(Math.random() * 1000000)}`;
+      const otherKey = `swazz_live_mcpo_${Math.floor(Math.random() * 1000000)}`;
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(otherId, `user_${otherId}`, "hash", await hashApiKey(otherKey)).run();
+      const forged = await appFetchWrapper(new Request(`http://localhost/api/mcp/message?connectionId=${connectionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${otherKey}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 43, method: "tools/list" })
+      }), testEnv);
+      expect(forged.status).toBe(404);
+
+      // The owner's connection still works, and carries nothing from the other user.
+      const again = await appFetchWrapper(new Request(`http://localhost/api/mcp/message?connectionId=${connectionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 44, method: "tools/list" })
+      }), testEnv);
+      expect(again.status).toBe(202);
+      const next = new TextDecoder().decode((await reader.read()).value);
+      expect(next).toContain('"id":44');
+      expect(next).not.toContain('"id":43');
+      await reader.cancel();
     });
 
     it("enforces scan ownership BOLA on retrieving/triaging specific standalone scan findings", async () => {

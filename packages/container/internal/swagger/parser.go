@@ -36,11 +36,7 @@ func WithMaxDepth(d int) ParserOption {
 
 // ParseRawSpec checks if the data is YAML, converts it to JSON if needed, and delegates to ParseSpec.
 func ParseRawSpec(data []byte, opts ...ParserOption) (*ParseResult, error) {
-	if IsYAML(data) {
-		jsonData, err := ConvertYAMLToJSON(data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert YAML to JSON: %w", err)
-		}
+	if jsonData, err := ConvertYAMLToJSON(data); err == nil {
 		data = jsonData
 	}
 	return ParseSpec(json.RawMessage(data), opts...)

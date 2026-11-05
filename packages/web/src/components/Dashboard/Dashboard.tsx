@@ -10,6 +10,7 @@ import { WAFBlockBanner } from './WAFBlockBanner.js';
 import { Heatmap } from './Heatmap.js';
 import type { HeatmapFilter } from './Heatmap.js';
 import { useAppStore } from '../../store/appStore.js';
+import { DOCS, REPO_URL } from '../../utils/docsLinks.js';
 
 interface Props {
     stats: RunStats | null;
@@ -107,14 +108,11 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
                             <div className="welcome-docker-group">
                                 <div>
                                     <div className="welcome-docker-item-label">
-                                        Web API Server & Dashboard
+                                        Runner Agent (executes your scans)
                                     </div>
-                                    <pre className="welcome-pre">
-                                        <code>
-                                            docker pull ghcr.io/sech0us3/swazz:latest{'\n'}
-                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:latest
-                                        </code>
-                                    </pre>
+                                    <p className="welcome-docker-item-label">
+                                        Scans run on a runner agent. Copy the ready-made <code>docker run … run-agent</code> command for this dashboard from Project Settings → Active Runners. <a href={DOCS.runnerAgent} target="_blank" rel="noopener noreferrer">How runners work →</a>
+                                    </p>
                                 </div>
                                 <div>
                                     <div className="welcome-docker-item-label">
@@ -123,7 +121,7 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
                                     <pre className="welcome-pre">
                                         <code>
                                             docker pull ghcr.io/sech0us3/swazz-cli:latest{'\n'}
-                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest --config /app/swazz.config.json .
+                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest start --config /app/swazz.config.json
                                         </code>
                                     </pre>
                                 </div>
@@ -135,7 +133,7 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
                     {/* Documentation Call to Action (CTA) & Quick Links */}
                     <div className="welcome-footer">
                         <a 
-                            href="https://sech0us3.github.io/swazz/usage.html" 
+                            href={DOCS.usage}
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className="welcome-footer-link"
@@ -152,7 +150,7 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
                             </button>
                             <span className="welcome-quick-link-separator">•</span>
                             <a 
-                                href="https://SecH0us3.github.io/swazz/" 
+                                href={DOCS.home}
                                 target="_blank" 
                                 rel="noopener noreferrer" 
                                 className="welcome-quick-link"
@@ -169,7 +167,7 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
                             </button>
                             <span className="welcome-quick-link-separator">•</span>
                             <a 
-                                href="https://github.com/SecH0us3/swazz" 
+                                href={REPO_URL}
                                 target="_blank" 
                                 rel="noopener noreferrer" 
                                 className="welcome-quick-github-link" 

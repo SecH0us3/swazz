@@ -18,7 +18,8 @@ import {
   getDeleteRequestedAt,
   verifyDummyPassword,
   safeCompare,
-  deletionCache
+  deletionCache,
+  negativeApiKeyCache
 } from '../../../src/utils/auth';
 import { Env } from '../../../src/env';
 import { sign } from 'hono/jwt';
@@ -106,6 +107,7 @@ describe('Auth Utils - Additional functions', () => {
     vi.restoreAllMocks();
     mockVerifyApiKey.mockReset();
     deletionCache.clear();
+    negativeApiKeyCache.clear();
   });
 
   it('hashApiKey generates hex hash', async () => {
@@ -138,6 +140,27 @@ describe('Auth Utils - Additional functions', () => {
       
       const res = await getUserIdFromRequest(mockContext);
       expect(res).toBeNull();
+    });
+
+    it('accepts an API key from the query string', async () => {
+      const mockContext = createMockContext() as any;
+      mockContext.queries['token'] = 'swazz_live_token';
+      mockContext.env.SESSION_CACHE.get.mockResolvedValueOnce(JSON.stringify({ userId: 'key-user' }));
+
+      expect(await getUserIdFromRequest(mockContext)).toBe('key-user');
+    });
+
+    // URLs end up in proxy and Cloudflare logs: a session token there must not work.
+    it('ignores a session JWT in the query string', async () => {
+      const jwt = await sign({ sub: 'jwt-user', iat: Math.floor(Date.now() / 1000) }, 'jwt-secret-123', 'HS256');
+      const inQuery = createMockContext() as any;
+      inQuery.queries['token'] = jwt;
+      expect(await getUserIdFromRequest(inQuery)).toBeNull();
+      expect(await getSessionIat(inQuery)).toBeNull();
+
+      const inHeader = createMockContext() as any;
+      inHeader.headers['authorization'] = `Bearer ${jwt}`;
+      expect(await getUserIdFromRequest(inHeader)).toBe('jwt-user');
     });
 
     it('uses KV cache positive match', async () => {
@@ -174,6 +197,21 @@ describe('Auth Utils - Additional functions', () => {
       expect(res).toBe('d1-user');
     });
 
+    it('caches invalid API keys in isolate memory without writing to KV or hitting D1 repeatedly', async () => {
+      const mockContext = createMockContext() as any;
+      mockContext.headers['authorization'] = 'Bearer swazz_live_invalid';
+      mockContext.env.SESSION_CACHE.get.mockResolvedValue(null);
+      mockVerifyApiKey.mockResolvedValueOnce(null);
+
+      expect(await getUserIdFromRequest(mockContext)).toBeNull();
+      expect(mockContext.env.SESSION_CACHE.put).not.toHaveBeenCalled();
+      expect(mockVerifyApiKey).toHaveBeenCalledTimes(1);
+
+      // Second request with the same invalid key is served from isolate negative cache (0 KV calls, 0 D1 calls)
+      expect(await getUserIdFromRequest(mockContext)).toBeNull();
+      expect(mockVerifyApiKey).toHaveBeenCalledTimes(1);
+    });
+
     it('decodes JWT token if valid', async () => {
       const mockContext = createMockContext() as any;
       const jwtToken = await sign({ sub: 'jwt-user' }, 'jwt-secret-123', 'HS256');
@@ -200,10 +238,18 @@ describe('Auth Utils - Additional functions', () => {
     it('uses cached jwtPayload from context', async () => {
       const mockContext = createMockContext() as any;
       mockContext.headers['authorization'] = 'Bearer token';
-      mockContext.get.mockReturnValueOnce({ sub: 'cached-jwt-user' });
+      mockContext.get.mockImplementation((key: string) => (key === 'jwtPayload' ? { sub: 'cached-jwt-user' } : undefined));
 
       const res = await getUserIdFromRequest(mockContext);
       expect(res).toBe('cached-jwt-user');
+    });
+
+    // The auth middleware redeemed a stream ticket: its user wins over anything else sent along.
+    it('returns the user of a redeemed stream ticket first', async () => {
+      const mockContext = createMockContext() as any;
+      mockContext.headers['authorization'] = 'Bearer invalid-jwt';
+      mockContext.get.mockImplementation((key: string) => (key === 'streamTicketUser' ? 'ticket-user' : undefined));
+      expect(await getUserIdFromRequest(mockContext)).toBe('ticket-user');
     });
 
     it('returns null if JWT token is invalid', async () => {
@@ -253,10 +299,20 @@ describe('Auth Utils - Additional functions', () => {
   });
 
   describe('verifyTurnstile', () => {
-    it('bypasses siteverify for mock tokens and dummy secret keys', async () => {
-      expect(await verifyTurnstile('mock-token', 'sec')).toBe(true);
+    it('bypasses siteverify only for the dummy secret key', async () => {
       expect(await verifyTurnstile('tok', '1x00000000000000000000000000000000')).toBe(true);
-      expect(await verifyTurnstile('mock-123', 'sec')).toBe(true);
+    });
+
+    it('never trusts a client-chosen token value, whatever it looks like', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: false }) });
+      vi.stubGlobal('fetch', mockFetch);
+      try {
+        expect(await verifyTurnstile('mock-token', 'real-secret')).toBe(false);
+        expect(await verifyTurnstile('mock-123', 'real-secret')).toBe(false);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it('queries turnstile siteverify endpoint', async () => {

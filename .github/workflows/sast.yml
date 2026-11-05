@@ -36,7 +36,7 @@ jobs:
         # v6.4.0
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.10'
           cache-dependency-path: packages/container/go.sum
       - name: Install GoSec
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.1
@@ -48,7 +48,7 @@ jobs:
       - name: Upload SARIF to GitHub Code Scanning
         if: always()  # upload findings even when gosec exits with code 1
         # v4.37.7
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           sarif_file: packages/container/gosec.sarif
   codeql:
@@ -69,11 +69,11 @@ jobs:
         # v6.4.0
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.10'
           cache-dependency-path: packages/container/go.sum
       - name: Initialize CodeQL
         # v4.37.7
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           languages: ${{ matrix.language }}
       - name: Build Go code
@@ -81,6 +81,6 @@ jobs:
         run: go build ./...
       - name: Perform CodeQL Analysis
         # v4.37.7
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           category: "${{ matrix.language }}-analysis"

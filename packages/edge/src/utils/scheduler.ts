@@ -6,6 +6,7 @@
 import { Env } from '../env';
 import { ScansRepository } from '../repositories/scans';
 import { isValidRunId, serializeScanConfig, writeScanConfig } from '../services/scanConfigStore';
+import { SCAN_NOT_QUEUED } from './runnerMessages';
 
 function matchCronField(pattern: string, value: number, min: number, max: number): boolean {
   if (pattern === '*') return true;
@@ -110,7 +111,7 @@ export async function handleScheduledScans(env: Env): Promise<void> {
         });
       } catch (err: any) {
         try {
-          await scansRepo.updateScanStatus(runId, 'failed');
+          await scansRepo.updateScanStatus(runId, 'failed', undefined, undefined, SCAN_NOT_QUEUED);
         } catch (statusErr) {
           console.error("Failed to mark scan as failed after R2/queue error in scheduler:", statusErr);
         }

@@ -9,9 +9,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"swazz-engine/internal/safenet"
 )
 
 func TestGatewayClient_ChatCompletion_GeminiFormat(t *testing.T) {
@@ -109,5 +112,40 @@ func TestGatewayClient_ChatCompletion_RateLimitRetry(t *testing.T) {
 	}
 	if atomic.LoadInt32(&attempts) != 2 {
 		t.Errorf("expected 2 attempts, got %d", atomic.LoadInt32(&attempts))
+	}
+}
+
+// A success body past maxGatewayResponseBytes fails the call instead of being read whole; an error
+// body keeps its status and goes into the error only up to safenet.MaxErrorBodyBytes.
+func TestGatewayClient_ChatCompletion_BodyIsCapped(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{"oversized success", http.StatusOK, strings.Repeat("x", maxGatewayResponseBytes+1024), "larger than"},
+		{"oversized error", http.StatusBadGateway, strings.Repeat("x", maxGatewayResponseBytes+1024), "AI Gateway error 502: xxx"},
+		{"long error text", http.StatusInternalServerError, strings.Repeat("y", 10<<10), "AI Gateway error 500: yyy"},
+		{"long error message", http.StatusBadRequest, `{"error":{"message":"` + strings.Repeat("z", 32<<10) + `"}}`, "AI Gateway error 400: zzz"},
+		{"forged log line", http.StatusInternalServerError, "bad\r\nINFO forged\x1b[0m", "AI Gateway error 500: bad  INFO forged [0m"},
+		// Past maxGatewayErrorBytes the JSON is not parsed: the raw start of the body is used.
+		{"huge error message", http.StatusBadRequest, `{"error":{"message":"` + strings.Repeat("z", 1<<20) + `"}}`, `AI Gateway error 400: {"error"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			client := NewGatewayClient(server.URL+"/openai", "", "k")
+			_, err := client.ChatCompletion(context.Background(), "s", "u")
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("got error %.200q", err)
+			}
+			if len(err.Error()) > safenet.MaxErrorBodyBytes+50 {
+				t.Fatalf("error is %d bytes long", len(err.Error()))
+			}
+		})
 	}
 }

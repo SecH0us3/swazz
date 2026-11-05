@@ -82,7 +82,7 @@ export SWAZZ_LICENSE_KEY="eyJhbGciOiJFZERTQSI..."
 ./swazz-engine license
 ```
 
-So if an official release rejects a dashboard-issued key with `license: invalid signature`, the key was signed by a different issuer than the one the binary trusts — check that `SWAZZ_LICENSE_PUBKEY` is not set to an unrelated key, then contact `enterprise@swazz.secmy.app`.
+So if an official release rejects a dashboard-issued key with `license: invalid signature`, the key was signed by a different issuer than the one the binary trusts — check that `SWAZZ_LICENSE_PUBKEY` is not set to an unrelated key, then contact `license@secmy.app`.
 
 ### 🛡️ Production Master Key Setup (Self-Hosted Deployment)
 For air-gapped or dedicated enterprise deployments:
@@ -103,4 +103,4 @@ For air-gapped or dedicated enterprise deployments:
 
 For commercial licensing, enterprise waitlist registration, or deployment inquiries:
 - Visit the landing page and click **Request Enterprise License**.
-- Or email our team directly at: `enterprise@swazz.secmy.app`
+- Or email our team directly at: `license@secmy.app`

@@ -12,11 +12,20 @@ import type { AuthRepository } from '../repositories/auth';
 declare module 'hono' {
   interface ContextVariableMap {
     jwtPayload: Record<string, unknown>;
+    // The user a one-time event stream ticket was issued to, once the auth middleware redeemed it.
+    streamTicketUser: string;
   }
 }
 
 const KV_POSITIVE_TTL = 300; // 5 minutes
-const KV_NEGATIVE_TTL = 60;  // 1 minute
+const NEGATIVE_API_KEY_TTL_MS = 60_000; // 1 minute in-memory negative cache
+const MAX_NEGATIVE_API_KEY_ENTRIES = 1000;
+export const negativeApiKeyCache = new Map<string, number>();
+
+/** `bytes` random bytes from the CSPRNG, as lowercase hex. */
+export function randomHex(bytes: number): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
+}
 
 export async function hashApiKey(key: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(key);
@@ -25,14 +34,30 @@ export async function hashApiKey(key: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Context<E>): Promise<string | null> {
-  let token = null;
+/**
+ * An API key passed as ?token= by a client that cannot set headers. Nothing else is taken from a
+ * URL: URLs end up in proxy and Cloudflare logs, and a session JWT there would outlive the request
+ * (the dashboard opens its WebSockets with a one-time ticket instead).
+ */
+export function queryApiKey<E extends { Bindings: Env }>(c: Context<E>): string | null {
+  const token = c.req.query('token');
+  return token && token.startsWith('swazz_live_') ? token : null;
+}
+
+/** The bearer token of the request, or an API key from its query string. */
+export function requestToken<E extends { Bindings: Env }>(c: Context<E>): string | null {
   const authHeader = c.req.header('Authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else {
-    token = c.req.query('token');
+    return authHeader.substring(7);
   }
+  return queryApiKey(c);
+}
+
+export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Context<E>): Promise<string | null> {
+  // A redeemed stream ticket stands for its user, whatever else the request carries.
+  const ticketUser = c.get('streamTicketUser');
+  if (ticketUser) return ticketUser;
+  const token = requestToken(c);
   if (!token) {
     return null;
   }
@@ -42,7 +67,16 @@ export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Conte
     const hashedToken = await hashApiKey(token);
     const cacheKey = `apikey:${hashedToken}`;
 
-    // 1. Try KV cache first (if available)
+    // 1. Check isolate-local negative cache first to prevent D1 cache-miss storms without KV writes
+    const negExpiry = negativeApiKeyCache.get(cacheKey);
+    if (negExpiry !== undefined) {
+      if (Date.now() < negExpiry) {
+        return null;
+      }
+      negativeApiKeyCache.delete(cacheKey);
+    }
+
+    // 2. Try KV positive cache (if available)
     if (kv) {
       try {
         const cached = await kv.get(cacheKey);
@@ -57,20 +91,28 @@ export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Conte
       }
     }
 
-    // 2. Cache miss — query D1
+    // 3. Cache miss — query D1
     try {
       const { AuthRepository: AuthRepoClass } = await import('../repositories/auth');
       const authRepo = new AuthRepoClass(c.env);
       const userId = await authRepo.verifyApiKey(hashedToken, token);
 
-      // 3. Write to KV (positive or negative cache)
-      if (kv) {
-        try {
-          const ttl = userId ? KV_POSITIVE_TTL : KV_NEGATIVE_TTL;
-          await kv.put(cacheKey, JSON.stringify({ userId }), { expirationTtl: ttl });
-        } catch {
-          // KV write failed — non-critical, continue
+      // 4. Positive match -> KV; Negative match -> bounded isolate-local memory (zero KV writes)
+      if (userId) {
+        negativeApiKeyCache.delete(cacheKey);
+        if (kv) {
+          try {
+            await kv.put(cacheKey, JSON.stringify({ userId }), { expirationTtl: KV_POSITIVE_TTL });
+          } catch {
+            // KV write failed — non-critical, continue
+          }
         }
+      } else {
+        if (negativeApiKeyCache.size >= MAX_NEGATIVE_API_KEY_ENTRIES) {
+          const oldestKey = negativeApiKeyCache.keys().next().value;
+          if (oldestKey !== undefined) negativeApiKeyCache.delete(oldestKey);
+        }
+        negativeApiKeyCache.set(cacheKey, Date.now() + NEGATIVE_API_KEY_TTL_MS);
       }
 
       return userId;
@@ -179,8 +221,9 @@ export async function verifyPassword(password: string, storedHash: string): Prom
  * Returns true if verification succeeds, false otherwise.
  */
 export async function verifyTurnstile(token: string, secret: string, remoteip?: string): Promise<boolean> {
-  // Always pass for dummy test keys or mock tokens in local development
-  if (secret === '1x00000000000000000000000000000000' || token === 'mock-token' || token.startsWith('mock-')) {
+  // The token comes from the unauthenticated request body, so nothing about it may skip
+  // verification. Only a dummy secret, which the operator configures, does.
+  if (secret === '1x00000000000000000000000000000000') {
     return true;
   }
 
@@ -229,13 +272,7 @@ const LOCKOUT_MINUTES = 15;
 
 
 export async function getSessionIat<E extends { Bindings: Env }>(c: Context<E>): Promise<number | null> {
-  let token = null;
-  const authHeader = c.req.header('Authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else {
-    token = c.req.query('token');
-  }
+  const token = requestToken(c);
   if (!token) return null;
   
   if (token.startsWith('swazz_live_')) {

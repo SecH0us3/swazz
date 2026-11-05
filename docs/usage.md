@@ -6,12 +6,12 @@ title: Usage
 
 Swazz provides two primary methods of operation: a feature-rich Web UI Dashboard and a powerful CLI.
 
-## Web UI Dashboard
+## Web UI Dashboard {#web-ui}
 
 The Web UI is the easiest way to manage your fuzzer, inspect requests, and visually analyze results.
 
-1. **Start the Web UI**  
-   Run `npm run dev` from the project root. This starts the React frontend and Go API.
+1. **Open the Web UI**  
+   Use the hosted dashboard at [swazz.secmy.app](https://swazz.secmy.app), or run your own: `bash scripts/start-local-dev.sh` from the project root starts the edge coordinator (`:8787`), the dashboard (`http://localhost:5173`), the demo targets and a connected Go runner agent. `npm run dev` starts only the coordinator and the dashboard — scans then wait until a runner joins (**Project Settings → Active Runners**, see [Installation → Runner Agent Mode](./installation.md#runner-agent)).
 2. **Dashboard Features**
    - **Heatmap**: Visualizes the `Endpoint × Status Code` responses in real time. Perfect for quickly identifying anomalous 500 errors or unexpected 200s.
    - **Sidebar Endpoint Tree & Filters**: Organize and manage scanned endpoints by hierarchical folder paths. Use HTTP method filter badges (`GET`, `POST`, etc.) and search to filter visible endpoints. Enable the **Included Only** toggle to hide excluded/disabled endpoints in the Web Dashboard view so you can focus exclusively on active endpoints (preference persists across sessions).
@@ -21,6 +21,44 @@ The Web UI is the easiest way to manage your fuzzer, inspect requests, and visua
      - **Raw Request**: Toggle to the raw request view to manually edit URLs, headers, and body payloads, then click **Replay** to send custom requests and view real-time responses.
    - **Configuration Management**: Configure target hosts, auth tokens, and fuzzing parameters directly in the browser. Fuzzing & Rate Limit settings are logically organized into horizontal sub-tabs (**Concurrency & Rate Limits**, **Fuzzing & Intensity**, **Timeout & Duration**, and **WAF Evasion & AI**).
    - **WAF Check Tab**: An on-demand perimeter firewall analysis tool accessible from the main results bar (alongside Endpoint Heatmap, Request Logs, Grouped Errors, and OWASP Top 10). Features an editable target URL field (local to the check, does not alter project configuration), invokes domain-level fingerprinting powered by `waf.secmy.app`, probes sensitive files (`.env`, `.git/config`, `wp-config.php`, etc.) for perimeter leaks, and synthesizes ready-to-deploy virtual patch rules across 9 vendor dialects (Cloudflare, AWS, GCP, Azure, ModSecurity, nginx, HAProxy, Caddy, K8s). Free for all users and not license-gated.
+
+### When a scan fails or warns
+
+A scan always ends on the dashboard, and says why it ended the way it did:
+
+- **Failed scans** show a red panel above the results with the reason (for example `could not connect to the MCP server: SSE connection failed with status 401`), a suggestion of what to change, and a button to the right setting. The reason is also in the **Runner Logs** tab and in **History**, where the scan is listed under **Failed**.
+- **Scans with warnings** (part of the scan skipped, re-authentication failing, a WAF check that could not run) complete and show a yellow panel: *The scan completed with N warnings*, with the latest warnings and what to do about them.
+- **Quiet scans**: if nothing arrives from the runner for 90 seconds, the status pill in the header switches to **No activity** and the dashboard checks the scan's status every 15 seconds. If the live connection drops, the dashboard checks the status and reconnects.
+- **Lost runners**: a scan whose runner disconnected and that no other runner took over is ended as failed by the coordinator, once no runner has owned it for 5 minutes and it has shown no activity (an event, or being dispatched or resumed) for 10 minutes. A scan whose runner is still connected but that has reported nothing for 60 minutes is stopped and ended as failed too (paused scans are left alone).
+- **One end per scan**: the first way a scan ends is final. A scan ended as failed does not turn into completed if its runner reports back later.
+- **Scheduled scans**: when the latest scheduled scan of the project failed (or the last several did), the dashboard says so the next time you open the project, until you dismiss it.
+
+Every runner log starts with what the scan covers (`Scan targets: 42 API endpoint(s), MCP server mcp.example.com with 7 endpoint(s)`), so a part you did not expect is visible before it matters. A warning or error that repeats on every request appears at most 5 times per scan, followed by how many more were left out.
+
+## Project Settings {#project-settings}
+
+Open **Project Settings** from the project menu. Each section links to its documentation from the top of the page; the sections that need more than a tooltip are described here.
+
+### Members & Roles {#members-roles}
+
+Invite existing users by email or username and give them one or more roles; custom roles are built from individual permissions (optionally inherited from existing roles). **Create User / Service Account** provisions an account directly:
+
+- **Service accounts** (interactive login unchecked) cannot sign in to the dashboard. A permanent API key starting with `swazz_live_` is shown **once** — use it for the runner agent (`--token`), the [MCP server](./mcp.md) or API scripts.
+- **Interactive users** get a temporary password, also shown once.
+
+Members & Roles requires an enterprise or trial license ([Pricing](./PRICING.md)).
+
+### Scan Scheduler {#scan-scheduler}
+
+Runs the project's current configuration automatically: **Daily** (00:00 UTC), **Weekly** (Sunday 00:00 UTC) or a **custom cron expression** evaluated in UTC. A connected runner is needed at run time. When the latest scheduled scan failed, the dashboard says so the next time you open the project ([When a scan fails or warns](#when-a-scan-fails-or-warns)). Scheduled runs require a commercial or trial license.
+
+### Audit Trail {#audit-trail}
+
+An immutable log of every state-changing action in the project: who did it, their role at the time, the source (web UI, API or MCP) and the IP address. Search by user, action or IP, filter by source, and export the filtered rows as CSV. Visible to owners and editors only.
+
+### Active Runners {#active-runners}
+
+Lists the runner agents connected to the coordinator and prints the exact `docker run … run-agent` command for a private runner (signing key) or a token-based runner. See [Installation → Runner Agent Mode](./installation.md#runner-agent), [Deployment → Runner Agent Setup](./deployment.md#runner-agent-setup) and [Runner Sandboxing](./runner_sandboxing_guide.md).
 
 ## CLI Mode
 
@@ -46,7 +84,7 @@ cd packages/container
 go run . start --config swazz.config.json
 ```
 
-### Headless Browser Crawler (`swazz spider`) 🕷️
+### Headless Browser Crawler (`swazz spider`) 🕷️ {#spider}
 
 Autonomous target discovery for modern Single Page Applications (SPAs: React, Vue, Angular). It launches a local Chrome/Chromium instance, injects authentication cookies, navigates dynamic UI elements, intercepts background HTTP requests, and exports them as an OpenAPI v3 specification or HAR file.
 
@@ -76,30 +114,40 @@ docker run --rm -v $(pwd):/output ghcr.io/sech0us3/swazz-cli spider https://app.
 > [!WARNING]
 > The headless crawler clicks interactive elements randomly. It may trigger data deletion, emails, or state mutations. Do not run against production environments!
 
-### Configuration File (`swazz.config.json`)
+### Configuration File (`swazz.config.json`) {#configuration-file}
 
 The fuzzer engine relies on a JSON configuration file. It fully supports **JSONC** (JSON with Comments), meaning you can use single-line (`//`) and multi-line (`/* */`) comments. Here is an example:
 
 ```json
 {
-  "targetUrl": "https://api.example.com",
-  "openapiSpec": "https://api.example.com/openapi.yaml",
-  "wordlist_files": {
-    "xss": "custom_xss.txt"
+  "swagger_urls": ["https://api.example.com/openapi.yaml"],
+  "base_url": "https://api.example.com",
+  "global_headers": {
+    "Authorization": "Bearer YOUR_TOKEN_HERE"
   },
-  "authHeader": "Bearer YOUR_TOKEN_HERE",
-  "concurrency": 50,
-  "timeoutMs": 5000,
-  "fuzzProfiles": ["xss", "sql_injection", "boundary"]
+  "wordlist_files": {
+    "xss": "wordlists/custom_xss.txt"
+  },
+  "settings": {
+    "iterations_per_profile": 10,
+    "concurrency": 10,
+    "timeout_ms": 5000,
+    "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+  }
 }
 ```
 
-- **`targetUrl`**: The base URL of the API you are testing.
-- **`openapiSpec`**: Path or URL to the OpenAPI/Swagger specification. Both JSON (`.json`) and YAML (`.yaml`/`.yml`) formats are fully supported.
+Unknown keys are ignored, so a misspelled key silently falls back to its default — `swazz-engine wizard` writes a valid file for you.
+
+- **`swagger_urls`**: One or more paths or URLs of API definitions: OpenAPI/Swagger (JSON or YAML), Postman collections, WSDL, GraphQL, AsyncAPI, HAR, `.proto` files or a live `grpc://` / `ws://` endpoint (see [Supported API formats](#spec-formats)).
+- **`base_url`**: The base URL of the API you are testing.
+- **`global_headers`**: Headers sent with every request (e.g. a static `Authorization` token). For login flows use [`auth_sequence`](#auth-sequence).
 - **`wordlist_files`**: Key-value mapping of payload categories to custom `.txt` wordlists. For security, files must be placed within a `wordlists/` directory.
-- **`concurrency`**: Number of parallel requests to send.
-- **`fuzzProfiles`**: Which payload generators to run (e.g., boundaries, malicious payloads).
+- **`rules`**: Status-code rules — `ignore` a list of codes, or map a code to a `severity` (`error`, `warning`).
 - **`settings`**: Fuzzer runtime settings block, containing:
+  - **`profiles`**: Which payload generators to run: `RANDOM`, `BOUNDARY`, `MALICIOUS`.
+  - **`concurrency`**: Number of parallel requests to send.
+  - **`chaining_rules`**: Values to extract from one response and reuse in later requests (see [Request Chaining](#request-chaining)).
   - **`analyze_response_body`**: (Boolean) If `true`, enables response body and response header parsing. Swazz will automatically inspect:
     - **Reflected XSS**: raw script and tag reflections.
     - **SQL Injection**: database error signature leaks.
@@ -115,12 +163,48 @@ The fuzzer engine relies on a JSON configuration file. It fully supports **JSONC
   - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.
   - **`bola_similarity_threshold`**: (Float) Threshold ratio for BOLA detection. Default is `0.85`.
   - **`time_anomaly_threshold_ms`**: (Integer) Threshold in milliseconds for detecting response time anomalies. Default is `4000`.
-  - **`oob_server_url`**: (String) Out-of-band interaction server URL for detecting SSRF / out-of-band vulnerability trigger interactions. Default is `""`.
+  - **`oob_server_url`**: (String) Out-of-band interaction server URL for detecting SSRF / out-of-band vulnerability trigger interactions. Default is `""`. When callbacks go to the coordinator (the default for dashboard scans), one that arrives after the scan has ended is still added to that scan's findings as `swazz/oob-interaction`, for up to 7 days; the 2,000 most recent unanswered tokens of a scan are kept. Reports, exports and webhooks produced when the scan ended do not include it.
   - **`waf_check_enabled`**: (Boolean) If `true`, runs pre-scan domain WAF fingerprinting via `waf.secmy.app` before initiating fuzzing. The detected WAF type, confidence score, and bypass techniques are saved in the scan record and displayed in report summaries. Default is `true` (opt-out).
   - **`waf_endpoint`**: (String) Custom endpoint URL for the WAF analysis service. Defaults to `https://waf.secmy.app`.
   - **`debug`**: (Boolean) Enables debug logging output. Default is `false`.
 
-## Authentication Sequences & Variable Evaluation 🔐
+## Supported API formats {#spec-formats}
+
+| Format | Put in `swagger_urls` | Details |
+| :--- | :--- | :--- |
+| OpenAPI / Swagger 2.0, 3.x (JSON or YAML) | spec URL or file path | [Configuration File](#configuration-file) |
+| GraphQL | endpoint URL (introspection) or saved introspection JSON | [GraphQL](#graphql) |
+| Postman Collection v2.x | collection file | [Postman](#postman) |
+| HAR (browser recording) | `.har` file | [HAR](#har) |
+| SOAP (WSDL) | `.wsdl` URL or file | — |
+| gRPC | `grpc://` / `grpcs://` (Server Reflection) or `.proto` file | [gRPC](#grpc) |
+| WebSocket | `ws://` / `wss://`, AsyncAPI file or HAR | [WebSocket](#websocket) |
+| MCP server | `mcp_server` block | [Recipe 7](./recipes.md#mcp-servers) |
+
+No spec at all? Record traffic with the [browser extension](./browser_extension.md) or crawl a SPA with [`swazz spider`](#spider).
+
+## Request Chaining {#request-chaining}
+
+Swazz can extract a value from one response and inject it into later requests — for example the `id` of a created resource, or a token returned by `POST /login`. Add rules in **Project Settings → Request Chaining**, or in `settings.chaining_rules`:
+
+```json
+{
+  "settings": {
+    "chaining_rules": [
+      {
+        "source_endpoint": "POST /api/login",
+        "extract_type": "json",
+        "extract_path": "data.token",
+        "variable_name": "AUTH_TOKEN"
+      }
+    ]
+  }
+}
+```
+
+`extract_type` is `json` (dot path into the body), `header` (header name) or `regex` (first capture group, or the whole match). The extracted value is available as <code v-pre>{{AUTH_TOKEN}}</code> in headers, paths and bodies (see [Template Substitution](#template-substitution-variables)).
+
+## Authentication Sequences & Variable Evaluation 🔐 {#auth-sequence}
 
 Swazz supports complex, multi-step authentication sequences (`auth_sequence` in the configuration file). This is extremely useful for APIs that require logging in, acquiring tokens or session IDs, solving Proof-of-Work (PoW) challenges, or computing cryptographically signed headers before fuzzing.
 
@@ -187,7 +271,7 @@ You can use a rich set of built-in functions inside `set_variables` to generate 
 | **Legacy & Proof-of-Work** | | |
 | `solvePoW(challenge, difficulty)` | Solves a Proof-of-Work challenge by finding an integer nonce such that the SHA256 hash of the concatenated `challenge + nonce` (hex encoded) starts with `difficulty` number of zero nibbles. | `solvePoW("challenge_token", 4)` |
 
-## GraphQL Schema Parsing & Fuzzing 🛡️
+## GraphQL Schema Parsing & Fuzzing 🛡️ {#graphql}
 
 Swazz supports fuzzing APIs that use GraphQL. It achieves this by retrieving the GraphQL schema via Introspection, mapping individual queries and mutations to virtual HTTP POST endpoints, and fuzzing their variables.
 
@@ -205,7 +289,7 @@ Swazz supports fuzzing APIs that use GraphQL. It achieves this by retrieving the
    - Swazz generates appropriate GraphQL requests (`{"query": "...", "variables": {...}}`).
    - The variables defined in the schema (e.g., custom input types, scalars) are fuzzed using active payloads, and Swazz monitors for any 500 Internal Server Errors, crashes, or unhandled exceptions.
 
-## Postman Collections Import 📂
+## Postman Collections Import 📂 {#postman}
 
 Swazz supports importing Postman Collection JSON files (v2.0.0 and v2.1.0) directly. This allows you to fuzz any API that you have already mapped in Postman without needing an OpenAPI/Swagger spec.
 
@@ -219,7 +303,7 @@ Swazz supports importing Postman Collection JSON files (v2.0.0 and v2.1.0) direc
    - Path variables like `:userId` or <code v-pre>{{userId}}</code> are automatically converted to `{userId}` format.
    - If the request includes query parameters or a body (JSON payloads, URL-encoded forms, or multipart form-data), Swazz infers their schemas and fuzzes their inputs.
 
-## HAR (HTTP Archive) Fuzzing 📂
+## HAR (HTTP Archive) Fuzzing 📂 {#har}
 
 Swazz supports importing `.har` (HTTP Archive) files directly. This enables **Zero-Setup Fuzzing**—you can export a browser session capturing real-world user flows (e.g., from Chrome or Firefox Developer Tools) and replay/fuzz those exact endpoints and payloads immediately without requiring any OpenAPI/Swagger specification.
 
@@ -255,12 +339,13 @@ To prevent Server-Side Request Forgery (SSRF) when Swazz is hosted as a shared r
 
 ### Security Configurations
 
-Swazz enforces SSRF protection by verifying resolved host IP addresses before making spec-fetching or fuzzing HTTP requests.
+Swazz enforces SSRF protection by verifying resolved host IP addresses before every connection it makes for a scan: spec fetching and fuzzing over HTTP, WebSocket (`ws://`, `wss://`) and gRPC (`grpc://`, `grpcs://`, including reflection discovery). All protocols share one check: a host is blocked if any address it resolves to is private or reserved, and the connection goes to an address that was checked. A blocked request is reported as a network error (status `0`), never as a response of the target. While the check applies, WebSocket and gRPC connections do not use an `HTTP(S)_PROXY` from the environment. HTTP requests do use a configured proxy, and the check then applies to the proxy's address, not to the target's, since the proxy resolves the target itself. A proxy at a private address, such as Burp or ZAP on `127.0.0.1:8080`, is therefore refused too, unless the runner's operator trusts it with `--trusted-proxy 127.0.0.1:8080` (on `run-agent` and `start`; an IP and port, repeatable or comma-separated). Only that exact address is exempt, and only as the proxy of a scan's proxy list. Since the dial to it checks nothing, a request goes through a trusted proxy only if its target host resolves to public addresses only, and a target at the proxy's own address is still blocked. The proxy resolves the target itself when it forwards the request, so a name it resolves differently from the runner (another DNS answer since the runner's check, which is remembered for a minute, or the proxy machine's own hosts file or split-horizon DNS) is not caught. Every scan on the runner may use a trusted proxy, so trust one only on a runner you alone use. The address is the one the runner dials: a runner in Docker reaches a proxy on its host at the bridge gateway's IP (often `172.17.0.1`), not at `127.0.0.1`, and `host.docker.internal` is refused because only IP addresses can be trusted. The `spider` and MCP-tools commands do not take the flag.
 
 - **Runner Agent Mode (`swazz-engine run-agent`)**:
   - By default, requests targeting private IP ranges (RFC 1918, loopback, link-local) are **blocked**.
   - Set `security.allow_private_ips` in the scan configuration to allow them for that scan. The web dashboard exposes this as a per-project toggle under **Project Settings → Anomalies**.
-  - Running the agent outside a container with `--dangerous-no-container` (or with `SWAZZ_DEV=1`) lifts the restriction for every scan, since that mode is meant for local development only.
+  - `--dangerous-no-container` only lets the agent run outside a container; it does not lift the restriction. `--allow-private-networks` (or the `SWAZZ_DEV=1` development mode) lifts it for every job regardless of the scan, so use it only on a runner whose operator is its only user.
+  - On a **shared runner**, one connected with the coordinator's `SHARED_RUNNER_TOKEN`, the coordinator forces `allow_private_ips` off before dispatch unless `SHARED_RUNNERS_ALLOW_PRIVATE_IPS="true"`. To fuzz a private target, run your own runner: connect it with your API key or a registered Ed25519 key, and it only ever receives your scans.
 - **CLI Mode (`swazz-engine start`)**:
   - By default, CLI mode also **blocks** private IP/localhost connections.
   - To scan local developer APIs, opt in explicitly with the command-line flag or the config setting:
@@ -306,7 +391,7 @@ For unsafe HTTP write requests (`POST`, `PUT`, `PATCH`, `DELETE`), Swazz dynamic
 
 ---
 
-## Managing False Positives & Suppressions 🙈
+## Managing False Positives & Suppressions 🙈 {#suppressions}
 
 To reduce noise and manage false positives in automated CI/CD pipelines, Swazz supports suppressions via ignore rules.
 
@@ -379,7 +464,7 @@ In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. 
 - **SARIF**: For integration into GitHub Advanced Security and other SAST/DAST tools.
 - **Virtual Patch Exports (`--waf-patch <vendor>`)**: Ready-to-deploy firewall rules (Cloudflare, AWS WAF, GCP Cloud Armor, Azure WAF, ModSecurity, Nginx, HAProxy, Caddy, K8s Ingress, or all vendors) and Terraform HCL. Gated by the report-exports license feature in CLI mode.
 
-### UI Performance Optimization
+### UI Performance Optimization {#ui-performance}
 
 The Swazz Web Dashboard is optimized to handle high-concurrency fuzzing runs. The following strategies keep the interface fluid and responsive:
 - **Localized Cell Hover**: Heatmap cells manage their own hover states locally. Moving the cursor over the grid does not trigger expensive dashboard or full-grid re-renders.
@@ -390,7 +475,7 @@ The Swazz Web Dashboard is optimized to handle high-concurrency fuzzing runs. Th
 
 During beta, registrations may be capped (default 50 users) to ensure stability. Once the limit is reached, new users can only register using a `BETA_BYPASS_CODE` provided by the administrator.
 
-## gRPC Microservice Fuzzing 🛰️
+## gRPC Microservice Fuzzing 🛰️ {#grpc}
 
 Swazz includes native, high-performance security fuzzing for **gRPC microservices**. Unlike standard HTTP fuzzing, gRPC services communicate over HTTP/2 with binary Protobuf serialization and specialized status codes.
 
@@ -451,7 +536,7 @@ During execution, responses and gRPC error metadata are passed to the analyzer p
 
 ---
 
-## WebSocket Protocol Fuzzing 🔌
+## WebSocket Protocol Fuzzing 🔌 {#websocket}
 
 Swazz supports native security fuzzing of **WebSocket APIs** (`ws://` and `wss://`) and event-driven real-time interfaces. Because WebSocket connections do not have standard built-in introspection or reflection mechanisms like gRPC or OpenAPI, Swazz provides multiple strategies for discovering and specifying message schemas.
 
@@ -540,7 +625,7 @@ Swazz captures WebSocket close frames, disconnection reasons, and asynchronous r
 
 ---
 
-## Domain WAF Analysis & Virtual Patch Generation 🛡️
+## Domain WAF Analysis & Virtual Patch Generation 🛡️ {#waf-analysis}
 
 Swazz includes an end-to-end Web Application Firewall (WAF) analysis and mitigation pipeline powered by the public [waf.secmy.app](https://waf.secmy.app) service. The feature operates across three complementary stages: pre-scan fingerprinting (Part A), post-scan mitigation rule generation (Part B), and an on-demand standalone security check tab in the web workspace (Part C).
 
@@ -636,7 +721,7 @@ If you prefer not to report anonymous telemetry, you can disable it entirely:
 
 ---
 
-## 🔒 Privacy & Account Deletion (Right to be Forgotten)
+## 🔒 Privacy & Account Deletion (Right to be Forgotten) {#account-deletion}
 
 Swazz values user privacy and complies with GDPR requirements. If you wish to delete your account and all associated data, you can do so immediately from the dashboard settings page:
 

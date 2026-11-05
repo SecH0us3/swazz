@@ -92,7 +92,7 @@ type Category struct {
 
 // BoundaryCategories lists all boundary categories in display order.
 var BoundaryCategories = []Category{
-	{ID: CatBoundaryStrings, Label: "Strings", Description: "Empty, whitespace, long strings, Unicode, 1MB–100MB megabyte payloads", Items: BoundaryStrings},
+	{ID: CatBoundaryStrings, Label: "Strings", Description: "Empty, whitespace, long strings, Unicode, 512KB–100MB payloads (those over the scan's max payload size are not sent)", Items: BoundaryStrings},
 	{ID: CatBoundaryIntegers, Label: "Integers", Description: "Min/max int8–int64, overflow, JS safe integer limits", Items: BoundaryIntegers},
 	{ID: CatBoundaryNumbers, Label: "Floats", Description: "NaN, ±Infinity, denormalized, max/min float64", Items: BoundaryNumbers},
 	{ID: CatBoundaryDates, Label: "Dates", Description: "Epoch, Y2K38, far future, invalid leap-year dates", Items: BoundaryDates},

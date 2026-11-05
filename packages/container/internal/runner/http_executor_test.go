@@ -6,12 +6,16 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -119,12 +123,14 @@ func TestExecuteGRPCRequest_LiveServerAndAnalyzer(t *testing.T) {
 			GlobalHeaders: map[string]string{
 				"Authorization": "Bearer test-jwt",
 			},
+			// The target is in-process, on loopback.
+			Security: swagger.SecurityConfig{AllowPrivateIPs: true},
 			Settings: swagger.Settings{
 				TimeoutMs:           2000,
 				AnalyzeResponseBody: true,
 			},
 		},
-		analyzer: analyzer.NewRegistry(),
+		analyzer: analyzer.NewRegistry(nil),
 	}
 	defer r.Close()
 
@@ -152,6 +158,50 @@ func TestExecuteGRPCRequest_LiveServerAndAnalyzer(t *testing.T) {
 		}
 	}
 	assert.True(t, foundGrpcInternal, "expected finding swazz/grpc-internal-error to be captured")
+}
+
+// A scan that may not reach private addresses (the default, and what the coordinator forces on
+// shared runners) must not reach a loopback gRPC target either: only the HTTP executor enforced it
+// before.
+func TestExecuteGRPCRequest_BlocksPrivateTarget(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer lis.Close()
+
+	var called atomic.Bool
+	srv := grpc.NewServer(
+		grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {
+			called.Store(true)
+			return status.Error(codes.Internal, "panic: runtime error: invalid memory address")
+		}),
+	)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	defer srv.Stop()
+
+	r := &Runner{
+		config: &swagger.Config{
+			BaseURL:  "grpc://" + lis.Addr().String(),
+			Settings: swagger.Settings{TimeoutMs: 2000, AnalyzeResponseBody: true},
+		},
+		analyzer: analyzer.NewRegistry(nil),
+	}
+	defer r.Close()
+
+	res := r.executeGRPCRequest(
+		context.Background(), "grpc://"+lis.Addr().String(),
+		"/demo.UserService/GetUser", "/demo.UserService/GetUser",
+		map[string]any{"id": 1}, swagger.ProfileRandom, nil,
+	)
+
+	require.NotNil(t, res)
+	assert.Contains(t, res.Error, "SSRF policy")
+	assert.Zero(t, res.Status, "a blocked target never answered: no status, not a 5xx finding")
+	for _, f := range res.AnalyzerFindings {
+		assert.NotEqual(t, "swazz/grpc-internal-error", f.RuleID, "no answer from the target may be analyzed")
+	}
+	assert.False(t, called.Load(), "the blocked target must not be contacted")
 }
 
 // fakeMCPClient records the extraHeaders it was called with, to prove the BOLA
@@ -277,7 +327,7 @@ func TestExecuteMCPRequest_ResourceLeakAnalyzerFires(t *testing.T) {
 	// Return /etc/passwd content to trigger the swazz/mcp-resource-leak rule.
 	fake.resourceText = "root:x:0:0:root:/root:/bin/bash"
 
-	reg := analyzer.NewRegistry()
+	reg := analyzer.NewRegistry(nil)
 	r := &Runner{
 		client: &http.Client{},
 		config: &swagger.Config{Settings: swagger.Settings{
@@ -388,7 +438,8 @@ func TestExecuteMCPRequest_ToolErrorAndCrash(t *testing.T) {
 
 func TestExecuteWebSocketRequest(t *testing.T) {
 	r := &Runner{
-		config: &swagger.Config{},
+		config:   &swagger.Config{},
+		analyzer: analyzer.NewRegistry(nil),
 	}
 
 	// Non-listening WS endpoint to test error capture and payload serialization
@@ -397,6 +448,7 @@ func TestExecuteWebSocketRequest(t *testing.T) {
 		"ws://127.0.0.1:59998",
 		"/chat",
 		"/chat",
+		"WS",
 		map[string]string{"message": "hello"},
 		swagger.ProfileRandom,
 		nil,
@@ -406,4 +458,117 @@ func TestExecuteWebSocketRequest(t *testing.T) {
 	assert.Equal(t, "WS", res.Method)
 	assert.Contains(t, res.Endpoint, "ws://127.0.0.1:59998/chat")
 	assert.NotEmpty(t, res.Error)
+}
+
+// drainTestServer serves /body/<n> with an n-byte body and any other path with an endless one
+// (until the client goes away), and counts the connections it accepts.
+func drainTestServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var conns atomic.Int32
+	chunk := bytes.Repeat([]byte("a"), 32<<10)
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if n, ok := strings.CutPrefix(r.URL.Path, "/body/"); ok {
+			size, _ := strconv.Atoi(n)
+			_, _ = w.Write(bytes.Repeat([]byte("a"), size)) // no explicit length: chunked once over the buffer
+			return
+		}
+		for r.Context().Err() == nil {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return srv, &conns
+}
+
+func drainTestRunner(t *testing.T, srv *httptest.Server, analyzeBody bool) *Runner {
+	t.Helper()
+	r := New(&swagger.Config{BaseURL: srv.URL, Security: swagger.SecurityConfig{AllowPrivateIPs: true}, Settings: swagger.Settings{TimeoutMs: 30000, AnalyzeResponseBody: analyzeBody}}, srv.Client())
+	t.Cleanup(r.Close)
+	return r
+}
+
+// An endless body is read up to maxResponseRead and dropped there, not until the request timeout,
+// and measured the same whether or not the analyzers read a prefix of it first.
+func TestExecuteRequest_EndlessBodyIsCutOff(t *testing.T) {
+	for _, analyzeBody := range []bool{false, true} {
+		t.Run(fmt.Sprintf("analyzeBody=%t", analyzeBody), func(t *testing.T) {
+			srv, _ := drainTestServer(t)
+			r := drainTestRunner(t, srv, analyzeBody)
+
+			start := time.Now()
+			res := r.executeRequest(context.Background(), srv.URL, "/stream", "/stream", "GET", nil, nil, nil, swagger.ProfileRandom, nil, nil, "")
+			require.NotNil(t, res)
+
+			assert.Less(t, time.Since(start), 10*time.Second, "the read stopped at the cap, not at the 30s timeout")
+			assert.Equal(t, 200, res.Status)
+			assert.Empty(t, res.Error)
+			assert.EqualValues(t, maxResponseRead+1, res.ResponseSize, "a body without a length is measured up to just past the cap")
+		})
+	}
+}
+
+// A body within the cap, up to exactly the cap, is still read to its end, so its connection is
+// reused; one past the cap costs its connection.
+func TestExecuteRequest_DrainKeepsConnectionReuseWithinTheCap(t *testing.T) {
+	srv, conns := drainTestServer(t)
+	r := drainTestRunner(t, srv, false)
+	get := func(size int) *swagger.FuzzResult {
+		t.Helper()
+		path := "/body/" + strconv.Itoa(size)
+		res := r.executeRequest(context.Background(), srv.URL, path, path, "GET", nil, nil, nil, swagger.ProfileRandom, nil, nil, "")
+		require.NotNil(t, res)
+		require.Equal(t, 200, res.Status)
+		return res
+	}
+
+	small := 64 << 10
+	assert.EqualValues(t, small, get(small).ResponseSize)
+	assert.EqualValues(t, small, get(small).ResponseSize)
+	assert.EqualValues(t, maxResponseRead, get(maxResponseRead).ResponseSize)
+	get(small)
+	assert.EqualValues(t, 1, conns.Load(), "a drained connection is reused")
+
+	assert.EqualValues(t, maxResponseRead+1, get(maxResponseRead*2).ResponseSize)
+	get(small)
+	assert.EqualValues(t, 2, conns.Load(), "a connection whose body was cut off is not reused")
+}
+
+// A 429's body is read before the retry, so the retry goes out on the same connection rather
+// than paying for a new one while the target is rate-limiting.
+func TestExecuteRequest_RetryAfter429ReusesTheConnection(t *testing.T) {
+	var conns, requests atomic.Int32
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			// 2 MB: more than the Transport reads by itself when a body is closed unread.
+			_, _ = w.Write(bytes.Repeat([]byte("slow down "), 200_000))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+	r := New(&swagger.Config{BaseURL: srv.URL, Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{TimeoutMs: 5000, EnableAdaptiveRateLimit: true}}, srv.Client())
+	t.Cleanup(r.Close)
+
+	res := r.executeRequest(context.Background(), srv.URL, "/limited", "/limited", "GET", nil, nil, nil, swagger.ProfileRandom, nil, nil, "")
+	require.NotNil(t, res)
+	assert.Equal(t, 200, res.Status)
+	assert.EqualValues(t, 2, requests.Load(), "the 429 was retried once")
+	assert.EqualValues(t, 1, conns.Load(), "the retry reused the 429's connection")
 }

@@ -25,10 +25,25 @@ import (
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
-	"swazz-engine/internal/oob"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
 
+// maxResponseRead is how much of a response body is read in all: the analyzers' prefix and then
+// the drain that keeps the connection reusable and measures a body sent without a Content-Length.
+// The target controls the body; past this much it is dropped with its connection. It sits well
+// above the size baselines the response-size-anomaly analyzer compares against.
+const maxResponseRead = 8 << 20
+
+// sentOOBTokens is what the caller of a request knows of the OOB callback tokens it carries.
+type sentOOBTokens struct {
+	ids []string
+	// known is false when the caller cannot say: a MALICIOUS request is then searched for UUIDs.
+	known bool
+}
+
+// executeRequest sends a request whose OOB tokens its caller does not know (a replay through
+// ExecuteRequest, a test): a MALICIOUS one is searched for them.
 func (r *Runner) executeRequest(
 	ctx context.Context,
 	baseURL, resolvedPath, originalPath, method string,
@@ -39,19 +54,89 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
+	return r.sendRequest(ctx, baseURL, resolvedPath, originalPath, method, headers, cookies,
+		payload, profile, queryParams, generatedHeaders, contentType, sentOOBTokens{})
+}
+
+// executeGeneratedRequest sends a request built by the run's generators, which carries exactly the
+// OOB tokens oobTokens (generatedPayload.oobTokens): the request is logged for each of them, and
+// is not searched for others.
+//
+// A token reaches the wire request unchanged on every path a generated value takes: path params
+// and query values are escaped, and a UUID's hex digits and hyphens are unreserved; variable
+// substitution only replaces {{name}} references. A value can be dropped before sending (a global
+// header or the CSRF token overwriting a generated one, a path param cut at 256 bytes): its token
+// then never reaches the target, so no callback ever shows the request logged for it. A token
+// echoed by the target and sent again through a chaining variable keeps the request that first
+// carried it.
+func (r *Runner) executeGeneratedRequest(
+	ctx context.Context,
+	baseURL, resolvedPath, originalPath, method string,
+	headers, cookies map[string]string,
+	payload any,
+	profile swagger.FuzzingProfile,
+	queryParams map[string]any,
+	generatedHeaders map[string]string,
+	contentType string,
+	oobTokens []string,
+) *swagger.FuzzResult {
+	return r.sendRequest(ctx, baseURL, resolvedPath, originalPath, method, headers, cookies,
+		payload, profile, queryParams, generatedHeaders, contentType, sentOOBTokens{ids: oobTokens, known: true})
+}
+
+func (r *Runner) sendRequest(
+	ctx context.Context,
+	baseURL, resolvedPath, originalPath, method string,
+	headers, cookies map[string]string,
+	payload any,
+	profile swagger.FuzzingProfile,
+	queryParams map[string]any,
+	generatedHeaders map[string]string,
+	contentType string,
+	oobTokens sentOOBTokens,
+) *swagger.FuzzResult {
+	if r.waitWhileHeld(ctx) {
+		// Stopped while held: the request was never sent, and must not pass for a timeout.
+		return &swagger.FuzzResult{
+			ID:           uuid.New().String(),
+			Endpoint:     originalPath,
+			ResolvedPath: resolvedPath,
+			Method:       method,
+			Profile:      profile,
+			Error:        "not sent: the scan stopped while it was held",
+			NotSent:      true,
+			Timestamp:    time.Now().UnixMilli(),
+		}
+	}
 	if strings.HasPrefix(originalPath, "mcp://") {
 		return r.executeMCPRequest(ctx, originalPath, payload, profile, headers, cookies)
+	}
+	if strings.HasPrefix(originalPath, "webmcp://") {
+		// WebMCP tools live inside a browser page (navigator.modelContext) and can
+		// only be invoked from that page. There is no network executor for them yet,
+		// so fail closed: falling through would send a nonsense "CALL <base>/webmcp://..."
+		// HTTP request to the target and feed its error page to the MCP analyzers.
+		return &swagger.FuzzResult{
+			ID:           uuid.New().String(),
+			Endpoint:     originalPath,
+			ResolvedPath: originalPath,
+			Method:       method,
+			Profile:      profile,
+			Payload:      payload,
+			Error:        "webmcp:// endpoints require a browser-side executor and are not fuzzed over HTTP",
+			Timestamp:    time.Now().UnixMilli(),
+		}
 	}
 	if method == "GRPC" || strings.HasPrefix(baseURL, "grpc://") || strings.HasPrefix(baseURL, "grpcs://") {
 		return r.executeGRPCRequest(ctx, baseURL, resolvedPath, originalPath, payload, profile, generatedHeaders)
 	}
 	if method == "WS" || strings.HasPrefix(baseURL, "ws://") || strings.HasPrefix(baseURL, "wss://") {
-		return r.executeWebSocketRequest(ctx, baseURL, resolvedPath, originalPath, payload, profile, headers, generatedHeaders)
+		return r.executeWebSocketRequest(ctx, baseURL, resolvedPath, originalPath, method, payload, profile, headers, generatedHeaders)
 	}
 
 	// Merge headers: generatedHeaders < global headers
 	isBody := !isNoBodyMethod(method)
-	mergedHeaders := make(map[string]string)
+	mergedHeaders := make(map[string]string, len(generatedHeaders)+len(headers)+2)
 	for k, v := range generatedHeaders {
 		mergedHeaders[k] = r.subStateVars(v)
 	}
@@ -172,6 +257,7 @@ func (r *Runner) executeRequest(
 		}
 
 		var bodyReader io.Reader
+		var reqBody []byte
 		if isBody && payload != nil {
 			if strings.Contains(effectiveCT, "x-www-form-urlencoded") {
 				if m, ok := payload.(map[string]any); ok {
@@ -179,24 +265,24 @@ func (r *Runner) executeRequest(
 					for k, v := range m {
 						vals.Set(k, toString(v))
 					}
-					bodyReader = strings.NewReader(vals.Encode())
-					payloadSize = len(vals.Encode())
+					reqBody = []byte(vals.Encode())
+					bodyReader = bytes.NewReader(reqBody)
 				}
 			}
 			if bodyReader == nil && strings.Contains(effectiveCT, "xml") {
 				if m, ok := payload.(map[string]any); ok {
 					xmlContent, _ := generator.ToXML(m, "request")
 					soapBody, _ := generator.WrapInSOAP(xmlContent)
-					bodyReader = strings.NewReader(soapBody)
-					payloadSize = len(soapBody)
+					reqBody = []byte(soapBody)
+					bodyReader = bytes.NewReader(reqBody)
 				}
 			}
 
 			if bodyReader == nil {
-				b, _ := json.Marshal(payload)
-				bodyReader = bytes.NewReader(b)
-				payloadSize = len(b)
+				reqBody, _ = json.Marshal(payload)
+				bodyReader = bytes.NewReader(reqBody)
 			}
+			payloadSize = len(reqBody)
 		}
 
 		if len(cookies) > 0 {
@@ -220,7 +306,7 @@ func (r *Runner) executeRequest(
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 				RequestURI: requestURIOf(rawURL),
-				Method: method, Profile: profile, Status: 0, Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize,
+				Method:     method, Profile: profile, Status: 0, Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize,
 				Error: err.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				RequestHeaders: mergedHeaders,
 			}
@@ -239,72 +325,34 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		var reqDump []byte
-		var dumpErr error
-		if logger.IsDebugEnabled() || r.config.Settings.Debug || profile == swagger.ProfileMalicious {
-			reqDump, dumpErr = httputil.DumpRequestOut(req, true)
-		}
-
-		if (logger.IsDebugEnabled() || r.config.Settings.Debug) && dumpErr == nil {
-			r.logDebug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
-		}
-
-		// Look for OOB payloads to register the actual request details
-		if profile == swagger.ProfileMalicious {
-			if dumpErr == nil {
-				reqStr := string(reqDump)
-				matches := uuidRegex.FindAllString(reqStr, -1)
-				if len(matches) > 0 {
-					reqLog := &swagger.RequestLog{
-						Method:       method,
-						URL:          rawURL,
-						Headers:      mergedHeaders,
-						OriginalPath: originalPath,
-						ResolvedPath: req.URL.RequestURI(),
-					}
-					var body string
-					if parts := strings.SplitN(reqStr, "\r\n\r\n", 2); len(parts) == 2 {
-						body = parts[1]
-					} else if parts := strings.SplitN(reqStr, "\n\n", 2); len(parts) == 2 {
-						body = parts[1]
-					}
-					reqLog.Body = body
-
-					for _, uuidMatch := range matches {
-						oob.GlobalStore.UpdateRequest(uuidMatch, reqLog)
-					}
-				}
+		if logger.IsDebugEnabled() || r.config.Settings.Debug {
+			if reqDump, dumpErr := httputil.DumpRequestOut(req, true); dumpErr == nil {
+				r.logDebug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
 			}
 		}
 
-		var clientToUse = r.client
-		proxyStr := getNextProxy(proxyList)
-		var customTransport *http.Transport
-		if proxyStr != "" {
-			if proxyURL, err := url.Parse(proxyStr); err == nil {
-				var baseTransport *http.Transport
-				if r.client.Transport != nil {
-					if t, ok := r.client.Transport.(*http.Transport); ok {
-						baseTransport = t
-					}
-				} else {
-					if t, ok := http.DefaultTransport.(*http.Transport); ok {
-						baseTransport = t
-					}
-				}
-				if baseTransport != nil {
-					customTransport = baseTransport.Clone()
-					customTransport.Proxy = http.ProxyURL(proxyURL)
-					clientToUse = &http.Client{
-						Transport:     customTransport,
-						CheckRedirect: r.client.CheckRedirect,
-						Timeout:       r.client.Timeout,
-					}
-				}
+		// Log the request for the OOB tokens it carries, so a callback shows what was sent.
+		tokens := oobTokens.ids
+		if !oobTokens.known && profile == swagger.ProfileMalicious && r.oobStore.Size() > 0 {
+			tokens = oobUUIDsInRequest(rawURL, mergedHeaders, reqBody)
+		}
+		if len(tokens) > 0 {
+			reqLog := &swagger.RequestLog{
+				Method:       method,
+				URL:          rawURL,
+				Headers:      mergedHeaders,
+				OriginalPath: originalPath,
+				ResolvedPath: req.URL.RequestURI(),
+				Body:         string(reqBody),
+			}
+			for _, token := range tokens {
+				r.oobStore.UpdateRequest(token, reqLog)
 			}
 		}
-		if customTransport != nil {
-			defer customTransport.CloseIdleConnections()
+
+		clientToUse := r.client
+		if len(proxyList) > 0 {
+			clientToUse = r.proxiedClient()
 		}
 
 		start := time.Now()
@@ -325,8 +373,8 @@ func (r *Runner) executeRequest(
 			}
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-				RequestURI: requestURIOf(rawURL),
-				Method: method, Profile: profile, Status: 0, Duration: duration,
+				RequestURI: req.URL.RequestURI(),
+				Method:     method, Profile: profile, Status: 0, Duration: duration,
 				Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				RequestHeaders: mergedHeaders,
 			}
@@ -334,6 +382,8 @@ func (r *Runner) executeRequest(
 
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
+			// Drained before closing so the connection is kept for the retry.
+			safenet.DrainBody(resp.Body, maxResponseRead)
 			resp.Body.Close() // #nosec G104 -- error from Body.Close irrelevant after 429 backoff
 			reqCancel()
 
@@ -367,8 +417,8 @@ func (r *Runner) executeRequest(
 				timer.Stop()
 				return &swagger.FuzzResult{
 					ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-					RequestURI: requestURIOf(rawURL),
-					Method: method, Profile: profile, Status: 429, Duration: duration,
+					RequestURI: req.URL.RequestURI(),
+					Method:     method, Profile: profile, Status: 429, Duration: duration,
 					Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 					RequestHeaders: mergedHeaders,
 				}
@@ -393,8 +443,8 @@ func (r *Runner) executeRequest(
 			}
 			PutBuffer(buf)
 		}
-		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
-		resp.Body.Close()                              // #nosec G104 -- close error irrelevant after body fully consumed
+		discarded := safenet.DrainBody(resp.Body, maxResponseRead-int64(len(rawBodyBytes)))
+		resp.Body.Close() // #nosec G104 -- close error irrelevant once the body is no longer read
 		reqCancel()
 
 		// Extract and save CSRF token if present
@@ -452,6 +502,8 @@ func (r *Runner) executeRequest(
 			}
 		}
 
+		// Without a Content-Length this is what was read: for a body cut off past maxResponseRead,
+		// a lower bound.
 		responseSize := resp.ContentLength
 		if responseSize < 0 {
 			responseSize = int64(len(rawBodyBytes)) + discarded
@@ -465,7 +517,7 @@ func (r *Runner) executeRequest(
 			ID:              uuid.New().String(),
 			Endpoint:        originalPath,
 			ResolvedPath:    resolvedPath,
-			RequestURI:      requestURIOf(rawURL),
+			RequestURI:      req.URL.RequestURI(),
 			Method:          method,
 			Profile:         profile,
 			Status:          resp.StatusCode,
@@ -479,21 +531,19 @@ func (r *Runner) executeRequest(
 			Timestamp:       time.Now().UnixMilli(),
 		}
 
-		if profile != swagger.FuzzingProfile("BOLA") {
-			r.detector.HarvestFromResponse(originalPath, method, resp.StatusCode, respBody)
+		// Only responses to the scan's own identity feed it: BOLA and DIFFERENTIAL probes go out
+		// as other identities or anonymously, and must not set User A's variables.
+		switch profile {
+		case swagger.ProfileRandom, swagger.FuzzingProfile("BASELINE"):
+			r.detector.Load().HarvestFromResponse(originalPath, method, resp.StatusCode, respBody, payload, queryParams)
+		case swagger.ProfileMalicious, swagger.ProfileBoundary:
+			// The target may echo these payloads in ID-like fields: not IDs to replay.
+			r.detector.Load().ExtractVariablesFromResponse(originalPath, method, resp.StatusCode, respBody)
 		}
 
 		if r.config.Settings.AnalyzeResponseBody {
-			var baselineSize int64
-			if profile == swagger.ProfileMalicious {
-				baselineSize = r.getSizeBaselineMedian(method, originalPath)
-			}
-			multiplier := r.config.Settings.ResponseSizeAnomalyMultiplier
-			if multiplier <= 0 {
-				multiplier = 5.0
-			}
-			baselineTime := r.getTimeBaselineMedian(method, originalPath)
-			input := &analyzer.AnalysisInput{
+			baselineSize, multiplier, baselineTime := r.anomalyBaselines(method, originalPath, profile, r.config.Settings)
+			input := analyzer.AcquireInput(analyzer.AnalysisInput{
 				SentPayload:     result.Payload,
 				ResponseBody:    rawBodyBytes,
 				ResponseHeaders: resp.Header,
@@ -507,8 +557,9 @@ func (r *Runner) executeRequest(
 				BaselineTimeMs:  baselineTime,
 				TimeThresholdMs: r.config.Settings.TimeAnomalyThresholdMs,
 				Settings:        r.config.Settings,
-			}
+			})
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
+			analyzer.ReleaseInput(input)
 			if (logger.IsDebugEnabled() || r.config.Settings.Debug) && len(result.AnalyzerFindings) > 0 {
 				r.logDebug("Analyzer: Found findings for %s %s: %v", method, originalPath, result.AnalyzerFindings)
 			}
@@ -520,4 +571,45 @@ func (r *Runner) executeRequest(
 
 		return result
 	}
+}
+
+// mayHoldUUID reports whether s has length of at least 36 and contains at least 4 hyphens,
+// the minimum required for a canonical UUID (8-4-4-4-12).
+func mayHoldUUID[T ~string | ~[]byte](s T) bool {
+	if len(s) < 36 {
+		return false
+	}
+	count := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '-' {
+			count++
+			if count == 4 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// oobUUIDsInRequest returns the UUIDs (OOB callback tokens) a request carries in its URL, header
+// names and values, and body: every part of the wire request a payload can reach.
+func oobUUIDsInRequest(rawURL string, headers map[string]string, body []byte) []string {
+	var matches []string
+	if mayHoldUUID(rawURL) {
+		matches = uuidRegex.FindAllString(rawURL, -1)
+	}
+	for k, v := range headers {
+		if mayHoldUUID(k) {
+			matches = append(matches, uuidRegex.FindAllString(k, -1)...)
+		}
+		if mayHoldUUID(v) {
+			matches = append(matches, uuidRegex.FindAllString(v, -1)...)
+		}
+	}
+	if mayHoldUUID(body) {
+		for _, m := range uuidRegex.FindAll(body, -1) {
+			matches = append(matches, string(m))
+		}
+	}
+	return matches
 }

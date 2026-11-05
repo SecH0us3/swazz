@@ -7,7 +7,7 @@ import { useCallback } from 'react';
 import type { RunStats, SwazzConfig } from '../types.js';
 import { toSummary } from './useRunner.js';
 import { loadSwaggerUrl, ParsingError } from '../services/swaggerService.js';
-import { dbStreamResult } from './useDb.js';
+import { createResultWriter } from './useDb.js';
 import type { ScanRun } from './useDb.js';
 import { useAppStore } from '../store/appStore.js';
 import { matchesPattern } from '../utils/glob.js';
@@ -16,11 +16,69 @@ import { sanitizeTargetUrl, hasSupportedScheme } from '../utils/url.js';
 interface UseFuzzSessionProps {
     config: SwazzConfig;
     updateConfig: (updates: Partial<SwazzConfig>) => void;
-    start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, clientRunId?: string) => void;
-    connectToExisting: (runId: string, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void) => void;
-    saveRun: (runRecord: ScanRun, rows?: any[]) => void;
+    start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, clientRunId?: string, onError?: (message: string) => void) => void;
+    connectToExisting: (runId: string, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, onError?: (message: string) => void) => void;
+    saveRun: (runRecord: ScanRun, rows?: any[]) => void | Promise<void>;
     getDb: () => IDBDatabase | null;
     showToast: (message: string, type: 'info' | 'success' | 'error') => void;
+}
+
+/**
+ * The callbacks that follow one scan: each result is written to IndexedDB in batches (no React state
+ * in the hot path, only a throttled count of the rows written), and the run is saved when it
+ * completes or fails. A failed run keeps its reason, so History shows why it failed (see
+ * ScanIssueBanner).
+ */
+function createRunHandlers(
+    runRec: ScanRun,
+    { getDb, saveRun, showToast }: Pick<UseFuzzSessionProps, 'getDb' | 'saveRun' | 'showToast'>,
+) {
+    let liveCount = 0;
+    let lastCountUpdate = 0;
+    let published = -1;
+    // The count the Inspector reloads on is the number of rows already in IndexedDB, so a reload
+    // it triggers finds every row it counts. It is only published while this run is the live one:
+    // a run that ended does not overwrite the count of the next.
+    const publish = (written: number) => {
+        if (written === published || useAppStore.getState().liveRunId !== runRec.id) return;
+        published = written;
+        useAppStore.setState({ liveCount: written });
+    };
+    let written = 0;
+    const writer = createResultWriter(getDb, runRec.id, {
+        onWritten: (n) => {
+            written = n;
+            const now = Date.now();
+            if (now - lastCountUpdate > 500) {
+                lastCountUpdate = now;
+                publish(n);
+            }
+        },
+    });
+
+    // The run is saved at once, as the server would have it; its last rows follow, and then the
+    // final count (even inside the throttle), which makes the Inspector reload with all of them.
+    const end = (run: ScanRun) => {
+        void Promise.resolve(saveRun(run)).catch((err) => console.warn('[swazz] Failed to save the run:', err));
+        void writer.flush().then(() => publish(written));
+    };
+
+    const onResult = (raw: any) => {
+        writer.add(toSummary(raw));
+        liveCount++;
+    };
+
+    const onComplete = (finalStats: RunStats) => {
+        end({ ...runRec, completedAt: Date.now(), stats: finalStats });
+        showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
+    };
+
+    const onError = (message: string) => {
+        end({ ...runRec, completedAt: Date.now(), stats: useAppStore.getState().stats as RunStats, failureReason: message });
+        showToast('Scan failed — see the details above the results', 'error');
+    };
+
+    return { onResult, onComplete, onError };
 }
 
 export function useFuzzSession({
@@ -170,43 +228,10 @@ export function useFuzzSession({
             stats: null,
         });
 
-        let liveCount = 0;
-        let lastCountUpdate = 0;
-
-        /**
-         * onResult: called per SSE event.
-         * We convert to a ResultSummary and write to IDB directly.
-         * No React state is touched here — only the db write + throttled counter.
-         */
-        const onResult = (raw: any) => {
-            const db = getDb();
-            if (!db) return;
-
-            const summary = toSummary(raw);
-            // Fire-and-forget IDB write — no await needed in the hot path
-            dbStreamResult(db, runId, summary).catch((err) => {
-                console.warn('[swazz] IDB write error:', err);
-            });
-
-            liveCount++;
-            const now = Date.now();
-            if (now - lastCountUpdate > 500) {
-                lastCountUpdate = now;
-                useAppStore.setState({ liveCount });
-            }
-        };
-
-        const onComplete = (finalStats: RunStats) => {
-            const completedRun: ScanRun = { ...runRec, completedAt: Date.now(), stats: finalStats };
-            saveRun(completedRun);
-            useAppStore.setState({
-                liveCount,
-            });
-            showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
-        };
+        const { onResult, onComplete, onError } = createRunHandlers(runRec, { getDb, saveRun, showToast });
 
         try {
-            await start({ ...finalConfig, projectId: activeProject?.id }, onResult, onComplete, runId);
+            await start({ ...finalConfig, projectId: activeProject?.id }, onResult, onComplete, runId, onError);
             showToast(
                 `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
                 'info',
@@ -247,37 +272,10 @@ export function useFuzzSession({
                 isPaused: status === 'paused',
             });
 
-            let liveCount = 0;
-            let lastCountUpdate = 0;
-
-            const onResult = (raw: any) => {
-                const db = getDb();
-                if (!db) return;
-
-                const summary = toSummary(raw);
-                dbStreamResult(db, runId, summary).catch((err) => {
-                    console.warn('[swazz] IDB write error:', err);
-                });
-
-                liveCount++;
-                const now = Date.now();
-                if (now - lastCountUpdate > 500) {
-                    lastCountUpdate = now;
-                    useAppStore.setState({ liveCount });
-                }
-            };
-
-            const onComplete = (finalStats: RunStats) => {
-                const completedRun: ScanRun = { ...runRec, completedAt: Date.now(), stats: finalStats };
-                saveRun(completedRun);
-                useAppStore.setState({
-                    liveCount,
-                });
-                showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
-            };
+            const { onResult, onComplete, onError } = createRunHandlers(runRec, { getDb, saveRun, showToast });
 
             try {
-                await connectToExisting(runId, onResult, onComplete);
+                await connectToExisting(runId, onResult, onComplete, onError);
             } catch (err: any) {
                 showToast(`Failed to connect to active scan: ${err.message}`, 'error');
                 useAppStore.setState({ liveRunId: null });

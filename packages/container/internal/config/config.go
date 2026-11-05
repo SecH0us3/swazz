@@ -255,7 +255,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 					isTLS := strings.HasPrefix(strings.ToLower(urlStr), "grpcs://")
 					grpcCtx, grpcCancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer grpcCancel()
-					parsedGRPC, errGRPC := grpc.DiscoverViaReflection(grpcCtx, urlStr, isTLS, headersCopy)
+					parsedGRPC, errGRPC := grpc.DiscoverViaReflection(grpcCtx, urlStr, isTLS, headersCopy, cliCfg.Security.AllowPrivateIPs)
 					if errGRPC == nil {
 						resChan <- specResult{
 							urlStr:    urlStr,

@@ -163,10 +163,39 @@ describe('useFuzzSession hook', () => {
         expect(mockConnectToExisting).toHaveBeenCalledWith(
             'existing-run-999',
             expect.any(Function),
+            expect.any(Function),
             expect.any(Function)
         );
         expect(mockSaveRun).toHaveBeenCalled();
         expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Scan complete'), 'success');
+    });
+
+    // History shows a failed scan as failed, with its reason, instead of as never finished.
+    it('keeps the reason with a run that failed', async () => {
+        mockConnectToExisting.mockImplementation(async (_runId: string, _onResult: any, _onComplete: any, onError: (m: string) => void) => {
+            onError('could not connect to the MCP server: status 401');
+        });
+        const { result } = renderHook(() => useFuzzSession({
+            config: initialConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        await act(async () => {
+            await result.current.handleConnectToExisting('failing-run', Date.now() - 5000, 'https://api.example.com', 'manual', 'dispatched');
+        });
+
+        expect(mockSaveRun).toHaveBeenLastCalledWith(expect.objectContaining({
+            id: 'failing-run',
+            completedAt: expect.any(Number),
+            failureReason: 'could not connect to the MCP server: status 401',
+        }));
+        expect(mockSaveRun.mock.calls.at(-1)![0].completedAt).toBeGreaterThan(0);
+        expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Scan failed'), 'error');
     });
 
     it('should handle start error when runner is already in progress', async () => {

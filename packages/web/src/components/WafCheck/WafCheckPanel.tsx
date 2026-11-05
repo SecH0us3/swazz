@@ -4,6 +4,8 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import React, { useState, useEffect, useRef } from 'react';
+import { DOCS } from '../../utils/docsLinks.js';
+import { DocsLink } from '../Shared/DocsLink.js';
 import { useConfig } from '../../hooks/useConfig.js';
 import { useAppStore } from '../../store/appStore.js';
 import type { WAFDetection, WAFPatchReport } from '../../types.js';
@@ -225,6 +227,7 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
                                 : 'Scanning for exposed files (up to a minute)...'}
                         </span>
                     )}
+                    <DocsLink href={DOCS.wafAnalysis} label="How WAF analysis works" />
                     <a
                         className="waf-check-attribution"
                         href="https://waf.secmy.app/"

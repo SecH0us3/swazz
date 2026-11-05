@@ -75,7 +75,6 @@ func TestRunner_Limiter(t *testing.T) {
 	r.LimiterRelease()
 }
 
-
 func TestRunner_ExecuteRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)

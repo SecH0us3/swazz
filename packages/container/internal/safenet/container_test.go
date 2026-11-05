@@ -24,14 +24,25 @@ func TestAssertRunningInContainer_Bypass(t *testing.T) {
 	origAllow := AllowLocalNetwork
 	defer func() { AllowLocalNetwork = origAllow }()
 
-	// 1. allowBypass = true
+	// 1. allowBypass = true only skips the container check; it must not open private networks,
+	// or the coordinator's allow_private_ips=false for shared runners would be ignored.
 	AllowLocalNetwork = false
+	t.Setenv("SWAZZ_DEV", "")
 	AssertRunningInContainer(true)
-	assert.True(t, AllowLocalNetwork)
+	assert.False(t, AllowLocalNetwork)
 
 	// 2. SWAZZ_DEV = "1"
 	AllowLocalNetwork = false
 	t.Setenv("SWAZZ_DEV", "1")
 	AssertRunningInContainer(false)
+	assert.True(t, AllowLocalNetwork)
+}
+
+func TestEnableLocalNetwork(t *testing.T) {
+	origAllow := AllowLocalNetwork
+	defer func() { AllowLocalNetwork = origAllow }()
+
+	AllowLocalNetwork = false
+	EnableLocalNetwork()
 	assert.True(t, AllowLocalNetwork)
 }

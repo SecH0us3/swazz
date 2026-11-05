@@ -55,7 +55,7 @@ The helper exports three main log-level functions:
 ### How it Works
 1. **Serialization**: The helpers format the inputs into a standardized `LogEntry` structure (converting JavaScript `Error` objects to nested JSON structures containing `message`, `name`, and `stack`).
 2. **Standard Output**: The formatted object is printed to standard output via `console.log(JSON.stringify(entry))`, `console.warn(JSON.stringify(entry))`, or `console.error(JSON.stringify(entry))`.
-3. **KV Buffering**: If the environment contains `SESSION_CACHE` (a Cloudflare KV namespace binding), the helpers concurrently buffer the log entry to a rolling array under the KV key `admin:logs` (capped at the last 1,000 entries). This rolling buffer is used to feed the web dashboard's real-time Admin Logs viewer.
+3. **In-Memory Buffering**: The helpers buffer the most recent log entries in an in-memory ring buffer (capped at the last 200 entries). This rolling buffer is exposed via `getBufferedLogs()` to feed the web dashboard's real-time Admin Logs viewer (`GET /api/admin/logs`) with zero external latency and without consuming paid KV write/read operations.
 
 ---
 

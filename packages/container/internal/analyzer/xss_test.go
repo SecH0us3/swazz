@@ -94,6 +94,14 @@ func TestXSSAnalyzer(t *testing.T) {
 			profile:       swagger.ProfileBoundary, // not MALICIOUS
 			expectedCount: 0,
 		},
+		{
+			name:          "Reflected XSS with Unicode Case Folding (Kelvin Sign)",
+			payload:       `"><script>alert(document.cookie)</script>`,
+			response:      `<html><body>"><script>alert(document.coo` + "\u212a" + `ie)</script></body></html>`,
+			headers:       http.Header{"Content-Type": []string{"text/html"}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+		},
 	}
 
 	for _, tt := range tests {

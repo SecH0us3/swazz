@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 )
@@ -82,13 +81,9 @@ func (c *Client) GeneratePatches(ctx context.Context, results []AuditResultItem,
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := readBody("virtual-patch", resp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read virtual-patch response: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, parseAPIError("virtual-patch", resp.StatusCode, body)
+		return nil, err
 	}
 
 	var rep PatchReport

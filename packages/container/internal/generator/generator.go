@@ -6,7 +6,6 @@
 package generator
 
 import (
-	"fmt"
 	"math/rand/v2"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/oob"
+	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 )
 
@@ -40,11 +40,24 @@ type Generator struct {
 	cachedMaliciousStrings []any
 	// hasActiveMaliciousStrings tracks if any malicious string categories are enabled
 	hasActiveMaliciousStrings bool
+	// bodyIterations is BodyIterations, computed once by New (bodyIterationsSet).
+	bodyIterations    int
+	bodyIterationsSet bool
+
+	// The boundary strings this generator's payload size cap can carry (BoundaryStringsFitting).
+	boundaryStrings []any
 
 	oobServerURL string
 	Endpoint     string
 	RunID        string
-	settings     swagger.Settings
+	// The run's stores for the OOB tokens and SSTI expressions this generator sends. Nil leaves
+	// them unregistered: the payload is still sent, but no callback or evaluation is matched to it.
+	OOBStore  *oob.Store
+	SSTIStore *sstistore.Store
+	settings  swagger.Settings
+
+	// sentOOB holds the OOB tokens registered since the last TakeOOBTokens, under mu.
+	sentOOB []string
 }
 
 // New creates a new Generator.
@@ -72,7 +85,11 @@ func New(dictionaries map[string][]any, profile swagger.FuzzingProfile, settings
 		oobServerURL:     settings.OOBServerURL,
 		mSecHeaderIdxs:   make(map[string]int),
 	}
+	if profile == swagger.ProfileBoundary {
+		g.boundaryStrings = payloads.BoundaryStringsFitting(settings.PayloadSizeCap())
+	}
 	g.cachedMaliciousStrings, g.hasActiveMaliciousStrings = g.getActiveMaliciousStrings()
+	g.bodyIterations, g.bodyIterationsSet = g.countBodyIterations(), true
 	return g
 }
 
@@ -127,8 +144,8 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 	switch profile {
 	case swagger.ProfileBoundary:
 		max := 0
-		if is(payloads.CatBoundaryStrings) && len(payloads.BoundaryStrings) > max {
-			max = len(payloads.BoundaryStrings)
+		if is(payloads.CatBoundaryStrings) {
+			max = len(payloads.BoundaryStringsFitting(settings.PayloadSizeCap()))
 		}
 		if is(payloads.CatBoundaryIntegers) && len(payloads.BoundaryIntegers) > max {
 			max = len(payloads.BoundaryIntegers)
@@ -321,9 +338,10 @@ func (g *Generator) GenerateArrayItem(propertyName string, schema *swagger.Schem
 	return g.Generate(propertyName, schema)
 }
 
-// GenerateSecurityHeaders returns a map of header name → fuzz value for
-// security-critical HTTP headers not defined in the API spec.
+// GenerateSecurityHeaders returns a newly allocated map of header name → fuzz value
+// for security-critical HTTP headers not defined in the API spec.
 // Only active during MALICIOUS profile. Returns nil for other profiles.
+// The returned map is owned by the caller and may be aliased or mutated directly.
 func (g *Generator) GenerateSecurityHeaders() map[string]string {
 	if g.profile != swagger.ProfileMalicious {
 		return nil
@@ -333,10 +351,10 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 	defer g.mu.Unlock()
 
 	if g.mSecHeaderIdxs == nil {
-		g.mSecHeaderIdxs = make(map[string]int)
+		g.mSecHeaderIdxs = make(map[string]int, 16)
 	}
 
-	headers := make(map[string]string)
+	headers := make(map[string]string, 16)
 	for _, def := range payloads.SecurityHeaderPayloads {
 		if !g.isCategoryEnabled(def.Category) {
 			continue
@@ -352,11 +370,13 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 				u := uuid.New().String()
 				url := g.oobURL(u)
 
-				endpoint := "Header: " + headerName
+				var endpoint string
 				if g.Endpoint != "" {
-					endpoint = fmt.Sprintf("%s (Header: %s)", g.Endpoint, headerName)
+					endpoint = g.Endpoint + " (Header: " + headerName + ")"
+				} else {
+					endpoint = "Header: " + headerName
 				}
-				oob.GlobalStore.RegisterUUID(u, &oob.OOBContext{
+				g.registerOOBLocked(u, &oob.OOBContext{
 					SessionID: g.RunID,
 					Endpoint:  endpoint,
 					Payload:   val,
@@ -375,54 +395,69 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 	return headers
 }
 
+// registerOOBLocked registers an OOB token in the run's store and records it for TakeOOBTokens.
+// The caller holds g.mu.
+func (g *Generator) registerOOBLocked(u string, ctx *oob.OOBContext) {
+	if g.OOBStore == nil {
+		// Nothing could match a callback, or take the request details for it.
+		return
+	}
+	g.OOBStore.RegisterUUID(u, ctx)
+	g.sentOOB = append(g.sentOOB, u)
+}
+
+// TakeOOBTokens returns the OOB tokens this generator has registered since the last call and
+// forgets them. A generator builds one request at a time: taken after a request's values are
+// generated, they are the tokens that request carries, so the runner can log the request for each
+// one without searching the wire request for them. The tokens of a request built and then
+// discarded (a payload over the size cap, a duplicate) are taken with it, so they are not
+// attributed to the next request.
+func (g *Generator) TakeOOBTokens() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := g.sentOOB
+	g.sentOOB = nil
+	return out
+}
+
 // BodyIterations returns the number of iterations needed for body fuzzing.
 func (g *Generator) BodyIterations() int {
+	if g.bodyIterationsSet {
+		return g.bodyIterations
+	}
+	return g.countBodyIterations()
+}
+
+// countBodyIterations computes BodyIterations; New stores it, since a generator's profile and
+// categories do not change after it.
+func (g *Generator) countBodyIterations() int {
 	if g.profile != swagger.ProfileMalicious {
 		return 0
 	}
 	is := g.isCategoryEnabled
 	bodyCount := 0
-	var maliciousBody []any
-	if is(payloads.CatMaliciousEncoding) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousEncoding...)
+	for _, c := range []struct {
+		category string
+		n        int
+	}{
+		{payloads.CatMaliciousEncoding, len(payloads.MaliciousEncoding)},
+		{payloads.CatMaliciousSQLi, len(payloads.MaliciousSQLi)},
+		{payloads.CatMaliciousXSS, len(payloads.MaliciousXSS)},
+		{payloads.CatMaliciousPathTraversal, len(payloads.MaliciousPathTraversal)},
+		{payloads.CatMaliciousCmdi, len(payloads.MaliciousCmdi)},
+		{payloads.CatMaliciousSSTI, len(payloads.MaliciousSSTI)},
+		{payloads.CatMaliciousXXE, len(payloads.MaliciousXXE)},
+		{payloads.CatMaliciousPrototypePollution, len(payloads.MaliciousPrototypePollution)},
+		{payloads.CatMaliciousNoSQLi, len(payloads.MaliciousNoSQLi)},
+		{payloads.CatMaliciousSSRF, len(payloads.MaliciousSSRF)},
+		{payloads.CatMaliciousMassAssignment, len(payloads.MaliciousMassAssignment)},
+		{payloads.CatMaliciousGraphQL, len(payloads.MaliciousGraphQL)},
+		{payloads.CatOOBInteraction, len(payloads.MaliciousOOB)},
+	} {
+		if is(c.category) {
+			bodyCount += c.n
+		}
 	}
-	if is(payloads.CatMaliciousSQLi) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousSQLi...)
-	}
-	if is(payloads.CatMaliciousXSS) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousXSS...)
-	}
-	if is(payloads.CatMaliciousPathTraversal) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousPathTraversal...)
-	}
-	if is(payloads.CatMaliciousCmdi) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousCmdi...)
-	}
-	if is(payloads.CatMaliciousSSTI) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousSSTI...)
-	}
-	if is(payloads.CatMaliciousXXE) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousXXE...)
-	}
-	if is(payloads.CatMaliciousPrototypePollution) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousPrototypePollution...)
-	}
-	if is(payloads.CatMaliciousNoSQLi) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousNoSQLi...)
-	}
-	if is(payloads.CatMaliciousSSRF) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousSSRF...)
-	}
-	if is(payloads.CatMaliciousMassAssignment) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousMassAssignment...)
-	}
-	if is(payloads.CatMaliciousGraphQL) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousGraphQL...)
-	}
-	if is(payloads.CatOOBInteraction) {
-		maliciousBody = append(maliciousBody, payloads.MaliciousOOB...)
-	}
-	bodyCount = len(maliciousBody)
 	if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {
 		bodyCount = len(payloads.MaliciousNumbers)
 	}

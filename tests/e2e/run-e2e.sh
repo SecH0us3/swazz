@@ -7,6 +7,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
+# Shared runner credential for this local coordinator (see scripts/runner-token.sh).
+SWAZZ_RUNNER_TOKEN="${SWAZZ_RUNNER_TOKEN:-$(bash "scripts/runner-token.sh")}"
+export SWAZZ_RUNNER_TOKEN
+
 
 echo "=== Swazz E2E Automated Test Runner ==="
 echo "Project Root: $ROOT_DIR"
@@ -183,11 +187,9 @@ if check_port 8787; then
 else
   echo "→ Applying local database migrations..."
   echo "y" | "$WRANGLER" d1 migrations apply swazz_db --local --cwd packages/edge || true
-  echo "→ Seeding CI runner user..."
-  "$WRANGLER" d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', '0c4000e5af58b58dac6d8f190a5e4960441c0d8b6370b09096900931f87df527', 'Supporter Plan');" --cwd packages/edge || true
   echo "→ Starting Edge Coordinator (with watchdog)..."
   start_watchdog 8787 "Edge Coordinator" edge.log \
-    env NODE_OPTIONS="--max-old-space-size=1536" "$WRANGLER" dev --cwd packages/edge --inspector-port 0 --var JWT_SECRET:test-secret --var PASSWORD_AUTH_ENABLED:true --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error
+    env NODE_OPTIONS="--max-old-space-size=1536" "$WRANGLER" dev --cwd packages/edge --var "SHARED_RUNNER_TOKEN:$SWAZZ_RUNNER_TOKEN" --var SHARED_RUNNERS_ALLOW_PRIVATE_IPS:true --var ALLOW_PRIVATE_PROXY_TARGETS:true --inspector-port 0 --var JWT_SECRET:test-secret --var PASSWORD_AUTH_ENABLED:true --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error
   wait_for_port 8787 "Edge Coordinator"
 fi
 
@@ -219,8 +221,8 @@ else
   echo "→ Starting Go Runner Agent..."
   ./packages/container/swazz-engine run-agent \
     --coordinator ws://127.0.0.1:8787/api/runners/connect \
-    --token swazz_live_citoken1234567890 \
-    --dangerous-no-container > packages/container/agent.log 2>&1 &
+    --token "$SWAZZ_RUNNER_TOKEN" \
+    --dangerous-no-container --allow-private-networks > packages/container/agent.log 2>&1 &
   PIDS+=($!)
   
   # Wait for agent to connect to coordinator

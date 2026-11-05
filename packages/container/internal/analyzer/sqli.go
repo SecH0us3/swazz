@@ -35,38 +35,33 @@ func (a *SQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	// Fast pre-filter: skip scanning if no SQL error indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "syntax", "sql", "mysql", "postgres", "psql", "pg_", "pg::", "sqlite", "ora-", "quotation", "quoted string", "driver", "oledb", "sqlstate", "npgsql", "sqlclient", "sqlexception") {
-		return nil
-	}
-
 	var findings []swagger.AnalysisFinding
 
 OuterLoop:
 	for _, sig := range dbSignatures {
 		switch sig.name {
 		case "MySQL":
-			if !containsAnyFoldASCII(input.ResponseBody, "syntax", "mysql", "jdbc") {
+			if !input.containsAnyLower("syntax", "mysql") {
 				continue
 			}
 		case "PostgreSQL":
-			if !containsAnyFoldASCII(input.ResponseBody, "syntax", "pg_", "psql", "pg::", "npgsql") {
+			if !input.containsAnyLower("syntax", "pg_", "psql", "pg::", "npgsql") {
 				continue
 			}
 		case "SQLite":
-			if !containsAnyFoldASCII(input.ResponseBody, "sqlite", "syntax") {
+			if !input.containsAnyLower("sqlite", "syntax") {
 				continue
 			}
 		case "MSSQL":
-			if !containsAnyFoldASCII(input.ResponseBody, "quotation", "oledb", "sql server", "sqlserver") {
+			if !input.containsAnyLower("quotation", "oledb", "sql server", "sqlserver") {
 				continue
 			}
 		case "Oracle":
-			if !containsAnyFoldASCII(input.ResponseBody, "ora-", "quoted string") {
+			if !input.containsAnyLower("ora-", "quoted string") {
 				continue
 			}
 		case "Generic":
-			if !containsAnyFoldASCII(input.ResponseBody, "sqlstate", "sqlexception", "sqlclient") {
+			if !input.containsAnyLower("sqlstate", "sqlexception", "sqlclient") {
 				continue
 			}
 		}

@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ScansService } from '../../../src/services/scans';
+import { ScansService, DEFAULT_SCANS_PAGE, MAX_SCANS_PAGE, encodeScansCursor } from '../../../src/services/scans';
 import { Env } from '../../../src/env';
 import * as jwt from 'hono/jwt';
 
@@ -37,11 +37,13 @@ describe('ScansService Unit Tests', () => {
       getProjectMemberRole: vi.fn(),
       createAuditLog: vi.fn(),
       getScans: vi.fn(),
+      getUnfinishedScans: vi.fn(),
       getScan: vi.fn(),
       updateScan: vi.fn(),
       updateScanStatus: vi.fn(),
       updateScanReportUrl: vi.fn(),
       getRunnerLogs: vi.fn(),
+      getFailureReasons: vi.fn().mockResolvedValue(new Map()),
       getFindings: vi.fn(),
       getFindingDetails: vi.fn(),
       updateFinding: vi.fn(),
@@ -219,7 +221,7 @@ describe('ScansService Unit Tests', () => {
       expect(thrownError.message).toBe('Failed to queue scan|500');
       expect(thrownError.message).not.toContain('R2 write error');
       expect(mockScansRepo.createScan).toHaveBeenCalled();
-      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
+      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
       expect(mockEnv.SCAN_QUEUE.send).not.toHaveBeenCalled();
     });
 
@@ -240,7 +242,7 @@ describe('ScansService Unit Tests', () => {
       expect(thrownError.message).toBe('Failed to queue scan|500');
       expect(thrownError.message).not.toContain('Queue send failed');
       expect(mockScansRepo.createScan).toHaveBeenCalled();
-      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed');
+      expect(mockScansRepo.updateScanStatus).toHaveBeenCalledWith(expect.any(String), 'failed', undefined, undefined, expect.stringContaining('could not be queued'));
     });
   });
 
@@ -255,9 +257,85 @@ describe('ScansService Unit Tests', () => {
     });
 
     it('returns scans', async () => {
-      mockScansRepo.getScans.mockResolvedValueOnce([{ id: 's1' }]);
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [{ id: 's1' }], next: null });
       const res = await scansService.getScans('p1', 'u1');
-      expect(res.scans).toEqual([{ id: 's1' }]);
+      expect(res).toEqual({ scans: [{ id: 's1' }] });
+      expect(mockScansRepo.getScans).toHaveBeenCalledWith('p1', DEFAULT_SCANS_PAGE, undefined);
+    });
+
+    it('pages with a cursor that leads back to where the page ended', async () => {
+      const next = { createdAt: '2026-10-21 10:00:00', id: '01JABCDEF' };
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [{ id: 's1' }], next });
+      const first = await scansService.getScans('p1', 'u1', { limit: '1' });
+      expect(first.next_cursor).toBe(encodeScansCursor(next));
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', 1, undefined);
+
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', { limit: '1', cursor: first.next_cursor });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', 1, next);
+    });
+
+    it.each(['1000', '99999', '9'.repeat(30)])('caps the page size %s', async (limit) => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', { limit });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', MAX_SCANS_PAGE, undefined);
+    });
+
+    it('lists the scans that have not ended with active=1', async () => {
+      mockScansRepo.getUnfinishedScans.mockResolvedValueOnce([{ id: 'paused-1', status: 'paused' }]);
+      const res = await scansService.getScans('p1', 'u1', { active: '1' });
+      expect(res).toEqual({ scans: [{ id: 'paused-1', status: 'paused' }] });
+      expect(mockScansRepo.getUnfinishedScans).toHaveBeenCalledWith('p1', DEFAULT_SCANS_PAGE);
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it.each([{ active: 'yes' }, { active: '1', cursor: 'abc' }])('refuses active query %o', async (page) => {
+      await expect(scansService.getScans('p1', 'u1', page)).rejects.toThrow('Invalid query parameter: active|400');
+      expect(mockScansRepo.getUnfinishedScans).not.toHaveBeenCalled();
+    });
+
+    it.each(['0', '-1', 'abc', '1.5', '00'])('refuses limit %s', async (limit) => {
+      await expect(scansService.getScans('p1', 'u1', { limit })).rejects.toThrow('Invalid query parameter: limit|400');
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'not base64!',
+      btoa('not json'),
+      btoa(JSON.stringify({ createdAt: '2026-10-21', id: 'x' })),
+      btoa(JSON.stringify(['2026-10-21', "x' OR 1=1"])),
+      btoa(JSON.stringify(["2026' OR 1=1", 'x'])),
+      btoa(JSON.stringify(['2026-10-21', 'x'.repeat(65)])),
+      'A'.repeat(300),
+    ])('refuses cursor %s', async (cursor) => {
+      await expect(scansService.getScans('p1', 'u1', { cursor })).rejects.toThrow('Invalid query parameter: cursor|400');
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it('reads an empty cursor as the first page', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', { cursor: '', limit: '' });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', DEFAULT_SCANS_PAGE, undefined);
+    });
+
+    it('checks access before the page parameters', async () => {
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.getScans('p1', 'u1', { limit: 'abc' })).rejects.toThrow('Forbidden|403');
+    });
+
+    it('takes the failure reason from the scan row when it has one', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [{ id: 'kept', status: 'failed', failure_reason: 'Runner lost\nsecond line' }], next: null });
+      const res = await scansService.getScans('p1', 'u1');
+      expect(res.scans[0].failure_reason).toBe('Runner lost second line');
+      expect(mockScansRepo.getFailureReasons).not.toHaveBeenCalled();
+    });
+
+    it('gives failed scans, and only those, their failure reason', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [{ id: 'ok', status: 'completed' }, { id: 'bad', status: 'failed' }], next: null });
+      mockScansRepo.getFailureReasons.mockResolvedValueOnce(new Map([['bad', 'Runner lost']]));
+      const res = await scansService.getScans('p1', 'u1');
+      expect(mockScansRepo.getFailureReasons).toHaveBeenCalledWith(['bad']);
+      expect(res.scans).toEqual([{ id: 'ok', status: 'completed' }, { id: 'bad', status: 'failed', failure_reason: 'Runner lost' }]);
     });
   });
 
@@ -277,6 +355,27 @@ describe('ScansService Unit Tests', () => {
       mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1' });
       const res = await scansService.getScan('s1', 'u1');
       expect(res.scan.id).toBe('s1');
+    });
+
+    it('says why a failed scan failed', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', status: 'failed' });
+      mockScansRepo.getFailureReasons.mockResolvedValueOnce(new Map([['s1', 'MCP server returned 401']]));
+      const res = await scansService.getScan('s1', 'u1');
+      expect(res.scan.failure_reason).toBe('MCP server returned 401');
+
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's2', project_id: 'p1', status: 'failed' });
+      mockScansRepo.getFailureReasons.mockResolvedValueOnce(new Map());
+      expect((await scansService.getScan('s2', 'u1')).scan.failure_reason).toBeNull();
+    });
+
+    // The dashboard polls the status of a scan outside any project; its creator may read it.
+    it('lets the creator read a scan outside any project, and nobody else', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: '', user_id: 'u1', status: 'dispatched' });
+      expect((await scansService.getScan('s1', 'u1')).scan.id).toBe('s1');
+
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: '', user_id: 'u1' });
+      await expect(scansService.getScan('s1', 'u2')).rejects.toThrow('Forbidden|403');
+      expect(mockRbacRepo.checkPermission).not.toHaveBeenCalledWith('u2', '', expect.anything());
     });
 
     it('parses waf_patch_report JSON string if present', async () => {
@@ -403,6 +502,24 @@ describe('ScansService Unit Tests', () => {
       expect(mockScansRepo.getRunnerLogs).toHaveBeenCalled();
     });
 
+    // Errors were filtered out of the runner log, so a failed scan's log just stopped.
+    it('shows errors in the runner log as one clean line', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', user_id: 'u1' });
+      mockScansRepo.getRunnerLogs.mockResolvedValueOnce([
+        { type: 'event', payload: '{"type":"runner_log","data":{"level":"info","message":"Starting"}}', created_at: 't1' },
+        { type: 'error', payload: '{"error":"MCP 401\\ngoroutine 1 [running]:"}', created_at: 't2' },
+        { type: 'event', payload: '{"type":"error","data":{"message":"boom"}}', created_at: 't3' },
+        { type: 'error', payload: '{}', created_at: 't4' },
+      ]);
+      const { logs } = await scansService.getRunnerLogs('s1', 'u1', true);
+      expect(logs[0].payload).toContain('Starting');
+      expect(logs.slice(1).map((l: any) => JSON.parse(l.payload))).toEqual([
+        { level: 'ERROR', message: 'MCP 401', timestamp: 't2' },
+        { level: 'ERROR', message: 'boom', timestamp: 't3' },
+        { level: 'ERROR', message: 'The scan failed without an error message.', timestamp: 't4' },
+      ]);
+    });
+
     it('checks rbac if project_id exists', async () => {
       mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1' });
       mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
@@ -496,6 +613,26 @@ describe('ScansService Unit Tests', () => {
       mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', user_id: 'other' });
       mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
       await expect(scansService.saveWAFPatchReport('s1', {}, 'u1', true)).rejects.toThrow('Forbidden|403');
+    });
+
+    it('refuses a removed member, even for a scan they created in the project', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', user_id: 'u1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.saveWAFPatchReport('s1', {}, 'u1', true)).rejects.toThrow('Forbidden|403');
+      expect(mockScansRepo.saveWAFPatchReport).not.toHaveBeenCalled();
+    });
+
+    it('lets the creator of a standalone scan (no project) save the report', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: '', user_id: 'u1' });
+      const res = await scansService.saveWAFPatchReport('s1', {}, 'u1', true);
+      expect(res.success).toBe(true);
+      expect(mockRbacRepo.checkPermission).not.toHaveBeenCalled();
+    });
+
+    it('AI triage updates also refuse a removed member who created the scan', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', user_id: 'u1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.batchUpdateFindingsAI('s1', [], 'u1', true)).rejects.toThrow('Forbidden|403');
     });
 
     it('saves report successfully', async () => {

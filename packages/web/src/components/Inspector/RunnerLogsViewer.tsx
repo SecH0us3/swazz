@@ -138,7 +138,7 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-panel)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+    <div className="runner-logs-viewer" style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-panel)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-3)', borderBottom: '1px solid var(--border-default)', background: 'var(--bg-elevated)', alignItems: 'center' }}>
         <h3 style={{ margin: 0, fontSize: 'var(--font-size-md)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -6,8 +6,11 @@
 package oob
 
 import (
-	"swazz-engine/internal/swagger"
+	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"swazz-engine/internal/swagger"
 )
 
 func TestOOBStore(t *testing.T) {
@@ -54,43 +57,218 @@ func TestOOBStore(t *testing.T) {
 		t.Error("Expected store to be empty after Clear")
 	}
 
-	// Test GlobalStore singleton
-	if GlobalStore == nil {
-		t.Error("Expected GlobalStore not to be nil")
-	}
-
 	// Test Size
 	store.RegisterUUID("test-uuid-4", ctx)
 	store.RegisterUUID("test-uuid-5", ctx)
 	if size := store.Size(); size != 2 {
 		t.Errorf("Expected Size to be 2, got %d", size)
 	}
+}
 
-	// Test ClearSession
-	ctxSession1 := &OOBContext{SessionID: "sess-1", Endpoint: "ep-1"}
-	ctxSession2 := &OOBContext{SessionID: "sess-2", Endpoint: "ep-2"}
+// A nil store holds nothing and never panics: a generator or runner without one sends its payloads
+// unregistered.
+func TestOOBStore_Nil(t *testing.T) {
+	var store *Store
+	store.RegisterUUID("u", &OOBContext{})
+	store.UpdateRequest("u", &swagger.RequestLog{})
+	store.Clear()
+	if _, ok := store.GetAndRemoveUUID("u"); ok {
+		t.Error("nil store returned a context")
+	}
+	if store.Size() != 0 {
+		t.Error("nil store has a size")
+	}
+}
 
-	store.RegisterUUID("uuid-s1-a", ctxSession1)
-	store.RegisterUUID("uuid-s1-b", ctxSession1)
-	store.RegisterUUID("uuid-s2-a", ctxSession2)
+// A full store drops its oldest tokens first, so a long scan stays bounded.
+func TestStore_EvictsOldestPastTheLimit(t *testing.T) {
+	s := NewStoreWithLimit(3)
+	for _, id := range []string{"a", "b", "c", "d"} {
+		s.RegisterUUID(id, &OOBContext{SessionID: id})
+	}
+	if s.Size() != 3 {
+		t.Fatalf("size = %d, want 3", s.Size())
+	}
+	if _, ok := s.GetAndRemoveUUID("a"); ok {
+		t.Error("the oldest token survived")
+	}
+	for _, id := range []string{"b", "c", "d"} {
+		if _, ok := s.GetAndRemoveUUID(id); !ok {
+			t.Errorf("token %s was dropped", id)
+		}
+	}
+}
 
-	if size := store.Size(); size != 5 {
-		t.Errorf("Expected Size to be 5, got %d", size)
+// A removed token frees its slot, and registering it again does not evict anything.
+func TestStore_RemoveFreesSlot(t *testing.T) {
+	s := NewStoreWithLimit(2)
+	s.RegisterUUID("a", &OOBContext{})
+	s.RegisterUUID("b", &OOBContext{})
+	s.GetAndRemoveUUID("a")
+	s.RegisterUUID("a", &OOBContext{})
+	if s.Size() != 2 {
+		t.Fatalf("size = %d, want 2", s.Size())
+	}
+	if _, ok := s.GetAndRemoveUUID("b"); !ok {
+		t.Error("b was evicted although a slot was free")
+	}
+}
+
+// Registering a token again keeps one entry with the newest context.
+func TestStore_ReRegisterKeepsOneEntry(t *testing.T) {
+	s := NewStoreWithLimit(2)
+	s.RegisterUUID("a", &OOBContext{SessionID: "1"})
+	s.RegisterUUID("a", &OOBContext{SessionID: "2"})
+	s.RegisterUUID("b", &OOBContext{})
+	if s.Size() != 2 {
+		t.Fatalf("size = %d, want 2", s.Size())
+	}
+	ctx, ok := s.GetAndRemoveUUID("a")
+	if !ok || ctx.SessionID != "2" {
+		t.Fatalf("got %+v, %v", ctx, ok)
+	}
+}
+
+// The drop handler runs once per run, without the store locked, and again after Clear.
+func TestStore_OnFirstDropOncePerClear(t *testing.T) {
+	s := NewStoreWithLimit(1)
+	calls := 0
+	s.OnFirstDrop(func() {
+		calls++
+		_ = s.Size() // would deadlock if the store were still locked
+	})
+	s.RegisterUUID("a", &OOBContext{})
+	if calls != 0 {
+		t.Fatal("handler ran without a drop")
+	}
+	s.RegisterUUID("b", &OOBContext{})
+	s.RegisterUUID("c", &OOBContext{})
+	if calls != 1 {
+		t.Fatalf("handler ran %d times, want 1", calls)
+	}
+	s.Clear()
+	s.RegisterUUID("d", &OOBContext{})
+	s.RegisterUUID("e", &OOBContext{})
+	if calls != 2 {
+		t.Fatalf("handler ran %d times after Clear, want 2", calls)
+	}
+}
+
+// TakePending takes the waiting tokens out, newest first, with long fields cut on a character
+// boundary.
+func TestStore_TakePending(t *testing.T) {
+	s := NewStoreWithLimit(10)
+	if got := s.TakePending(5); len(got) != 0 {
+		t.Fatalf("empty store gave %v", got)
+	}
+	s.RegisterUUID("a", &OOBContext{Endpoint: "GET /a", Payload: "p"})
+	s.RegisterUUID("b", &OOBContext{Endpoint: "GET /" + strings.Repeat("é", MaxPendingFieldBytes), Payload: map[string]any{"k": 1}})
+	s.RegisterUUID("c", &OOBContext{Endpoint: "GET /c", Payload: "c"})
+	s.GetAndRemoveUUID("c") // answered: not pending
+	got := s.TakePending(1)
+	if len(got) != 1 || got[0].UUID != "b" {
+		t.Fatalf("TakePending(1) = %+v, want b", got)
+	}
+	if _, ok := s.GetAndRemoveUUID("b"); ok {
+		t.Error("a taken token is still matched")
+	}
+	s.RegisterUUID("b", &OOBContext{Endpoint: "GET /" + strings.Repeat("é", MaxPendingFieldBytes), Payload: map[string]any{"k": 1}})
+	got = s.TakePending(5)
+	if len(got) != 2 || got[0].UUID != "b" || got[1].UUID != "a" {
+		t.Fatalf("Pending = %+v, want b then a", got)
+	}
+	if len(got[0].Endpoint) > MaxPendingFieldBytes || !utf8.ValidString(got[0].Endpoint) {
+		t.Errorf("endpoint of %d bytes not cut cleanly", len(got[0].Endpoint))
+	}
+	if got[0].Payload != "map[k:1]" {
+		t.Errorf("payload = %q", got[0].Payload)
+	}
+	if s.Size() != 0 {
+		t.Errorf("%d tokens left after taking all", s.Size())
+	}
+	var nilStore *Store
+	if nilStore.TakePending(3) != nil {
+		t.Error("nil store has pending tokens")
+	}
+}
+
+// A cut keeps everything before the limit, even after an invalid byte.
+func TestCutUTF8(t *testing.T) {
+	s := "ab\xffcd" + strings.Repeat("é", 10)
+	if got := cutUTF8(s, 9); len(got) != 9 && len(got) != 8 {
+		t.Fatalf("cut to %d bytes: %q", len(got), got)
+	}
+	if got := cutUTF8("ééé", 3); got != "é" {
+		t.Fatalf("cutUTF8 split a character: %q", got)
+	}
+	if got := cutUTF8(strings.Repeat("\x80", 300), 256); len(got) < 256-utf8.UTFMax {
+		t.Fatalf("continuation bytes cut to %d bytes", len(got))
+	}
+	if got := cutUTF8("abc", 10); got != "abc" {
+		t.Fatalf("short string changed: %q", got)
+	}
+}
+
+// A large non-string payload is formatted only as far as it is kept.
+func TestPayloadText_Bounded(t *testing.T) {
+	big := make([]string, 10_000)
+	for i := range big {
+		big[i] = "xxxxxxxx"
+	}
+	if got := payloadText(big); len(got) > MaxPendingFieldBytes+utf8.UTFMax {
+		t.Fatalf("formatted %d bytes", len(got))
+	}
+	if got := payloadText("plain"); got != "plain" {
+		t.Fatalf("string payload = %q", got)
+	}
+}
+
+func TestStore_Size(t *testing.T) {
+	var nilStore *Store
+	if got := nilStore.Size(); got != 0 {
+		t.Fatalf("nil store size = %d, want 0", got)
 	}
 
-	store.ClearSession("sess-1")
-
-	if size := store.Size(); size != 3 {
-		t.Errorf("Expected Size to be 3 after clearing sess-1, got %d", size)
+	s := NewStoreWithLimit(100)
+	if got := s.Size(); got != 0 {
+		t.Fatalf("empty store size = %d, want 0", got)
 	}
 
-	_, okS1 := store.GetAndRemoveUUID("uuid-s1-a")
-	if okS1 {
-		t.Errorf("Expected uuid-s1-a to be removed by ClearSession")
+	// Register unique tokens
+	s.RegisterUUID("tok-1", &OOBContext{})
+	s.RegisterUUID("tok-2", &OOBContext{})
+	s.RegisterUUID("tok-3", &OOBContext{})
+	if got := s.Size(); got != 3 {
+		t.Fatalf("store size = %d, want 3", got)
 	}
 
-	_, okS2 := store.GetAndRemoveUUID("uuid-s2-a")
-	if !okS2 {
-		t.Errorf("Expected uuid-s2-a to remain after clearing sess-1")
+	// Re-registering existing key should not increase size
+	s.RegisterUUID("tok-1", &OOBContext{})
+	if got := s.Size(); got != 3 {
+		t.Fatalf("store size after re-register = %d, want 3", got)
+	}
+
+	// Remove one
+	_, ok := s.GetAndRemoveUUID("tok-2")
+	if !ok {
+		t.Fatalf("expected tok-2 to be found")
+	}
+	if got := s.Size(); got != 2 {
+		t.Fatalf("store size after remove = %d, want 2", got)
+	}
+
+	// TakePending
+	taken := s.TakePending(1)
+	if len(taken) != 1 {
+		t.Fatalf("taken count = %d, want 1", len(taken))
+	}
+	if got := s.Size(); got != 1 {
+		t.Fatalf("store size after take = %d, want 1", got)
+	}
+
+	// Clear
+	s.Clear()
+	if got := s.Size(); got != 0 {
+		t.Fatalf("store size after clear = %d, want 0", got)
 	}
 }

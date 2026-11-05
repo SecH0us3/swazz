@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"swazz-engine/internal/license"
@@ -52,26 +53,116 @@ func (r *Runner) logInfo(format string, v ...interface{}) {
 
 func (r *Runner) logWarn(format string, v ...interface{}) {
 	logger.Warn(format, v...)
+	r.broadcastUserLog("warn", format, v...)
+}
+
+func (r *Runner) logError(format string, v ...interface{}) {
+	logger.Error(format, v...)
+	r.broadcastUserLog("error", format, v...)
+}
+
+// maxUserLogRepeats bounds how often one warning or error (by its format) reaches the user's
+// runner log in a run: a failure that repeats on every request must not flood the log, or bury
+// the first occurrence that explains it. The local log keeps every occurrence.
+const maxUserLogRepeats = 5
+
+// logRepeats counts each warning and error format sent to the user's log in the current run.
+type logRepeats struct {
+	mu     sync.Mutex
+	counts map[string]int
+	order  []string
+}
+
+func (l *logRepeats) reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.counts = nil
+	l.order = nil
+}
+
+// note records one occurrence of key and reports whether it is still within the bound.
+func (l *logRepeats) note(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.counts == nil {
+		l.counts = make(map[string]int)
+	}
+	if _, seen := l.counts[key]; !seen {
+		l.order = append(l.order, key)
+	}
+	l.counts[key]++
+	return l.counts[key] <= maxUserLogRepeats
+}
+
+// suppressed returns, in first-seen order, each key that went over the bound and by how much.
+func (l *logRepeats) suppressed() []suppressedLog {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []suppressedLog
+	for _, key := range l.order {
+		if n := l.counts[key] - maxUserLogRepeats; n > 0 {
+			out = append(out, suppressedLog{key: key, count: n})
+		}
+	}
+	return out
+}
+
+type suppressedLog struct {
+	key   string
+	count int
+}
+
+func (r *Runner) broadcastUserLog(level, format string, v ...interface{}) {
+	if !r.userLogRepeats.note(level + "\x00" + format) {
+		return
+	}
 	r.Broadcast(Event{
 		Type: "runner_log",
 		Data: map[string]interface{}{
-			"level":     "warn",
+			"level":     level,
 			"message":   truncateLog(fmt.Sprintf(format, v...)),
 			"timestamp": time.Now().Format(time.RFC3339),
 		},
 	})
 }
 
-func (r *Runner) logError(format string, v ...interface{}) {
-	logger.Error(format, v...)
-	r.Broadcast(Event{
-		Type: "runner_log",
-		Data: map[string]interface{}{
-			"level":     "error",
-			"message":   truncateLog(fmt.Sprintf(format, v...)),
-			"timestamp": time.Now().Format(time.RFC3339),
-		},
-	})
+// logSuppressedSummary tells the user how many repeats of each warning or error were left out.
+func (r *Runner) logSuppressedSummary() {
+	for _, s := range r.userLogRepeats.suppressed() {
+		level, format, _ := strings.Cut(s.key, "\x00")
+		r.Broadcast(Event{
+			Type: "runner_log",
+			Data: map[string]interface{}{
+				"level":     level,
+				"message":   fmt.Sprintf("[Runner] %d more message(s) like this one were left out: %s", s.count, truncateLog(formatTemplate(format))),
+				"timestamp": time.Now().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+// formatTemplate shows a format string with its verbs as "…" (the values differ per message).
+func formatTemplate(format string) string {
+	var b strings.Builder
+	for i := 0; i < len(format); i++ {
+		if format[i] != '%' {
+			b.WriteByte(format[i])
+			continue
+		}
+		if i+1 < len(format) && format[i+1] == '%' {
+			b.WriteByte('%')
+			i++
+			continue
+		}
+		// Skip flags, width and precision up to the verb letter.
+		j := i + 1
+		for j < len(format) && strings.IndexByte("+-# 0123456789.*[]", format[j]) >= 0 {
+			j++
+		}
+		b.WriteString("…")
+		i = j
+	}
+	return b.String()
 }
 
 // formatBytes formats byte sizes into human-readable strings (e.g. "10.0 MB (10485760 B)").
@@ -225,7 +316,7 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 		profileNames = []string{"NONE"}
 	}
 
-	payloadSizeStr := formatBytes(r.config.Settings.MaxPayloadSizeBytes)
+	payloadSizeStr := formatBytes(r.config.Settings.PayloadSizeCap())
 	plannedTotal := r.progress.totalPlanned.Load()
 	etaStr := estimateScanDuration(plannedTotal, r.config.Settings.Concurrency, r.config.Settings.DelayBetweenRequestMs, isMCP)
 	if r.config.Settings.MaxScanDurationMin > 0 {
@@ -460,7 +551,13 @@ func (r *Runner) logCompletionSummary(stats swagger.RunStats) {
 	for _, res := range r.allResults {
 		findingsCount += len(res.AnalyzerFindings)
 	}
+	notRetained, droppedFindings := r.retained.notRetained, r.retained.droppedFindings
 	r.resultsMu.Unlock()
+	if droppedFindings > 0 {
+		r.logWarn("%d analyzer finding(s) past the post-scan cap are in the results stream but not in Smart Triage or WAF patches", droppedFindings)
+	} else if notRetained > 0 {
+		r.logDebug("%d successful result(s) were streamed but not kept for the post-scan phases (see retainResult)", notRetained)
+	}
 
 	sentStr := formatBytes(int(stats.TotalSentBytes))
 	recvStr := formatBytes(int(stats.TotalResponseBytes))
@@ -471,7 +568,7 @@ func (r *Runner) logCompletionSummary(stats swagger.RunStats) {
 	r.logInfo("📊 Requests Executed:   %d / %d (%.1f%%) | Sent: %s | Received: %s", stats.TotalRequests, stats.TotalPlanned, percent, sentStr, recvStr)
 	r.logInfo("🛑 Status Distribution: %s", statusSummary)
 	if findingsCount > 0 {
-		r.logInfo("🚨 Security Findings:   %d active analyzer finding(s) discovered across %d result(s)", findingsCount, resultsCount)
+		r.logInfo("🚨 Security Findings:   %d active analyzer finding(s) discovered across %d result(s)", findingsCount+droppedFindings, resultsCount)
 	} else {
 		r.logInfo("✨ Security Findings:   Clean scan (0 analyzer findings)")
 	}

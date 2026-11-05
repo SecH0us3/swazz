@@ -30,7 +30,7 @@ func (a *TimingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding
 		return nil
 	}
 
-	payloadStr := fmt.Sprintf("%v", input.SentPayload)
+	payloadStr := input.payloadText()
 	upper := strings.ToUpper(payloadStr)
 	lower := strings.ToLower(payloadStr)
 

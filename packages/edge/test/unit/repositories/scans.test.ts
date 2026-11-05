@@ -97,13 +97,17 @@ describe('ScansRepository Unit Tests', () => {
     expect(mockBind).toHaveBeenCalledWith('a-1', 'p-1', 'u-1', 'alex', 'admin', 'action-1', 'label-1', 'web', '{}', '127.0.0.1');
   });
 
-  it('getScans queries scans ordered by created_at desc', async () => {
+  it('getScans reads one page of the list columns, newest first', async () => {
     const scansList = [{ id: 's-1' }];
     mockAll.mockResolvedValue({ results: scansList });
 
     const repo = new ScansRepository(mockEnv);
-    expect(await repo.getScans('p-1')).toBe(scansList);
-    expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM scans WHERE project_id = ?'));
+    expect(await repo.getScans('p-1', 50)).toEqual({ scans: scansList, next: null });
+    const sql = mockPrepare.mock.calls.at(-1)[0];
+    expect(sql).toContain('WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?');
+    expect(sql).not.toContain('*');
+    expect(sql).not.toContain('waf_patch_report');
+    expect(mockBind).toHaveBeenLastCalledWith('p-1', 51);
   });
 
   it('getScan returns details by scanId', async () => {
@@ -125,11 +129,12 @@ describe('ScansRepository Unit Tests', () => {
       mockAll.mockResolvedValue(scan); // first for run execution, then getScan query
 
       const repo = new ScansRepository(mockEnv);
-      const res = await repo.updateScan('s-1', { status: 'completed', report_url: 'https://r2.com/1.json' });
+      const res = await repo.updateScan('s-1', { status: 'completed', report_url: 'specs/raw/victim.json' });
 
       expect(res).toBe(scan);
-      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE scans SET status = ?, report_url = ? WHERE id = ?'));
-      expect(mockBind).toHaveBeenCalledWith('completed', 'https://r2.com/1.json', 's-1');
+      // report_url is ignored: clients cannot choose which R2 object account cleanup deletes.
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE scans SET status = ? WHERE id = ?'));
+      expect(mockBind).toHaveBeenCalledWith('completed', 's-1');
     });
   });
 
@@ -259,7 +264,7 @@ describe('ScansRepository Unit Tests', () => {
       const repo = new ScansRepository(mockEnv);
       await repo.updateScanStatus('s-1', 'completed', '{}');
 
-      expect(mockPrepare).toHaveBeenNthCalledWith(1, expect.stringContaining("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?"));
+      expect(mockPrepare).toHaveBeenNthCalledWith(1, expect.stringContaining("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ?, status_changed_at = datetime('now') WHERE id = ?"));
       expect(dispatchWebhook).toHaveBeenCalledWith(mockEnv, 'p-1', 'scan.completed', expect.any(Object));
     });
 
@@ -386,12 +391,12 @@ describe('ScansRepository Unit Tests', () => {
     it('returns true when an active scan was transitioned to failed', async () => {
       const repo = new ScansRepository(mockEnv);
       mockAll.mockResolvedValueOnce({ meta: { changes: 1 } });
-      const result = await repo.markFailedIfActive('scan-123');
+      const result = await repo.markFailedIfActive('scan-123', 'The scan was stopped.');
 
       expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ? AND status IN ('queued','dispatched','paused')")
+        expect.stringContaining("UPDATE scans SET status = 'failed', completed_at = datetime('now'), failure_reason = ? WHERE id = ? AND status IN ('queued','dispatched','paused')")
       );
-      expect(mockBind).toHaveBeenCalledWith('scan-123');
+      expect(mockBind).toHaveBeenCalledWith('The scan was stopped.', 'scan-123');
       expect(result).toBe(true);
     });
 

@@ -7,13 +7,14 @@ import { Env } from '../env';
 import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
 import { RouteHandler } from './handlers/types';
-import { SseHandler, SseSendHandler } from './handlers/sse';
+import { SseHandler, SseSendHandler, SseOwnerHandler } from './handlers/sse';
 import { RevokeUserHandler } from './handlers/users';
 import { DispatchHandler, CommandHandler, StartRunHandler, ControlRunHandler } from './handlers/jobs';
 import { ParseHandler } from './handlers/parse';
 import { RunnersHandler, RestartRunnerHandler, ConnectRunnerHandler } from './handlers/runners';
 import { ConnectClientHandler } from './handlers/connectClient';
 import { OobHandler } from './handlers/oob';
+import { WatchdogHandler } from './watchdog';
 
 export class RequestHandler {
   private routes: Map<string, RouteHandler>;
@@ -27,6 +28,7 @@ export class RequestHandler {
     this.routes = new Map<string, RouteHandler>([
       ['/sse', new SseHandler()],
       ['/sse-send', new SseSendHandler()],
+      ['/sse-owner', new SseOwnerHandler()],
       ['/revoke-user', new RevokeUserHandler()],
       ['/dispatch', new DispatchHandler()],
       ['/command', new CommandHandler()],
@@ -38,6 +40,7 @@ export class RequestHandler {
       ['/connect-runner', new ConnectRunnerHandler()],
       ['/connect-client', new ConnectClientHandler()],
       ['/oob', new OobHandler()],
+      ['/watchdog', new WatchdogHandler()],
     ]);
   }
 

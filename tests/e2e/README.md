@@ -39,7 +39,7 @@ If you prefer to start each service manually in separate terminal windows, run t
   rtk go build -o swazz-engine
   
   # Run the runner agent in dangerous/local bypass mode
-  rtk ./swazz-engine run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --token swazz_live_citoken1234567890 --dangerous-no-container
+  rtk ./swazz-engine run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --token "$(bash scripts/runner-token.sh)" --dangerous-no-container --allow-private-networks
   ```
 
 * **Terminal 5: Run Playwright**

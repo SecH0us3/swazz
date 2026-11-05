@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getDB, recordQueryTime } from '../../../src/utils/db';
+import { getDB, recordQueryTime, getBufferedSlowQueries, clearBufferedSlowQueries } from '../../../src/utils/db';
 import { Env } from '../../../src/env';
 import { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 
@@ -25,6 +25,7 @@ describe('getDB Helper & Proxy Traps', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearBufferedSlowQueries();
 
     mockDB = {
       prepare: vi.fn(),
@@ -152,8 +153,9 @@ describe('getDB Helper & Proxy Traps', () => {
     it('handles recordQueryTime failures inside exec/batch/dump gracefully', async () => {
       mockDB.exec.mockResolvedValue({ count: 1 });
       
-      // Force KV to throw during recordQueryTime to trigger logError
-      mockKV.get.mockRejectedValue(new Error('KV connection failure'));
+      mockAnalytics.writeDataPoint.mockImplementation(() => {
+        throw new Error('Analytics failed');
+      });
 
       const db = getDB(mockEnv);
       await db.exec('SELECT 1');
@@ -161,7 +163,7 @@ describe('getDB Helper & Proxy Traps', () => {
       expect(mockLogError).toHaveBeenCalledWith(
         expect.anything(),
         'Database',
-        'Failed to save slow query to KV',
+        'Failed to write to Analytics Engine',
         expect.any(Object)
       );
     });
@@ -221,7 +223,9 @@ describe('getDB Helper & Proxy Traps', () => {
 
     it('handles query timing record failures inside statement execution gracefully', async () => {
       mockStmt.first.mockResolvedValue({ id: 1 });
-      mockKV.get.mockRejectedValue(new Error('KV failed'));
+      mockAnalytics.writeDataPoint.mockImplementation(() => {
+        throw new Error('Analytics failed');
+      });
 
       const db = getDB(mockEnv);
       const stmt = db.prepare('SELECT 1');
@@ -230,7 +234,7 @@ describe('getDB Helper & Proxy Traps', () => {
       expect(mockLogError).toHaveBeenCalledWith(
         expect.anything(),
         'Database',
-        'Failed to save slow query to KV',
+        'Failed to write to Analytics Engine',
         expect.any(Object)
       );
     });
@@ -243,9 +247,8 @@ describe('getDB Helper & Proxy Traps', () => {
       expect(mockLogWarn).not.toHaveBeenCalled();
     });
 
-    it('emits warn log and writes to Analytics Engine and KV if above threshold', async () => {
+    it('emits warn log, writes to Analytics Engine, and buffers in-memory without KV', async () => {
       (mockEnv as any).SLOW_QUERY_THRESHOLD_MS = 50;
-      mockKV.get.mockResolvedValue(null);
 
       await recordQueryTime('SELECT * FROM users', 100, mockEnv);
 
@@ -256,11 +259,13 @@ describe('getDB Helper & Proxy Traps', () => {
         indexes: ['slow_query']
       });
 
-      expect(mockKV.put).toHaveBeenCalledWith(
-        'admin:slow-queries',
-        expect.stringContaining('SELECT * FROM users'),
-        { expirationTtl: 86400 }
-      );
+      expect(mockKV.get).not.toHaveBeenCalled();
+      expect(mockKV.put).not.toHaveBeenCalled();
+
+      const buffered = getBufferedSlowQueries();
+      expect(buffered.length).toBe(1);
+      expect(buffered[0].query).toBe('SELECT * FROM users');
+      expect(buffered[0].duration).toBe(100);
     });
 
     it('handles Analytics Engine write failures gracefully', async () => {
@@ -279,61 +284,20 @@ describe('getDB Helper & Proxy Traps', () => {
       );
     });
 
-    it('manages slow query KV cache limits correctly and handles malformed existing cache JSON', async () => {
+    it('limits in-memory slow queries buffer to 100 items by slicing oldest', async () => {
       (mockEnv as any).SLOW_QUERY_THRESHOLD_MS = 50;
-      // Return malformed JSON to trigger JSON.parse catch fallback
-      mockKV.get.mockResolvedValue('malformed-json');
 
-      await recordQueryTime('SELECT 1', 100, mockEnv);
+      for (let i = 0; i < 150; i++) {
+        await recordQueryTime(`SELECT ${i}`, 100, mockEnv);
+      }
 
-      expect(mockKV.put).toHaveBeenCalledWith(
-        'admin:slow-queries',
-        expect.stringContaining('SELECT 1'),
-        expect.any(Object)
-      );
-    });
+      const buffered = getBufferedSlowQueries();
+      expect(buffered.length).toBe(100);
+      expect(buffered[0].query).toBe('SELECT 149');
+      expect(buffered[99].query).toBe('SELECT 50');
 
-    it('limits KV cache to 100 items by slicing oldest', async () => {
-      (mockEnv as any).SLOW_QUERY_THRESHOLD_MS = 50;
-      const manyRecords = Array.from({ length: 150 }, (_, i) => ({
-        event: 'slow_query',
-        query: `SELECT ${i}`,
-        duration: 100,
-        threshold: 50,
-        timestamp: new Date().toISOString()
-      }));
-
-      mockKV.get.mockResolvedValue(JSON.stringify(manyRecords));
-
-      await recordQueryTime('SELECT NEW', 100, mockEnv);
-
-      expect(mockKV.put).toHaveBeenCalled();
-      const putArg = mockKV.put.mock.calls[0][1];
-      const parsedPut = JSON.parse(putArg);
-      expect(parsedPut.length).toBe(100);
-      expect(parsedPut[0].query).toBe('SELECT NEW');
-    });
-
-    it('respects different execution contexts for waitUntil scheduling', async () => {
-      (mockEnv as any).SLOW_QUERY_THRESHOLD_MS = 50;
-      const mockCtx1 = {
-        waitUntil: vi.fn()
-      };
-      
-      const mockCtx2 = {
-        executionCtx: {
-          waitUntil: vi.fn()
-        }
-      };
-
-      // Set env.JWT_SECRET to production value so it doesn't await recordPromise directly
-      (mockEnv as any).JWT_SECRET = 'prod-secret';
-
-      await recordQueryTime('SELECT A', 100, mockEnv, mockCtx1);
-      expect(mockCtx1.waitUntil).toHaveBeenCalled();
-
-      await recordQueryTime('SELECT B', 100, mockEnv, mockCtx2);
-      expect(mockCtx2.executionCtx.waitUntil).toHaveBeenCalled();
+      clearBufferedSlowQueries();
+      expect(getBufferedSlowQueries()).toEqual([]);
     });
   });
 });

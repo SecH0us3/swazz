@@ -25,6 +25,32 @@ import { WafAnalysisTab } from './ProjectSettings/WafAnalysisTab.js';
 import { useFeatureGate } from '../hooks/useFeatureGate.js';
 import { useToast } from '../hooks/useToast.js';
 import { FEATURE_ENTERPRISE, FEATURE_AI_REMEDIATION_PRO, FEATURE_SCHEDULED_RUNS, FEATURE_DOMAIN_RECON } from '@swazz/shared';
+import { DocsLink, SettingsResourceLinks } from './Shared/DocsLink.js';
+import { DOCS } from '../utils/docsLinks.js';
+
+type ProjectSettingsSubTab = 'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks' | 'auth_sequence' | 'waf_analysis';
+
+// The documentation page that explains each settings section.
+export const PROJECT_SETTINGS_DOCS: Record<ProjectSettingsSubTab, { label: string; href: string }> = {
+    general: { label: 'swazz.config.json reference', href: DOCS.configFile },
+    members: { label: 'Members, roles & service accounts', href: DOCS.membersRoles },
+    api_specs: { label: 'Supported API formats', href: DOCS.specFormats },
+    performance: { label: 'swazz.config.json reference', href: DOCS.configFile },
+    anomalies: { label: 'BOLA / multi-identity testing', href: DOCS.bolaMultiIdentity },
+    runners: { label: 'Active runners', href: DOCS.activeRunners },
+    wordlists: { label: 'swazz.config.json reference', href: DOCS.configFile },
+    dictionaries: { label: 'swazz.config.json reference', href: DOCS.configFile },
+    chaining: { label: 'Request chaining', href: DOCS.requestChaining },
+    ai_remediation: { label: 'AI remediation', href: DOCS.aiRemediation },
+    keys: { label: 'Key backup & recovery', href: DOCS.encryptionKeys },
+    raw_config: { label: 'swazz.config.json reference', href: DOCS.configFile },
+    schedule: { label: 'Scan scheduler', href: DOCS.scanScheduler },
+    audit_trail: { label: 'Audit trail', href: DOCS.auditTrail },
+    webhooks: { label: 'Webhooks', href: DOCS.webhooks },
+    auth_sequence: { label: 'Authentication sequences', href: DOCS.authSequence },
+    waf_analysis: { label: 'WAF analysis & virtual patches', href: DOCS.wafAnalysis },
+};
+
 interface Runner {
     connectionId: string | null;
     name: string;
@@ -36,7 +62,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks' | 'auth_sequence' | 'waf_analysis'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<ProjectSettingsSubTab>('general');
     const { showToast } = useToast();
 
     const gateMembers = useFeatureGate(FEATURE_ENTERPRISE);
@@ -97,6 +123,9 @@ export function ProjectSettings() {
                     <p className="project-settings-subtitle">
                         Configure project metadata, security defaults, fuzzing thresholds, and active run environments.
                     </p>
+                    <div className="settings-section-docs">
+                        <DocsLink href={PROJECT_SETTINGS_DOCS[activeSubTab].href} label={`Docs: ${PROJECT_SETTINGS_DOCS[activeSubTab].label}`} />
+                    </div>
                 </div>
                 <button 
                     className="btn btn-secondary btn-back-dashboard" 
@@ -350,6 +379,7 @@ export function ProjectSettings() {
                         </svg>
                         Webhooks {!gateScheduledRuns.unlocked && (gateScheduledRuns.gateType === 'coming_soon' ? '⏳' : '🔒')}
                     </button>
+                    <SettingsResourceLinks />
                 </div>
 
                 {/* Main Content Area */}

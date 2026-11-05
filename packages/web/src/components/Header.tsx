@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { UserMenu } from './UserMenu.js';
 import { useToast } from '../hooks/useToast.js';
 import { sanitizeTargetUrl } from '../utils/url.js';
+import { orderInvitations, PENDING_INVITE_KEY } from '../utils/invitations.js';
 import { Logo } from './Common/Logo.js';
 
 interface Props {
@@ -46,11 +47,12 @@ export function Header({
     onResume,
     onToggleConfig,
 }: Props) {
-    const { isRunning, isPaused, isLoadingSpecs, isQueued, activeTab, betaModeEnabled, loadedRunId, isConfigOpen, isConfigHiddenDesktop } = useAppStore(useShallow(state => ({
+    const { isRunning, isPaused, isLoadingSpecs, isQueued, runStalled, activeTab, betaModeEnabled, loadedRunId, isConfigOpen, isConfigHiddenDesktop } = useAppStore(useShallow(state => ({
         isRunning: state.isRunning,
         isPaused: state.isPaused,
         isLoadingSpecs: state.isLoadingSpecs,
         isQueued: state.isQueued,
+        runStalled: state.runStalled,
         activeTab: state.activeTab,
         betaModeEnabled: state.betaModeEnabled,
         loadedRunId: state.loadedRunId,
@@ -101,7 +103,8 @@ export function Header({
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setInvitations(data.invitations || []);
+                    // Offer the invitation the user arrived for (via /accept-invite) first.
+                    setInvitations(orderInvitations(data.invitations || [], sessionStorage.getItem(PENDING_INVITE_KEY)));
                 }
             } catch (err) {
                 console.error(err);
@@ -126,6 +129,7 @@ export function Header({
             if (res.ok) {
                 const data = await res.json();
                 setInvitations(invs => invs.filter(i => i.token !== inviteToken));
+                if (sessionStorage.getItem(PENDING_INVITE_KEY) === inviteToken) sessionStorage.removeItem(PENDING_INVITE_KEY);
                 window.dispatchEvent(new CustomEvent('swazz:invite-accepted', { detail: { projectId: data.project_id } }));
             } else {
                 const data = await res.json();
@@ -148,6 +152,7 @@ export function Header({
             });
             if (res.ok) {
                 setInvitations(invs => invs.filter(i => i.token !== inviteToken));
+                if (sessionStorage.getItem(PENDING_INVITE_KEY) === inviteToken) sessionStorage.removeItem(PENDING_INVITE_KEY);
                 showToast('Invitation declined', 'success');
             } else {
                 const data = await res.json();
@@ -183,7 +188,10 @@ export function Header({
                 {(isRunning || isPaused || isQueued) && (
                     <>
                         <div className="header-divider" />
-                        <div className={`header-status${isPaused ? ' paused' : isQueued ? ' queued' : ''}`}>
+                        <div
+                            className={`header-status${isPaused ? ' paused' : isQueued ? ' queued' : runStalled ? ' stalled' : ''}`}
+                            title={!isPaused && !isQueued && runStalled ? 'Nothing has been received from the runner for a while. The scan’s status is being checked; it ends here as soon as it is known.' : undefined}
+                        >
                             {isPaused ? (
                                 <>
                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
@@ -195,6 +203,11 @@ export function Header({
                                 <>
                                     <span className="queued-dot" />
                                     Queued
+                                </>
+                            ) : runStalled ? (
+                                <>
+                                    <span className="stalled-dot" />
+                                    No activity
                                 </>
                             ) : (
                                 <>

@@ -77,7 +77,7 @@ jobs:
         # v6.4.0
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: "1.26.6"
+          go-version: "1.26.10"
           cache-dependency-path: packages/container/go.sum
 
       - name: Build Binaries
@@ -192,7 +192,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         # v4.2.0
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -249,7 +249,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on Server
         # v0.74.0
-        uses: aquasecurity/trivy-action@c03d123cb480c08c69b054af418ea5e69fe6e57e
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
         with:
           image-ref: "ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}"
           format: "table"
@@ -260,7 +260,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on CLI
         # v0.74.0
-        uses: aquasecurity/trivy-action@c03d123cb480c08c69b054af418ea5e69fe6e57e
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
         with:
           image-ref: "ghcr.io/${{ env.REPO_LC }}-cli:${{ env.DOCKER_TAG }}"
           format: "table"
@@ -327,7 +327,7 @@ jobs:
 
       - name: Set up Node.js
         # v6.4.0
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: "25.9.0"
           cache: "npm"

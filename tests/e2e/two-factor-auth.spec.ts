@@ -35,9 +35,10 @@ function base32Decode(input: string): Uint8Array {
   return buffer;
 }
 
-async function generateTOTP(secret: string): Promise<string> {
+const currentStep = () => Math.floor(Date.now() / 1000 / 30);
+
+async function generateTOTP(secret: string, counter = currentStep()): Promise<string> {
   const keyBytes = base32Decode(secret);
-  const counter = Math.floor(Date.now() / 1000 / 30);
   
   const key = await webcrypto.subtle.importKey(
     'raw',
@@ -64,6 +65,17 @@ async function generateTOTP(secret: string): Promise<string> {
     
   const otp = binary % 1000000;
   return otp.toString().padStart(6, '0');
+}
+
+/**
+ * Returns a code for the first time step after `lastUsed`. The server accepts each step once and
+ * only steps within one of its current one, so wait for real time to catch up when needed.
+ */
+async function nextCode(secret: string, lastUsed: number): Promise<{ code: string; step: number }> {
+  const step = lastUsed + 1;
+  const waitMs = (step - 1) * 30_000 - Date.now();
+  if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs + 500));
+  return { code: await generateTOTP(secret, step), step };
 }
 
 test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
@@ -126,7 +138,8 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     const secret = (await secretDisplay.textContent())?.trim();
 
     // 5. Verify 2FA
-    const validCode = await generateTOTP(secret!);
+    let usedStep = currentStep();
+    const validCode = await generateTOTP(secret!, usedStep);
     await page.locator('#totp-setup-code').fill(validCode);
     
     const verifyEnableBtn = page.getByRole('button', { name: 'Verify & Enable' });
@@ -154,9 +167,10 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     const twoFactorVerifyHeader = page.getByRole('heading', { name: 'Two-Factor Verification', exact: true });
     await expect(twoFactorVerifyHeader).toBeVisible();
 
-    // Submit valid 2FA code
-    const freshCode = await generateTOTP(secret!);
-    await page.locator('#twoFactorCode').fill(freshCode);
+    // Submit valid 2FA code. Each step is accepted once, so use the step after the one that enabled 2FA.
+    const login = await nextCode(secret!, usedStep);
+    usedStep = login.step;
+    await page.locator('#twoFactorCode').fill(login.code);
     
     const verifyLoginBtn = page.getByRole('button', { name: 'Verify' });
     await expect(verifyLoginBtn).toBeVisible();
@@ -178,7 +192,7 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     // Disable 2FA
     await page.locator('#totp-disable-password').fill('Password123!');
 
-    const disableCode = await generateTOTP(secret!);
+    const disableCode = (await nextCode(secret!, usedStep)).code;
     await page.locator('#totp-disable-code').fill(disableCode);
     
     const disableBtn = page.getByRole('button', { name: 'Disable 2FA' });

@@ -39,7 +39,7 @@ These tools run locally using SQLite/Embeddings to help the AI assistant navigat
 ### 2. Remote Project & Scan Tools
 These tools are dynamically exposed by the Cloud Coordinator and verify user-specific project access rights:
 - `swazz_list_projects`: Lists all projects the authenticated user has access to.
-- `swazz_list_scans`: Lists fuzzer scans for a specific project.
+- `swazz_list_scans`: Lists fuzzer scans for a specific project, newest first, 50 per page by default (`limit`, at most 200). When the response has `next_cursor`, pass it as `cursor` for the next page.
 - `swazz_get_scan_status`: Retrieves the detailed metadata and progress status of a scan.
 - `swazz_get_scan_findings`: Fetches all vulnerability findings (crashes, logic flaws, boundaries) for a fuzzer scan.
 - `swazz_trigger_scan`: Configures and triggers/queues a new Swazz API fuzzer scan.
@@ -60,6 +60,8 @@ To connect your AI assistant, configure the Swazz MCP server in your editor's or
 ### 1. Deployed Product (HTTP/SSE Transport)
 
 If you are connecting your AI assistant directly to a deployed Swazz instance in the cloud, you can use the built-in HTTP/SSE transport of the coordinator without running any local process.
+
+An SSE connection belongs to the account that opened it: its messages endpoint (`/api/mcp/message?connectionId=...`) only accepts requests made with that same account's credentials, and answers any other caller with `404`, so the client must send the same API key or session on both.
 
 #### A. Claude Desktop
 
@@ -192,6 +194,8 @@ Swazz is not only an MCP server for AI clients — it is also a comprehensive se
 - **`stdio`**: Runs and fuzzes a local MCP subprocess via standard I/O (e.g. `node server.js`, `python -m mcp_server`).
 - **`sse`**: Connects to an HTTP Server-Sent Events MCP endpoint (e.g. `http://localhost:8788/mcp/sse`).
 - **`http`**: Connects to streamable HTTP JSON-RPC MCP endpoints (e.g. `http://localhost:8000/mcp`), with full support for per-request identity header overrides.
+
+**If the MCP server cannot be used** (wrong URL, missing token, server down), the runner logs a warning saying why and skips only the MCP part of the scan: the rest of the API is scanned as usual, and the dashboard shows *The scan completed with N warnings*. A scan with nothing to scan but the MCP server fails, with the reason shown on the dashboard. The runner sends the project's **Global Headers** and cookies to the MCP server, so that is where its token goes.
 
 ---
 

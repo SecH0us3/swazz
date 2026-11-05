@@ -11,15 +11,22 @@ import { ScansRepository } from '../../../src/repositories/scans';
 
 const mockGetCachedSwaggerDetails = vi.fn();
 const mockUpsertSwaggerCache = vi.fn();
+const mockGetActiveScans = vi.fn();
+const mockUpdateScanStatus = vi.fn();
 const mockLogError = vi.fn();
 const mockLogWarn = vi.fn();
 
+const mockStoreOobPending = vi.fn();
+
 vi.mock('../../../src/repositories/scans', () => {
   return {
+    sanitizeOobPending: (data: any) => (Array.isArray(data?.tokens) ? data.tokens.map((t: any) => ({ token: t.uuid, endpoint: t.endpoint, payload: t.payload })) : []),
     ScansRepository: vi.fn().mockImplementation(function () {
       return {
         getCachedSwaggerDetails: mockGetCachedSwaggerDetails,
         upsertSwaggerCache: mockUpsertSwaggerCache,
+        getActiveScans: mockGetActiveScans,
+        updateScanStatus: mockUpdateScanStatus,
       };
     })
   };
@@ -42,6 +49,19 @@ describe('WebSocketHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockGetActiveScans.mockResolvedValue([]);
+    mockUpdateScanStatus.mockResolvedValue(true);
+    mockStoreOobPending.mockResolvedValue(undefined);
+    (ScansRepository as any).mockImplementation(function () {
+      return {
+        getCachedSwaggerDetails: mockGetCachedSwaggerDetails,
+        upsertSwaggerCache: mockUpsertSwaggerCache,
+        getActiveScans: mockGetActiveScans,
+        updateScanStatus: mockUpdateScanStatus,
+        storeOobPending: mockStoreOobPending,
+      };
+    });
+
     mockWs = {
       deserializeAttachment: vi.fn().mockReturnValue({}),
       serializeAttachment: vi.fn(),
@@ -58,6 +78,7 @@ describe('WebSocketHandler', () => {
       getTags: vi.fn().mockReturnValue(['client', 'run-123']),
       waitUntil: vi.fn(),
       storage: {
+        put: vi.fn().mockResolvedValue(undefined),
         get: vi.fn().mockResolvedValue(new Map()),
         delete: vi.fn().mockResolvedValue(true)
       }
@@ -143,6 +164,22 @@ describe('WebSocketHandler', () => {
     expect(mockWs.close).toHaveBeenCalledWith(1008, 'Authentication failed');
   });
 
+  it('ignores a parse_result from a runner the request was not sent to', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, new QueueService(mockEnv, mockState, stateManager));
+    const mockResolve = vi.fn();
+    stateManager.pendingParses.set('req-x', mockResolve);
+    stateManager.pendingParseUrls.set('req-x', 'user:victim|http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-x', { other: true } as any);
+
+    await handler.handleMessage(mockWs, JSON.stringify({ type: 'parse_result', reqId: 'req-x', payload: { basePath: 'https://attacker.example', endpoints: [] } }));
+
+    expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockUpsertSwaggerCache).not.toHaveBeenCalled();
+    expect(stateManager.pendingParses.has('req-x')).toBe(true);
+  });
+
   it('should process parse_result message, cache details, and resolve the pending parse', async () => {
     mockState.getTags.mockReturnValue(['runner']);
     const stateManager = new StateManager(mockState);
@@ -152,6 +189,7 @@ describe('WebSocketHandler', () => {
     const mockResolve = vi.fn();
     stateManager.pendingParses.set('req-123', mockResolve);
     stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-123', mockWs);
 
     mockGetCachedSwaggerDetails.mockResolvedValue(null);
 
@@ -215,6 +253,36 @@ describe('WebSocketHandler', () => {
     expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(msg.payload));
   });
 
+  // A run's handed-over OOB tokens are stored at once (a callback can follow within seconds), the
+  // run is noted as handing over, and the dashboard does not get them.
+  it('stores handed-over OOB tokens directly and does not broadcast them', async () => {
+    mockEnv.JWT_SECRET = 'prod-secret';
+    mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-oob'] });
+    const stateManager = new StateManager(mockState);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, new QueueService(mockEnv, mockState, stateManager));
+    stateManager.clients.set('run-oob', new Set([mockClientWs]));
+
+    const payload = { type: 'oob_pending', data: { tokens: [{ uuid: 'tok-1', endpoint: 'GET /a', payload: 'p' }] } };
+    await handler.handleMessage(mockWs, JSON.stringify({ type: 'event', runId: 'run-oob', payload }));
+
+    expect(mockStoreOobPending).toHaveBeenCalledWith('run-oob', [{ token: 'tok-1', endpoint: 'GET /a', payload: 'p' }]);
+    expect(stateManager.oobHandedOverWithin('run-oob', 60_000)).toBe(true);
+    expect(mockEnv.FINDINGS_QUEUE.send).toHaveBeenCalled();
+    expect(mockClientWs.send).not.toHaveBeenCalled();
+  });
+
+  it('ignores handed-over OOB tokens for a run the runner does not own', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-mine'] });
+    const stateManager = new StateManager(mockState);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, new QueueService(mockEnv, mockState, stateManager));
+    const payload = { type: 'oob_pending', data: { tokens: [{ uuid: 'tok-1' }] } };
+    await handler.handleMessage(mockWs, JSON.stringify({ type: 'event', runId: 'run-other', payload }));
+    expect(mockStoreOobPending).not.toHaveBeenCalled();
+    expect(stateManager.oobHandedOverWithin('run-other', 60_000)).toBe(false);
+  });
+
   it('should persist events to D1 directly in local dev (test-secret) and broadcast to clients', async () => {
     // Local dev mode (JWT_SECRET === 'test-secret') bypasses the queue and
     // writes events straight to D1 to avoid miniflare queue emulation crashes.
@@ -258,10 +326,11 @@ describe('WebSocketHandler', () => {
     expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(msg.payload));
   });
 
-  it('should cleanup active jobs on scan error or complete events', async () => {
+  it('should cleanup active jobs on scan error or complete events and trigger queued scan dispatch', async () => {
     mockState.getTags.mockReturnValue(['runner']);
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const spyDispatch = vi.spyOn(queueService, 'checkAndDispatchQueuedScans').mockResolvedValue();
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
 
     stateManager.jobs.set('run-456', mockWs);
@@ -282,6 +351,86 @@ describe('WebSocketHandler', () => {
       activeJobs: [],
       recentJobs: ['run-456']
     });
+    expect(spyDispatch).toHaveBeenCalledWith(mockWs);
+  });
+
+  it('dispatches next queued scan when a job completes without re-dispatching the just-completed job', async () => {
+    const mockGetActiveScans = vi.fn().mockResolvedValue([
+      // run-1 is still 'dispatched' in D1 because FINDINGS_QUEUE is async
+      { id: 'run-1', userPublicKey: null, status: 'dispatched', target_url: 'http://a.example.com' },
+      { id: 'run-2', userPublicKey: null, status: 'queued', target_url: 'http://b.example.com' }
+    ]);
+    const mockUpdateScanStatus = vi.fn().mockResolvedValue(true);
+    (ScansRepository as any).mockImplementation(function () {
+      return {
+        getActiveScans: mockGetActiveScans,
+        updateScanStatus: mockUpdateScanStatus,
+        processFindingsQueueMessages: vi.fn().mockResolvedValue(undefined),
+      };
+    });
+
+    mockState.getTags.mockReturnValue(['runner', 'shared']);
+    let currentAttachment: any = { activeJobs: ['run-1'], recentJobs: [] };
+    mockWs.deserializeAttachment.mockImplementation(() => currentAttachment);
+    mockWs.serializeAttachment.mockImplementation((val: any) => { currentAttachment = val; });
+
+    const stateManager = new StateManager(mockState);
+    stateManager.runners.add(mockWs);
+    stateManager.jobs.set('run-1', mockWs);
+
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    await handler.handleMessage(mockWs, JSON.stringify({
+      type: 'event',
+      runId: 'run-1',
+      payload: { type: 'complete', data: {} }
+    }));
+
+    for (const call of mockState.waitUntil.mock.calls) {
+      await call[0];
+    }
+
+    expect(mockState.storage.put).toHaveBeenCalledWith('finished_runs', ['run-1']);
+    expect(stateManager.jobs.has('run-1')).toBe(false);
+    expect(stateManager.jobs.get('run-2')).toBe(mockWs);
+    expect(currentAttachment.activeJobs).toEqual(['run-2']);
+    expect(currentAttachment.recentJobs).toEqual(['run-1']);
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockWs.send.mock.calls[0][0]).payload.runId).toBe('run-2');
+  });
+
+  it('falls back to processFindingsQueueMessages when FINDINGS_QUEUE.send fails on a terminal event (Review #3)', async () => {
+    const mockProcessFindings = vi.fn().mockResolvedValue(undefined);
+    (ScansRepository as any).mockImplementation(function () {
+      return {
+        getActiveScans: vi.fn().mockResolvedValue([]),
+        processFindingsQueueMessages: mockProcessFindings,
+      };
+    });
+
+    mockEnv.JWT_SECRET = 'prod-secret';
+    mockEnv.FINDINGS_QUEUE.send.mockRejectedValueOnce(new Error('Queue down'));
+    mockState.getTags.mockReturnValue(['runner']);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    await handler.handleMessage(mockWs, JSON.stringify({
+      type: 'event',
+      runId: 'run-456',
+      payload: { type: 'complete', data: {} }
+    }));
+
+    for (const call of mockState.waitUntil.mock.calls) {
+      await call[0];
+    }
+
+    expect(mockProcessFindings).toHaveBeenCalledWith([
+      { body: { scanId: 'run-456', type: 'event', payload: { type: 'complete', data: {} } } }
+    ]);
   });
 
   it('should handle runner connection close by deleting runner resources', async () => {
@@ -388,6 +537,7 @@ describe('WebSocketHandler', () => {
     const mockResolve = vi.fn();
     stateManager.pendingParses.set('req-123', mockResolve);
     stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-123', mockWs);
 
     mockGetCachedSwaggerDetails.mockRejectedValue(new Error('R2 write error'));
 
@@ -418,6 +568,7 @@ describe('WebSocketHandler', () => {
     const mockResolve = vi.fn();
     stateManager.pendingParses.set('req-123', mockResolve);
     stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-123', mockWs);
 
     const msg = {
       type: 'parse_result',
@@ -560,6 +711,7 @@ describe('WebSocketHandler', () => {
     const mockResolve = vi.fn();
     stateManager.pendingParses.set('req-123', mockResolve);
     stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+    stateManager.pendingParseRunners.set('req-123', mockWs);
 
     mockGetCachedSwaggerDetails.mockResolvedValue({
       endpoints_hash: 'different-old-hash',

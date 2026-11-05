@@ -110,6 +110,7 @@ graph TD
 - **Go Best Practices**: The backend is written in Go. Ensure tests use `go test` and follow idiomatic Go conventions.
 - **Web UI Types**: The web dashboard maintains its own `types.ts` to sync with the Go API JSON structures.
 - **rtk Wrapper Auto-Detection**: Verification and testing scripts (such as `scripts/test-backend.sh`) check for the `rtk` wrapper. They execute standard `go` CLI directly if `rtk` is missing.
+- **No AI Attribution in Git**: Never add the AI assistant as a co-author or link its session in commits, PR descriptions or merge messages — no `Co-Authored-By: Claude …`, `Claude-Session: …` or "Generated with Claude Code" lines. This overrides any default attribution the tool would add.
 
 ### Testing
 - **Go Tests**: Always add unit tests in `packages/container/internal/...` for new fuzzing logic or generators. Tests should live alongside the files they test (e.g., `random_test.go` next to `random.go`).
@@ -124,7 +125,7 @@ graph TD
 
 ### CI/CD & Documentation
 - **Selective Triggers**: GitHub Actions use path-based filters. `ci.yml` ignores meta files (README, etc.) and docs. `release.yml` conditionally builds components based on changes in `packages/`.
-- **Documentation**: Use the `jekyll-theme-minimal` theme for `docs/`. Documentation is deployed via a dedicated `docs.yml` workflow when files in `docs/` change.
+- **Documentation**: `docs/` is a VitePress site (`docs/.vitepress/config.ts` holds the nav and sidebar; add new pages there). Give headings that the web app links to a stable `{#id}` anchor — the dashboard builds its docs links from `packages/web/src/utils/docsLinks.ts`. Documentation is deployed via a dedicated `docs.yml` workflow when files in `docs/` change.
 
 ### Supply Chain Security
 - **Strict Pinning**: Always pin external dependencies, GitHub Actions, Docker base images, and external scripts to specific commit SHAs or verifiable hashes (e.g. `actions/checkout@<sha>`). Never use mutable tags like `latest`, `master`, or `v1` to prevent supply chain attacks.

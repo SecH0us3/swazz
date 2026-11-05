@@ -51,7 +51,7 @@ func BenchmarkExecuteMCPRequest_ToolCall(b *testing.B) {
 			},
 		},
 	}
-	reg := analyzer.NewRegistry()
+	reg := analyzer.NewRegistry(nil)
 	cfg := &swagger.Config{
 		Settings: swagger.Settings{
 			TimeoutMs:           5000,
@@ -89,7 +89,7 @@ func BenchmarkExecuteMCPRequest_ResourceRead(b *testing.B) {
 			},
 		},
 	}
-	reg := analyzer.NewRegistry()
+	reg := analyzer.NewRegistry(nil)
 	cfg := &swagger.Config{
 		Settings: swagger.Settings{
 			TimeoutMs:           5000,
@@ -126,7 +126,7 @@ func BenchmarkExecuteMCPRequest_PromptGet(b *testing.B) {
 			},
 		},
 	}
-	reg := analyzer.NewRegistry()
+	reg := analyzer.NewRegistry(nil)
 	cfg := &swagger.Config{
 		Settings: swagger.Settings{
 			TimeoutMs:           5000,
@@ -162,7 +162,7 @@ func BenchmarkExecuteMCPRequest_ToolCall_Boundary(b *testing.B) {
 			},
 		},
 	}
-	reg := analyzer.NewRegistry()
+	reg := analyzer.NewRegistry(nil)
 	cfg := &swagger.Config{
 		Settings: swagger.Settings{
 			TimeoutMs:           5000,
@@ -200,7 +200,7 @@ func BenchmarkExecuteMCPRequest_ResourceRead_Boundary(b *testing.B) {
 			},
 		},
 	}
-	reg := analyzer.NewRegistry()
+	reg := analyzer.NewRegistry(nil)
 	cfg := &swagger.Config{
 		Settings: swagger.Settings{
 			TimeoutMs:           5000,
@@ -237,7 +237,7 @@ func BenchmarkExecuteMCPRequest_PromptGet_Boundary(b *testing.B) {
 			},
 		},
 	}
-	reg := analyzer.NewRegistry()
+	reg := analyzer.NewRegistry(nil)
 	cfg := &swagger.Config{
 		Settings: swagger.Settings{
 			TimeoutMs:           5000,

@@ -14,6 +14,15 @@ export interface IRunnersRepository {
   getUserPublicKey(userId: string): Promise<string | null>;
   createScanRecord(runId: string, projectId: string, targetUrl: string, profile: string, status: string, userId: string | null): Promise<void>;
   getScanDetails(scanId: string): Promise<{ project_id: string | null; user_id: string | null } | null>;
+  createStreamTicket(ticketHash: string, userId: string, runId: string, expiresAt: number, maxLive: number): Promise<boolean>;
+  consumeStreamTicket(ticketHash: string): Promise<StreamTicket | null>;
+}
+
+/** A stored one-time ticket for a scan's event stream; `expiresAt` is in Unix seconds. */
+export interface StreamTicket {
+  userId: string;
+  runId: string;
+  expiresAt: number;
 }
 
 export class RunnersRepository extends BaseService implements IRunnersRepository {
@@ -76,5 +85,29 @@ export class RunnersRepository extends BaseService implements IRunnersRepository
       .bind(scanId)
       .first<{ project_id: string | null; user_id: string | null }>();
     return scan || null;
+  }
+
+  /**
+   * Stores a ticket unless the user already holds `maxLive` unexpired ones; false if refused. The
+   * user's expired tickets go first, so no user ever has more than `maxLive` rows here.
+   */
+  async createStreamTicket(ticketHash: string, userId: string, runId: string, expiresAt: number, maxLive: number): Promise<boolean> {
+    const now = Math.floor(Date.now() / 1000);
+    const [, inserted] = await this.db.batch([
+      this.db.prepare('DELETE FROM ws_tickets WHERE user_id = ? AND expires_at <= ?').bind(userId, now),
+      this.db.prepare(
+        `INSERT INTO ws_tickets (ticket_hash, user_id, run_id, expires_at)
+         SELECT ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM ws_tickets WHERE user_id = ?) < ?`
+      ).bind(ticketHash, userId, runId, expiresAt, userId, maxLive),
+    ]);
+    return (inserted.meta?.changes ?? 0) > 0;
+  }
+
+  /** Deletes the ticket and returns what it was for: a single statement, so it can be used once. */
+  async consumeStreamTicket(ticketHash: string): Promise<StreamTicket | null> {
+    const row = await this.db.prepare('DELETE FROM ws_tickets WHERE ticket_hash = ? RETURNING user_id, run_id, expires_at')
+      .bind(ticketHash)
+      .first<{ user_id: string; run_id: string; expires_at: number }>();
+    return row ? { userId: row.user_id, runId: row.run_id, expiresAt: Number(row.expires_at) } : null;
   }
 }
