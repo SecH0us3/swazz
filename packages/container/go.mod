@@ -4,8 +4,8 @@ go 1.26.10
 
 require (
 	github.com/bufbuild/protocompile v0.14.1
-	github.com/chromedp/cdproto v0.160.4
-	github.com/chromedp/chromedp v0.23.1
+	github.com/chromedp/cdproto v0.160.7
+	github.com/chromedp/chromedp v0.24.0
 	github.com/google/uuid v1.6.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/pquerna/otp v1.5.0
