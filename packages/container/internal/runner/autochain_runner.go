@@ -8,6 +8,7 @@ package runner
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -70,6 +71,36 @@ type sacrificialVal struct {
 	str     string
 }
 
+const maxAutoChainReseedDepth = 5
+
+func leafDeletePathParam(epPath string) string {
+	segs := strings.Split(strings.Trim(epPath, "/"), "/")
+	for i := len(segs) - 1; i >= 0; i-- {
+		seg := segs[i]
+		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") && len(seg) > 2 {
+			return seg[1 : len(seg)-1]
+		}
+	}
+	return ""
+}
+
+func isSacrificialBinding(ep swagger.EndpointConfig, bindings []autochain.ParamBinding, b autochain.ParamBinding) bool {
+	if !strings.EqualFold(ep.Method, "DELETE") {
+		return false
+	}
+	hasPathBinding := false
+	for _, item := range bindings {
+		if item.Location == autochain.LocPath {
+			hasPathBinding = true
+			break
+		}
+	}
+	if hasPathBinding {
+		return b.Location == autochain.LocPath && len(b.ParamPath) == 1 && b.ParamPath[0] == leafDeletePathParam(ep.Path)
+	}
+	return true
+}
+
 // prepareEndpointPool ensures sacrificial IDs exist before DELETE or re-seeds an evicted pool.
 func (r *Runner) prepareEndpointPool(ctx context.Context, epIdx int) map[string]sacrificialVal {
 	return r.prepareEndpointPoolFiltered(ctx, epIdx, "", nil)
@@ -78,11 +109,14 @@ func (r *Runner) prepareEndpointPool(ctx context.Context, epIdx int) map[string]
 // prepareEndpointPoolFiltered ensures sacrificial IDs exist before DELETE or re-seeds an evicted pool,
 // skipping any binding targeting skipLoc/skipPath so mutated fields do not burn sacrificial IDs.
 func (r *Runner) prepareEndpointPoolFiltered(ctx context.Context, epIdx int, skipLoc string, skipPath []string) map[string]sacrificialVal {
+	return r.prepareEndpointPoolDepth(ctx, epIdx, skipLoc, skipPath, 0)
+}
+
+func (r *Runner) prepareEndpointPoolDepth(ctx context.Context, epIdx int, skipLoc string, skipPath []string, depth int) map[string]sacrificialVal {
 	if r.chainPool == nil || r.chainPlan == nil || epIdx < 0 || epIdx >= len(r.chainPlan.Bindings) {
 		return nil
 	}
 	ep := r.chainPlan.Ordered[epIdx]
-	isDelete := strings.EqualFold(ep.Method, "DELETE")
 	bindings := r.chainPlan.Bindings[epIdx]
 	if len(bindings) == 0 {
 		return nil
@@ -93,9 +127,9 @@ func (r *Runner) prepareEndpointPoolFiltered(ctx context.Context, epIdx int, ski
 		if skipLoc != "" && string(b.Location) == skipLoc && slices.Equal(b.ParamPath, skipPath) {
 			continue
 		}
-		if isDelete {
+		if isSacrificialBinding(ep, bindings, b) {
 			if r.chainPool.LiveCount(b.PoolKey) <= 1 && b.PrimaryProd >= 0 {
-				r.mintFromProducer(ctx, b.PrimaryProd)
+				r.mintFromProducerDepth(ctx, b.PrimaryProd, depth)
 			}
 			if r.chainPool.LiveCount(b.PoolKey) > 1 {
 				if val, str, ok := r.chainPool.TakeSacrificial(b.PoolKey, b.TargetSchema); ok {
@@ -108,21 +142,26 @@ func (r *Runner) prepareEndpointPoolFiltered(ctx context.Context, epIdx int, ski
 			continue
 		}
 		if r.chainPool.LiveCount(b.PoolKey) == 0 && r.chainPool.HadEntries(b.PoolKey) && b.PrimaryProd >= 0 {
-			r.mintFromProducer(ctx, b.PrimaryProd)
+			r.mintFromProducerDepth(ctx, b.PrimaryProd, depth)
 		}
 	}
 	return sac
 }
 
 func (r *Runner) mintFromProducer(ctx context.Context, prodIdx int) {
+	r.mintFromProducerDepth(ctx, prodIdx, 0)
+}
+
+func (r *Runner) mintFromProducerDepth(ctx context.Context, prodIdx, depth int) {
 	r.waitIfPaused(ctx)
-	if r.stopped() || ctx.Err() != nil || !r.chainPool.TryAcquireReseed(prodIdx) {
+	if depth >= maxAutoChainReseedDepth || r.stopped() || ctx.Err() != nil || !r.chainPool.TryAcquireReseed(prodIdx) {
 		return
 	}
 	prodEP := r.chainPlan.Ordered[prodIdx]
+	sac := r.prepareEndpointPoolDepth(ctx, prodIdx, "", nil, depth+1)
 	safeGen := r.newGenerator(swagger.ProfileRandom, prodEP.Method+" "+prodEP.Path)
 	built := buildSafePayload(prodEP, safeGen)
-	r.overlayBindings(prodIdx, &built, nil)
+	r.overlayBindingsFiltered(prodIdx, &built, sac, "", nil)
 
 	r.progress.totalPlanned.Add(1)
 	resolvedPath := fillPathParamsFromMap(prodEP.Path, built.pathParams)
@@ -149,7 +188,7 @@ func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac
 	if len(bindings) == 0 {
 		return
 	}
-	isDelete := strings.EqualFold(r.chainPlan.Ordered[epIdx].Method, "DELETE")
+	ep := r.chainPlan.Ordered[epIdx]
 	for _, b := range bindings {
 		if skipLoc != "" && string(b.Location) == skipLoc && slices.Equal(b.ParamPath, skipPath) {
 			continue
@@ -161,7 +200,7 @@ func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac
 		)
 		if sv, hasSac := sac[b.PoolKey]; hasSac {
 			coerced, strVal, ok = sv.coerced, sv.str, true
-		} else if !isDelete {
+		} else if !isSacrificialBinding(ep, bindings, b) {
 			coerced, strVal, ok = r.chainPool.GetCoerced(b.PoolKey, b.TargetSchema)
 		}
 		if !ok || len(b.ParamPath) == 0 {
@@ -198,7 +237,40 @@ func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac
 	}
 }
 
-func (r *Runner) harvestAutoChain(originalPath, method string, status int, profile swagger.FuzzingProfile, headers http.Header, rawBody []byte, payload, queryParams any) {
+func sentPathAndPinnedScalars(originalPath, resolvedPath string, pinned []autochain.PinnedBinding) map[string]any {
+	var out map[string]any
+	origSegs := strings.Split(strings.Trim(originalPath, "/"), "/")
+	resSegs := strings.Split(strings.Trim(resolvedPath, "/"), "/")
+	if len(origSegs) == len(resSegs) {
+		for i, seg := range origSegs {
+			if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") && len(seg) > 2 {
+				name := seg[1 : len(seg)-1]
+				val := resSegs[i]
+				if unescaped, err := url.PathUnescape(val); err == nil {
+					val = unescaped
+				}
+				if val != "" {
+					if out == nil {
+						out = make(map[string]any)
+					}
+					out[name] = val
+				}
+			}
+		}
+	}
+	for _, pb := range pinned {
+		if len(pb.ParamPath) == 0 || pb.StrVal == "" {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]any)
+		}
+		out[pb.ParamPath[len(pb.ParamPath)-1]] = pb.StrVal
+	}
+	return out
+}
+
+func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, status int, profile swagger.FuzzingProfile, headers http.Header, rawBody []byte, payload, queryParams any, pinned []autochain.PinnedBinding) {
 	if r.chainPool == nil || r.chainPlan == nil || status < 200 || status >= 300 {
 		return
 	}
@@ -213,7 +285,7 @@ func (r *Runner) harvestAutoChain(originalPath, method string, status int, profi
 	if len(rules) == 0 {
 		return
 	}
-	r.chainPool.HarvestResponse(rules, headers, rawBody, payload, queryParams)
+	r.chainPool.HarvestResponse(rules, headers, rawBody, payload, queryParams, sentPathAndPinnedScalars(originalPath, resolvedPath, pinned))
 }
 
 func (r *Runner) recordAutoChainMisses(method string, status int, pinned []autochain.PinnedBinding) {

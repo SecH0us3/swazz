@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -198,6 +199,7 @@ func BuildPlan(endpoints []swagger.EndpointConfig, rules []swagger.ChainingRule,
 				for _, s := range srcIdxs {
 					addEdge(s, i)
 				}
+				markExampleTokenSlots(ep, token, boundSet[i])
 			}
 		}
 	}
@@ -234,8 +236,12 @@ func BuildPlan(endpoints []swagger.EndpointConfig, rules []swagger.ChainingRule,
 		}
 		for _, link := range ep.Links {
 			consIdx, ok := resolveLinkTarget(link, opIDIdx, pathMethodIdx)
-			if !ok {
+			if !ok || !httpMask[consIdx] {
 				continue
+			}
+			linkID := link.Name
+			if linkID == "" {
+				linkID = strconv.Itoa(consIdx)
 			}
 			// Sort parameter keys so ProducerRule and ParamBinding slices are deterministic across runs.
 			paramKeys := make([]string, 0, len(link.Parameters))
@@ -245,9 +251,12 @@ func BuildPlan(endpoints []swagger.EndpointConfig, rules []swagger.ChainingRule,
 			sort.Strings(paramKeys)
 			for _, rawParam := range paramKeys {
 				runtimeExpr := link.Parameters[rawParam]
-				loc, pName := parseLinkParamTarget(rawParam, endpoints[consIdx])
-				poolKey := "link:" + ep.Method + ":" + ep.Path + ":" + pName
 				respExpr := parseOpenAPIRuntimeExpr(runtimeExpr)
+				if respExpr == "" {
+					continue
+				}
+				loc, pName := parseLinkParamTarget(rawParam, endpoints[consIdx])
+				poolKey := "link:" + ep.Method + ":" + ep.Path + ":" + linkID + ":" + pName
 				addProducer(prodIdx, poolKey, respExpr)
 				prim := -1
 				if strings.EqualFold(ep.Method, "POST") {
@@ -339,6 +348,11 @@ func BuildPlan(endpoints []swagger.EndpointConfig, rules []swagger.ChainingRule,
 		qNames := sortedSchemaKeys(ep.QueryParams)
 		for _, qName := range qNames {
 			bindFieldCandidate(consIdx, LocQuery, []string{qName}, ep.QueryParams[qName], bySingular, scalarFieldProds, scalarPrimary, addBind)
+		}
+		if isNoBodyHTTP(ep.Method) && len(ep.Schema.Properties) > 0 {
+			for _, qName := range sortedSchemaKeys(ep.Schema.Properties) {
+				bindFieldCandidate(consIdx, LocQuery, []string{qName}, ep.Schema.Properties[qName], bySingular, scalarFieldProds, scalarPrimary, addBind)
+			}
 		}
 
 		// 3. Body properties (up to depth 4)
@@ -750,6 +764,32 @@ func endpointMentionsToken(ep swagger.EndpointConfig, token string) bool {
 	return false
 }
 
+func markExampleTokenSlots(ep swagger.EndpointConfig, token string, slots map[string]bool) {
+	exMap, ok := ep.Example.(map[string]any)
+	if !ok {
+		return
+	}
+	loc := LocBody
+	if isNoBodyHTTP(ep.Method) {
+		loc = LocQuery
+	}
+	var walk func(m map[string]any, prefix []string)
+	walk = func(m map[string]any, prefix []string) {
+		for k, v := range m {
+			path := append(append([]string(nil), prefix...), k)
+			switch tv := v.(type) {
+			case string:
+				if strings.Contains(tv, token) {
+					slots[string(loc)+":"+strings.Join(path, ".")] = true
+				}
+			case map[string]any:
+				walk(tv, path)
+			}
+		}
+	}
+	walk(exMap, nil)
+}
+
 func resolveLinkTarget(link swagger.ResponseLink, opIDIdx, pathMethodIdx map[string]int) (int, bool) {
 	if link.OperationID != "" {
 		idx, ok := opIDIdx[link.OperationID]
@@ -790,6 +830,9 @@ func parseLinkParamTarget(raw string, cons swagger.EndpointConfig) (ParamLocatio
 	if cons.QueryParams != nil && cons.QueryParams[raw] != nil {
 		return LocQuery, raw
 	}
+	if isNoBodyHTTP(cons.Method) && cons.Schema.Properties != nil && cons.Schema.Properties[raw] != nil {
+		return LocQuery, raw
+	}
 	if cons.HeaderParams != nil && cons.HeaderParams[raw] != nil {
 		return LocHeader, raw
 	}
@@ -815,7 +858,13 @@ func lookupParamSchema(ep swagger.EndpointConfig, loc ParamLocation, path []stri
 	case LocPath:
 		return ep.PathParams[path[0]]
 	case LocQuery:
-		return ep.QueryParams[path[0]]
+		if p := ep.QueryParams[path[0]]; p != nil {
+			return p
+		}
+		if isNoBodyHTTP(ep.Method) && ep.Schema.Properties != nil {
+			return ep.Schema.Properties[path[0]]
+		}
+		return nil
 	case LocHeader:
 		return ep.HeaderParams[path[0]]
 	case LocBody:

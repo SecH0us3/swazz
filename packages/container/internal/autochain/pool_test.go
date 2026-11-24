@@ -146,3 +146,32 @@ func TestPool_DeterministicWalkAndHeaderRules(t *testing.T) {
 	assert.Equal(t, 0, pool.LiveCount("bad"))
 	assert.False(t, pool.HadEntries("bad"))
 }
+
+func TestPool_LocationEdgeCasesAndLowercaseHeader(t *testing.T) {
+	for _, loc := range []string{
+		"/api/orders/..",
+		"/api/orders/.",
+		"/api/orders/%2e%2e",
+		"/api/orders",
+	} {
+		pool := NewPool()
+		hdr := http.Header{}
+		hdr.Set("Location", loc)
+		pool.HarvestResponse([]ProducerRule{{PoolKey: "res:orders:id", ResponseExpr: ""}}, hdr, nil)
+		assert.Equal(t, 0, pool.LiveCount("res:orders:id"), "expected Location %q not to seed res:orders:id", loc)
+	}
+
+	poolNested := NewPool()
+	hdrNested := http.Header{}
+	hdrNested.Set("Location", "/api/orgs/org-1/projects")
+	poolNested.HarvestResponse([]ProducerRule{{PoolKey: "res:orgs/projects:id", ResponseExpr: ""}}, hdrNested, nil)
+	assert.Equal(t, 0, poolNested.LiveCount("res:orgs/projects:id"))
+
+	poolLower := NewPool()
+	hdrLower := http.Header{}
+	hdrLower.Set("Location", "/api/v2/invoices/88")
+	poolLower.HarvestResponse([]ProducerRule{{PoolKey: "link:loc", ResponseExpr: "$header.location"}}, hdrLower, nil)
+	numVal, _, ok := poolLower.GetCoerced("link:loc", &swagger.SchemaProperty{Type: "integer"})
+	require.True(t, ok)
+	assert.Equal(t, int64(88), numVal)
+}

@@ -47,7 +47,7 @@ type poolEntry struct {
 type keyBucket struct {
 	entries    []poolEntry
 	hadEntries bool
-	cursor     uint64
+	cursor     atomic.Uint64
 }
 
 // Pool is a concurrency-safe bounded store of live resource IDs and stateful tokens.
@@ -110,7 +110,7 @@ func (p *Pool) GetCoerced(poolKey string, schema *swagger.SchemaProperty) (any, 
 		p.mu.RUnlock()
 		return nil, "", false
 	}
-	idx := atomic.AddUint64(&b.cursor, 1) - 1
+	idx := b.cursor.Add(1) - 1
 	entry := b.entries[idx%uint64(len(b.entries))]
 	p.mu.RUnlock()
 
@@ -131,6 +131,7 @@ func (p *Pool) TakeSacrificial(poolKey string, schema *swagger.SchemaProperty) (
 	}
 	last := len(b.entries) - 1
 	entry := b.entries[last]
+	b.entries[last] = poolEntry{}
 	b.entries = b.entries[:last]
 	p.mu.Unlock()
 
@@ -233,8 +234,10 @@ func (p *Pool) HarvestResponse(rules []ProducerRule, headers http.Header, rawBod
 		if rule.ResponseExpr != "" {
 			if strings.HasPrefix(rule.ResponseExpr, "$header.") {
 				hName := strings.TrimPrefix(rule.ResponseExpr, "$header.")
-				if hName == "Location" && locID != "" {
-					p.Put(rule.PoolKey, locID, toTypedScalar(locID))
+				if strings.EqualFold(hName, "Location") {
+					if locID != "" {
+						p.Put(rule.PoolKey, locID, toTypedScalar(locID))
+					}
 				} else if hv := headers.Get(hName); hv != "" {
 					p.Put(rule.PoolKey, hv, hv)
 				}
@@ -265,9 +268,25 @@ func (p *Pool) HarvestResponse(rules []ProducerRule, headers http.Header, rawBod
 			})
 		}
 		if locID != "" {
-			p.Put(rule.PoolKey, locID, toTypedScalar(locID))
+			if colSeg := resourceCollectionSegment(rule.PoolKey); colSeg == "" || !strings.EqualFold(locID, colSeg) {
+				p.Put(rule.PoolKey, locID, toTypedScalar(locID))
+			}
 		}
 	}
+}
+
+func resourceCollectionSegment(poolKey string) string {
+	if !strings.HasPrefix(poolKey, "res:") {
+		return ""
+	}
+	trimmed := strings.TrimSuffix(strings.TrimPrefix(poolKey, "res:"), ":id")
+	if trimmed == "" {
+		return ""
+	}
+	if slash := strings.LastIndexByte(trimmed, '/'); slash >= 0 {
+		return trimmed[slash+1:]
+	}
+	return trimmed
 }
 
 func extractLocationID(headers http.Header) string {
@@ -287,6 +306,12 @@ func extractLocationID(headers http.Header) string {
 		return ""
 	}
 	last := segs[len(segs)-1]
+	if last == "." || last == ".." || strings.EqualFold(last, "%2e") || strings.EqualFold(last, "%2e%2e") {
+		return ""
+	}
+	if dec, err := url.PathUnescape(last); err == nil && (dec == "." || dec == "..") {
+		return ""
+	}
 	if isValidChainScalar(last) && !isVersionOrRootPrefix(last) {
 		return last
 	}

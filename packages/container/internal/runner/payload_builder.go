@@ -148,10 +148,12 @@ func selectGen(gen, safeGen *generator.Generator, isSecHeaderIter bool) *generat
 func buildFromExample(ep swagger.EndpointConfig, safeGen *generator.Generator) generatedPayload {
 	out := generatedPayload{}
 	isBody := !isNoBodyMethod(ep.Method)
-	if isBody {
-		out.body, _ = ep.Example.(map[string]any)
-	} else {
-		out.queryParams, _ = ep.Example.(map[string]any)
+	if exMap, ok := ep.Example.(map[string]any); ok {
+		if isBody {
+			out.body = cloneMap(exMap)
+		} else {
+			out.queryParams = cloneMap(exMap)
+		}
 	}
 	out.headers = buildHeaders(ep, safeGen)
 	return out

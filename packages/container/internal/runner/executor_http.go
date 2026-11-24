@@ -558,7 +558,7 @@ func (r *Runner) sendRequest(
 			// The target may echo these payloads in ID-like fields: not IDs to replay.
 			r.detector.Load().ExtractVariablesFromResponse(originalPath, method, resp.StatusCode, respBody)
 		}
-		r.harvestAutoChain(originalPath, method, resp.StatusCode, profile, resp.Header, rawBodyBytes, payload, queryParams)
+		r.harvestAutoChain(originalPath, resolvedPath, method, resp.StatusCode, profile, resp.Header, rawBodyBytes, payload, queryParams, pinned)
 		r.recordAutoChainMisses(method, resp.StatusCode, pinned)
 
 		if r.config.Settings.AnalyzeResponseBody {

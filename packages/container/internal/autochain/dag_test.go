@@ -6,6 +6,7 @@
 package autochain
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -236,5 +237,219 @@ func TestBuildPlan_OperationRefHeaderLinkAndDeterminism(t *testing.T) {
 		got := BuildPlan(eps, nil, "https://api.example.com")
 		assert.Equal(t, baseline, got)
 	}
+}
+
+func TestBuildPlan_TrueMutualCycle(t *testing.T) {
+	eps := []swagger.EndpointConfig{
+		{
+			Path:   "/v1/as",
+			Method: "POST",
+			Schema: swagger.SchemaProperty{
+				Type:       "object",
+				Properties: map[string]*swagger.SchemaProperty{"b_id": {Type: "string"}},
+			},
+			ResponseSchema: &swagger.SchemaProperty{
+				Type:       "object",
+				Properties: map[string]*swagger.SchemaProperty{"id": {Type: "string"}},
+			},
+		},
+		{
+			Path:   "/v1/bs",
+			Method: "POST",
+			Schema: swagger.SchemaProperty{
+				Type:       "object",
+				Properties: map[string]*swagger.SchemaProperty{"a_id": {Type: "string"}},
+			},
+			ResponseSchema: &swagger.SchemaProperty{
+				Type:       "object",
+				Properties: map[string]*swagger.SchemaProperty{"id": {Type: "string"}},
+			},
+		},
+	}
+
+	plan := BuildPlan(eps, nil, "https://api.example.com")
+	require.Len(t, plan.Ordered, 2)
+	require.Len(t, plan.Waves, 2)
+	assert.Equal(t, 2, plan.EdgeCount)
+	assert.Equal(t, "/v1/as", plan.Ordered[0].Path)
+	assert.Equal(t, "/v1/bs", plan.Ordered[1].Path)
+}
+
+func TestBuildPlan_ParseSpecGETQueryParamsHeuristicAndLink(t *testing.T) {
+	spec := `{
+		"openapi": "3.0.3",
+		"info": {"title": "Test", "version": "1.0"},
+		"paths": {
+			"/api/users": {
+				"post": {
+					"operationId": "createUser",
+					"requestBody": {
+						"content": {
+							"application/json": {
+								"schema": {"type": "object", "properties": {"name": {"type": "string"}}}
+							}
+						}
+					},
+					"responses": {
+						"201": {
+							"description": "created",
+							"content": {
+								"application/json": {
+									"schema": {"type": "object", "properties": {"id": {"type": "string"}, "nextCursor": {"type": "string"}}}
+								}
+							},
+							"links": {
+								"ListOrders": {
+									"operationId": "listOrders",
+									"parameters": {"cursor": "$response.body#/nextCursor"}
+								}
+							}
+						}
+					}
+				}
+			},
+			"/api/orders": {
+				"get": {
+					"operationId": "listOrders",
+					"parameters": [
+						{"name": "user_id", "in": "query", "schema": {"type": "string"}},
+						{"name": "cursor", "in": "query", "schema": {"type": "integer"}}
+					],
+					"responses": {"200": {"description": "ok"}}
+				}
+			}
+		}
+	}`
+
+	parsed, err := swagger.ParseSpec(json.RawMessage(spec))
+	require.NoError(t, err)
+
+	plan := BuildPlan(parsed.Endpoints, nil, "https://api.example.com")
+	require.Len(t, plan.Ordered, 2)
+	require.Len(t, plan.Waves, 2)
+	assert.Equal(t, "/api/users", plan.Ordered[0].Path)
+	assert.Equal(t, "/api/orders", plan.Ordered[1].Path)
+
+	var gotUserID, gotCursor *ParamBinding
+	for i := range plan.Bindings[1] {
+		b := &plan.Bindings[1][i]
+		if len(b.ParamPath) == 1 && b.ParamPath[0] == "user_id" {
+			gotUserID = b
+		}
+		if len(b.ParamPath) == 1 && b.ParamPath[0] == "cursor" {
+			gotCursor = b
+		}
+	}
+	require.NotNil(t, gotUserID, "expected heuristic FK user_id on GET query param")
+	assert.Equal(t, LocQuery, gotUserID.Location)
+	assert.Equal(t, "res:users:id", gotUserID.PoolKey)
+
+	require.NotNil(t, gotCursor, "expected OpenAPI 3 Link cursor without query. prefix to bind to LocQuery")
+	assert.Equal(t, LocQuery, gotCursor.Location)
+	assert.Equal(t, SourceLink, gotCursor.Source)
+	require.NotNil(t, gotCursor.TargetSchema)
+	assert.Equal(t, "integer", gotCursor.TargetSchema.Type)
+}
+
+func TestBuildPlan_OpenAPILinkEdgeCasesAndExampleProtection(t *testing.T) {
+	eps := []swagger.EndpointConfig{
+		{
+			Path:   "/v1/auth",
+			Method: "POST",
+			Links: []swagger.ResponseLink{
+				{
+					Name:        "LinkA",
+					OperationID: "targetA",
+					Parameters: map[string]string{
+						"id":         "$response.body#/aId",
+						"constParam": "literal",
+						"reqParam":   "$request.body#/foo",
+					},
+				},
+				{
+					Name:        "LinkB",
+					OperationID: "targetB",
+					Parameters: map[string]string{
+						"id": "$response.body#/bId",
+					},
+				},
+				{
+					Name:        "LinkMCP",
+					OperationID: "mcpOp",
+					Parameters: map[string]string{
+						"x": "$response.body#/x",
+					},
+				},
+			},
+		},
+		{Path: "/v1/targets-a", Method: "POST", OperationID: "targetA"},
+		{Path: "/v1/targets-b", Method: "POST", OperationID: "targetB"},
+		{Path: "mcp://tool/run", Method: "CALL", OperationID: "mcpOp"},
+		{
+			Path:   "/v1/users",
+			Method: "POST",
+			ResponseSchema: &swagger.SchemaProperty{
+				Type:       "object",
+				Properties: map[string]*swagger.SchemaProperty{"id": {Type: "string"}},
+			},
+		},
+		{
+			Path:   "/v1/orders",
+			Method: "POST",
+			Schema: swagger.SchemaProperty{
+				Type: "object",
+				Properties: map[string]*swagger.SchemaProperty{
+					"user_id": {Type: "string"},
+					"nested": {
+						Type:       "object",
+						Properties: map[string]*swagger.SchemaProperty{"user_id": {Type: "string"}},
+					},
+				},
+			},
+			Example: map[string]any{
+				"user_id": "{{tok}}",
+				"nested":  map[string]any{"user_id": "{{tok}}"},
+			},
+		},
+		{
+			Path:        "/v1/orders",
+			Method:      "GET",
+			QueryParams: map[string]*swagger.SchemaProperty{"user_id": {Type: "string"}},
+			Example:     map[string]any{"user_id": "{{tok}}"},
+		},
+	}
+
+	rules := []swagger.ChainingRule{
+		{SourceEndpoint: "/v1/auth", ExtractType: "json", ExtractPath: "tok", VariableName: "tok"},
+	}
+
+	plan := BuildPlan(eps, rules, "https://api.example.com")
+
+	idxOf := func(method, path string) int {
+		for i, ep := range plan.Ordered {
+			if ep.Method == method && ep.Path == path {
+				return i
+			}
+		}
+		t.Fatalf("missing %s %s", method, path)
+		return -1
+	}
+
+	authIdx := idxOf("POST", "/v1/auth")
+	// Only LinkA.id and LinkB.id plus Tier 3 res:auth:id should exist; constParam, reqParam, LinkMCP must be skipped.
+	var linkRules []ProducerRule
+	for _, pr := range plan.Producers[authIdx] {
+		if len(pr.PoolKey) >= 5 && pr.PoolKey[:5] == "link:" {
+			linkRules = append(linkRules, pr)
+		}
+	}
+	require.Len(t, linkRules, 2)
+	assert.NotEqual(t, linkRules[0].PoolKey, linkRules[1].PoolKey, "expected link name to distinguish link poolKeys")
+
+	postOrdersIdx := idxOf("POST", "/v1/orders")
+	assert.Empty(t, plan.Bindings[postOrdersIdx], "Tier 1 ep.Example {{tok}} must protect body slots from Tier 3 overwrite")
+
+	getOrdersIdx := idxOf("GET", "/v1/orders")
+	assert.Empty(t, plan.Bindings[getOrdersIdx], "Tier 1 ep.Example {{tok}} must protect query slots from Tier 3 overwrite")
 }
 
