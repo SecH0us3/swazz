@@ -176,7 +176,7 @@ func TestSniffer_QueryParamsAndBodySample(t *testing.T) {
 				"Content-Type": "application/json",
 			},
 			PostDataEntries: []*network.PostDataEntry{
-				{Bytes: `{"filter":"active"}`},
+				{Bytes: []byte(`{"filter":"active"}`)},
 			},
 		},
 	}

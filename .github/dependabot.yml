@@ -43,6 +43,10 @@ updates:
     labels:
       - "dependencies"
       - "go"
+    groups:
+      chromedp:
+        patterns:
+          - "github.com/chromedp/*"
 
   # 3. GitHub Actions Workflows
   - package-ecosystem: "github-actions"

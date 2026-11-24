@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	cdpRuntime "github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
 
@@ -221,10 +220,8 @@ func (c *Crawler) collectWebMcpTools(browserCtx context.Context, collector *webM
 	ctx, cancel := context.WithTimeout(browserCtx, 5*time.Second)
 	defer cancel()
 
-	var raw string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(webMcpCollectScript, &raw, func(p *cdpRuntime.EvaluateParams) *cdpRuntime.EvaluateParams {
-		return p.WithAwaitPromise(true)
-	})); err != nil || raw == "" {
+	raw, err := chromedp.Run(ctx, chromedp.Evaluate[string](webMcpCollectScript, chromedp.EvalAwaitPromise))
+	if err != nil || raw == "" {
 		return
 	}
 	var payloads []string
