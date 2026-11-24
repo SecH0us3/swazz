@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -246,9 +247,8 @@ func (r *Runner) runActiveParameterFuzzing(
 	delay := time.Duration(r.config.Settings.DelayBetweenRequestMs) * time.Millisecond
 
 	baseline := buildSafePayload(endpoint, safeGen)
-	sac := r.prepareEndpointPool(ctx, epIdx)
-	r.overlayBindings(epIdx, &baseline, sac)
 	totalPlanned := len(fields) * baseIter
+	isDelete := strings.EqualFold(endpoint.Method, "DELETE")
 
 	var wg sync.WaitGroup
 	seenHashes := make(map[uint32]bool)
@@ -267,6 +267,14 @@ func (r *Runner) runActiveParameterFuzzing(
 			isSecHeaderIter := isSecurityHeaderIteration(gen, profile, i)
 
 			built := buildMutatedPayload(baseline, field, selectGen(gen, safeGen, isSecHeaderIter))
+			skipLoc, skipPath := field.Location, field.Path
+			if isSecHeaderIter {
+				skipLoc, skipPath = "", nil
+			}
+			if !isDelete {
+				sac := r.prepareEndpointPoolFiltered(ctx, epIdx, skipLoc, skipPath)
+				r.overlayBindingsFiltered(epIdx, &built, sac, skipLoc, skipPath)
+			}
 
 			// A skipped payload still takes its iteration index, so a resume's iterToSkip
 			// (a count of walked iterations) lines up with what was sent.
@@ -284,6 +292,16 @@ func (r *Runner) runActiveParameterFuzzing(
 					continue
 				}
 				seenHashes[payloadHash] = true
+			}
+
+			if isDelete {
+				sac := r.prepareEndpointPoolFiltered(ctx, epIdx, skipLoc, skipPath)
+				r.overlayBindingsFiltered(epIdx, &built, sac, skipLoc, skipPath)
+				if !payloadFits(built, maxPayload) {
+					r.progress.totalPlanned.Add(-1)
+					globalIterIdx++
+					continue
+				}
 			}
 
 			if isSecHeaderIter {

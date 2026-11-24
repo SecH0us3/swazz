@@ -436,7 +436,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	} else {
 		// #nosec G115 -- Number of endpoints will never exceed int32 max
 		r.progress.completedEndpoints.Store(int32(len(endpoints)))
-		r.seedResumeProducers(runCtx, resumeEndpoint)
+		r.seedResumeProducers(runCtx, profiles, resumeProfile, resumeEndpoint)
 	}
 
 	for profileIdx, profile := range profiles {

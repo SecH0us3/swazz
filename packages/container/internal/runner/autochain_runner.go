@@ -7,7 +7,6 @@ package runner
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -73,6 +72,12 @@ type sacrificialVal struct {
 
 // prepareEndpointPool ensures sacrificial IDs exist before DELETE or re-seeds an evicted pool.
 func (r *Runner) prepareEndpointPool(ctx context.Context, epIdx int) map[string]sacrificialVal {
+	return r.prepareEndpointPoolFiltered(ctx, epIdx, "", nil)
+}
+
+// prepareEndpointPoolFiltered ensures sacrificial IDs exist before DELETE or re-seeds an evicted pool,
+// skipping any binding targeting skipLoc/skipPath so mutated fields do not burn sacrificial IDs.
+func (r *Runner) prepareEndpointPoolFiltered(ctx context.Context, epIdx int, skipLoc string, skipPath []string) map[string]sacrificialVal {
 	if r.chainPool == nil || r.chainPlan == nil || epIdx < 0 || epIdx >= len(r.chainPlan.Bindings) {
 		return nil
 	}
@@ -85,6 +90,9 @@ func (r *Runner) prepareEndpointPool(ctx context.Context, epIdx int) map[string]
 
 	var sac map[string]sacrificialVal
 	for _, b := range bindings {
+		if skipLoc != "" && string(b.Location) == skipLoc && slices.Equal(b.ParamPath, skipPath) {
+			continue
+		}
 		if isDelete {
 			if r.chainPool.LiveCount(b.PoolKey) <= 1 && b.PrimaryProd >= 0 {
 				r.mintFromProducer(ctx, b.PrimaryProd)
@@ -126,16 +134,14 @@ func (r *Runner) mintFromProducer(ctx context.Context, prodIdx int) {
 		built.queryParams, built.headers, prodEP.ContentType,
 		built.oobTokens, built.pinned,
 	)
-	r.sendStats(statsMsg{
-		result:           res,
-		currentIteration: 1,
-		totalIterations:  1,
-		endpoint:         prodEP.Method + " " + prodEP.Path,
-		profile:          "BASELINE",
-	})
+	r.sendStats(statsMsg{result: res})
 }
 
 func (r *Runner) overlayBindings(epIdx int, built *generatedPayload, sac map[string]sacrificialVal) {
+	r.overlayBindingsFiltered(epIdx, built, sac, "", nil)
+}
+
+func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac map[string]sacrificialVal, skipLoc string, skipPath []string) {
 	if r.chainPool == nil || r.chainPlan == nil || epIdx < 0 || epIdx >= len(r.chainPlan.Bindings) {
 		return
 	}
@@ -145,6 +151,9 @@ func (r *Runner) overlayBindings(epIdx int, built *generatedPayload, sac map[str
 	}
 	isDelete := strings.EqualFold(r.chainPlan.Ordered[epIdx].Method, "DELETE")
 	for _, b := range bindings {
+		if skipLoc != "" && string(b.Location) == skipLoc && slices.Equal(b.ParamPath, skipPath) {
+			continue
+		}
 		var (
 			coerced any
 			strVal  string
@@ -173,7 +182,7 @@ func (r *Runner) overlayBindings(epIdx int, built *generatedPayload, sac map[str
 			if built.headers == nil {
 				built.headers = make(map[string]string)
 			}
-			built.headers[b.ParamPath[0]] = fmt.Sprintf("%v", strVal)
+			built.headers[b.ParamPath[0]] = strVal
 		case autochain.LocBody:
 			if built.body == nil {
 				built.body = make(map[string]any)
@@ -221,15 +230,18 @@ func (r *Runner) recordAutoChainMisses(method string, status int, pinned []autoc
 
 // seedResumeProducers warms up upstream PrimaryProd endpoints when resuming from a checkpoint
 // that skipped baselinePhase.
-func (r *Runner) seedResumeProducers(ctx context.Context, resumeEndpoint string) {
+func (r *Runner) seedResumeProducers(ctx context.Context, profiles []swagger.FuzzingProfile, resumeProfile, resumeEndpoint string) {
 	if r.chainPool == nil || r.chainPlan == nil {
 		return
 	}
+	isLastProfile := len(profiles) > 0 && string(profiles[len(profiles)-1]) == resumeProfile
 	startIdx := 0
-	for i, ep := range r.chainPlan.Ordered {
-		if (ep.Method + " " + ep.Path) == resumeEndpoint {
-			startIdx = i
-			break
+	if isLastProfile {
+		for i, ep := range r.chainPlan.Ordered {
+			if (ep.Method + " " + ep.Path) == resumeEndpoint {
+				startIdx = i
+				break
+			}
 		}
 	}
 	needed := make(map[int]bool)
