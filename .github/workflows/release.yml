@@ -249,7 +249,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on Server
         # v0.74.0
-        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
+        uses: aquasecurity/trivy-action@38b337fff0a2f984d5be173c99e3f633438167ec
         with:
           image-ref: "ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}"
           format: "table"
@@ -260,7 +260,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on CLI
         # v0.74.0
-        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
+        uses: aquasecurity/trivy-action@38b337fff0a2f984d5be173c99e3f633438167ec
         with:
           image-ref: "ghcr.io/${{ env.REPO_LC }}-cli:${{ env.DOCKER_TAG }}"
           format: "table"
