@@ -10,19 +10,19 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.23.0",
-    "@cloudflare/workers-types": "^5.20260930.1",
+    "@cloudflare/workers-types": "^5.20261116.1",
     "@vitest/coverage-istanbul": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
     "@vitest/snapshot": "^4.1.12",
     "miniflare": "^5.20260811.1-alpha",
     "pretty-format": "^30.5.1",
     "vitest": "^4.1.12",
-    "workerd": "^1.20261013.1"
+    "workerd": "^1.20261110.1"
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.0.3",
     "@swazz/shared": "*",
-    "hono": "^4.13.13",
+    "hono": "^4.13.17",
     "ulidx": "^2.4.1",
     "zod": "^4.6.7"
   }

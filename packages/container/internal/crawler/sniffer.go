@@ -198,8 +198,8 @@ func (s *Sniffer) OnRequestWillBeSent(evt *network.EventRequestWillBeSent) {
 	if len(req.PostDataEntries) > 0 {
 		var parts []string
 		for _, entry := range req.PostDataEntries {
-			if entry != nil && entry.Bytes != "" {
-				parts = append(parts, entry.Bytes)
+			if entry != nil && len(entry.Bytes) > 0 {
+				parts = append(parts, string(entry.Bytes))
 			}
 		}
 		bodySample = strings.Join(parts, "")

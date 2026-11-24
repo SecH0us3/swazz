@@ -21,10 +21,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	cdpRuntime "github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/remote"
 )
 
 // CheckChromeExecutable checks if Chrome/Chromium is installed on the host system.
@@ -117,17 +119,22 @@ func InjectCookies(ctx context.Context, targetURL string, cookies map[string]str
 
 	domain := u.Hostname()
 
-	var actions []chromedp.Action
+	var actions []chromedp.Action[chromedp.Void]
 	for k, v := range cookies {
 		name := k
 		val := v
-		actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
-			expr := network.SetCookie(name, val).WithDomain(domain).WithPath("/")
-			return expr.Do(ctx)
+		actions = append(actions, chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			_, err := cdp.Call(ctx, t, network.SetCookie, network.SetCookieParams{
+				Name:   name,
+				Value:  val,
+				Domain: domain,
+				Path:   "/",
+			})
+			return err
 		}))
 	}
 
-	return chromedp.Run(ctx, actions...)
+	return chromedp.Do(ctx, actions...)
 }
 
 // browserStartTimeout bounds Chrome's DevTools handshake on each start attempt; a loaded CI
@@ -146,14 +153,15 @@ func isTransientStartError(err error) bool {
 	msg := err.Error()
 	return errors.Is(err, errBrowserStartTimeout) ||
 		strings.Contains(msg, "websocket url timeout reached") ||
-		strings.Contains(msg, "could not dial")
+		strings.Contains(msg, "could not dial") ||
+		strings.Contains(msg, "connect: connection refused")
 }
 
 // startBrowser launches Chrome and opens its first tab, retrying once when Chrome misses its
 // DevTools handshake. The crawl's page budget starts only once the browser is up, so a slow start
 // no longer eats it. The returned cancel closes the browser.
 func startBrowser(ctx context.Context, opts []chromedp.ExecAllocatorOption) (context.Context, context.CancelFunc, error) {
-	opts = append(opts[:len(opts):len(opts)], chromedp.WSURLReadTimeout(browserStartTimeout))
+	opts = append(opts[:len(opts):len(opts)], remote.WebSocket, chromedp.WSURLReadTimeout(browserStartTimeout))
 	var lastErr error
 	for range browserStartAttempts {
 		allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
@@ -163,7 +171,7 @@ func startBrowser(ctx context.Context, opts []chromedp.ExecAllocatorOption) (con
 		// The first Run starts the browser. Its context must not carry a timeout, which would
 		// close the browser when it fires, so the start is bounded from outside instead.
 		done := make(chan error, 1)
-		go func() { done <- chromedp.Run(browserCtx) }()
+		go func() { done <- chromedp.Do(browserCtx) }()
 		timer := time.NewTimer(browserStartTimeout + 10*time.Second)
 		select {
 		case lastErr = <-done:
@@ -232,7 +240,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 	defer runCancel()
 
 	// Enable CDP network domain listening
-	if err := chromedp.Run(runCtx, network.Enable()); err != nil {
+	if _, err := chromedp.Call(runCtx, network.Enable, network.EnableParams{}); err != nil {
 		return nil, fmt.Errorf("failed to enable CDP network domain: %w", err)
 	}
 
@@ -242,20 +250,22 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		for k, v := range c.config.Headers {
 			headersMap[k] = v
 		}
-		if err := chromedp.Run(runCtx, network.SetExtraHTTPHeaders(headersMap)); err != nil {
+		if _, err := chromedp.Call(runCtx, network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{Headers: headersMap}); err != nil {
 			fmt.Printf("Warning: failed to set extra HTTP headers: %v\n", err)
 		}
 	}
 
 	// Listen for CDP network events
-	chromedp.ListenTarget(runCtx, func(ev interface{}) {
+	if err := chromedp.Listen(runCtx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *network.EventRequestWillBeSent:
 			c.sniffer.OnRequestWillBeSent(e)
 		case *network.EventResponseReceived:
 			c.sniffer.OnResponseReceived(e)
 		}
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("failed to listen for CDP network events: %w", err)
+	}
 
 	// Inject cookies if configured
 	if len(c.config.Cookies) > 0 {
@@ -268,16 +278,22 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 	// a CDP binding, so tools are captured as they happen (across navigations and
 	// even if the crawl later times out) rather than read back once at the end.
 	webmcp := newWebMcpCollector(c.sniffer)
-	chromedp.ListenTarget(runCtx, func(ev interface{}) {
+	if err := chromedp.Listen(runCtx, func(ev interface{}) {
 		if e, ok := ev.(*cdpRuntime.EventBindingCalled); ok && e.Name == webMcpBindingName {
 			webmcp.add(e.Payload)
 		}
-	})
-	if err := chromedp.Run(runCtx,
-		page.Enable(),
-		cdpRuntime.AddBinding(webMcpBindingName),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			_, err := page.AddScriptToEvaluateOnNewDocument(webMcpHookScript).Do(ctx)
+	}); err != nil {
+		fmt.Printf("Warning: failed to listen for WebMCP binding events: %v\n", err)
+	}
+	if err := chromedp.Do(runCtx,
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			if _, err := cdp.Call(ctx, t, page.Enable, page.EnableParams{}); err != nil {
+				return err
+			}
+			if _, err := cdp.Call(ctx, t, cdpRuntime.AddBinding, cdpRuntime.AddBindingParams{Name: webMcpBindingName}); err != nil {
+				return err
+			}
+			_, err := cdp.Call(ctx, t, page.AddScriptToEvaluateOnNewDocument, page.AddScriptToEvaluateOnNewDocumentParams{Source: webMcpHookScript})
 			return err
 		}),
 	); err != nil {
@@ -285,7 +301,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 	}
 
 	// Navigate to target URL
-	if err := chromedp.Run(runCtx, chromedp.Navigate(targetURL)); err != nil {
+	if err := chromedp.Do(runCtx, chromedp.Navigate(targetURL)); err != nil {
 		return nil, fmt.Errorf("failed to navigate to target URL %s: %w", targetURL, err)
 	}
 
@@ -309,9 +325,8 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 
 	// SPA click dispatch loop
 	var mu sync.Mutex
-	var currentURL string
 
-	if err := chromedp.Run(runCtx, chromedp.Location(&currentURL)); err == nil {
+	if currentURL, err := chromedp.Run(runCtx, chromedp.Location()); err == nil {
 		_ = currentURL
 	}
 
@@ -323,8 +338,8 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		default:
 		}
 
-		var currLocation string
-		if err := chromedp.Run(runCtx, chromedp.Location(&currLocation)); err != nil {
+		currLocation, err := chromedp.Run(runCtx, chromedp.Location())
+		if err != nil {
 			break
 		}
 
@@ -338,8 +353,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		mu.Unlock()
 
 		// Get DOM snapshot / state hash
-		var htmlContent string
-		if err := chromedp.Run(runCtx, chromedp.OuterHTML("html", &htmlContent)); err == nil {
+		if htmlContent, err := chromedp.Run(runCtx, chromedp.OuterHTML("html")); err == nil {
 			stateHash := hashState(currLocation + htmlContent)
 			if visitedStates[stateHash] {
 				// State already visited, skip further clicks on this exact state
@@ -374,19 +388,17 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		})()
 		`
 
-		var evalRes *cdpRuntime.RemoteObject
-		var exceptionRes *cdpRuntime.ExceptionDetails
-		errEval := chromedp.Run(runCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-			var err error
-			evalRes, exceptionRes, err = cdpRuntime.Evaluate(jsScript).WithReturnByValue(true).Do(ctx)
-			return err
-		}))
+		retByVal := true
+		evalRes, errEval := chromedp.Call(runCtx, cdpRuntime.Evaluate, cdpRuntime.EvaluateParams{
+			Expression:    jsScript,
+			ReturnByValue: &retByVal,
+		})
 
-		if errEval != nil || exceptionRes != nil {
+		if errEval != nil || evalRes.ExceptionDetails != nil {
 			// Click failed for this element; continue to next iteration
 			continue
 		}
-		_ = evalRes
+		_ = evalRes.Result
 
 		// Wait briefly after click to allow SPA router / fetch requests to complete
 		select {
@@ -395,8 +407,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		case <-time.After(500 * time.Millisecond):
 		}
 
-		var newLoc string
-		if err := chromedp.Run(runCtx, chromedp.Location(&newLoc)); err == nil {
+		if newLoc, err := chromedp.Run(runCtx, chromedp.Location()); err == nil {
 			if newLoc != "" && !visitedURLs[newLoc] {
 				visitedURLs[newLoc] = true
 				pagesVisited++
