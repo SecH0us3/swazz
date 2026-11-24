@@ -29,3 +29,20 @@ func TestSettings_FeatureFlagsDefaultTrue(t *testing.T) {
 		t.Error("MCPMethodFuzzingEnabled should be false when explicitly disabled")
 	}
 }
+
+func TestAutoChainingEnabledDefaultAndOverride(t *testing.T) {
+	var s Settings
+	if !s.AutoChainingEnabled() {
+		t.Fatal("expected AutoChainingEnabled() to default to true when nil")
+	}
+	f := false
+	s.EnableAutoChaining = &f
+	if s.AutoChainingEnabled() {
+		t.Fatal("expected AutoChainingEnabled() to return false when explicitly false")
+	}
+	tr := true
+	s.EnableAutoChaining = &tr
+	if !s.AutoChainingEnabled() {
+		t.Fatal("expected AutoChainingEnabled() to return true when explicitly true")
+	}
+}
