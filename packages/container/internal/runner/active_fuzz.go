@@ -8,9 +8,11 @@ package runner
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
+	"swazz-engine/internal/autochain"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
 )
@@ -108,6 +110,7 @@ func clonePayload(p generatedPayload) generatedPayload {
 			out.pathParams[k] = v
 		}
 	}
+	out.pinned = slices.Clone(p.pinned)
 	return out
 }
 
@@ -214,6 +217,12 @@ func buildMutatedPayload(
 		mutated.pathParams[field.Path[0]] = capPathParam(fuzzedVal)
 	}
 
+	if len(mutated.pinned) > 0 {
+		mutated.pinned = slices.DeleteFunc(mutated.pinned, func(pb autochain.PinnedBinding) bool {
+			return string(pb.Location) == field.Location &&
+				(slices.Equal(pb.ParamPath, field.Path) || (field.Location == "body" && len(field.Path) == 0))
+		})
+	}
 	mutated.oobTokens = gen.TakeOOBTokens()
 	return mutated
 }
@@ -230,13 +239,15 @@ func (r *Runner) runActiveParameterFuzzing(
 	fields []targetField,
 	iterToSkip int,
 ) {
-	endpoints := r.config.Endpoints
+	endpoints := r.activeEndpoints()
 	baseIter := calcEffectiveIterations(profile, r.config.Settings, &endpoint)
 	enableDedup := profile == swagger.ProfileRandom
 	maxPayload := r.config.Settings.PayloadSizeCap()
 	delay := time.Duration(r.config.Settings.DelayBetweenRequestMs) * time.Millisecond
 
 	baseline := buildSafePayload(endpoint, safeGen)
+	sac := r.prepareEndpointPool(ctx, epIdx)
+	r.overlayBindings(epIdx, &baseline, sac)
 	totalPlanned := len(fields) * baseIter
 
 	var wg sync.WaitGroup
@@ -289,18 +300,18 @@ func (r *Runner) runActiveParameterFuzzing(
 			}
 			wg.Add(1)
 
-			it, p, qp, gh, pp, ot := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens
+			it, p, qp, gh, pp, ot, pn := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens, built.pinned
 			r.goWorker(func() {
 				defer r.limiter.Release()
 				defer wg.Done()
 
 				resolvedPath := fillPathParamsFromMap(endpoint.Path, pp)
-				result := r.executeGeneratedRequest(
+				result := r.executeGeneratedRequestPinned(
 					ctx,
 					r.config.BaseURL, resolvedPath, endpoint.Path, endpoint.Method,
 					r.config.GlobalHeaders, r.config.Cookies,
 					p, profile, qp, gh,
-					endpoint.ContentType, ot,
+					endpoint.ContentType, ot, pn,
 				)
 
 				if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {

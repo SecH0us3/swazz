@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 
 	"swazz-engine/internal/analyzer"
+	"swazz-engine/internal/autochain"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
@@ -55,7 +56,7 @@ func (r *Runner) executeRequest(
 	contentType string,
 ) *swagger.FuzzResult {
 	return r.sendRequest(ctx, baseURL, resolvedPath, originalPath, method, headers, cookies,
-		payload, profile, queryParams, generatedHeaders, contentType, sentOOBTokens{})
+		payload, profile, queryParams, generatedHeaders, contentType, sentOOBTokens{}, nil)
 }
 
 // executeGeneratedRequest sends a request built by the run's generators, which carries exactly the
@@ -80,8 +81,24 @@ func (r *Runner) executeGeneratedRequest(
 	contentType string,
 	oobTokens []string,
 ) *swagger.FuzzResult {
+	return r.executeGeneratedRequestPinned(ctx, baseURL, resolvedPath, originalPath, method, headers, cookies,
+		payload, profile, queryParams, generatedHeaders, contentType, oobTokens, nil)
+}
+
+func (r *Runner) executeGeneratedRequestPinned(
+	ctx context.Context,
+	baseURL, resolvedPath, originalPath, method string,
+	headers, cookies map[string]string,
+	payload any,
+	profile swagger.FuzzingProfile,
+	queryParams map[string]any,
+	generatedHeaders map[string]string,
+	contentType string,
+	oobTokens []string,
+	pinned []autochain.PinnedBinding,
+) *swagger.FuzzResult {
 	return r.sendRequest(ctx, baseURL, resolvedPath, originalPath, method, headers, cookies,
-		payload, profile, queryParams, generatedHeaders, contentType, sentOOBTokens{ids: oobTokens, known: true})
+		payload, profile, queryParams, generatedHeaders, contentType, sentOOBTokens{ids: oobTokens, known: true}, pinned)
 }
 
 func (r *Runner) sendRequest(
@@ -94,6 +111,7 @@ func (r *Runner) sendRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 	oobTokens sentOOBTokens,
+	pinned []autochain.PinnedBinding,
 ) *swagger.FuzzResult {
 	if r.waitWhileHeld(ctx) {
 		// Stopped while held: the request was never sent, and must not pass for a timeout.
@@ -186,7 +204,7 @@ func (r *Runner) sendRequest(
 	base, err := url.Parse(strings.TrimRight(baseURL, "/"))
 	var rawURL string
 	if err == nil {
-		rawURL = base.JoinPath(resolvedPath).String()
+		rawURL = base.JoinPath(resolvedPath).String() // #nosec G125 -- fuzzer intentionally constructs target request paths
 	} else {
 		rawURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(resolvedPath, "/")
 	}
@@ -427,7 +445,7 @@ func (r *Runner) sendRequest(
 
 		var respBody any
 		var rawBodyBytes []byte
-		needsBody := resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody || r.hasChainingRuleFor(originalPath)
+		needsBody := resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody || r.hasChainingRuleFor(originalPath) || r.hasAutoChainProducerFor(originalPath, method)
 		if needsBody {
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
@@ -480,7 +498,7 @@ func (r *Runner) sendRequest(
 				// Re-calculate rawURL with new variables if any
 				base, parseErr := url.Parse(strings.TrimRight(baseURL, "/"))
 				if parseErr == nil {
-					rawURL = base.JoinPath(resolvedPath).String()
+					rawURL = base.JoinPath(resolvedPath).String() // #nosec G125 -- fuzzer intentionally constructs target request paths
 				} else {
 					rawURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(resolvedPath, "/")
 				}
@@ -540,6 +558,8 @@ func (r *Runner) sendRequest(
 			// The target may echo these payloads in ID-like fields: not IDs to replay.
 			r.detector.Load().ExtractVariablesFromResponse(originalPath, method, resp.StatusCode, respBody)
 		}
+		r.harvestAutoChain(originalPath, method, resp.StatusCode, profile, resp.Header, rawBodyBytes, payload, queryParams)
+		r.recordAutoChainMisses(method, resp.StatusCode, pinned)
 
 		if r.config.Settings.AnalyzeResponseBody {
 			baselineSize, multiplier, baselineTime := r.anomalyBaselines(method, originalPath, profile, r.config.Settings)

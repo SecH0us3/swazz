@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 
+	"swazz-engine/internal/autochain"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
 )
@@ -35,6 +36,7 @@ type generatedPayload struct {
 	// oobTokens are the OOB callback tokens the fuzz generator put in these values, in any of
 	// them: executeGeneratedRequest logs the request for each without searching it.
 	oobTokens []string
+	pinned    []autochain.PinnedBinding
 }
 
 func buildPathParams(ep swagger.EndpointConfig, gen *generator.Generator) map[string]string {

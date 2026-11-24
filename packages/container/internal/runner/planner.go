@@ -65,7 +65,7 @@ func endpointRequests(profile swagger.FuzzingProfile, settings swagger.Settings,
 // sent during the run and stores it for progress reporting.
 func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 	settings := r.config.Settings
-	endpoints := r.config.Endpoints
+	endpoints := r.activeEndpoints()
 	var total int64
 
 	// 1. Baseline: 1 request per endpoint.
