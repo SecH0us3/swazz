@@ -269,6 +269,7 @@ func printHelp() {
 	fmt.Println("  --progress-on-change         Only print progress when the active endpoint changes")
 	fmt.Println("  --debug                      Enable debug logging for all HTTP interactions")
 	fmt.Println("  --disable-telemetry          Disable reporting anonymous global scan count telemetry")
+	fmt.Println("  --no-auto-chain              Disable automatic request chaining DAG and live ID pooling")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  swazz-engine wizard")

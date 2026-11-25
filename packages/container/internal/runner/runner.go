@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"swazz-engine/internal/analyzer"
-	"swazz-engine/internal/autochain"
 	"swazz-engine/internal/differential"
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
@@ -167,9 +166,7 @@ type Runner struct {
 	regexCache    map[string]*regexp.Regexp
 	regexCacheMu  sync.RWMutex
 
-	chainPlan  *autochain.Plan
-	chainPool  *autochain.Pool
-	chainIndex map[string]int
+	chain atomic.Pointer[autoChainState]
 
 	// Auth & CSRF — protected by their own fine-grained mutexes.
 	reauthMu        sync.Mutex
@@ -514,8 +511,8 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 
 	endpoints := r.activeEndpoints()
 	var waves [][]int
-	if r.chainPlan != nil && len(r.chainPlan.Waves) > 0 {
-		waves = r.chainPlan.Waves
+	if st := r.chain.Load(); st != nil && st.plan != nil && len(st.plan.Waves) > 0 {
+		waves = st.plan.Waves
 	} else if len(endpoints) > 0 {
 		w := make([]int, len(endpoints))
 		for i := range endpoints {

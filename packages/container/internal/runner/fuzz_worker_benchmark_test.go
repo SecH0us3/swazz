@@ -104,11 +104,17 @@ func BenchmarkBuildFuzzIterationPinned_AutoChainOnVsOff(b *testing.B) {
 			r := New(cfg, nil)
 			b.Cleanup(r.Close)
 			r.initAutoChain()
-			if r.chainPool != nil {
-				r.chainPool.Put("res:orders:id", "ord-42", "ord-42")
+			st := r.chain.Load()
+			if st != nil && st.pool != nil {
+				st.pool.Put("res:orders:id", "ord-42", "ord-42")
 			}
-			epIdx := r.chainIndex["PATCH /orders/{orderId}"]
-			targetEP := r.chainPlan.Ordered[epIdx]
+			epIdx := 0
+			if st != nil && st.index != nil {
+				epIdx = st.index["PATCH /orders/{orderId}"]
+			} else {
+				epIdx = 1
+			}
+			targetEP := st.plan.Ordered[epIdx]
 			gen := generator.New(nil, swagger.ProfileMalicious, settings)
 			safeGen := generator.New(nil, swagger.ProfileRandom, settings)
 			seenHashes := make(map[uint32]bool)

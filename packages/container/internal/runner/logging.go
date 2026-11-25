@@ -496,8 +496,8 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 	if r.config.Settings.RandomizeUserAgent {
 		modules = append(modules, "RandomUA")
 	}
-	if r.config.Settings.AutoChainingEnabled() && r.chainPlan != nil {
-		modules = append(modules, fmt.Sprintf("AutoChain (%d waves, %d edges)", len(r.chainPlan.Waves), r.chainPlan.EdgeCount))
+	if st := r.chain.Load(); r.config.Settings.AutoChainingEnabled() && st != nil && st.plan != nil {
+		modules = append(modules, fmt.Sprintf("AutoChain (%d waves, %d edges)", len(st.plan.Waves), st.plan.EdgeCount))
 	}
 	if len(r.config.Settings.ChainingRules) > 0 {
 		modules = append(modules, fmt.Sprintf("ChainingRules (%d)", len(r.config.Settings.ChainingRules)))

@@ -1224,8 +1224,10 @@ func TestRunner_AutoChainingNestedDeleteAndSubresourceEcho(t *testing.T) {
 
 		assert.False(t, pollutedProjWithOrg.Load(), "expected echoed orgId in POST /api/orgs/{orgId}/projects response not to pollute res:orgs/projects:id")
 		assert.True(t, nestedDelete200.Load(), "expected nested DELETE /api/orgs/{orgId}/projects/{projectId} to preserve orgId and pass sacrificial projectId")
-		assert.GreaterOrEqual(t, r.chainPool.LiveCount("res:orgs:id"), 1, "expected ancestor res:orgs:id not to be popped as sacrificial")
-		assert.GreaterOrEqual(t, r.chainPool.LiveCount("res:orgs/projects:id"), 1, "expected at least one live projectId to survive sacrificial DELETE")
+		st := r.chain.Load()
+		require.NotNil(t, st)
+		assert.GreaterOrEqual(t, st.pool.LiveCount("res:orgs:id"), 1, "expected ancestor res:orgs:id not to be popped as sacrificial")
+		assert.GreaterOrEqual(t, st.pool.LiveCount("res:orgs/projects:id"), 1, "expected at least one live projectId to survive sacrificial DELETE")
 	})
 
 	t.Run("RecursiveReseedExhaustedAncestor", func(t *testing.T) {
@@ -1296,18 +1298,20 @@ func TestRunner_AutoChainingNestedDeleteAndSubresourceEcho(t *testing.T) {
 		defer p.close()
 
 		// Simulate prior seed then exhaustion of both parent (org) and child (project) pools.
-		r.chainPool.Put("res:orgs:id", "stale-org", "stale-org")
-		_, _, _ = r.chainPool.TakeSacrificial("res:orgs:id", nil)
-		r.chainPool.Put("res:orgs/projects:id", "proj-0", "proj-0")
-		require.Equal(t, 0, r.chainPool.LiveCount("res:orgs:id"))
-		require.Equal(t, 1, r.chainPool.LiveCount("res:orgs/projects:id"))
+		st := r.chain.Load()
+		require.NotNil(t, st)
+		st.pool.Put("res:orgs:id", "stale-org", "stale-org")
+		_, _, _ = st.pool.TakeSacrificial("res:orgs:id", nil)
+		st.pool.Put("res:orgs/projects:id", "proj-0", "proj-0")
+		require.Equal(t, 0, st.pool.LiveCount("res:orgs:id"))
+		require.Equal(t, 1, st.pool.LiveCount("res:orgs/projects:id"))
 
-		delIdx := r.chainIndex["DELETE /api/orgs/{orgId}/projects/{projectId}"]
+		delIdx := st.index["DELETE /api/orgs/{orgId}/projects/{projectId}"]
 		sac := r.prepareEndpointPool(context.Background(), delIdx)
 		require.NotNil(t, sac)
 		assert.Contains(t, sac, "res:orgs/projects:id")
-		assert.Equal(t, "org-1", func() string { _, s, _ := r.chainPool.GetCoerced("res:orgs:id", nil); return s }())
-		assert.Equal(t, 1, r.chainPool.LiveCount("res:orgs/projects:id"))
+		assert.Equal(t, "org-1", func() string { _, s, _ := st.pool.GetCoerced("res:orgs:id", nil); return s }())
+		assert.Equal(t, 1, st.pool.LiveCount("res:orgs/projects:id"))
 	})
 }
 
@@ -1599,6 +1603,94 @@ func TestRunner_ActiveParameterFuzzingNestedChild404PreservesParentID(t *testing
 	assert.GreaterOrEqual(t, child404Count.Load(), int32(2), "expected ActiveParameterFuzzing on child GET to generate >=2 404s")
 	assert.Zero(t, orgPostAfterChild404.Load(), "expected 404s while fuzzing child {projectId} not to evict or re-seed parent org-1")
 	assert.Zero(t, projPostAfter404.Load(), "expected 404s while fuzzing {orgId} not to evict or re-seed child proj-1")
-	assert.Equal(t, 1, r.chainPool.LiveCount("res:orgs:id"))
-	assert.Equal(t, 1, r.chainPool.LiveCount("res:orgs/projects:id"))
+	st := r.chain.Load()
+	require.NotNil(t, st)
+	assert.Equal(t, 1, st.pool.LiveCount("res:orgs:id"))
+	assert.Equal(t, 1, st.pool.LiveCount("res:orgs/projects:id"))
+}
+
+func TestRunner_ActiveParameterFuzzingNestedProducerWithBodyFKSkipsOrphanHarvest(t *testing.T) {
+	var (
+		nextValid  atomic.Int64
+		nextOrphan atomic.Int64
+		orphanSent atomic.Int32
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		segs := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		switch {
+		case r.URL.Path == "/api/orgs" && r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "org-1"})
+		case r.URL.Path == "/api/users" && r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "user-1"})
+		case len(segs) == 4 && segs[0] == "api" && segs[1] == "orgs" && segs[3] == "projects" && r.Method == http.MethodPost:
+			orgID := segs[2]
+			w.WriteHeader(http.StatusCreated)
+			if orgID == "org-1" {
+				id := fmt.Sprintf("proj-valid-%d", nextValid.Add(1))
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": id})
+			} else {
+				orphanSent.Add(1)
+				id := fmt.Sprintf("proj-orphan-%d", nextOrphan.Add(1))
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": id})
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	cfg := &swagger.Config{
+		BaseURL:  srv.URL,
+		Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{
+			IterationsPerProfile:   4,
+			Concurrency:            1,
+			TimeoutMs:              5000,
+			ActiveParameterFuzzing: true,
+			Profiles:               []swagger.FuzzingProfile{swagger.ProfileRandom},
+		},
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/api/orgs",
+				Method: "POST",
+				Schema: swagger.SchemaProperty{Type: "object", Properties: map[string]*swagger.SchemaProperty{"name": {Type: "string"}}},
+			},
+			{
+				Path:   "/api/users",
+				Method: "POST",
+				Schema: swagger.SchemaProperty{Type: "object", Properties: map[string]*swagger.SchemaProperty{"email": {Type: "string"}}},
+			},
+			{
+				Path:       "/api/orgs/{orgId}/projects",
+				Method:     "POST",
+				PathParams: map[string]*swagger.SchemaProperty{"orgId": {Type: "string"}},
+				Schema: swagger.SchemaProperty{
+					Type: "object",
+					Properties: map[string]*swagger.SchemaProperty{
+						"userId": {Type: "string"},
+						"title":  {Type: "string"},
+					},
+				},
+			},
+		},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+	require.NoError(t, r.Start(context.Background()))
+
+	assert.Greater(t, orphanSent.Load(), int32(0), "expected ActiveParameterFuzzing to mutate {orgId} and receive 201 orphan responses")
+	st := r.chain.Load()
+	require.NotNil(t, st)
+	count := st.pool.LiveCount("res:orgs/projects:id")
+	require.Greater(t, count, 0)
+	for range count {
+		_, str, parents, ok := st.pool.GetEntryCoerced("res:orgs/projects:id", nil)
+		require.True(t, ok)
+		assert.True(t, strings.HasPrefix(str, "proj-valid-"), "expected orphan child project not to be harvested when path parent orgId was unpinned, got %q", str)
+		assert.Equal(t, "org-1", parents["res:orgs:id"])
+	}
 }

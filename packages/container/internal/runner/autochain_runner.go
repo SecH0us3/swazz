@@ -16,6 +16,15 @@ import (
 	"swazz-engine/internal/swagger"
 )
 
+// autoChainState bundles the immutable per-run DAG plan, endpoint lookup index,
+// and bounded live value pool behind a single atomic pointer so a lingering worker
+// from a previous timed-out run never races with a subsequent initRun.
+type autoChainState struct {
+	plan  *autochain.Plan
+	pool  *autochain.Pool
+	index map[string]int
+}
+
 func (r *Runner) initAutoChain() {
 	r.configMu.RLock()
 	enabled := r.config.Settings.AutoChainingEnabled()
@@ -25,39 +34,43 @@ func (r *Runner) initAutoChain() {
 	r.configMu.RUnlock()
 
 	if !enabled {
-		r.chainPlan = autochain.IdentityPlan(eps)
-		r.chainPool = nil
-		r.chainIndex = nil
+		r.chain.Store(&autoChainState{
+			plan: autochain.IdentityPlan(eps),
+		})
 		return
 	}
-	r.chainPlan = autochain.BuildPlan(eps, rules, baseURL)
-	r.chainPool = autochain.NewPool()
-	idx := make(map[string]int, len(r.chainPlan.Ordered))
-	for i, ep := range r.chainPlan.Ordered {
+	plan := autochain.BuildPlan(eps, rules, baseURL)
+	idx := make(map[string]int, len(plan.Ordered))
+	for i, ep := range plan.Ordered {
 		idx[strings.ToUpper(ep.Method)+" "+ep.Path] = i
 	}
-	r.chainIndex = idx
+	r.chain.Store(&autoChainState{
+		plan:  plan,
+		pool:  autochain.NewPool(),
+		index: idx,
+	})
 }
 
 func (r *Runner) activeEndpoints() []swagger.EndpointConfig {
 	r.configMu.RLock()
 	cfgEps := r.config.Endpoints
 	r.configMu.RUnlock()
-	if r.chainPlan != nil && len(r.chainPlan.Ordered) == len(cfgEps) {
-		return r.chainPlan.Ordered
+	if st := r.chain.Load(); st != nil && st.plan != nil && len(st.plan.Ordered) == len(cfgEps) {
+		return st.plan.Ordered
 	}
 	return cfgEps
 }
 
 func (r *Runner) shouldHarvestAutoChain(originalPath, method string, status int, profile swagger.FuzzingProfile) bool {
-	if r.chainPool == nil || r.chainPlan == nil || status < 200 || status >= 300 {
+	st := r.chain.Load()
+	if st == nil || st.pool == nil || st.plan == nil || status < 200 || status >= 300 {
 		return false
 	}
 	if profile != swagger.ProfileRandom && profile != swagger.FuzzingProfile("BASELINE") {
 		return false
 	}
-	epIdx, ok := r.chainIndex[strings.ToUpper(method)+" "+originalPath]
-	return ok && epIdx < len(r.chainPlan.Producers) && len(r.chainPlan.Producers[epIdx]) > 0
+	epIdx, ok := st.index[strings.ToUpper(method)+" "+originalPath]
+	return ok && epIdx < len(st.plan.Producers) && len(st.plan.Producers[epIdx]) > 0
 }
 
 // shouldPinBulkIteration pins 80% of bulk fuzzing iterations (0,1,2,3 mod 5) and leaves
@@ -117,11 +130,12 @@ func (r *Runner) prepareEndpointPoolFiltered(ctx context.Context, epIdx int, ski
 }
 
 func (r *Runner) prepareEndpointPoolDepth(ctx context.Context, epIdx int, skipLoc string, skipPath []string, depth int) map[string]sacrificialVal {
-	if r.chainPool == nil || r.chainPlan == nil || epIdx < 0 || epIdx >= len(r.chainPlan.Bindings) {
+	st := r.chain.Load()
+	if st == nil || st.pool == nil || st.plan == nil || epIdx < 0 || epIdx >= len(st.plan.Bindings) {
 		return nil
 	}
-	ep := r.chainPlan.Ordered[epIdx]
-	bindings := r.chainPlan.Bindings[epIdx]
+	ep := st.plan.Ordered[epIdx]
+	bindings := st.plan.Bindings[epIdx]
 	if len(bindings) == 0 {
 		return nil
 	}
@@ -132,11 +146,11 @@ func (r *Runner) prepareEndpointPoolDepth(ctx context.Context, epIdx int, skipLo
 			continue
 		}
 		if isSacrificialBinding(ep, bindings, b) {
-			if r.chainPool.LiveCount(b.PoolKey) <= 1 && b.PrimaryProd >= 0 {
+			if st.pool.LiveCount(b.PoolKey) <= 1 && b.PrimaryProd >= 0 {
 				r.mintFromProducerDepth(ctx, b.PrimaryProd, depth)
 			}
-			if r.chainPool.LiveCount(b.PoolKey) > 1 {
-				if val, str, parents, ok := r.chainPool.TakeSacrificialEntry(b.PoolKey, b.TargetSchema); ok {
+			if st.pool.LiveCount(b.PoolKey) > 1 {
+				if val, str, parents, ok := st.pool.TakeSacrificialEntry(b.PoolKey, b.TargetSchema); ok {
 					if sac == nil {
 						sac = make(map[string]sacrificialVal, 2)
 					}
@@ -145,7 +159,7 @@ func (r *Runner) prepareEndpointPoolDepth(ctx context.Context, epIdx int, skipLo
 			}
 			continue
 		}
-		if r.chainPool.LiveCount(b.PoolKey) == 0 && r.chainPool.HadEntries(b.PoolKey) && b.PrimaryProd >= 0 {
+		if st.pool.LiveCount(b.PoolKey) == 0 && st.pool.HadEntries(b.PoolKey) && b.PrimaryProd >= 0 {
 			r.mintFromProducerDepth(ctx, b.PrimaryProd, depth)
 		}
 	}
@@ -158,10 +172,14 @@ func (r *Runner) mintFromProducer(ctx context.Context, prodIdx int) {
 
 func (r *Runner) mintFromProducerDepth(ctx context.Context, prodIdx, depth int) {
 	r.waitIfPaused(ctx)
-	if depth >= maxAutoChainReseedDepth || r.stopped() || ctx.Err() != nil || !r.chainPool.TryAcquireReseed(prodIdx) {
+	st := r.chain.Load()
+	if st == nil || st.pool == nil || st.plan == nil || prodIdx < 0 || prodIdx >= len(st.plan.Ordered) {
 		return
 	}
-	prodEP := r.chainPlan.Ordered[prodIdx]
+	if depth >= maxAutoChainReseedDepth || r.stopped() || ctx.Err() != nil || !st.pool.TryAcquireReseed(prodIdx) {
+		return
+	}
+	prodEP := st.plan.Ordered[prodIdx]
 	sac := r.prepareEndpointPoolDepth(ctx, prodIdx, "", nil, depth+1)
 	safeGen := r.newGenerator(swagger.ProfileRandom, prodEP.Method+" "+prodEP.Path)
 	built := buildSafePayload(prodEP, safeGen)
@@ -185,14 +203,15 @@ func (r *Runner) overlayBindings(epIdx int, built *generatedPayload, sac map[str
 }
 
 func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac map[string]sacrificialVal, skipLoc string, skipPath []string) {
-	if r.chainPool == nil || r.chainPlan == nil || epIdx < 0 || epIdx >= len(r.chainPlan.Bindings) {
+	st := r.chain.Load()
+	if st == nil || st.pool == nil || st.plan == nil || epIdx < 0 || epIdx >= len(st.plan.Bindings) {
 		return
 	}
-	bindings := r.chainPlan.Bindings[epIdx]
+	bindings := st.plan.Bindings[epIdx]
 	if len(bindings) == 0 {
 		return
 	}
-	ep := r.chainPlan.Ordered[epIdx]
+	ep := st.plan.Ordered[epIdx]
 
 	type resolvedBinding struct {
 		binding autochain.ParamBinding
@@ -200,8 +219,15 @@ func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac
 		strVal  string
 		ok      bool
 	}
-	resolved := make([]resolvedBinding, len(bindings))
+	var resolvedBuf [8]resolvedBinding
+	var resolved []resolvedBinding
+	if len(bindings) <= len(resolvedBuf) {
+		resolved = resolvedBuf[:len(bindings)]
+	} else {
+		resolved = make([]resolvedBinding, len(bindings))
+	}
 	var forced map[string]string
+	resolvedCount := 0
 
 	// Resolve bindings in reverse order (leaf/child first) so a child resource's recorded
 	// parent pins force consistent ancestor IDs instead of picking unrelated ones round-robin.
@@ -223,7 +249,7 @@ func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac
 		} else if sv, hasSac := sac[b.PoolKey]; hasSac {
 			coerced, strVal, parents, ok = sv.coerced, sv.str, sv.parents, true
 		} else if !isSacrificialBinding(ep, bindings, b) {
-			coerced, strVal, parents, ok = r.chainPool.GetEntryCoerced(b.PoolKey, b.TargetSchema)
+			coerced, strVal, parents, ok = st.pool.GetEntryCoerced(b.PoolKey, b.TargetSchema)
 		}
 		if !ok || len(b.ParamPath) == 0 {
 			continue
@@ -245,6 +271,13 @@ func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac
 			strVal:  strVal,
 			ok:      true,
 		}
+		resolvedCount++
+	}
+	if resolvedCount == 0 {
+		return
+	}
+	if built.pinned == nil {
+		built.pinned = make([]autochain.PinnedBinding, 0, resolvedCount)
 	}
 
 	for _, item := range resolved {
@@ -278,7 +311,7 @@ func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac
 			PoolKey:   b.PoolKey,
 			StrVal:    item.strVal,
 			Location:  b.Location,
-			ParamPath: slices.Clone(b.ParamPath),
+			ParamPath: b.ParamPath,
 		})
 	}
 }
@@ -320,20 +353,15 @@ func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, sta
 	if !r.shouldHarvestAutoChain(originalPath, method, status, profile) {
 		return
 	}
-	epIdx, ok := r.chainIndex[strings.ToUpper(method)+" "+originalPath]
-	if !ok || epIdx >= len(r.chainPlan.Producers) {
+	st := r.chain.Load()
+	if st == nil || st.pool == nil || st.plan == nil {
 		return
 	}
-	rules := r.chainPlan.Producers[epIdx]
-	if len(pinned) == 0 {
-		for _, b := range r.chainPlan.Bindings[epIdx] {
-			if r.chainPool.LiveCount(b.PoolKey) > 0 {
-				// Intentionally unpinned bulk fuzzing iteration (i%5 == 4): do not harvest
-				// orphan child resources lacking parent pins into the shared pool.
-				return
-			}
-		}
+	epIdx, ok := st.index[strings.ToUpper(method)+" "+originalPath]
+	if !ok || epIdx >= len(st.plan.Producers) {
+		return
 	}
+	rules := st.plan.Producers[epIdx]
 	var parentPins map[string]string
 	for _, pb := range pinned {
 		if pb.PoolKey != "" && pb.StrVal != "" {
@@ -343,25 +371,36 @@ func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, sta
 			parentPins[pb.PoolKey] = pb.StrVal
 		}
 	}
-	r.chainPool.HarvestResponseWithParents(rules, headers, rawBody, parentPins, payload, queryParams, sentPathAndPinnedScalars(originalPath, resolvedPath, pinned))
+	for _, b := range st.plan.Bindings[epIdx] {
+		if st.pool.LiveCount(b.PoolKey) <= 0 {
+			continue
+		}
+		if len(pinned) == 0 || (b.Location == autochain.LocPath && parentPins[b.PoolKey] == "") {
+			// Skip harvesting orphan child resources created during unpinned bulk iterations
+			// (i%5 == 4) or ActiveParameterFuzzing mutations of a parent path parameter.
+			return
+		}
+	}
+	st.pool.HarvestResponseWithParents(rules, headers, rawBody, parentPins, payload, queryParams, sentPathAndPinnedScalars(originalPath, resolvedPath, pinned))
 }
 
 func (r *Runner) recordAutoChainOutcome(originalPath, method string, status int, pinned []autochain.PinnedBinding) {
-	if r.chainPool == nil || len(pinned) == 0 {
+	st := r.chain.Load()
+	if st == nil || st.pool == nil || len(pinned) == 0 {
 		return
 	}
 	if status >= 200 && status < 300 {
 		for _, pb := range pinned {
-			r.chainPool.RecordHit(pb.PoolKey, pb.StrVal)
+			st.pool.RecordHit(pb.PoolKey, pb.StrVal)
 		}
 		return
 	}
 	if strings.EqualFold(method, "DELETE") || (status != http.StatusNotFound && status != http.StatusGone) {
 		return
 	}
-	if r.chainPlan != nil {
-		if epIdx, ok := r.chainIndex[strings.ToUpper(method)+" "+originalPath]; ok && epIdx < len(r.chainPlan.Ordered) {
-			ep := r.chainPlan.Ordered[epIdx]
+	if st.plan != nil {
+		if epIdx, ok := st.index[strings.ToUpper(method)+" "+originalPath]; ok && epIdx < len(st.plan.Ordered) {
+			ep := st.plan.Ordered[epIdx]
 			if len(ep.PathParams) > 0 {
 				pinnedPathCount := 0
 				leafPathIdx := -1
@@ -386,30 +425,31 @@ func (r *Runner) recordAutoChainOutcome(originalPath, method string, status int,
 				}
 				if leafPathIdx >= 0 {
 					pb := pinned[leafPathIdx]
-					r.chainPool.RecordMiss(pb.PoolKey, pb.StrVal)
+					st.pool.RecordMiss(pb.PoolKey, pb.StrVal)
 					return
 				}
 			}
-			if len(pinned) < len(r.chainPlan.Bindings[epIdx]) {
+			if len(pinned) < len(st.plan.Bindings[epIdx]) {
 				return
 			}
 		}
 	}
 	for _, pb := range pinned {
-		r.chainPool.RecordMiss(pb.PoolKey, pb.StrVal)
+		st.pool.RecordMiss(pb.PoolKey, pb.StrVal)
 	}
 }
 
 // seedResumeProducers warms up upstream PrimaryProd endpoints when resuming from a checkpoint
 // that skipped baselinePhase.
 func (r *Runner) seedResumeProducers(ctx context.Context, profiles []swagger.FuzzingProfile, resumeProfile, resumeEndpoint string) {
-	if r.chainPool == nil || r.chainPlan == nil {
+	st := r.chain.Load()
+	if st == nil || st.pool == nil || st.plan == nil {
 		return
 	}
 	isLastProfile := len(profiles) > 0 && string(profiles[len(profiles)-1]) == resumeProfile
 	startIdx := 0
 	if isLastProfile {
-		for i, ep := range r.chainPlan.Ordered {
+		for i, ep := range st.plan.Ordered {
 			if (ep.Method + " " + ep.Path) == resumeEndpoint {
 				startIdx = i
 				break
@@ -419,14 +459,14 @@ func (r *Runner) seedResumeProducers(ctx context.Context, profiles []swagger.Fuz
 	needed := make(map[int]bool)
 	var collectAncestors func(idx int)
 	collectAncestors = func(idx int) {
-		for _, b := range r.chainPlan.Bindings[idx] {
+		for _, b := range st.plan.Bindings[idx] {
 			if b.PrimaryProd >= 0 && !needed[b.PrimaryProd] {
 				needed[b.PrimaryProd] = true
 				collectAncestors(b.PrimaryProd)
 			}
 		}
 	}
-	for i := startIdx; i < len(r.chainPlan.Ordered); i++ {
+	for i := startIdx; i < len(st.plan.Ordered); i++ {
 		collectAncestors(i)
 	}
 	if len(needed) == 0 {
