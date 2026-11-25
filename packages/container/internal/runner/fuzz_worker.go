@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +55,9 @@ func (r *Runner) fuzzEndpoint(
 	seenHashes := make(map[uint32]bool)
 	delay := time.Duration(r.config.Settings.DelayBetweenRequestMs) * time.Millisecond
 
+	isDelete := strings.EqualFold(endpoint.Method, "DELETE")
+	deferDeletePin := isDelete && hasFields(&endpoint)
+
 	for i := range effectiveIter {
 		if i < iterToSkip {
 			continue
@@ -65,11 +69,11 @@ func (r *Runner) fuzzEndpoint(
 		isSecHeaderIter := isSecurityHeaderIteration(gen, profile, i)
 		pinIter := shouldPinBulkIteration(i, isSecHeaderIter)
 		var sac map[string]sacrificialVal
-		if pinIter {
+		if pinIter && !deferDeletePin {
 			sac = r.prepareEndpointPool(ctx, epIdx)
 		}
 		built, payloadHash, isDuplicate := r.buildFuzzIterationPinned(
-			epIdx, pinIter, sac, endpoint, gen, safeGen, isSecHeaderIter, maxPayload, enableDedup, seenHashes,
+			epIdx, pinIter && !deferDeletePin, sac, endpoint, gen, safeGen, isSecHeaderIter, maxPayload, enableDedup, seenHashes,
 		)
 		if isDuplicate {
 			r.progress.totalPlanned.Add(-1)
@@ -87,6 +91,15 @@ func (r *Runner) fuzzEndpoint(
 		r.waitIfPaused(ctx)
 		if r.stopped() || ctx.Err() != nil {
 			break
+		}
+
+		if pinIter && deferDeletePin {
+			sac = r.prepareEndpointPool(ctx, epIdx)
+			r.overlayBindings(epIdx, &built, sac)
+			if !payloadFits(built, maxPayload) {
+				r.progress.totalPlanned.Add(-1)
+				continue
+			}
 		}
 
 		if err := r.limiter.Acquire(ctx); err != nil {

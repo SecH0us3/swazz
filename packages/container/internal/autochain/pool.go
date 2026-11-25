@@ -8,6 +8,7 @@ package autochain
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 	"sort"
@@ -39,9 +40,10 @@ type PinnedBinding struct {
 }
 
 type poolEntry struct {
-	strVal string
-	rawVal any
-	misses int
+	strVal  string
+	rawVal  any
+	misses  int
+	parents map[string]string
 }
 
 type keyBucket struct {
@@ -67,11 +69,21 @@ func NewPool() *Pool {
 
 // Put inserts or refreshes a value under poolKey, evicting the oldest entry if over MaxEntriesPerKey.
 func (p *Pool) Put(poolKey, strVal string, rawVal any) {
+	p.PutWithParents(poolKey, strVal, rawVal, nil)
+}
+
+// PutWithParents inserts or refreshes a value under poolKey along with the parent pool bindings
+// that were active when the resource was created, keeping multi-hop ID tuples consistent.
+func (p *Pool) PutWithParents(poolKey, strVal string, rawVal any, parents map[string]string) {
 	if p == nil || poolKey == "" || !isValidChainScalar(strVal) {
 		return
 	}
 	if rawVal == nil {
 		rawVal = strVal
+	}
+	var clonedParents map[string]string
+	if len(parents) > 0 {
+		clonedParents = maps.Clone(parents)
 	}
 
 	p.mu.Lock()
@@ -88,46 +100,62 @@ func (p *Pool) Put(poolKey, strVal string, rawVal any) {
 		if b.entries[i].strVal == strVal {
 			b.entries[i].misses = 0
 			b.entries[i].rawVal = rawVal
+			if clonedParents != nil {
+				b.entries[i].parents = clonedParents
+			}
 			return
 		}
 	}
+	entry := poolEntry{strVal: strVal, rawVal: rawVal, parents: clonedParents}
 	if len(b.entries) >= MaxEntriesPerKey {
 		copy(b.entries, b.entries[1:])
-		b.entries[len(b.entries)-1] = poolEntry{strVal: strVal, rawVal: rawVal}
+		b.entries[len(b.entries)-1] = entry
 		return
 	}
-	b.entries = append(b.entries, poolEntry{strVal: strVal, rawVal: rawVal})
+	b.entries = append(b.entries, entry)
 }
 
 // GetCoerced returns a round-robin entry from poolKey coerced to match schema.Type.
 func (p *Pool) GetCoerced(poolKey string, schema *swagger.SchemaProperty) (any, string, bool) {
+	coerced, strVal, _, ok := p.GetEntryCoerced(poolKey, schema)
+	return coerced, strVal, ok
+}
+
+// GetEntryCoerced returns a round-robin entry coerced to schema.Type together with any recorded parent pins.
+func (p *Pool) GetEntryCoerced(poolKey string, schema *swagger.SchemaProperty) (any, string, map[string]string, bool) {
 	if p == nil {
-		return nil, "", false
+		return nil, "", nil, false
 	}
 	p.mu.RLock()
 	b := p.buckets[poolKey]
 	if b == nil || len(b.entries) == 0 {
 		p.mu.RUnlock()
-		return nil, "", false
+		return nil, "", nil, false
 	}
 	idx := b.cursor.Add(1) - 1
 	entry := b.entries[idx%uint64(len(b.entries))]
 	p.mu.RUnlock()
 
-	return coerceEntry(entry, schema), entry.strVal, true
+	return coerceEntry(entry, schema), entry.strVal, entry.parents, true
 }
 
 // TakeSacrificial pops the newest live entry from poolKey so destructive DELETE calls
 // never leave a deleted ID in the shared pool.
 func (p *Pool) TakeSacrificial(poolKey string, schema *swagger.SchemaProperty) (any, string, bool) {
+	coerced, strVal, _, ok := p.TakeSacrificialEntry(poolKey, schema)
+	return coerced, strVal, ok
+}
+
+// TakeSacrificialEntry pops the newest live entry from poolKey together with its recorded parent pins.
+func (p *Pool) TakeSacrificialEntry(poolKey string, schema *swagger.SchemaProperty) (any, string, map[string]string, bool) {
 	if p == nil {
-		return nil, "", false
+		return nil, "", nil, false
 	}
 	p.mu.Lock()
 	b := p.buckets[poolKey]
 	if b == nil || len(b.entries) == 0 {
 		p.mu.Unlock()
-		return nil, "", false
+		return nil, "", nil, false
 	}
 	last := len(b.entries) - 1
 	entry := b.entries[last]
@@ -135,7 +163,12 @@ func (p *Pool) TakeSacrificial(poolKey string, schema *swagger.SchemaProperty) (
 	b.entries = b.entries[:last]
 	p.mu.Unlock()
 
-	return coerceEntry(entry, schema), entry.strVal, true
+	return coerceEntry(entry, schema), entry.strVal, entry.parents, true
+}
+
+// CoerceString coerces a raw string scalar into the Go type expected by schema.
+func CoerceString(strVal string, schema *swagger.SchemaProperty) any {
+	return coerceEntry(poolEntry{strVal: strVal, rawVal: toTypedScalar(strVal)}, schema)
 }
 
 // RecordMiss increments the consecutive 404/410 miss counter and evicts at MaxConsecutiveMisses.
@@ -204,6 +237,12 @@ func (p *Pool) TryAcquireReseed(producerIdx int) bool {
 // HarvestResponse extracts scalar values from a 2xx response according to rules, Location header,
 // and JSON ID heuristics, filtering out request echoes.
 func (p *Pool) HarvestResponse(rules []ProducerRule, headers http.Header, rawBody []byte, sent ...any) {
+	p.HarvestResponseWithParents(rules, headers, rawBody, nil, sent...)
+}
+
+// HarvestResponseWithParents extracts scalar values from a 2xx response and associates each entry
+// with the parent pool bindings that were active on the creating request.
+func (p *Pool) HarvestResponseWithParents(rules []ProducerRule, headers http.Header, rawBody []byte, parentPins map[string]string, sent ...any) {
 	if p == nil || len(rules) == 0 {
 		return
 	}
@@ -236,10 +275,10 @@ func (p *Pool) HarvestResponse(rules []ProducerRule, headers http.Header, rawBod
 				hName := strings.TrimPrefix(rule.ResponseExpr, "$header.")
 				if strings.EqualFold(hName, "Location") {
 					if locID != "" {
-						p.Put(rule.PoolKey, locID, toTypedScalar(locID))
+						p.PutWithParents(rule.PoolKey, locID, toTypedScalar(locID), parentPins)
 					}
 				} else if hv := headers.Get(hName); hv != "" {
-					p.Put(rule.PoolKey, hv, hv)
+					p.PutWithParents(rule.PoolKey, hv, hv, parentPins)
 				}
 				continue
 			}
@@ -252,7 +291,7 @@ func (p *Pool) HarvestResponse(rules []ProducerRule, headers http.Header, rawBod
 						leaf = leaf[dot+1:]
 					}
 					if !echoed[strings.ToLower(leaf)+"\x00"+str] {
-						p.Put(rule.PoolKey, str, gjsonScalarValue(res))
+						p.PutWithParents(rule.PoolKey, str, gjsonScalarValue(res), parentPins)
 					}
 				}
 			}
@@ -263,13 +302,13 @@ func (p *Pool) HarvestResponse(rules []ProducerRule, headers http.Header, rawBod
 		if root := ensureDecoded(); root != nil {
 			walkJSONIDs(root, 0, func(key, str string, raw any) {
 				if !echoed[strings.ToLower(key)+"\x00"+str] {
-					p.Put(rule.PoolKey, str, raw)
+					p.PutWithParents(rule.PoolKey, str, raw, parentPins)
 				}
 			})
 		}
 		if locID != "" {
 			if colSeg := resourceCollectionSegment(rule.PoolKey); colSeg == "" || !strings.EqualFold(locID, colSeg) {
-				p.Put(rule.PoolKey, locID, toTypedScalar(locID))
+				p.PutWithParents(rule.PoolKey, locID, toTypedScalar(locID), parentPins)
 			}
 		}
 	}

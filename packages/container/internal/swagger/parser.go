@@ -596,6 +596,7 @@ func derefMap(v any, spec map[string]any) map[string]any {
 		if resolved, ok := curr.(map[string]any); ok {
 			return resolved
 		}
+		return nil
 	}
 	return m
 }

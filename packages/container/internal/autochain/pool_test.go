@@ -175,3 +175,25 @@ func TestPool_LocationEdgeCasesAndLowercaseHeader(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, int64(88), numVal)
 }
+
+func TestPool_ParentTuplesAndCoerceString(t *testing.T) {
+	pool := NewPool()
+	pool.Put("res:orgs:id", "org-1", "org-1")
+	pool.Put("res:orgs:id", "org-2", "org-2")
+
+	pool.HarvestResponseWithParents(
+		[]ProducerRule{{PoolKey: "res:orgs/projects:id", ResponseExpr: ""}},
+		nil,
+		[]byte(`{"id": "101"}`),
+		map[string]string{"res:orgs:id": "org-1"},
+	)
+
+	val, str, parents, ok := pool.GetEntryCoerced("res:orgs/projects:id", &swagger.SchemaProperty{Type: "integer"})
+	require.True(t, ok)
+	assert.Equal(t, int64(101), val)
+	assert.Equal(t, "101", str)
+	assert.Equal(t, map[string]string{"res:orgs:id": "org-1"}, parents)
+
+	assert.Equal(t, int64(42), CoerceString("42", &swagger.SchemaProperty{Type: "integer"}))
+	assert.Equal(t, "42", CoerceString("42", &swagger.SchemaProperty{Type: "string"}))
+}

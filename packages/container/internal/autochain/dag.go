@@ -102,8 +102,9 @@ func isHTTPEndpoint(ep swagger.EndpointConfig, baseURL string) bool {
 		return false
 	}
 	lowerBase := strings.ToLower(baseURL)
+	lowerPath := strings.ToLower(ep.Path)
 	for _, prefix := range []string{"grpc://", "grpcs://", "ws://", "wss://"} {
-		if strings.HasPrefix(lowerBase, prefix) {
+		if strings.HasPrefix(lowerBase, prefix) || strings.HasPrefix(lowerPath, prefix) {
 			return false
 		}
 	}
@@ -363,11 +364,28 @@ func BuildPlan(endpoints []swagger.EndpointConfig, rules []swagger.ChainingRule,
 		}
 	}
 
-	// Partition non-DELETE vs DELETE and run Kahn's wave scheduling
-	var activeNodes, deleteNodes []int
+	// Partition non-DELETE vs DELETE vs trailing non-HTTP (e.g., MCP endpoints appended after HTTP specs)
+	// and run Kahn's wave scheduling on activeNodes.
+	firstHTTPIdx := -1
+	for i := range n {
+		if httpMask[i] {
+			firstHTTPIdx = i
+			break
+		}
+	}
+	incomingCount := make([]int, n)
+	for u := range n {
+		for v := range edges[u] {
+			incomingCount[v]++
+		}
+	}
+
+	var activeNodes, deleteNodes, trailingNonHTTPNodes []int
 	for i := range n {
 		if deleteMask[i] {
 			deleteNodes = append(deleteNodes, i)
+		} else if !httpMask[i] && firstHTTPIdx >= 0 && i > firstHTTPIdx && len(edges[i]) == 0 && incomingCount[i] == 0 {
+			trailingNonHTTPNodes = append(trailingNonHTTPNodes, i)
 		} else {
 			activeNodes = append(activeNodes, i)
 		}
@@ -463,6 +481,9 @@ func BuildPlan(endpoints []swagger.EndpointConfig, rules []swagger.ChainingRule,
 		})
 		deleteWaveIdx = len(origWaves)
 		origWaves = append(origWaves, deleteNodes)
+	}
+	if len(trailingNonHTTPNodes) > 0 {
+		origWaves = append(origWaves, trailingNonHTTPNodes)
 	}
 
 	// Flatten waves into Ordered and remap all indices

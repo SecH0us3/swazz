@@ -466,3 +466,23 @@ func TestParseSpec_DeterministicOrderAndResponseMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestDerefMap_RefResolutionAndMissingTarget(t *testing.T) {
+	spec := map[string]any{
+		"components": map[string]any{
+			"responses": map[string]any{
+				"Created": map[string]any{"description": "created"},
+			},
+		},
+	}
+
+	resolved := derefMap(map[string]any{"$ref": "#/components/responses/Created"}, spec)
+	if resolved == nil || resolved["description"] != "created" {
+		t.Fatalf("expected resolved component response map, got %+v", resolved)
+	}
+
+	missing := derefMap(map[string]any{"$ref": "#/components/responses/DoesNotExist"}, spec)
+	if missing != nil {
+		t.Fatalf("expected nil for missing $#ref target, got %+v", missing)
+	}
+}

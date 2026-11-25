@@ -1392,3 +1392,140 @@ func TestRunner_ExampleTokenNotMutatedOrOverwrittenByTier3(t *testing.T) {
 	assert.NotContains(t, gotIDs, "user-999", "expected Tier 3 user_id binding not to overwrite {{tok}} in ep.Example")
 	assert.Equal(t, "{{tok}}", origExample["user_id"], "expected ep.Example map never to be mutated in-place")
 }
+
+func TestRunner_NestedResourceParentChildTupleConsistency(t *testing.T) {
+	var (
+		mu               sync.Mutex
+		orgSeq           int64
+		projSeq          int64
+		orgs             = make(map[string]bool)
+		projectOwner     = make(map[string]string)
+		patchMismatches  atomic.Int32
+		deleteMismatches atomic.Int32
+		patch200s        atomic.Int32
+		delete200s       atomic.Int32
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/orgs" && r.Method == http.MethodPost:
+			id := fmt.Sprintf("org-%d", atomic.AddInt64(&orgSeq, 1))
+			mu.Lock()
+			orgs[id] = true
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": id})
+
+		case strings.HasPrefix(r.URL.Path, "/api/orgs/") && strings.HasSuffix(r.URL.Path, "/projects") && r.Method == http.MethodPost:
+			trimmed := strings.TrimPrefix(r.URL.Path, "/api/orgs/")
+			orgID := strings.TrimSuffix(trimmed, "/projects")
+			mu.Lock()
+			orgExists := orgs[orgID]
+			if orgExists {
+				projID := fmt.Sprintf("proj-%d", atomic.AddInt64(&projSeq, 1))
+				projectOwner[projID] = orgID
+				mu.Unlock()
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": projID, "orgId": orgID})
+				return
+			}
+			mu.Unlock()
+			w.WriteHeader(http.StatusNotFound)
+
+		case strings.HasPrefix(r.URL.Path, "/api/orgs/") && strings.Contains(r.URL.Path, "/projects/"):
+			rest := strings.TrimPrefix(r.URL.Path, "/api/orgs/")
+			parts := strings.Split(rest, "/projects/")
+			if len(parts) != 2 {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			orgID, projID := parts[0], parts[1]
+			mu.Lock()
+			owner, exists := projectOwner[projID]
+			matched := exists && owner == orgID
+			if matched && r.Method == http.MethodDelete {
+				delete(projectOwner, projID)
+			}
+			mu.Unlock()
+
+			if !matched {
+				if exists && strings.HasPrefix(orgID, "org-") {
+					// Real parent/child mismatch: projID existed under a different orgID!
+					if r.Method == http.MethodPatch {
+						patchMismatches.Add(1)
+					} else if r.Method == http.MethodDelete {
+						deleteMismatches.Add(1)
+					}
+				}
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			if r.Method == http.MethodPatch {
+				patch200s.Add(1)
+			} else if r.Method == http.MethodDelete {
+				delete200s.Add(1)
+			}
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": projID, "orgId": orgID})
+
+		case strings.HasPrefix(r.URL.Path, "/api/orgs/") && r.Method == http.MethodGet:
+			// Shifts res:orgs:id round-robin cursor independently across RANDOM iterations
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": strings.TrimPrefix(r.URL.Path, "/api/orgs/")})
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	cfg := &swagger.Config{
+		BaseURL:  srv.URL,
+		Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 6,
+			Concurrency:          1,
+			TimeoutMs:            5000,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom, swagger.ProfileMalicious},
+		},
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/api/orgs",
+				Method: "POST",
+				Schema: swagger.SchemaProperty{Type: "object", Properties: map[string]*swagger.SchemaProperty{"name": {Type: "string"}}},
+			},
+			{
+				Path:       "/api/orgs/{orgId}",
+				Method:     "GET",
+				PathParams: map[string]*swagger.SchemaProperty{"orgId": {Type: "string"}},
+			},
+			{
+				Path:       "/api/orgs/{orgId}/projects",
+				Method:     "POST",
+				PathParams: map[string]*swagger.SchemaProperty{"orgId": {Type: "string"}},
+				Schema:     swagger.SchemaProperty{Type: "object", Properties: map[string]*swagger.SchemaProperty{"title": {Type: "string"}}},
+			},
+			{
+				Path:       "/api/orgs/{orgId}/projects/{projectId}",
+				Method:     "PATCH",
+				PathParams: map[string]*swagger.SchemaProperty{"orgId": {Type: "string"}, "projectId": {Type: "string"}},
+				Schema:     swagger.SchemaProperty{Type: "object", Properties: map[string]*swagger.SchemaProperty{"title": {Type: "string"}}},
+			},
+			{
+				Path:       "/api/orgs/{orgId}/projects/{projectId}",
+				Method:     "DELETE",
+				PathParams: map[string]*swagger.SchemaProperty{"orgId": {Type: "string"}, "projectId": {Type: "string"}},
+			},
+		},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+	require.NoError(t, r.Start(context.Background()))
+
+	assert.Greater(t, patch200s.Load(), int32(0), "expected PATCH /api/orgs/{orgId}/projects/{projectId} to hit 200 OK")
+	assert.Greater(t, delete200s.Load(), int32(0), "expected DELETE /api/orgs/{orgId}/projects/{projectId} to hit 200 OK")
+	assert.Zero(t, patchMismatches.Load(), "expected zero mismatched (orgId, projectId) pairs on PATCH")
+	assert.Zero(t, deleteMismatches.Load(), "expected zero mismatched (orgId, projectId) pairs on DELETE")
+}

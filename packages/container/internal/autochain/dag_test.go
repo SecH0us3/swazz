@@ -453,3 +453,67 @@ func TestBuildPlan_OpenAPILinkEdgeCasesAndExampleProtection(t *testing.T) {
 	assert.Empty(t, plan.Bindings[getOrdersIdx], "Tier 1 ep.Example {{tok}} must protect query slots from Tier 3 overwrite")
 }
 
+func TestBuildPlan_TrailingNonHTTPEndpointsStayAfterHTTPWavesAndPathSchemes(t *testing.T) {
+	eps := []swagger.EndpointConfig{
+		{
+			Path:   "/api/orders/{orderId}",
+			Method: "DELETE",
+			PathParams: map[string]*swagger.SchemaProperty{
+				"orderId": {Type: "string"},
+			},
+		},
+		{
+			Path:   "/api/orders",
+			Method: "POST",
+			ResponseSchema: &swagger.SchemaProperty{
+				Type:       "object",
+				Properties: map[string]*swagger.SchemaProperty{"id": {Type: "string"}},
+			},
+		},
+		{
+			Path:   "/api/orders/{orderId}",
+			Method: "GET",
+			PathParams: map[string]*swagger.SchemaProperty{
+				"orderId": {Type: "string"},
+			},
+		},
+		// Emulates init_run.go's prepareMCP appending mcp:// tools/probes after HTTP specs,
+		// plus explicit grpc:// / ws:// path scheme endpoints.
+		{Path: "mcp://tool/query_db", Method: "CALL"},
+		{Path: "mcp://tool/__globals__", Method: "CALL"},
+		{Path: "grpc://svc.Orders/Get", Method: "GET"},
+		{Path: "ws://stream/orders", Method: "GET"},
+	}
+
+	plan := BuildPlan(eps, nil, "https://api.example.com")
+	require.Len(t, plan.Ordered, 7)
+
+	idxOf := func(method, path string) int {
+		for i, ep := range plan.Ordered {
+			if ep.Method == method && ep.Path == path {
+				return i
+			}
+		}
+		t.Fatalf("missing %s %s", method, path)
+		return -1
+	}
+
+	postIdx := idxOf("POST", "/api/orders")
+	getIdx := idxOf("GET", "/api/orders/{orderId}")
+	delIdx := idxOf("DELETE", "/api/orders/{orderId}")
+	mcpQueryIdx := idxOf("CALL", "mcp://tool/query_db")
+	mcpProbeIdx := idxOf("CALL", "mcp://tool/__globals__")
+	grpcIdx := idxOf("GET", "grpc://svc.Orders/Get")
+	wsIdx := idxOf("GET", "ws://stream/orders")
+
+	assert.Less(t, postIdx, getIdx)
+	assert.Less(t, getIdx, delIdx)
+	// Trailing non-HTTP wave must run AFTER all HTTP waves (including DELETE) in original relative order.
+	assert.Less(t, delIdx, mcpQueryIdx)
+	assert.Less(t, mcpQueryIdx, mcpProbeIdx)
+	assert.Less(t, mcpProbeIdx, grpcIdx)
+	assert.Less(t, grpcIdx, wsIdx)
+	assert.Empty(t, plan.Bindings[grpcIdx], "grpc:// path endpoint must bypass HTTP heuristic bindings")
+	assert.Empty(t, plan.Bindings[wsIdx], "ws:// path endpoint must bypass HTTP heuristic bindings")
+}
+

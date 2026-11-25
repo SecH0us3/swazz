@@ -69,6 +69,7 @@ func shouldPinBulkIteration(iterIdx int, isSecHeaderIter bool) bool {
 type sacrificialVal struct {
 	coerced any
 	str     string
+	parents map[string]string
 }
 
 const maxAutoChainReseedDepth = 5
@@ -132,11 +133,11 @@ func (r *Runner) prepareEndpointPoolDepth(ctx context.Context, epIdx int, skipLo
 				r.mintFromProducerDepth(ctx, b.PrimaryProd, depth)
 			}
 			if r.chainPool.LiveCount(b.PoolKey) > 1 {
-				if val, str, ok := r.chainPool.TakeSacrificial(b.PoolKey, b.TargetSchema); ok {
+				if val, str, parents, ok := r.chainPool.TakeSacrificialEntry(b.PoolKey, b.TargetSchema); ok {
 					if sac == nil {
 						sac = make(map[string]sacrificialVal, 2)
 					}
-					sac[b.PoolKey] = sacrificialVal{coerced: val, str: str}
+					sac[b.PoolKey] = sacrificialVal{coerced: val, str: str, parents: parents}
 				}
 			}
 			continue
@@ -189,48 +190,90 @@ func (r *Runner) overlayBindingsFiltered(epIdx int, built *generatedPayload, sac
 		return
 	}
 	ep := r.chainPlan.Ordered[epIdx]
-	for _, b := range bindings {
+
+	type resolvedBinding struct {
+		binding autochain.ParamBinding
+		coerced any
+		strVal  string
+		ok      bool
+	}
+	resolved := make([]resolvedBinding, len(bindings))
+	var forced map[string]string
+
+	// Resolve bindings in reverse order (leaf/child first) so a child resource's recorded
+	// parent pins force consistent ancestor IDs instead of picking unrelated ones round-robin.
+	for i := len(bindings) - 1; i >= 0; i-- {
+		b := bindings[i]
 		if skipLoc != "" && string(b.Location) == skipLoc && slices.Equal(b.ParamPath, skipPath) {
 			continue
 		}
 		var (
 			coerced any
 			strVal  string
+			parents map[string]string
 			ok      bool
 		)
-		if sv, hasSac := sac[b.PoolKey]; hasSac {
-			coerced, strVal, ok = sv.coerced, sv.str, true
+		if forcedStr, hasForced := forced[b.PoolKey]; hasForced {
+			coerced = autochain.CoerceString(forcedStr, b.TargetSchema)
+			strVal = forcedStr
+			ok = true
+		} else if sv, hasSac := sac[b.PoolKey]; hasSac {
+			coerced, strVal, parents, ok = sv.coerced, sv.str, sv.parents, true
 		} else if !isSacrificialBinding(ep, bindings, b) {
-			coerced, strVal, ok = r.chainPool.GetCoerced(b.PoolKey, b.TargetSchema)
+			coerced, strVal, parents, ok = r.chainPool.GetEntryCoerced(b.PoolKey, b.TargetSchema)
 		}
 		if !ok || len(b.ParamPath) == 0 {
 			continue
 		}
+		for pk, pv := range parents {
+			if pv == "" {
+				continue
+			}
+			if forced == nil {
+				forced = make(map[string]string, len(parents))
+			}
+			if _, exists := forced[pk]; !exists {
+				forced[pk] = pv
+			}
+		}
+		resolved[i] = resolvedBinding{
+			binding: b,
+			coerced: coerced,
+			strVal:  strVal,
+			ok:      true,
+		}
+	}
+
+	for _, item := range resolved {
+		if !item.ok {
+			continue
+		}
+		b := item.binding
 		switch b.Location {
 		case autochain.LocPath:
 			if built.pathParams == nil {
 				built.pathParams = make(map[string]string)
 			}
-			built.pathParams[b.ParamPath[0]] = capPathParam(strVal)
+			built.pathParams[b.ParamPath[0]] = capPathParam(item.strVal)
 		case autochain.LocQuery:
 			if built.queryParams == nil {
 				built.queryParams = make(map[string]any)
 			}
-			setNestedValue(built.queryParams, b.ParamPath, coerced)
+			setNestedValue(built.queryParams, b.ParamPath, item.coerced)
 		case autochain.LocHeader:
 			if built.headers == nil {
 				built.headers = make(map[string]string)
 			}
-			built.headers[b.ParamPath[0]] = strVal
+			built.headers[b.ParamPath[0]] = item.strVal
 		case autochain.LocBody:
 			if built.body == nil {
 				built.body = make(map[string]any)
 			}
-			setNestedValue(built.body, b.ParamPath, coerced)
+			setNestedValue(built.body, b.ParamPath, item.coerced)
 		}
 		built.pinned = append(built.pinned, autochain.PinnedBinding{
 			PoolKey:   b.PoolKey,
-			StrVal:    strVal,
+			StrVal:    item.strVal,
 			Location:  b.Location,
 			ParamPath: slices.Clone(b.ParamPath),
 		})
@@ -285,7 +328,25 @@ func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, sta
 	if len(rules) == 0 {
 		return
 	}
-	r.chainPool.HarvestResponse(rules, headers, rawBody, payload, queryParams, sentPathAndPinnedScalars(originalPath, resolvedPath, pinned))
+	if len(pinned) == 0 {
+		for _, b := range r.chainPlan.Bindings[epIdx] {
+			if r.chainPool.LiveCount(b.PoolKey) > 0 {
+				// Intentionally unpinned bulk fuzzing iteration (i%5 == 4): do not harvest
+				// orphan child resources lacking parent pins into the shared pool.
+				return
+			}
+		}
+	}
+	var parentPins map[string]string
+	for _, pb := range pinned {
+		if pb.PoolKey != "" && pb.StrVal != "" {
+			if parentPins == nil {
+				parentPins = make(map[string]string, len(pinned))
+			}
+			parentPins[pb.PoolKey] = pb.StrVal
+		}
+	}
+	r.chainPool.HarvestResponseWithParents(rules, headers, rawBody, parentPins, payload, queryParams, sentPathAndPinnedScalars(originalPath, resolvedPath, pinned))
 }
 
 func (r *Runner) recordAutoChainMisses(method string, status int, pinned []autochain.PinnedBinding) {

@@ -44,6 +44,8 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
       await stopBtn.click();
     }
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    // Allow IndexedDB's 250ms batch flush timer to commit final SSE rows before counting
+    await page.waitForTimeout(500);
 
     // 6. Switch to Logs tab
     await switchDashboardTab(page, 'Logs');
