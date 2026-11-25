@@ -136,3 +136,147 @@ func TestParseHAR_Merging(t *testing.T) {
 	assert.Contains(t, ep.Schema.Properties, "username")
 	assert.Contains(t, ep.Schema.Properties, "age")
 }
+
+func TestParseHAR_FormURLEncodedFromText(t *testing.T) {
+	rawHAR := []byte(`{
+		"log": {
+			"entries": [
+				{
+					"request": {
+						"method": "POST",
+						"url": "https://lab.example.com/login",
+						"postData": {
+							"mimeType": "application/x-www-form-urlencoded",
+							"text": "csrf=tok123&username=wiener&password=peter&remember=true&age=30"
+						}
+					}
+				}
+			]
+		}
+	}`)
+
+	res, err := ParseHAR(rawHAR, "")
+	assert.NoError(t, err)
+	assert.Len(t, res.Endpoints, 1)
+
+	ep := res.Endpoints[0]
+	assert.Equal(t, "POST", ep.Method)
+	assert.Equal(t, "/login", ep.Path)
+	assert.Equal(t, "application/x-www-form-urlencoded", ep.ContentType)
+	assert.Contains(t, ep.Schema.Properties, "csrf")
+	assert.Contains(t, ep.Schema.Properties, "username")
+	assert.Contains(t, ep.Schema.Properties, "password")
+	assert.Equal(t, "boolean", ep.Schema.Properties["remember"].Type)
+	assert.Equal(t, "integer", ep.Schema.Properties["age"].Type)
+
+	exampleMap, ok := ep.Example.(map[string]any)
+	assert.True(t, ok)
+	assert.Equal(t, "wiener", exampleMap["username"])
+	assert.Equal(t, "peter", exampleMap["password"])
+	assert.Equal(t, "tok123", exampleMap["csrf"])
+}
+
+func TestParseHAR_FormURLEncodedFromParams(t *testing.T) {
+	rawHAR := []byte(`{
+		"log": {
+			"entries": [
+				{
+					"request": {
+						"method": "POST",
+						"url": "https://lab.example.com/login",
+						"postData": {
+							"mimeType": "application/x-www-form-urlencoded",
+							"params": [
+								{"name": "username", "value": "alice"},
+								{"name": "password", "value": "secret"}
+							]
+						}
+					}
+				}
+			]
+		}
+	}`)
+
+	res, err := ParseHAR(rawHAR, "")
+	assert.NoError(t, err)
+	assert.Len(t, res.Endpoints, 1)
+
+	ep := res.Endpoints[0]
+	assert.Equal(t, "application/x-www-form-urlencoded", ep.ContentType)
+	assert.Contains(t, ep.Schema.Properties, "username")
+	assert.Contains(t, ep.Schema.Properties, "password")
+	exampleMap, ok := ep.Example.(map[string]any)
+	assert.True(t, ok)
+	assert.Equal(t, "alice", exampleMap["username"])
+	assert.Equal(t, "secret", exampleMap["password"])
+}
+
+func TestParseHAR_MultipartFormDataParams(t *testing.T) {
+	rawHAR := []byte(`{
+		"log": {
+			"entries": [
+				{
+					"request": {
+						"method": "POST",
+						"url": "https://lab.example.com/upload",
+						"postData": {
+							"mimeType": "multipart/form-data; boundary=----WebKitFormBoundary",
+							"params": [
+								{"name": "title", "value": "avatar"}
+							]
+						}
+					}
+				}
+			]
+		}
+	}`)
+
+	res, err := ParseHAR(rawHAR, "")
+	assert.NoError(t, err)
+	assert.Len(t, res.Endpoints, 1)
+
+	ep := res.Endpoints[0]
+	assert.Equal(t, "multipart/form-data; boundary=----WebKitFormBoundary", ep.ContentType)
+	assert.Contains(t, ep.Schema.Properties, "title")
+}
+
+func TestParseHAR_FormMerging(t *testing.T) {
+	rawHAR := []byte(`{
+		"log": {
+			"entries": [
+				{
+					"request": {
+						"method": "POST",
+						"url": "https://lab.example.com/login",
+						"postData": {
+							"mimeType": "application/x-www-form-urlencoded",
+							"text": "username=wiener"
+						}
+					}
+				},
+				{
+					"request": {
+						"method": "POST",
+						"url": "https://lab.example.com/login",
+						"postData": {
+							"mimeType": "application/x-www-form-urlencoded",
+							"text": "username=carlos&otp=1234"
+						}
+					}
+				}
+			]
+		}
+	}`)
+
+	res, err := ParseHAR(rawHAR, "")
+	assert.NoError(t, err)
+	assert.Len(t, res.Endpoints, 1)
+
+	ep := res.Endpoints[0]
+	assert.Contains(t, ep.Schema.Properties, "username")
+	assert.Contains(t, ep.Schema.Properties, "otp")
+	exampleMap, ok := ep.Example.(map[string]any)
+	assert.True(t, ok)
+	assert.Equal(t, "wiener", exampleMap["username"])
+	assert.Equal(t, "1234", exampleMap["otp"])
+}

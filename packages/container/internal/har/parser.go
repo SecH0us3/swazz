@@ -98,8 +98,9 @@ func ParseHAR(raw []byte, domainFilter string) (*swagger.ParseResult, error) {
 		postData := req.Get("postData")
 		if postData.Exists() {
 			mime := postData.Get("mimeType").String()
+			mimeLower := strings.ToLower(mime)
 			text := postData.Get("text").String()
-			if strings.Contains(mime, "application/json") && text != "" {
+			if strings.Contains(mimeLower, "application/json") && text != "" {
 				ep.ContentType = mime
 				newBodySchema := InferSchemaFromJSON(text)
 
@@ -129,6 +130,50 @@ func ParseHAR(raw []byte, domainFilter string) (*swagger.ParseResult, error) {
 									existingMap[k] = v
 								}
 							}
+						}
+					}
+				}
+			} else if strings.Contains(mimeLower, "application/x-www-form-urlencoded") || strings.Contains(mimeLower, "multipart/form-data") {
+				ep.ContentType = mime
+				if ep.Schema.Type == "" {
+					ep.Schema.Type = "object"
+				}
+				if ep.Schema.Properties == nil {
+					ep.Schema.Properties = map[string]*swagger.SchemaProperty{}
+				}
+				if ep.Example == nil {
+					ep.Example = map[string]any{}
+				}
+				exampleMap, _ := ep.Example.(map[string]any)
+
+				addFormField := func(name, val string) {
+					if name == "" {
+						return
+					}
+					if _, found := ep.Schema.Properties[name]; !found {
+						inferred := inferQueryValue(val)
+						ep.Schema.Properties[name] = &inferred
+					}
+					if exampleMap != nil {
+						if _, found := exampleMap[name]; !found {
+							exampleMap[name] = val
+						}
+					}
+				}
+
+				params := postData.Get("params").Array()
+				if len(params) > 0 {
+					for _, p := range params {
+						addFormField(p.Get("name").String(), p.Get("value").String())
+					}
+				} else if text != "" {
+					if values, err := url.ParseQuery(text); err == nil {
+						for k, vals := range values {
+							val := ""
+							if len(vals) > 0 {
+								val = vals[0]
+							}
+							addFormField(k, val)
 						}
 					}
 				}

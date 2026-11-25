@@ -46,6 +46,13 @@
                     <span class="slider round"></span>
                 </label>
             </div>
+            <div class="panel-row track-site-row" id="track-site-row">
+                <div class="toggle-desc track-site-info">
+                    <h3>Current Site</h3>
+                    <p id="lbl-current-site-host">No active web page</p>
+                </div>
+                <button class="btn btn-track btn-sm" id="btn-track-site" disabled>🎯 Track this site</button>
+            </div>
             <div class="panel-row crawl-row">
                 <div class="toggle-desc">
                     <h3>Page Crawler</h3>
@@ -190,6 +197,12 @@
                     Sync active session cookies
                 </label>
             </div>
+            <div class="cookie-sync-option">
+                <label>
+                    <input type="checkbox" id="chk-replace-endpoints">
+                    Replace existing project endpoints
+                </label>
+            </div>
             <div class="footer-actions">
                 <button class="btn btn-primary" id="btn-sync-swazz" disabled>
                     🚀 Sync to Swazz Dashboard
@@ -202,6 +215,7 @@
         </footer>
     </div>
     <script src="config.js"></script>
+    <script src="scope.js"></script>
     <script src="har.js"></script>
     <script src="popup.js"></script>
 </body>

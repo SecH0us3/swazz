@@ -57,10 +57,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const lblIgnoredCountTab = document.getElementById('lbl-ignored-count-tab');
     const lblEndpointCountTab = document.getElementById('lbl-endpoint-count-tab');
     const crawlStatusMsg = document.getElementById('crawl-status-msg');
+    const lblCurrentSiteHost = document.getElementById('lbl-current-site-host');
+    const btnTrackSite = document.getElementById('btn-track-site');
 
     let isRecording = false;
     let targetDomains = [];
     let capturedRequests = {};
+    let activeTabHost = null;
     let activeToken = null;
     let activeSwazzUrl = DEFAULT_SWAZZ_URL;
     let activeProjectId = null;
@@ -84,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCloseSidepanel = document.getElementById('btn-close-sidepanel');
 
     if (isSidePanel) {
+        document.body.classList.add('sidepanel');
         if (linkOpenSidepanel) linkOpenSidepanel.classList.add('hidden');
         if (btnCloseSidepanel) {
             btnCloseSidepanel.classList.remove('hidden');
@@ -139,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'projectId',
             'projectName',
             'syncCookies',
+            'replaceEndpoints',
             'crawlState'
         ], (state) => {
             isRecording = !!state.recording;
@@ -163,10 +168,14 @@ document.addEventListener('DOMContentLoaded', () => {
             inputToken.value = activeToken || '';
             inputDomains.value = targetDomains.join(', ');
 
-            // Sync syncCookies preference
+            // Sync syncCookies & replaceEndpoints preferences
             const chkSyncCookies = document.getElementById('chk-sync-cookies');
             if (chkSyncCookies) {
                 chkSyncCookies.checked = state.syncCookies !== false; // default to true
+            }
+            const chkReplaceEndpoints = document.getElementById('chk-replace-endpoints');
+            if (chkReplaceEndpoints) {
+                chkReplaceEndpoints.checked = !!state.replaceEndpoints;
             }
 
             // Sync connection card
@@ -180,6 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Sync sync & export buttons state
             updateSyncButtonState();
+            updateTrackSiteUI();
             renderIgnoredHosts();
 
             // Load projects dropdown
@@ -255,6 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         updateScopeWarningUI();
         updateSyncButtonState();
+        updateTrackSiteUI();
         renderIgnoredHosts();
     }
 
@@ -335,6 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.local.set({ recording: isRecording });
         updateRecordingUI();
         updateScopeWarningUI();
+        updateTrackSiteUI();
     });
 
     // Update domains in storage
@@ -347,6 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cardActiveDomains.textContent = domains.length > 0 ? `Domains: ${domains.join(', ')}` : 'Scope: Empty';
         updateScopeWarningUI();
         updateSyncButtonState();
+        updateTrackSiteUI();
     });
 
     // Update Swazz URL
@@ -501,14 +514,67 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Auto-detect current active tab and suggest adding its domain
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs && tabs[0]) {
-            try {
-                const tabUrl = new URL(tabs[0].url);
-                const host = tabUrl.host;
-                
-                if (tabUrl.protocol.startsWith('http')) {
+    function isHostInScope(host, domains) {
+        if (!host || !domains || domains.length === 0) return false;
+        const scopeApi = (typeof window !== 'undefined' && window.SwazzScope) || {};
+        if (typeof scopeApi.isDomainTargeted === 'function') {
+            return scopeApi.isDomainTargeted(host, domains);
+        }
+        const cleanHost = String(host).trim().toLowerCase().split(':')[0];
+        return domains.some(t => {
+            const target = String(t).trim().toLowerCase().split(':')[0];
+            return target && (cleanHost === target || cleanHost.endsWith('.' + target));
+        });
+    }
+
+    function updateTrackSiteUI() {
+        if (!btnTrackSite || !lblCurrentSiteHost) return;
+        if (!activeTabHost) {
+            lblCurrentSiteHost.textContent = 'No active web page';
+            lblCurrentSiteHost.title = '';
+            btnTrackSite.disabled = true;
+            btnTrackSite.textContent = '🎯 Track this site';
+            btnTrackSite.classList.remove('tracking');
+            btnTrackSite.title = '';
+            return;
+        }
+
+        lblCurrentSiteHost.textContent = activeTabHost;
+        lblCurrentSiteHost.title = activeTabHost;
+        btnTrackSite.disabled = false;
+
+        const inScope = isHostInScope(activeTabHost, targetDomains);
+        if (inScope && isRecording) {
+            btnTrackSite.textContent = '✓ Tracking';
+            btnTrackSite.classList.add('tracking');
+            btnTrackSite.title = 'Click to remove this site from scope';
+        } else if (inScope && !isRecording) {
+            btnTrackSite.textContent = '▶ Start tracking';
+            btnTrackSite.classList.remove('tracking');
+            btnTrackSite.title = 'Site is in scope — click to start recording';
+        } else {
+            btnTrackSite.textContent = '🎯 Track this site';
+            btnTrackSite.classList.remove('tracking');
+            btnTrackSite.title = 'Add this site to scope and start recording';
+        }
+    }
+
+    function refreshActiveTab() {
+        if (!chrome.tabs || !chrome.tabs.query) return;
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            let host = null;
+            if (tabs && tabs[0] && tabs[0].url) {
+                try {
+                    const tabUrl = new URL(tabs[0].url);
+                    if (tabUrl.protocol.startsWith('http')) {
+                        host = tabUrl.host;
+                    }
+                } catch (e) {}
+            }
+            activeTabHost = host;
+
+            if (helperCurrentTab) {
+                if (host) {
                     helperCurrentTab.textContent = 'Suggest active tab: ';
                     const strong = document.createElement('strong');
                     strong.id = 'btn-add-host';
@@ -516,14 +582,73 @@ document.addEventListener('DOMContentLoaded', () => {
                     strong.style.textDecoration = 'underline';
                     strong.textContent = host;
                     helperCurrentTab.appendChild(strong);
-
                     strong.addEventListener('click', () => {
                         addDomainToScope(host);
                     });
+                } else {
+                    helperCurrentTab.innerHTML = 'Suggest active tab: <strong>None</strong>';
                 }
-            } catch (e) {}
-        }
-    });
+            }
+
+            updateTrackSiteUI();
+        });
+    }
+
+    if (btnTrackSite) {
+        btnTrackSite.addEventListener('click', () => {
+            if (!activeTabHost) return;
+            const inScope = isHostInScope(activeTabHost, targetDomains);
+            if (inScope && isRecording) {
+                const scopeApi = (typeof window !== 'undefined' && window.SwazzScope) || {};
+                const stripHost = scopeApi.stripPort || ((d) => String(d).trim().toLowerCase().split(':')[0]);
+                const cleanActive = stripHost(activeTabHost);
+                const exactClean = activeTabHost.trim().toLowerCase();
+                const hasExact = targetDomains.some(d => d.trim().toLowerCase() === exactClean);
+
+                targetDomains = targetDomains.filter(d => {
+                    const dl = d.trim().toLowerCase();
+                    if (hasExact) return dl !== exactClean;
+                    const dt = stripHost(d);
+                    return !(dt && (cleanActive === dt || cleanActive.endsWith('.' + dt)));
+                });
+
+                inputDomains.value = targetDomains.join(', ');
+                cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
+                chrome.storage.local.set({ targetDomains });
+                updateScopeWarningUI();
+                updateSyncButtonState();
+                updateTrackSiteUI();
+            } else {
+                if (!inScope) {
+                    addDomainToScope(activeTabHost);
+                }
+                if (!isRecording) {
+                    isRecording = true;
+                    toggleRecord.checked = true;
+                    chrome.storage.local.set({ recording: true });
+                    updateRecordingUI();
+                    updateScopeWarningUI();
+                }
+                updateTrackSiteUI();
+            }
+        });
+    }
+
+    if (chrome.tabs && chrome.tabs.onActivated) {
+        chrome.tabs.onActivated.addListener(() => refreshActiveTab());
+    }
+    if (chrome.tabs && chrome.tabs.onUpdated) {
+        chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+            if (tab && tab.active && (changeInfo.url || changeInfo.status === 'complete')) {
+                refreshActiveTab();
+            }
+        });
+    }
+    if (chrome.windows && chrome.windows.onFocusChanged) {
+        chrome.windows.onFocusChanged.addListener(() => refreshActiveTab());
+    }
+
+    refreshActiveTab();
 
     // Clear recorded endpoints
     btnClearEndpoints.addEventListener('click', () => {
@@ -949,54 +1074,61 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!configRes.ok) throw new Error("Failed to retrieve project configuration.");
-            const currentConfig = await configRes.json();
+            const configResponse = await configRes.json();
+            // GET /api/projects/:id/config returns { config: {...}, cron_schedule, last_run_at }
+            const currentConfig = (configResponse && configResponse.config && typeof configResponse.config === 'object')
+                ? { ...configResponse.config }
+                : {};
 
-            // 4. Merge new endpoints into existing config
-            const existingEndpoints = currentConfig.endpoints || [];
-            const mergedEndpoints = [...existingEndpoints];
+            // 4. Merge or replace endpoints in config
+            const chkReplaceEndpoints = document.getElementById('chk-replace-endpoints');
+            const replaceEndpoints = !!(chkReplaceEndpoints && chkReplaceEndpoints.checked);
+            if (replaceEndpoints) {
+                currentConfig.endpoints = parsedEndpoints;
+            } else {
+                const existingEndpoints = Array.isArray(currentConfig.endpoints) ? currentConfig.endpoints : [];
+                const mergedEndpoints = [...existingEndpoints];
 
-            parsedEndpoints.forEach(newEp => {
-                const matchIndex = mergedEndpoints.findIndex(existingEp => 
-                    existingEp.method.toUpperCase() === newEp.method.toUpperCase() && 
-                    existingEp.path === newEp.path
-                );
+                parsedEndpoints.forEach(newEp => {
+                    const matchIndex = mergedEndpoints.findIndex(existingEp => 
+                        existingEp.method.toUpperCase() === newEp.method.toUpperCase() && 
+                        existingEp.path === newEp.path
+                    );
 
-                if (matchIndex >= 0) {
-                    mergedEndpoints[matchIndex] = mergeEndpointDefs(mergedEndpoints[matchIndex], newEp);
-                } else {
-                    mergedEndpoints.push(newEp);
-                }
-            });
+                    if (matchIndex >= 0) {
+                        mergedEndpoints[matchIndex] = mergeEndpointDefs(mergedEndpoints[matchIndex], newEp);
+                    } else {
+                        mergedEndpoints.push(newEp);
+                    }
+                });
 
-            currentConfig.endpoints = mergedEndpoints;
+                currentConfig.endpoints = mergedEndpoints;
+            }
 
             let capturedBaseUrl = parseData.basePath || null;
             if (!capturedBaseUrl) {
                 try {
-                    const stored = await new Promise(r => chrome.storage.local.get(['targetDomains'], r));
-                    const domains = stored.targetDomains || [];
-                    if (domains.length > 0) {
-                        // Take the scheme from traffic we actually saw; assuming
-                        // https made the runner fail the TLS handshake against a
-                        // plain-http local target.
-                        const sample = Object.values(capturedRequests)[0];
-                        let scheme = 'https';
+                    const firstHttpReq = Object.values(selectedMap).find(r => {
                         try {
-                            if (sample && sample.exampleUrl) {
-                                scheme = new URL(sample.exampleUrl).protocol.replace(':', '');
-                            } else if (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(domains[0])) {
-                                scheme = 'http';
-                            }
-                        } catch {}
-                        capturedBaseUrl = `${scheme}://${domains[0]}`;
+                            const u = new URL(r && r.exampleUrl);
+                            return u.protocol === 'http:' || u.protocol === 'https:';
+                        } catch { return false; }
+                    });
+                    if (firstHttpReq) {
+                        capturedBaseUrl = new URL(firstHttpReq.exampleUrl).origin;
+                    } else {
+                        const stored = await new Promise(r => chrome.storage.local.get(['targetDomains'], r));
+                        const domains = stored.targetDomains || [];
+                        if (domains.length > 0) {
+                            const scheme = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(domains[0]) ? 'http' : 'https';
+                            capturedBaseUrl = `${scheme}://${domains[0]}`;
+                        }
                     }
                 } catch {}
             }
 
             if (capturedBaseUrl) {
-                if (!currentConfig.base_url) {
-                    currentConfig.base_url = capturedBaseUrl;
-                }
+                currentConfig.base_url = capturedBaseUrl;
                 if (!currentConfig.swagger_url) {
                     currentConfig.swagger_url = capturedBaseUrl;
                 }
@@ -1038,6 +1170,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!saveRes.ok) throw new Error("Failed to save merged configuration.");
 
+            // Notify any open Swazz Dashboard tabs so they reload the updated config live
+            try {
+                const dashboardOrigin = new URL(activeSwazzUrl).origin;
+                if (chrome.tabs && chrome.tabs.query && chrome.tabs.sendMessage) {
+                    chrome.tabs.query({ url: `${dashboardOrigin}/*` }, (tabs) => {
+                        if (chrome.runtime && chrome.runtime.lastError) return;
+                        (tabs || []).forEach(tab => {
+                            chrome.tabs.sendMessage(
+                                tab.id,
+                                {
+                                    source: 'swazz-detector',
+                                    type: 'config_synced',
+                                    data: {
+                                        projectId: activeProjectId,
+                                        endpointCount: parsedEndpoints.length,
+                                        baseUrl: capturedBaseUrl || ''
+                                    }
+                                },
+                                { frameId: 0 },
+                                () => { void (chrome.runtime && chrome.runtime.lastError); }
+                            );
+                        });
+                    });
+                }
+            } catch (e) {}
+
             showSyncStatus(`✅ Successfully synced ${parsedEndpoints.length} endpoints!`, "success");
         } catch (err) {
             console.error("Sync failed:", err);
@@ -1063,8 +1221,19 @@ document.addEventListener('DOMContentLoaded', () => {
             mergedSchema.type = "object";
         }
 
-        return {
+        let mergedExample = oldEp.example;
+        if (newEp.example !== undefined) {
+            if (oldEp.example && typeof oldEp.example === 'object' && !Array.isArray(oldEp.example)
+                && newEp.example && typeof newEp.example === 'object' && !Array.isArray(newEp.example)) {
+                mergedExample = { ...oldEp.example, ...newEp.example };
+            } else if (oldEp.example === undefined) {
+                mergedExample = newEp.example;
+            }
+        }
+
+        const merged = {
             ...oldEp,
+            contentType: newEp.contentType || oldEp.contentType,
             schema: mergedSchema,
             queryParams: {
                 ...(oldEp.queryParams || {}),
@@ -1075,6 +1244,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 ...(newEp.headerParams || {})
             }
         };
+        if (mergedExample !== undefined) {
+            merged.example = mergedExample;
+        }
+        return merged;
     }
 
     // Storage listener for live updates
@@ -1094,6 +1267,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleRecord.checked = isRecording;
             updateRecordingUI();
             updateScopeWarningUI();
+            updateTrackSiteUI();
         }
         if (changes.targetDomains) {
             targetDomains = changes.targetDomains.newValue || [];
@@ -1101,6 +1275,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
             updateScopeWarningUI();
             updateSyncButtonState();
+            updateTrackSiteUI();
         }
         if (changes.droppedOutOfScope !== undefined) {
             droppedOutOfScope = changes.droppedOutOfScope.newValue || 0;
@@ -1144,6 +1319,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     showCrawlStatus("Please enable Traffic Recording first!", "error");
                     return;
                 }
+                if (activeTabHost && !isHostInScope(activeTabHost, targetDomains)) {
+                    showCrawlStatus("Current site is not in scope. Click 'Track this site' first.", "error");
+                    return;
+                }
 
                 showCrawlStatus("Initiating crawl on active tab...", "info");
                 btnCrawlTab.disabled = true;
@@ -1155,7 +1334,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
                     const activeTab = tabs[0];
-                    chrome.tabs.sendMessage(activeTab.id, { source: 'swazz-detector', type: 'start_crawl', tabId: activeTab.id }, (response) => {
+                    chrome.tabs.sendMessage(activeTab.id, { source: 'swazz-detector', type: 'start_crawl', tabId: activeTab.id }, { frameId: 0 }, (response) => {
                         if (chrome.runtime.lastError) {
                             showCrawlStatus("Could not communicate with tab. Make sure the page is fully loaded and refresh it.", "error");
                             btnCrawlTab.disabled = false;
@@ -1212,11 +1391,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Sync cookies checkbox listener
+    // Sync cookies & replace endpoints checkbox listeners
     const chkSyncCookies = document.getElementById('chk-sync-cookies');
     if (chkSyncCookies) {
         chkSyncCookies.addEventListener('change', () => {
             chrome.storage.local.set({ syncCookies: chkSyncCookies.checked });
+        });
+    }
+    const chkReplaceEndpoints = document.getElementById('chk-replace-endpoints');
+    if (chkReplaceEndpoints) {
+        chkReplaceEndpoints.addEventListener('change', () => {
+            chrome.storage.local.set({ replaceEndpoints: chkReplaceEndpoints.checked });
         });
     }
 

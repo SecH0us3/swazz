@@ -193,8 +193,52 @@ export default function App() {
 
     const {
         config, updateConfig, updateHeaders, updateCookies,
-        updateDictionaries, updateProfiles, importConfig, exportConfig
+        updateDictionaries, updateProfiles, importConfig, exportConfig, reloadFromServer
     } = useConfig();
+
+    const lastVisibilitySyncRef = useRef<number>(0);
+
+    useEffect(() => {
+        const handleExtensionSync = async (e: Event) => {
+            const detail = ((e as CustomEvent).detail || {}) as {
+                projectId?: string;
+                endpointCount?: number;
+                baseUrl?: string;
+            };
+            const currentProjectId = useAppStore.getState().activeProject?.id;
+            if (detail.projectId && currentProjectId && detail.projectId !== currentProjectId) {
+                return;
+            }
+            const { updated } = await reloadFromServer();
+            if (updated) {
+                showToast(
+                    detail.endpointCount
+                        ? `Synced ${detail.endpointCount} endpoints from Swazz Extension`
+                        : 'Project config synced from Swazz Extension',
+                    'success',
+                );
+            }
+        };
+
+        const handleVisibilityChange = async () => {
+            if (document.hidden) return;
+            if (useAppStore.getState().liveRunId) return;
+            const now = Date.now();
+            if (now - lastVisibilitySyncRef.current < 5000) return;
+            lastVisibilitySyncRef.current = now;
+            const { updated } = await reloadFromServer();
+            if (updated) {
+                showToast('Project config updated from server', 'info');
+            }
+        };
+
+        window.addEventListener('swazz-config-synced', handleExtensionSync);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            window.removeEventListener('swazz-config-synced', handleExtensionSync);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [reloadFromServer, showToast]);
 
     const [triagePrompt, setTriagePrompt] = useState<{
         id: string;

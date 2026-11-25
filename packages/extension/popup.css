@@ -723,11 +723,76 @@ input:checked + .slider:before {
 /* Sidepanel View Adaptation */
 body.sidepanel {
     width: 100%;
-    min-width: 320px;
+    min-width: 0;
+    min-height: 100vh;
+}
+
+body.sidepanel .popup-container {
+    width: 100%;
+    min-height: 100vh;
+}
+
+body.sidepanel .endpoints-list-container {
+    flex: 1;
+    height: auto;
+    min-height: 180px;
 }
 
 body.sidepanel #link-open-sidepanel {
     display: none;
+}
+
+/* Quick Track Current Site row */
+.track-site-row {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-default);
+    gap: 10px;
+}
+
+.track-site-info {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+}
+
+#lbl-current-site-host {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-track {
+    background: rgba(168, 85, 247, 0.18);
+    color: var(--accent-light);
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.btn-track:hover:not(:disabled) {
+    background: rgba(168, 85, 247, 0.32);
+    color: #ffffff;
+    border-color: var(--accent);
+}
+
+.btn-track:disabled {
+    background: var(--text-disabled);
+    color: var(--text-muted);
+    cursor: not-allowed;
+    border-color: var(--border-default);
+}
+
+.btn-track.tracking {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border-color: rgba(16, 185, 129, 0.35);
+}
+
+.btn-track.tracking:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.55);
 }
 
 /* Scope Warning Box (C2) */

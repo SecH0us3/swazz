@@ -461,5 +461,69 @@ describe('useConfig', () => {
             toastSpy.mockRestore();
             vi.useRealTimers();
         });
+
+        it('reloadFromServer updates base_url and endpoints without triggering a redundant POST', async () => {
+            vi.useFakeTimers();
+            let serverConfig = {
+                ...DEFAULT_CONFIG,
+                base_url: 'https://old-lab.example.com',
+                endpoints: [{ method: 'GET', path: '/old' }],
+            };
+
+            const mockFetch = vi.fn((_url: string, opts?: RequestInit) => {
+                if (!opts || !opts.method || opts.method === 'GET') {
+                    return Promise.resolve({
+                        ok: true,
+                        json: async () => ({ config: serverConfig }),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: async () => ({ status: 'saved' }) });
+            });
+            vi.stubGlobal('fetch', mockFetch);
+
+            localStorage.setItem('swazz_token', 'test-token');
+            useAppStore.setState({
+                activeProject: { id: 'p_live', name: 'Live Proj' } as any,
+                config: DEFAULT_CONFIG,
+            });
+
+            const { result } = renderHook(() => useConfig());
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+            expect(result.current.config.base_url).toBe('https://old-lab.example.com');
+
+            // Simulate extension syncing a new lab URL + POST /login to the server
+            serverConfig = {
+                ...DEFAULT_CONFIG,
+                base_url: 'https://new-lab.example.com',
+                endpoints: [{ method: 'POST', path: '/login' }],
+            };
+
+            let reloadResult: any;
+            await act(async () => {
+                reloadResult = await result.current.reloadFromServer();
+            });
+
+            expect(reloadResult.updated).toBe(true);
+            expect(result.current.config.base_url).toBe('https://new-lab.example.com');
+            expect(result.current.config.endpoints).toEqual([{ method: 'POST', path: '/login' }]);
+
+            // Second reload with identical server state returns updated: false
+            await act(async () => {
+                reloadResult = await result.current.reloadFromServer();
+            });
+            expect(reloadResult.updated).toBe(false);
+
+            // Advance past 1500ms debounce — no POST should have been sent back
+            await act(async () => {
+                vi.advanceTimersByTime(2000);
+            });
+            const postCalls = mockFetch.mock.calls.filter((c) => c[1]?.method === 'POST');
+            expect(postCalls).toHaveLength(0);
+
+            vi.useRealTimers();
+        });
     });
 });

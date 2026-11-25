@@ -325,7 +325,19 @@ chrome.storage.onChanged.addListener(() => {
 // BROWSER EXTENSION-DRIVEN CRAWLER
 // ==========================================
 
+const isTopFrame = (window === window.top);
 let lastProcessedUrl = null;
+let crawlStepRunning = false;
+
+function normalizeCrawlUrl(urlStr) {
+    try {
+        const u = new URL(urlStr, window.location.href);
+        u.hash = '';
+        return u.href;
+    } catch (e) {
+        return urlStr;
+    }
+}
 
 function isCrawlTargetInScope(urlStr, targetDomains) {
     try {
@@ -366,6 +378,9 @@ function getFormSignature(form) {
 }
 
 async function runCrawlStep() {
+    if (!isTopFrame || crawlStepRunning) return;
+    crawlStepRunning = true;
+    try {
     const state = await new Promise(r => chrome.storage.local.get(['recording', 'targetDomains', 'crawlState'], r));
     if (!state.recording || !state.crawlState || !state.crawlState.crawling) {
         document.documentElement.setAttribute('data-swazz-crawling', 'false');
@@ -383,7 +398,7 @@ async function runCrawlStep() {
 
     const crawlState = state.crawlState;
     const targetDomains = state.targetDomains || [];
-    const currentUrl = window.location.href;
+    const currentUrl = normalizeCrawlUrl(window.location.href);
 
     if (lastProcessedUrl === currentUrl) {
         return; // Prevent duplicate step execution on same URL/state
@@ -400,7 +415,7 @@ async function runCrawlStep() {
     const links = document.querySelectorAll('a[href]');
     links.forEach(a => {
         try {
-            const resolved = new URL(a.href, window.location.href).href;
+            const resolved = normalizeCrawlUrl(a.href);
             if (isCrawlTargetInScope(resolved, targetDomains)) {
                 // If not visited and not in queue, add to queue
                 if (!crawlState.visited.includes(resolved) && !crawlState.queue.includes(resolved)) {
@@ -496,7 +511,11 @@ async function runCrawlStep() {
     // 4. Update state in storage
     await new Promise(r => chrome.storage.local.set({ crawlState }, r));
 
-    // 5. Navigate to the next URL in the queue if any, otherwise finish
+    // 5. Prune already-visited URLs from the front of the queue, then navigate or finish
+    while (crawlState.queue.length > 0 && crawlState.visited.includes(crawlState.queue[0])) {
+        crawlState.queue.shift();
+    }
+
     if (crawlState.stats.linksVisited >= crawlState.limit || crawlState.queue.length === 0) {
         crawlState.crawling = false;
         document.documentElement.setAttribute('data-swazz-crawling', 'false');
@@ -514,7 +533,7 @@ async function runCrawlStep() {
         const allLinks = Array.from(document.querySelectorAll('a[href]'));
         const targetLink = allLinks.find(a => {
             try {
-                return new URL(a.href, window.location.href).href === nextUrl;
+                return normalizeCrawlUrl(a.href) === nextUrl;
             } catch (e) {
                 return false;
             }
@@ -527,24 +546,51 @@ async function runCrawlStep() {
             window.location.href = nextUrl;
         }
 
-        // Wait to see if page reloads. If not (SPA router transition), trigger next step
+        // Wait to see if page reloads. If not (SPA router transition or no-op link),
+        // force navigation or advance the queue so the crawler never stalls.
         setTimeout(() => {
             chrome.storage.local.get(['crawlState'], (res) => {
-                if (res.crawlState && res.crawlState.crawling) {
+                if (!res.crawlState || !res.crawlState.crawling) return;
+                if (normalizeCrawlUrl(window.location.href) === currentUrl) {
+                    const cs = res.crawlState;
+                    if (!cs.visited.includes(nextUrl)) {
+                        cs.visited.push(nextUrl);
+                    }
+                    chrome.storage.local.set({ crawlState: cs }, () => {
+                        window.location.href = nextUrl;
+                        setTimeout(() => {
+                            lastProcessedUrl = null;
+                            runCrawlStep();
+                        }, 1000);
+                    });
+                } else {
                     runCrawlStep();
                 }
             });
         }, 1500);
     }, 500);
+    } finally {
+        crawlStepRunning = false;
+    }
 }
 
-// Listen for crawl commands from background/popup
+// Listen for crawl and dashboard sync commands from background/popup (top frame only)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (!message || message.source !== 'swazz-detector') return;
+    if (!isTopFrame || !message || message.source !== 'swazz-detector') return;
+
+    if (message.type === 'config_synced') {
+        if (typeof isAuthOriginAllowed !== 'function' || isAuthOriginAllowed(window.location.href)) {
+            window.dispatchEvent(new CustomEvent('swazz-config-synced', { detail: message.data || {} }));
+        }
+        if (sendResponse) sendResponse({ ok: true });
+        return;
+    }
 
     if (message.type === 'start_crawl') {
-        const startUrl = window.location.href;
         lastProcessedUrl = null;
+        crawlStepRunning = false;
+        document.querySelectorAll('form[data-swazz-crawled]').forEach(f => delete f.dataset.swazzCrawled);
+        document.querySelectorAll('[data-swazz-clicked]').forEach(el => delete el.dataset.swazzClicked);
         chrome.storage.local.get(['recording', 'targetDomains'], (state) => {
             if (!state.recording) {
                 sendResponse({ error: 'Please start recording traffic first!' });
@@ -554,7 +600,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 crawling: true,
                 tabId: message.tabId,
                 visited: [],
-                queue: [startUrl],
+                queue: [],
                 submittedForms: [],
                 stats: { linksVisited: 0, formsSubmitted: 0 },
                 limit: 50,
@@ -570,20 +616,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// Resume crawling automatically on page load
-chrome.storage.local.get(['crawlState'], (state) => {
-    if (state.crawlState && state.crawlState.crawling) {
-        chrome.runtime.sendMessage({ source: 'swazz-detector', type: 'get_my_tab_id' }, (response) => {
-            const myTabId = response ? response.tabId : null;
-            if (myTabId && state.crawlState.tabId === myTabId) {
-                document.documentElement.setAttribute('data-swazz-crawling', 'true');
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', () => setTimeout(runCrawlStep, 800));
-                } else {
-                    setTimeout(runCrawlStep, 800);
+// Resume crawling automatically on page load (top frame only)
+if (isTopFrame) {
+    chrome.storage.local.get(['crawlState'], (state) => {
+        if (state.crawlState && state.crawlState.crawling) {
+            chrome.runtime.sendMessage({ source: 'swazz-detector', type: 'get_my_tab_id' }, (response) => {
+                const myTabId = response ? response.tabId : null;
+                if (myTabId && state.crawlState.tabId === myTabId) {
+                    document.documentElement.setAttribute('data-swazz-crawling', 'true');
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', () => setTimeout(runCrawlStep, 800));
+                    } else {
+                        setTimeout(runCrawlStep, 800);
+                    }
                 }
-            }
-        });
-    }
-});
+            });
+        }
+    });
+}
 
