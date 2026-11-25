@@ -175,9 +175,10 @@ type Runner struct {
 	lastProbeTime   time.Time
 
 	// Per-run baselines, results, and concurrency control.
-	sizeBaselines *sync.Map
-	timeBaselines *sync.Map
-	resultsMu     sync.Mutex
+	sizeBaselines  *sync.Map
+	timeBaselines  *sync.Map
+	requiredParams *RequiredParamTracker
+	resultsMu      sync.Mutex
 	allResults    []*swagger.FuzzResult // see retainResult
 	retained      retainedResults
 	limiter       *ConcurrencyLimiter
@@ -268,6 +269,7 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		sstiStore:      sstistore.NewStore(),
 		sizeBaselines:  &sync.Map{},
 		timeBaselines:  &sync.Map{},
+		requiredParams: newRequiredParamTracker(),
 		state:          make(map[string]string),
 		regexCache:     make(map[string]*regexp.Regexp),
 		mcpRateLimiter: mcp.NewRateLimiter(100, 50),

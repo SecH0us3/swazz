@@ -120,6 +120,7 @@ func (r *Runner) fuzzEndpoint(
 				p, profile, qp, gh,
 				endpoint.ContentType, ot, pn,
 			)
+			r.observeRequiredParams(endpoint, p, qp, result.Status, result.ResponseBody)
 
 			if len(result.AnalyzerFindings) > 0 {
 				for fi := range result.AnalyzerFindings {
@@ -440,6 +441,11 @@ func (r *Runner) buildFuzzIterationPinned(
 		if pinIter {
 			r.overlayBindings(epIdx, &attempt, sac)
 		}
+		pinProb := 0.0
+		if !isSecHeaderIter && !enableDedup {
+			pinProb = defaultRequiredPinProbability
+		}
+		r.enforceRequiredParams(endpoint, &attempt, safeGen, pinProb)
 
 		if !enableDedup {
 			if !payloadFits(attempt, maxPayloadSize) {
