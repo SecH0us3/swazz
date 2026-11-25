@@ -8,9 +8,12 @@ package runner
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
+	"swazz-engine/internal/autochain"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
 )
@@ -108,6 +111,7 @@ func clonePayload(p generatedPayload) generatedPayload {
 			out.pathParams[k] = v
 		}
 	}
+	out.pinned = slices.Clone(p.pinned)
 	return out
 }
 
@@ -214,6 +218,12 @@ func buildMutatedPayload(
 		mutated.pathParams[field.Path[0]] = capPathParam(fuzzedVal)
 	}
 
+	if len(mutated.pinned) > 0 {
+		mutated.pinned = slices.DeleteFunc(mutated.pinned, func(pb autochain.PinnedBinding) bool {
+			return string(pb.Location) == field.Location &&
+				(slices.Equal(pb.ParamPath, field.Path) || (field.Location == "body" && len(field.Path) == 0))
+		})
+	}
 	mutated.oobTokens = gen.TakeOOBTokens()
 	return mutated
 }
@@ -230,7 +240,7 @@ func (r *Runner) runActiveParameterFuzzing(
 	fields []targetField,
 	iterToSkip int,
 ) {
-	endpoints := r.config.Endpoints
+	endpoints := r.activeEndpoints()
 	baseIter := calcEffectiveIterations(profile, r.config.Settings, &endpoint)
 	enableDedup := profile == swagger.ProfileRandom
 	maxPayload := r.config.Settings.PayloadSizeCap()
@@ -238,6 +248,7 @@ func (r *Runner) runActiveParameterFuzzing(
 
 	baseline := buildSafePayload(endpoint, safeGen)
 	totalPlanned := len(fields) * baseIter
+	isDelete := strings.EqualFold(endpoint.Method, "DELETE")
 
 	var wg sync.WaitGroup
 	seenHashes := make(map[uint32]bool)
@@ -256,6 +267,14 @@ func (r *Runner) runActiveParameterFuzzing(
 			isSecHeaderIter := isSecurityHeaderIteration(gen, profile, i)
 
 			built := buildMutatedPayload(baseline, field, selectGen(gen, safeGen, isSecHeaderIter))
+			skipLoc, skipPath := field.Location, field.Path
+			if isSecHeaderIter {
+				skipLoc, skipPath = "", nil
+			}
+			if !isDelete {
+				sac := r.prepareEndpointPoolFiltered(ctx, epIdx, skipLoc, skipPath)
+				r.overlayBindingsFiltered(epIdx, &built, sac, skipLoc, skipPath)
+			}
 
 			// A skipped payload still takes its iteration index, so a resume's iterToSkip
 			// (a count of walked iterations) lines up with what was sent.
@@ -275,6 +294,16 @@ func (r *Runner) runActiveParameterFuzzing(
 				seenHashes[payloadHash] = true
 			}
 
+			if isDelete {
+				sac := r.prepareEndpointPoolFiltered(ctx, epIdx, skipLoc, skipPath)
+				r.overlayBindingsFiltered(epIdx, &built, sac, skipLoc, skipPath)
+				if !payloadFits(built, maxPayload) {
+					r.progress.totalPlanned.Add(-1)
+					globalIterIdx++
+					continue
+				}
+			}
+
 			if isSecHeaderIter {
 				mergeSecurityHeaders(&built, gen)
 			}
@@ -289,18 +318,18 @@ func (r *Runner) runActiveParameterFuzzing(
 			}
 			wg.Add(1)
 
-			it, p, qp, gh, pp, ot := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens
+			it, p, qp, gh, pp, ot, pn := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens, built.pinned
 			r.goWorker(func() {
 				defer r.limiter.Release()
 				defer wg.Done()
 
 				resolvedPath := fillPathParamsFromMap(endpoint.Path, pp)
-				result := r.executeGeneratedRequest(
+				result := r.executeGeneratedRequestPinned(
 					ctx,
 					r.config.BaseURL, resolvedPath, endpoint.Path, endpoint.Method,
 					r.config.GlobalHeaders, r.config.Cookies,
 					p, profile, qp, gh,
-					endpoint.ContentType, ot,
+					endpoint.ContentType, ot, pn,
 				)
 
 				if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {

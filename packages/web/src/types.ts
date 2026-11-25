@@ -100,6 +100,7 @@ export interface SwazzSettings {
     randomize_user_agent?: boolean;
     enable_adaptive_rate_limit?: boolean;
     enable_semantic_mutation?: boolean;
+    enable_auto_chaining?: boolean;
     enable_mcp_method_fuzzing?: boolean;
     enable_differential_analysis?: boolean;
     enable_security_headers_analysis?: boolean;
@@ -165,6 +166,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     randomize_user_agent: false,
     enable_adaptive_rate_limit: false,
     enable_semantic_mutation: true,
+    enable_auto_chaining: true,
     enable_mcp_method_fuzzing: true,
     enable_differential_analysis: false,
     enable_security_headers_analysis: false,

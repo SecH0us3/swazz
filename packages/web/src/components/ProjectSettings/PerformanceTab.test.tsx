@@ -107,4 +107,44 @@ describe('PerformanceTab horizontal sub-tabs navigation', () => {
             proxy_list: ['http://proxy1']
         }));
     });
+
+    it('renders and toggles Automatic Request Chaining (DAG) under Fuzzing & Intensity', () => {
+        const { rerender } = render(<PerformanceTab />);
+        fireEvent.click(screen.getByRole('tab', { name: /Fuzzing & Intensity/i }));
+
+        const toggle = screen.getByLabelText(/Automatic Request Chaining \(DAG\)/i) as HTMLInputElement;
+        expect(toggle.checked).toBe(true);
+
+        fireEvent.click(toggle);
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ enable_auto_chaining: false });
+
+        (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+            config: {
+                settings: {
+                    concurrency: 5,
+                    timeout_ms: 2000,
+                    delay_between_requests_ms: 100,
+                    max_scan_duration_min: 30,
+                    iterations_per_profile: 10,
+                    active_parameter_fuzzing: false,
+                    enable_auto_chaining: false,
+                    rate_limit_check: true,
+                    rate_limit_burst_size: 50,
+                    proxy_list: [],
+                    randomize_user_agent: false,
+                    enable_adaptive_rate_limit: false,
+                    har_domain_filter: 'api.example.com',
+                    enable_semantic_mutation: true,
+                    use_llm_prepass: true,
+                    ai_gateway_url: 'https://gateway.example.com',
+                    cf_aig_token: 'secret-token'
+                }
+            },
+            updateSettings: mockUpdateSettings
+        });
+
+        rerender(<PerformanceTab />);
+        const uncheckedToggle = screen.getByLabelText(/Automatic Request Chaining \(DAG\)/i) as HTMLInputElement;
+        expect(uncheckedToggle.checked).toBe(false);
+    });
 });

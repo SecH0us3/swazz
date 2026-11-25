@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +32,7 @@ func (r *Runner) fuzzEndpoint(
 	safeGen *generator.Generator,
 	iterToSkip int,
 ) {
-	endpoints := r.config.Endpoints
+	endpoints := r.activeEndpoints()
 	epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
 
 	r.progress.currentEndpoint.Store(epKey)
@@ -54,6 +55,9 @@ func (r *Runner) fuzzEndpoint(
 	seenHashes := make(map[uint32]bool)
 	delay := time.Duration(r.config.Settings.DelayBetweenRequestMs) * time.Millisecond
 
+	isDelete := strings.EqualFold(endpoint.Method, "DELETE")
+	deferDeletePin := isDelete && hasFields(&endpoint)
+
 	for i := range effectiveIter {
 		if i < iterToSkip {
 			continue
@@ -63,8 +67,13 @@ func (r *Runner) fuzzEndpoint(
 		}
 
 		isSecHeaderIter := isSecurityHeaderIteration(gen, profile, i)
-		built, payloadHash, isDuplicate := r.buildFuzzIteration(
-			endpoint, gen, safeGen, isSecHeaderIter, maxPayload, enableDedup, seenHashes,
+		pinIter := shouldPinBulkIteration(i, isSecHeaderIter)
+		var sac map[string]sacrificialVal
+		if pinIter && !deferDeletePin {
+			sac = r.prepareEndpointPool(ctx, epIdx)
+		}
+		built, payloadHash, isDuplicate := r.buildFuzzIterationPinned(
+			epIdx, pinIter && !deferDeletePin, sac, endpoint, gen, safeGen, isSecHeaderIter, maxPayload, enableDedup, seenHashes,
 		)
 		if isDuplicate {
 			r.progress.totalPlanned.Add(-1)
@@ -84,23 +93,32 @@ func (r *Runner) fuzzEndpoint(
 			break
 		}
 
+		if pinIter && deferDeletePin {
+			sac = r.prepareEndpointPool(ctx, epIdx)
+			r.overlayBindings(epIdx, &built, sac)
+			if !payloadFits(built, maxPayload) {
+				r.progress.totalPlanned.Add(-1)
+				continue
+			}
+		}
+
 		if err := r.limiter.Acquire(ctx); err != nil {
 			break
 		}
 		wg.Add(1)
 
-		it, p, qp, gh, pp, ot := i, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens
+		it, p, qp, gh, pp, ot, pn := i, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens, built.pinned
 		r.goWorker(func() {
 			defer r.limiter.Release()
 			defer wg.Done()
 
 			resolvedPath := fillPathParamsFromMap(endpoint.Path, pp)
-			result := r.executeGeneratedRequest(
+			result := r.executeGeneratedRequestPinned(
 				ctx,
 				r.config.BaseURL, resolvedPath, endpoint.Path, endpoint.Method,
 				r.config.GlobalHeaders, r.config.Cookies,
 				p, profile, qp, gh,
-				endpoint.ContentType, ot,
+				endpoint.ContentType, ot, pn,
 			)
 
 			if len(result.AnalyzerFindings) > 0 {
@@ -380,13 +398,38 @@ func (r *Runner) buildFuzzIteration(
 	enableDedup bool,
 	seenHashes map[uint32]bool,
 ) (built generatedPayload, hash uint32, duplicate bool) {
+	return r.buildFuzzIterationPinned(-1, false, nil, endpoint, gen, safeGen, isSecHeaderIter, maxPayloadSize, enableDedup, seenHashes)
+}
+
+func (r *Runner) buildFuzzIterationPinned(
+	epIdx int,
+	pinIter bool,
+	sac map[string]sacrificialVal,
+	endpoint swagger.EndpointConfig,
+	gen, safeGen *generator.Generator,
+	isSecHeaderIter bool,
+	maxPayloadSize int,
+	enableDedup bool,
+	seenHashes map[uint32]bool,
+) (built generatedPayload, hash uint32, duplicate bool) {
 	const maxRetries = 10
 
 	if !hasFields(&endpoint) {
 		// No fields to generate — only headers differ per iteration.
 		built = generatedPayload{headers: buildHeaders(endpoint, selectGen(gen, safeGen, isSecHeaderIter)), oobTokens: gen.TakeOOBTokens()}
+		if pinIter {
+			r.overlayBindings(epIdx, &built, sac)
+		}
 		if enableDedup {
-			hash = payloads.HashStr("empty")
+			if len(built.pinned) > 0 {
+				var fits bool
+				hash, fits = sizedPayloadHash(built, maxPayloadSize)
+				if !fits {
+					return generatedPayload{}, 0, true
+				}
+			} else {
+				hash = payloads.HashStr("empty")
+			}
 			duplicate = seenHashes[hash]
 		}
 		return built, hash, duplicate
@@ -394,6 +437,9 @@ func (r *Runner) buildFuzzIteration(
 
 	for range maxRetries {
 		attempt := buildFuzzPayload(endpoint, gen, safeGen, isSecHeaderIter, enableDedup)
+		if pinIter {
+			r.overlayBindings(epIdx, &attempt, sac)
+		}
 
 		if !enableDedup {
 			if !payloadFits(attempt, maxPayloadSize) {

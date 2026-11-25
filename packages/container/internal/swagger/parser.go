@@ -8,6 +8,7 @@ package swagger
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -76,10 +77,17 @@ func ParseSpec(raw json.RawMessage, opts ...ParserOption) (*ParseResult, error) 
 		return nil, fmt.Errorf("invalid spec: \"paths\" is not an object: %w", err)
 	}
 
+	sortedPaths := make([]string, 0, len(paths))
+	for p := range paths {
+		sortedPaths = append(sortedPaths, p)
+	}
+	sort.Strings(sortedPaths)
+
 	methods := []string{"get", "post", "put", "patch", "delete"}
 	var endpoints []EndpointConfig
 
-	for path, pathItemRaw := range paths {
+	for _, path := range sortedPaths {
+		pathItemRaw := paths[path]
 		var pathItem map[string]json.RawMessage
 		if err := json.Unmarshal(pathItemRaw, &pathItem); err != nil {
 			continue
@@ -134,10 +142,22 @@ func ParseSpec(raw json.RawMessage, opts ...ParserOption) (*ParseResult, error) 
 			pathParams := extractPathParams(allParams)
 			headerParams := extractHeaderParams(allParams, fullSpec, endpointHint, o.maxNodes, o.maxDepth)
 
+			upperMethod := strings.ToUpper(method)
+			var respSchema *SchemaProperty
+			if upperMethod == "POST" || upperMethod == "PUT" {
+				// Auto-chaining only inspects scalar fields on POST/PUT responses up to depth 3.
+				// Bounding response schema resolution prevents large GET DTO graphs from bloating
+				// serialized project configs and memory.
+				respSchema = extractResponseSchema(operation, fullSpec, endpointHint, min(o.maxNodes, 256), min(o.maxDepth, 4))
+			}
+
 			ep := EndpointConfig{
-				Path:   path,
-				Method: strings.ToUpper(method),
-				Schema: schema,
+				Path:           path,
+				Method:         upperMethod,
+				OperationID:    getStringField(operation, "operationId"),
+				Schema:         schema,
+				ResponseSchema: respSchema,
+				Links:          extractResponseLinks(operation, fullSpec),
 			}
 			if len(pathParams) > 0 {
 				ep.PathParams = pathParams
@@ -470,4 +490,122 @@ func getStringField(m map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+var preferredSuccessCodes = []string{"200", "201", "202", "2XX", "2xx"}
+
+func extractResponseSchema(operation map[string]any, spec map[string]any, endpointHint string, maxNodes, maxDepth int) *SchemaProperty {
+	responses, ok := operation["responses"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, code := range preferredSuccessCodes {
+		rawResp, exists := responses[code]
+		if !exists {
+			continue
+		}
+		respObj := derefMap(rawResp, spec)
+		if respObj == nil {
+			continue
+		}
+		// OpenAPI 3.x: responses.<code>.content.<mime>.schema
+		if content, ok := respObj["content"].(map[string]any); ok {
+			for _, mime := range []string{"application/json", "*/*"} {
+				if media, ok := content[mime].(map[string]any); ok {
+					if s, ok := media["schema"]; ok {
+						resolved := resolveSchemaWithHint(s, spec, nil, endpointHint+" resp", maxNodes, maxDepth)
+						return &resolved
+					}
+				}
+			}
+			mimes := make([]string, 0, len(content))
+			for mime := range content {
+				mimes = append(mimes, mime)
+			}
+			sort.Strings(mimes)
+			for _, mime := range mimes {
+				if media, ok := content[mime].(map[string]any); ok {
+					if s, ok := media["schema"]; ok {
+						resolved := resolveSchemaWithHint(s, spec, nil, endpointHint+" resp", maxNodes, maxDepth)
+						return &resolved
+					}
+				}
+			}
+		}
+		// Swagger 2.0: responses.<code>.schema
+		if s, ok := respObj["schema"]; ok {
+			resolved := resolveSchemaWithHint(s, spec, nil, endpointHint+" resp", maxNodes, maxDepth)
+			return &resolved
+		}
+	}
+	return nil
+}
+
+func extractResponseLinks(operation map[string]any, spec map[string]any) []ResponseLink {
+	responses, ok := operation["responses"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	var out []ResponseLink
+	for _, code := range preferredSuccessCodes {
+		respObj := derefMap(responses[code], spec)
+		if respObj == nil {
+			continue
+		}
+		linksMap, ok := respObj["links"].(map[string]any)
+		if !ok {
+			continue
+		}
+		linkNames := make([]string, 0, len(linksMap))
+		for k := range linksMap {
+			linkNames = append(linkNames, k)
+		}
+		sort.Strings(linkNames)
+		for _, linkName := range linkNames {
+			lm := derefMap(linksMap[linkName], spec)
+			if lm == nil {
+				continue
+			}
+			rl := ResponseLink{
+				Name:         linkName,
+				OperationID:  getStringField(lm, "operationId"),
+				OperationRef: getStringField(lm, "operationRef"),
+			}
+			if paramsRaw, ok := lm["parameters"].(map[string]any); ok && len(paramsRaw) > 0 {
+				rl.Parameters = make(map[string]string, len(paramsRaw))
+				for pk, pv := range paramsRaw {
+					if ps, ok := pv.(string); ok {
+						rl.Parameters[pk] = ps
+					}
+				}
+			}
+			if rl.OperationID != "" || rl.OperationRef != "" {
+				out = append(out, rl)
+			}
+		}
+	}
+	return out
+}
+
+func derefMap(v any, spec map[string]any) map[string]any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if ref, ok := m["$ref"].(string); ok && strings.HasPrefix(ref, "#/") {
+		curr := any(spec)
+		for _, seg := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
+			seg = strings.ReplaceAll(strings.ReplaceAll(seg, "~1", "/"), "~0", "~")
+			next, ok := curr.(map[string]any)
+			if !ok {
+				return nil
+			}
+			curr = next[seg]
+		}
+		if resolved, ok := curr.(map[string]any); ok {
+			return resolved
+		}
+		return nil
+	}
+	return m
 }

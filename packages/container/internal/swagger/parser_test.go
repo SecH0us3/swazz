@@ -391,3 +391,101 @@ func TestExtractParams_DirectHelpers(t *testing.T) {
 	assert.Equal(t, "", getStringField(m, "num"))
 	assert.Equal(t, "", getStringField(m, "nonexistent"))
 }
+
+func TestParseSpec_DeterministicOrderAndResponseMetadata(t *testing.T) {
+	raw := []byte(`{
+		"openapi": "3.0.3",
+		"paths": {
+			"/z-items/{itemId}": {
+				"get": {
+					"operationId": "getItem",
+					"parameters": [{"name": "itemId", "in": "path", "required": true, "schema": {"type": "integer"}}],
+					"responses": {
+						"200": {
+							"content": {
+								"application/json": {
+									"schema": {
+										"type": "object",
+										"properties": {"id": {"type": "integer"}, "slug": {"type": "string"}}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"/a-items": {
+				"post": {
+					"operationId": "createItem",
+					"requestBody": {
+						"content": {"application/json": {"schema": {"type": "object", "properties": {"title": {"type": "string"}}}}}
+					},
+					"responses": {
+						"201": {
+							"content": {
+								"application/json": {
+									"schema": {
+										"type": "object",
+										"properties": {"id": {"type": "integer"}, "upload_token": {"type": "string"}}
+									}
+								}
+							},
+							"links": {
+								"GetCreatedItem": {
+									"operationId": "getItem",
+									"parameters": {"itemId": "$response.body#/id"}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}`)
+
+	for range 20 {
+		res, err := ParseSpec(raw)
+		if err != nil {
+			t.Fatalf("ParseSpec failed: %v", err)
+		}
+		if len(res.Endpoints) != 2 {
+			t.Fatalf("expected 2 endpoints, got %d", len(res.Endpoints))
+		}
+		if res.Endpoints[0].Path != "/a-items" || res.Endpoints[1].Path != "/z-items/{itemId}" {
+			t.Fatalf("expected deterministic lexicographic path order, got %s then %s", res.Endpoints[0].Path, res.Endpoints[1].Path)
+		}
+		createEP := res.Endpoints[0]
+		if createEP.OperationID != "createItem" {
+			t.Fatalf("expected OperationID createItem, got %q", createEP.OperationID)
+		}
+		if createEP.ResponseSchema == nil || createEP.ResponseSchema.Properties["upload_token"] == nil {
+			t.Fatalf("expected 201 ResponseSchema with upload_token, got %+v", createEP.ResponseSchema)
+		}
+		if len(createEP.Links) != 1 || createEP.Links[0].OperationID != "getItem" || createEP.Links[0].Parameters["itemId"] != "$response.body#/id" {
+			t.Fatalf("expected OpenAPI link to getItem, got %+v", createEP.Links)
+		}
+		if res.Endpoints[1].ResponseSchema != nil {
+			t.Fatalf("expected GET endpoint to skip ResponseSchema extraction to avoid config bloat, got %+v", res.Endpoints[1].ResponseSchema)
+		}
+	}
+}
+
+func TestDerefMap_RefResolutionAndMissingTarget(t *testing.T) {
+	spec := map[string]any{
+		"components": map[string]any{
+			"responses": map[string]any{
+				"Created": map[string]any{"description": "created"},
+			},
+		},
+	}
+
+	resolved := derefMap(map[string]any{"$ref": "#/components/responses/Created"}, spec)
+	if resolved == nil || resolved["description"] != "created" {
+		t.Fatalf("expected resolved component response map, got %+v", resolved)
+	}
+
+	missing := derefMap(map[string]any{"$ref": "#/components/responses/DoesNotExist"}, spec)
+	if missing != nil {
+		t.Fatalf("expected nil for missing $#ref target, got %+v", missing)
+	}
+}

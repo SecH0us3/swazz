@@ -115,6 +115,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 			r.logWarn("[MCP] ⚠️ %s. The MCP part of the scan is skipped (%d MCP endpoint(s)); everything else is scanned as usual. %s", reason, skipped, mcpFixHint)
 		}
 	}
+	r.initAutoChain()
 	r.logScanTargets()
 
 	stats := newStatsPipe()

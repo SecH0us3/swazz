@@ -28,7 +28,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 
 	r.progress.currentProfile.Store("RATE-LIMIT")
 
-	for _, endpoint := range r.config.Endpoints {
+	for epIdx, endpoint := range r.activeEndpoints() {
 		if r.stopped() {
 			break
 		}
@@ -38,33 +38,16 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 		safeGen := r.newGenerator(swagger.ProfileRandom, endpoint.Method+" "+endpoint.Path)
+		built := buildSafePayload(endpoint, safeGen)
+		r.overlayBindings(epIdx, &built, nil)
+		resolvedPath := fillPathParamsFromMap(endpoint.Path, built.pathParams)
 
 		var payload any
-		var queryParams map[string]any
-		var generatedHeaders map[string]string
-
-		if hasFields(&endpoint) {
-			generated := safeGen.BuildObject(&endpoint.Schema)
-			isBody := !isNoBodyMethod(endpoint.Method)
-			if isBody {
-				payload = generated
-			} else {
-				queryParams = generated
-			}
-			if len(endpoint.HeaderParams) > 0 {
-				generatedHeaders = make(map[string]string)
-				headerSchema := &swagger.SchemaProperty{
-					Type:       "object",
-					Properties: endpoint.HeaderParams,
-				}
-				headerObj := safeGen.BuildObject(headerSchema)
-				for k, v := range headerObj {
-					generatedHeaders[k] = fmt.Sprintf("%v", v)
-				}
-			}
+		if built.body != nil {
+			payload = built.body
 		}
-
-		resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
+		queryParams := built.queryParams
+		generatedHeaders := built.headers
 
 		// Merge headers: generatedHeaders < global headers
 		mergedHeaders := make(map[string]string)

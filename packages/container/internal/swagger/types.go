@@ -141,11 +141,22 @@ func (s *SchemaProperty) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ResponseLink captures an OpenAPI 3.x response link definition.
+type ResponseLink struct {
+	Name         string            `json:"name,omitempty"`
+	OperationID  string            `json:"operationId,omitempty"`
+	OperationRef string            `json:"operationRef,omitempty"`
+	Parameters   map[string]string `json:"parameters,omitempty"`
+}
+
 // EndpointConfig describes a single API endpoint extracted from the spec.
 type EndpointConfig struct {
 	Path             string                     `json:"path"`
 	Method           string                     `json:"method"`
+	OperationID      string                     `json:"operationId,omitempty"`
 	Schema           SchemaProperty             `json:"schema"`
+	ResponseSchema   *SchemaProperty            `json:"responseSchema,omitempty"`
+	Links            []ResponseLink             `json:"links,omitempty"`
 	PathParams       map[string]*SchemaProperty `json:"pathParams,omitempty"`
 	QueryParams      map[string]*SchemaProperty `json:"queryParams,omitempty"`
 	HeaderParams     map[string]*SchemaProperty `json:"headerParams,omitempty"`
@@ -315,6 +326,16 @@ type Settings struct {
 	MaxTriagePerScan              int                         `json:"max_triage_per_scan,omitempty"`
 	EnableDifferentialAnalysis    *bool                       `json:"enable_differential_analysis,omitempty"`
 	EnableSecurityHeadersAnalysis *bool                       `json:"enable_security_headers_analysis,omitempty"`
+	EnableAutoChaining            *bool                       `json:"enable_auto_chaining,omitempty"`
+}
+
+// AutoChainingEnabled returns true if automatic producer->consumer DAG chaining is enabled.
+// Defaults to true when nil to match the frontend default.
+func (s Settings) AutoChainingEnabled() bool {
+	if s.EnableAutoChaining == nil {
+		return true
+	}
+	return *s.EnableAutoChaining
 }
 
 // SecurityHeadersAnalysisEnabled returns true if security headers and CSP analysis is enabled.

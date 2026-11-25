@@ -65,3 +65,66 @@ func BenchmarkBuildFuzzIteration_Random(b *testing.B) {
 		r.buildFuzzIteration(ep, gen, safeGen, false, maxCap, true, seenHashes)
 	}
 }
+
+func BenchmarkBuildFuzzIterationPinned_AutoChainOnVsOff(b *testing.B) {
+	ep := swagger.EndpointConfig{
+		Path:       "/orders/{orderId}",
+		Method:     "PATCH",
+		PathParams: map[string]*swagger.SchemaProperty{"orderId": {Type: "string"}},
+		Schema: swagger.SchemaProperty{
+			Type: "object",
+			Properties: map[string]*swagger.SchemaProperty{
+				"note": {Type: "string"},
+			},
+		},
+	}
+	postEP := swagger.EndpointConfig{
+		Path:   "/orders",
+		Method: "POST",
+		Schema: swagger.SchemaProperty{
+			Type:       "object",
+			Properties: map[string]*swagger.SchemaProperty{"item": {Type: "string"}},
+		},
+	}
+
+	for _, enabled := range []bool{false, true} {
+		name := "off"
+		if enabled {
+			name = "on"
+		}
+		b.Run(name, func(b *testing.B) {
+			settings := swagger.DefaultSettings()
+			flagVal := enabled
+			settings.EnableAutoChaining = &flagVal
+			cfg := &swagger.Config{
+				BaseURL:   "https://api.example.com",
+				Settings:  settings,
+				Endpoints: []swagger.EndpointConfig{postEP, ep},
+			}
+			r := New(cfg, nil)
+			b.Cleanup(r.Close)
+			r.initAutoChain()
+			st := r.chain.Load()
+			if st != nil && st.pool != nil {
+				st.pool.Put("res:orders:id", "ord-42", "ord-42")
+			}
+			epIdx := 0
+			if st != nil && st.index != nil {
+				epIdx = st.index["PATCH /orders/{orderId}"]
+			} else {
+				epIdx = 1
+			}
+			targetEP := st.plan.Ordered[epIdx]
+			gen := generator.New(nil, swagger.ProfileMalicious, settings)
+			safeGen := generator.New(nil, swagger.ProfileRandom, settings)
+			seenHashes := make(map[uint32]bool)
+			maxCap := settings.PayloadSizeCap()
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				r.buildFuzzIterationPinned(epIdx, enabled, nil, targetEP, gen, safeGen, false, maxCap, false, seenHashes)
+			}
+		})
+	}
+}

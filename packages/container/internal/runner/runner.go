@@ -166,6 +166,8 @@ type Runner struct {
 	regexCache    map[string]*regexp.Regexp
 	regexCacheMu  sync.RWMutex
 
+	chain atomic.Pointer[autoChainState]
+
 	// Auth & CSRF — protected by their own fine-grained mutexes.
 	reauthMu        sync.Mutex
 	csrfMu          sync.RWMutex
@@ -363,8 +365,9 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.calculateTotalPlanned(profiles)
 	r.logStartupSummary(profiles)
 
+	endpoints := r.activeEndpoints()
 	r.logDebug("Start run: len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t",
-		len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
+		len(endpoints), profiles, r.sizeBaselines == nil)
 
 	r.limiter.SetTarget(r.config.Settings.Concurrency)
 
@@ -383,7 +386,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			}
 		}
 		endpointExists := false
-		for _, ep := range r.config.Endpoints {
+		for _, ep := range endpoints {
 			epKey := ep.Method + " " + ep.Path
 			if epKey == r.config.Settings.Checkpoint.Endpoint {
 				endpointExists = true
@@ -406,12 +409,12 @@ func (r *Runner) Start(ctx context.Context) error {
 	if resuming {
 		for _, profile := range profiles {
 			if string(profile) != resumeProfile {
-				for _, endpoint := range r.config.Endpoints {
+				for _, endpoint := range endpoints {
 					skippedRequests += int64(endpointRequests(profile, r.config.Settings, &endpoint))
 				}
 				continue
 			}
-			for _, endpoint := range r.config.Endpoints {
+			for _, endpoint := range endpoints {
 				epKey := endpoint.Method + " " + endpoint.Path
 				if epKey != resumeEndpoint {
 					skippedRequests += int64(endpointRequests(profile, r.config.Settings, &endpoint))
@@ -429,7 +432,8 @@ func (r *Runner) Start(ctx context.Context) error {
 		r.baselinePhase(runCtx)
 	} else {
 		// #nosec G115 -- Number of endpoints will never exceed int32 max
-		r.progress.completedEndpoints.Store(int32(len(r.config.Endpoints)))
+		r.progress.completedEndpoints.Store(int32(len(endpoints)))
+		r.seedResumeProducers(runCtx, profiles, resumeProfile, resumeEndpoint)
 	}
 
 	for profileIdx, profile := range profiles {
@@ -439,13 +443,13 @@ func (r *Runner) Start(ctx context.Context) error {
 
 		if resuming && string(profile) != resumeProfile {
 			// #nosec G115 -- Number of endpoints will never exceed int32 max
-			r.progress.completedEndpoints.Add(int32(len(r.config.Endpoints)))
+			r.progress.completedEndpoints.Add(int32(len(endpoints)))
 			continue
 		}
 
 		r.progress.currentProfile.Store(string(profile))
 
-		for epIdx, endpoint := range r.config.Endpoints {
+		for epIdx, endpoint := range endpoints {
 			if r.stopped() || runCtx.Err() != nil {
 				break
 			}
@@ -505,77 +509,94 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 	r.progress.currentProfile.Store("BASELINE")
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
-	var wg sync.WaitGroup
+	endpoints := r.activeEndpoints()
+	var waves [][]int
+	if st := r.chain.Load(); st != nil && st.plan != nil && len(st.plan.Waves) > 0 {
+		waves = st.plan.Waves
+	} else if len(endpoints) > 0 {
+		w := make([]int, len(endpoints))
+		for i := range endpoints {
+			w[i] = i
+		}
+		waves = [][]int{w}
+	}
 
-	for _, endpoint := range r.config.Endpoints {
-		r.waitIfPaused(ctx)
+	for _, wave := range waves {
 		if r.stopped() || ctx.Err() != nil {
 			break
 		}
-
-		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
-		if _, alreadyDone := r.sizeBaselines.Load(key); alreadyDone {
-			r.progress.completedEndpoints.Add(1)
-			continue
-		}
-
-		if err := r.limiter.Acquire(ctx); err != nil {
-			break
-		}
-		wg.Add(1)
-
-		ep := endpoint
-		r.goWorker(func() {
-			defer r.limiter.Release()
-			defer wg.Done()
-
-			epKey := ep.Method + " " + ep.Path
-			r.progress.currentEndpoint.Store(epKey)
-			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-
-			safeGen := r.newGenerator(swagger.ProfileRandom, epKey)
-
-			built := buildSafePayload(ep, safeGen)
-			resolvedPath := fillPathParamsFromMap(ep.Path, built.pathParams)
-
-			result := r.executeGeneratedRequest(
-				ctx,
-				r.config.BaseURL, resolvedPath, ep.Path, ep.Method,
-				r.config.GlobalHeaders, r.config.Cookies,
-				built.body,
-				swagger.FuzzingProfile("BASELINE"),
-				built.queryParams,
-				built.headers,
-				ep.ContentType, built.oobTokens,
-			)
-
-			r.logDebug("Baseline run: method=%s path=%s status=%d size=%d err=%v",
-				ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
-
-			if result.Status >= 200 && result.Status < 300 {
-				r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
-				r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
+		var wg sync.WaitGroup
+		for _, epIdx := range wave {
+			r.waitIfPaused(ctx)
+			if r.stopped() || ctx.Err() != nil {
+				break
+			}
+			endpoint := endpoints[epIdx]
+			key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
+			if _, alreadyDone := r.sizeBaselines.Load(key); alreadyDone {
+				r.progress.completedEndpoints.Add(1)
+				continue
 			}
 
-			// A result of a run that has ended (a worker finalise gave up waiting for) is dropped
-			// whole: not counted, streamed or kept.
-			if !r.sendStats(statsMsg{
-				result:           result,
-				currentIteration: 1,
-				totalIterations:  1,
-				endpoint:         epKey,
-				profile:          "BASELINE",
-			}) {
-				return
-			}
-			r.Broadcast(Event{Type: EventResult, Data: result})
+			sac := r.prepareEndpointPool(ctx, epIdx)
 
-			r.progress.completedEndpoints.Add(1)
-			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-		})
+			if err := r.limiter.Acquire(ctx); err != nil {
+				break
+			}
+			wg.Add(1)
+
+			idx, ep, sacVals := epIdx, endpoint, sac
+			r.goWorker(func() {
+				defer r.limiter.Release()
+				defer wg.Done()
+
+				epKey := ep.Method + " " + ep.Path
+				r.progress.currentEndpoint.Store(epKey)
+				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
+				safeGen := r.newGenerator(swagger.ProfileRandom, epKey)
+				built := buildSafePayload(ep, safeGen)
+				r.overlayBindings(idx, &built, sacVals)
+				resolvedPath := fillPathParamsFromMap(ep.Path, built.pathParams)
+
+				result := r.executeGeneratedRequestPinned(
+					ctx,
+					r.config.BaseURL, resolvedPath, ep.Path, ep.Method,
+					r.config.GlobalHeaders, r.config.Cookies,
+					built.body,
+					swagger.FuzzingProfile("BASELINE"),
+					built.queryParams,
+					built.headers,
+					ep.ContentType, built.oobTokens, built.pinned,
+				)
+
+				r.logDebug("Baseline run: method=%s path=%s status=%d size=%d err=%v",
+					ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
+
+				if result.Status >= 200 && result.Status < 300 {
+					r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
+					r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
+				}
+
+				// A result of a run that has ended (a worker finalise gave up waiting for) is dropped
+				// whole: not counted, streamed or kept.
+				if !r.sendStats(statsMsg{
+					result:           result,
+					currentIteration: 1,
+					totalIterations:  1,
+					endpoint:         epKey,
+					profile:          "BASELINE",
+				}) {
+					return
+				}
+				r.Broadcast(Event{Type: EventResult, Data: result})
+
+				r.progress.completedEndpoints.Add(1)
+				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+			})
+		}
+		wg.Wait()
 	}
-
-	wg.Wait()
 }
 
 // RunnerContext implementation for bola.Detector

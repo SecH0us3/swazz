@@ -160,9 +160,11 @@ func (r *Runner) statsAggregator(p *statsPipe) {
 		}
 		accumulateResult(&stats, msg.result)
 
-		latestIteration = iters.complete(msg.endpoint, msg.profile, msg.currentIteration, msg.totalIterations)
-		if msg.totalIterations > latestTotalIterations {
-			latestTotalIterations = msg.totalIterations
+		if msg.currentIteration > 0 {
+			latestIteration = iters.complete(msg.endpoint, msg.profile, msg.currentIteration, msg.totalIterations)
+			if msg.totalIterations > latestTotalIterations {
+				latestTotalIterations = msg.totalIterations
+			}
 		}
 		dirty = true
 	}
