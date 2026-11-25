@@ -251,6 +251,34 @@ describe('SwazzHar module', () => {
             expect(har.log.entries).toHaveLength(6);
         });
 
+        it('populates HAR 1.2 postData.params alongside postData.text for form-urlencoded requests', () => {
+            const requests = {
+                'POST:/login': {
+                    key: 'POST:/login',
+                    method: 'POST',
+                    path: '/login',
+                    exampleUrl: 'https://lab.example.com/login',
+                    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                    count: 1,
+                    lastCaptured: 1710000000000,
+                    queryKeys: [],
+                    queryVariations: [],
+                    bodyVariations: ['csrf=tok123&username=wiener&password=peter'],
+                    statuses: { '200': 1 }
+                }
+            };
+            const har = SwazzHar.buildHarPayload(requests);
+            expect(har.log.entries).toHaveLength(1);
+            const postData = har.log.entries[0].request.postData;
+            expect(postData.mimeType).toBe('application/x-www-form-urlencoded');
+            expect(postData.text).toBe('csrf=tok123&username=wiener&password=peter');
+            expect(postData.params).toEqual([
+                { name: 'csrf', value: 'tok123' },
+                { name: 'username', value: 'wiener' },
+                { name: 'password', value: 'peter' }
+            ]);
+        });
+
         it('skips malformed exampleUrl without throwing', () => {
             const requests = {
                 'GET:/invalid': {

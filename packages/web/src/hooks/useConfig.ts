@@ -16,6 +16,10 @@ import { showToast } from './useToast.js';
 
 const STORAGE_KEY = 'swazz:config';
 
+// Shared across all useConfig() hook instances so reloading from the server in
+// one place does not trigger a redundant debounced POST from another.
+const lastServerConfigJsonByKey = new Map<string, string>();
+
 const DEFAULT_CONFIG: SwazzConfig = {
     base_url: '',
     global_headers: {},
@@ -187,6 +191,16 @@ function saveConfig(config: SwazzConfig): void {
     } catch { /* ignore */ }
 }
 
+function normalizeLoadedConfig(loaded: Partial<SwazzConfig> | null): SwazzConfig {
+    if (!loaded) return { ...DEFAULT_CONFIG };
+    return {
+        ...DEFAULT_CONFIG,
+        ...loaded,
+        settings: { ...DEFAULT_SETTINGS, ...(loaded.settings || {}) },
+        security: loaded.security ? { ...DEFAULT_CONFIG.security, ...loaded.security } : DEFAULT_CONFIG.security,
+    };
+}
+
 export function useConfig() {
     const activeProject = useAppStore(state => state.activeProject);
     let token: string | null = null;
@@ -242,13 +256,11 @@ export function useConfig() {
 
             if (!active) return;
 
-            const finalConfig = loaded ? {
-                ...DEFAULT_CONFIG,
-                ...loaded,
-                settings: { ...DEFAULT_SETTINGS, ...(loaded.settings || {}) },
-                security: loaded.security ? { ...DEFAULT_CONFIG.security, ...loaded.security } : DEFAULT_CONFIG.security,
-            } : { ...DEFAULT_CONFIG };
+            const finalConfig = normalizeLoadedConfig(loaded);
 
+            if (loaded && token && activeProject) {
+                lastServerConfigJsonByKey.set(storageKey, JSON.stringify(finalConfig));
+            }
             currentKeyRef.current = storageKey;
             setConfig(finalConfig);
         };
@@ -265,11 +277,16 @@ export function useConfig() {
         if (currentKeyRef.current !== storageKey) {
             return;
         }
+        const serialized = JSON.stringify(config);
         try {
-            localStorage.setItem(storageKey, JSON.stringify(config));
+            localStorage.setItem(storageKey, serialized);
         } catch { /* ignore */ }
 
         if (token && activeProject) {
+            // Skip echo-saving when this exact snapshot was just loaded from the server.
+            if (lastServerConfigJsonByKey.get(storageKey) === serialized) {
+                return;
+            }
             const timer = setTimeout(async () => {
                 try {
                     const res = await fetch(`/api/projects/${activeProject.id}/config`, {
@@ -293,6 +310,8 @@ export function useConfig() {
                         }
                         console.warn('[swazz] Failed to sync config to server:', errMsg);
                         showToast(`Failed to sync config: ${errMsg}`, 'error');
+                    } else {
+                        lastServerConfigJsonByKey.set(storageKey, serialized);
                     }
                 } catch (err) {
                     console.warn('[swazz] Failed to sync config to server:', err);
@@ -303,6 +322,40 @@ export function useConfig() {
             return () => clearTimeout(timer);
         }
     }, [config, storageKey, token, activeProject]);
+
+    const reloadFromServer = useCallback(async (): Promise<{ updated: boolean; config: SwazzConfig | null }> => {
+        if (!token || !activeProject) {
+            return { updated: false, config: null };
+        }
+        try {
+            const res = await fetch(`/api/projects/${activeProject.id}/config`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) {
+                return { updated: false, config: null };
+            }
+            const data = await res.json();
+            if (!data || !data.config) {
+                return { updated: false, config: null };
+            }
+            const finalConfig = normalizeLoadedConfig(data.config);
+            const nextJson = JSON.stringify(finalConfig);
+            const prevJson = JSON.stringify(useAppStore.getState().config);
+            lastServerConfigJsonByKey.set(storageKey, nextJson);
+            if (nextJson === prevJson) {
+                return { updated: false, config: finalConfig };
+            }
+            try {
+                localStorage.setItem(storageKey, nextJson);
+            } catch { /* ignore */ }
+            currentKeyRef.current = storageKey;
+            setConfig(finalConfig);
+            return { updated: true, config: finalConfig };
+        } catch (err) {
+            console.warn('[swazz] Failed to reload config from server:', err);
+            return { updated: false, config: null };
+        }
+    }, [token, activeProject, storageKey, setConfig]);
 
     const updateConfig = useCallback((partial: Partial<SwazzConfig>) => {
         setConfig((prev) => {
@@ -439,5 +492,6 @@ export function useConfig() {
         updatePayloadCategories,
         importConfig,
         exportConfig,
+        reloadFromServer,
     };
 }

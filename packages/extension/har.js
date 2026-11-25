@@ -105,10 +105,25 @@
                             vQueryParams.push({ name, value: val });
                         });
 
-                        const postData = b ? {
-                            mimeType: reqMimeType,
-                            text: b
-                        } : undefined;
+                        let postData;
+                        if (b) {
+                            postData = {
+                                mimeType: reqMimeType,
+                                text: b
+                            };
+                            if (reqMimeType.toLowerCase().includes('x-www-form-urlencoded')) {
+                                const formParams = [];
+                                try {
+                                    const usp = new URLSearchParams(b);
+                                    usp.forEach((value, name) => {
+                                        formParams.push({ name, value });
+                                    });
+                                } catch (e) {}
+                                if (formParams.length > 0) {
+                                    postData.params = formParams;
+                                }
+                            }
+                        }
 
                         const contentObj = {
                             size: respBodyText ? respBodyText.length : 0,

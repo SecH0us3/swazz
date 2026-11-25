@@ -263,34 +263,9 @@
         };
     }
 
-    // 3. Intercept standard HTML Form submissions
-    window.addEventListener('submit', (e) => {
-        try {
-            const form = e.target;
-            if (!form || form.tagName.toLowerCase() !== 'form') return;
-
-            const url = form.action || window.location.href;
-            const method = (form.method || 'GET').toUpperCase();
-            
-            const formData = new FormData(form);
-            const bodyParams = {};
-            formData.forEach((value, key) => {
-                if (typeof value === 'string') {
-                    bodyParams[key] = value;
-                }
-            });
-
-            const contentType = form.enctype || 'application/x-www-form-urlencoded';
-            let body = "";
-            if (contentType === 'multipart/form-data') {
-                body = new URLSearchParams(bodyParams).toString();
-            } else {
-                body = new URLSearchParams(bodyParams).toString();
-            }
-
-            sendRequestLog(url, method, { 'Content-Type': contentType }, body);
-        } catch (err) {}
-    }, true);
+    // 3. Standard HTML Form navigations (GET/POST) are captured in background.js
+    // via chrome.webRequest so synchronous full-page form submissions are never
+    // dropped on unload and SPA forms calling preventDefault() are not duplicated.
 
     // 4. Intercept navigator.sendBeacon (B4)
     if (navigator.sendBeacon) {

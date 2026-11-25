@@ -35,6 +35,9 @@ let droppedHosts = {};
 // Map from requestId -> { key, timestamp } for response correlation (B2)
 const pendingRequests = new Map();
 const countedRequests = new Set();
+// Track redirect hops per Chrome webRequest.requestId so a POST -> 302 -> GET
+// redirect chain gets distinct correlation IDs instead of colliding.
+const wrHopMap = new Map();
 
 // inject.js mints request ids from a per-document counter that restarts at 1,
 // so the raw id collides across tabs and frames. Scope it by sender before
@@ -387,20 +390,159 @@ function processCapturedResponse(resData, sender) {
     scheduleFlush();
 }
 
-// B4: Listen for document navigation on committed
-if (typeof chrome !== 'undefined' && chrome.webNavigation && chrome.webNavigation.onCommitted) {
-    chrome.webNavigation.onCommitted.addListener((details) => {
-        // Only capture top-level frame navigation
-        if (details.frameId !== 0) return;
-        if (!details.url || !details.url.startsWith('http')) return;
+function extractWebRequestBody(requestBody) {
+    if (!requestBody) return { body: '', contentType: '' };
+    if (requestBody.formData && typeof requestBody.formData === 'object') {
+        const params = new URLSearchParams();
+        for (const [key, values] of Object.entries(requestBody.formData)) {
+            if (Array.isArray(values)) {
+                for (const v of values) {
+                    params.append(key, String(v));
+                }
+            } else if (values !== undefined && values !== null) {
+                params.append(key, String(values));
+            }
+        }
+        return {
+            body: params.toString(),
+            contentType: 'application/x-www-form-urlencoded'
+        };
+    }
+    if (Array.isArray(requestBody.raw) && requestBody.raw.length > 0) {
+        const decoder = new TextDecoder('utf-8', { fatal: false });
+        let body = '';
+        for (const chunk of requestBody.raw) {
+            if (!chunk || !chunk.bytes) continue;
+            try {
+                const view = chunk.bytes instanceof Uint8Array
+                    ? chunk.bytes
+                    : new Uint8Array(chunk.bytes);
+                body += decoder.decode(view, { stream: true });
+                if (body.length >= 10000) {
+                    body = body.slice(0, 10000);
+                    break;
+                }
+            } catch (e) {}
+        }
+        body += decoder.decode();
+        return { body: body.slice(0, 10000), contentType: '' };
+    }
+    return { body: '', contentType: '' };
+}
 
-        whenHydrated(() => processCapturedRequest({
-            url: details.url,
-            method: 'GET',
-            headers: {},
-            body: ''
-        }, null));
+function formatWebRequestHeaders(headerList, { skipCookie = false } = {}) {
+    const result = {};
+    if (!Array.isArray(headerList)) return result;
+    for (const h of headerList) {
+        if (!h || !h.name) continue;
+        const name = h.name.toLowerCase();
+        if (skipCookie && name === 'cookie') continue;
+        result[name] = h.value != null ? String(h.value) : '';
+    }
+    return result;
+}
+
+function handleWebRequestBeforeRequest(details) {
+    if (!details || !details.url || !details.url.startsWith('http')) return;
+    const method = (details.method || 'GET').toUpperCase();
+    // For sub_frame, only capture non-GET/HEAD requests (e.g. iframe form POSTs)
+    // to avoid noisy third-party iframe GETs.
+    if (details.type === 'sub_frame' && (method === 'GET' || method === 'HEAD')) return;
+
+    const hop = (wrHopMap.get(details.requestId) || 0) + 1;
+    wrHopMap.set(details.requestId, hop);
+    if (wrHopMap.size > 2000) {
+        const oldestKey = wrHopMap.keys().next().value;
+        if (oldestKey !== undefined) wrHopMap.delete(oldestKey);
+    }
+
+    const wrReqId = `wr:${details.requestId}:${hop}`;
+    const wrSender = { tab: { id: details.tabId }, frameId: details.frameId };
+    const { body, contentType } = extractWebRequestBody(details.requestBody);
+    const headers = contentType ? { 'content-type': contentType } : {};
+
+    return whenHydrated(() => processCapturedRequest({
+        url: details.url,
+        method,
+        headers,
+        body,
+        requestId: wrReqId
+    }, null, wrSender));
+}
+
+function handleWebRequestSendHeaders(details) {
+    if (!details || !details.requestId) return;
+    const hop = wrHopMap.get(details.requestId);
+    if (!hop) return;
+
+    const wrReqId = `wr:${details.requestId}:${hop}`;
+    const wrSender = { tab: { id: details.tabId }, frameId: details.frameId };
+    const allHeaders = formatWebRequestHeaders(details.requestHeaders, { skipCookie: true });
+    const filteredHeaders = {};
+    for (const [k, v] of Object.entries(allHeaders)) {
+        if (k === 'content-type' || k === 'accept' || k === 'authorization' || k.startsWith('x-')) {
+            filteredHeaders[k] = v;
+        }
+    }
+    if (Object.keys(filteredHeaders).length === 0) return;
+
+    return whenHydrated(() => {
+        const pending = pendingRequests.get(correlationId(wrSender, wrReqId));
+        if (!pending) return;
+        const existing = capturedRequests[pending.key];
+        if (!existing) return;
+        existing.headers = Object.assign({}, existing.headers, filteredHeaders);
+        scheduleFlush();
     });
+}
+
+function handleWebRequestResponse(details, isFinal) {
+    if (!details || !details.requestId) return;
+    const hop = wrHopMap.get(details.requestId);
+    if (!hop) return;
+
+    const wrReqId = `wr:${details.requestId}:${hop}`;
+    const wrSender = { tab: { id: details.tabId }, frameId: details.frameId };
+    const respHeaders = formatWebRequestHeaders(details.responseHeaders);
+
+    if (isFinal) {
+        wrHopMap.delete(details.requestId);
+    }
+
+    return whenHydrated(() => processCapturedResponse({
+        requestId: wrReqId,
+        status: details.statusCode || 0,
+        statusText: details.statusLine || '',
+        headers: respHeaders,
+        bodyText: ''
+    }, wrSender));
+}
+
+function handleWebRequestError(details) {
+    if (details && details.requestId) {
+        wrHopMap.delete(details.requestId);
+    }
+}
+
+// Capture top-level and iframe form navigations (including full-page POSTs)
+// via chrome.webRequest so synchronous form submissions are never lost on unload.
+if (typeof chrome !== 'undefined' && chrome.webRequest) {
+    const navFilter = { urls: ['<all_urls>'], types: ['main_frame', 'sub_frame'] };
+    if (chrome.webRequest.onBeforeRequest) {
+        chrome.webRequest.onBeforeRequest.addListener(handleWebRequestBeforeRequest, navFilter, ['requestBody']);
+    }
+    if (chrome.webRequest.onSendHeaders) {
+        chrome.webRequest.onSendHeaders.addListener(handleWebRequestSendHeaders, navFilter, ['requestHeaders']);
+    }
+    if (chrome.webRequest.onBeforeRedirect) {
+        chrome.webRequest.onBeforeRedirect.addListener((d) => handleWebRequestResponse(d, false), navFilter, ['responseHeaders']);
+    }
+    if (chrome.webRequest.onCompleted) {
+        chrome.webRequest.onCompleted.addListener((d) => handleWebRequestResponse(d, true), navFilter, ['responseHeaders']);
+    }
+    if (chrome.webRequest.onErrorOccurred) {
+        chrome.webRequest.onErrorOccurred.addListener(handleWebRequestError, navFilter);
+    }
 }
 
 function handleRuntimeMessage(message, sender, sendResponse) {
@@ -448,6 +590,11 @@ if (typeof module !== 'undefined' && module.exports) {
         processCapturedRequest,
         processCapturedResponse,
         handleRuntimeMessage,
+        extractWebRequestBody,
+        handleWebRequestBeforeRequest,
+        handleWebRequestSendHeaders,
+        handleWebRequestResponse,
+        handleWebRequestError,
         getCapturedRequests: () => capturedRequests,
         setCapturedRequests: (val) => { capturedRequests = val; },
         getRecording: () => recording,
@@ -469,6 +616,7 @@ if (typeof module !== 'undefined' && module.exports) {
             droppedHosts = {};
             pendingRequests.clear();
             countedRequests.clear();
+            wrHopMap.clear();
         }
     };
 }

@@ -104,6 +104,11 @@ describe('markup and stylesheet agree', () => {
         const ids = (f) => [...read(f).matchAll(/id="([\w-]+)"/g)].map(m => m[1]).sort();
         expect(ids('sidepanel.html')).toEqual(ids('popup.html'));
     });
+
+    it('marks sidepanel.html body with .sidepanel and stretches width to 100% in popup.css', () => {
+        expect(read('sidepanel.html')).toMatch(/<body\b[^>]*class="[^"]*\bsidepanel\b[^"]*"/);
+        expect(read('popup.css')).toMatch(/body\.sidepanel\s*\{[^}]*width:\s*100%/);
+    });
 });
 
 describe('config wiring', () => {
@@ -112,14 +117,17 @@ describe('config wiring', () => {
         expect(bg).toMatch(/importScripts\([^)]*['"]config\.js['"][^)]*\)/);
     });
 
-    it('loads config.js before popup.js in popup.html and sidepanel.html', () => {
+    it('loads config.js and scope.js before popup.js in popup.html and sidepanel.html', () => {
         for (const f of ['popup.html', 'sidepanel.html']) {
             const html = read(f);
             const configIdx = html.indexOf('src="config.js"');
+            const scopeIdx = html.indexOf('src="scope.js"');
             const popupIdx = html.indexOf('src="popup.js"');
             expect(configIdx, `${f} must include config.js`).toBeGreaterThan(-1);
+            expect(scopeIdx, `${f} must include scope.js`).toBeGreaterThan(-1);
             expect(popupIdx, `${f} must include popup.js`).toBeGreaterThan(-1);
             expect(configIdx, `${f} must load config.js before popup.js`).toBeLessThan(popupIdx);
+            expect(scopeIdx, `${f} must load scope.js before popup.js`).toBeLessThan(popupIdx);
         }
     });
 });

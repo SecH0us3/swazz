@@ -310,3 +310,158 @@ describe('Service worker lifecycle and request accounting', () => {
         expect(background.getDroppedOutOfScope()).toBe(1);
     });
 });
+
+describe('Full-page navigation and form POST capture via webRequest', () => {
+    beforeEach(() => {
+        background.resetState();
+        background.setRecording(true);
+        background.setTargetDomains(['0ae4009404e2b0a881342a9900f300a8.web-security-academy.net']);
+    });
+
+    it('extractWebRequestBody serializes formData, decodes raw ArrayBuffer, and handles empty bodies', () => {
+        expect(background.extractWebRequestBody(null)).toEqual({ body: '', contentType: '' });
+
+        const formRes = background.extractWebRequestBody({
+            formData: {
+                csrf: ['tok123'],
+                username: ['wiener'],
+                password: ['peter']
+            }
+        });
+        expect(formRes.contentType).toBe('application/x-www-form-urlencoded');
+        const params = new URLSearchParams(formRes.body);
+        expect(params.get('csrf')).toBe('tok123');
+        expect(params.get('username')).toBe('wiener');
+        expect(params.get('password')).toBe('peter');
+
+        const encoded = new TextEncoder().encode('{"user":"wiener"}');
+        const rawRes = background.extractWebRequestBody({
+            raw: [{ bytes: encoded.buffer }]
+        });
+        expect(rawRes.body).toBe('{"user":"wiener"}');
+        expect(rawRes.contentType).toBe('');
+    });
+
+    it('captures main_frame POST /login with formData and does not record a bogus GET /login', () => {
+        background.handleWebRequestBeforeRequest({
+            requestId: '101',
+            url: 'https://0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/login',
+            method: 'POST',
+            type: 'main_frame',
+            tabId: 5,
+            frameId: 0,
+            requestBody: {
+                formData: {
+                    csrf: ['abc'],
+                    username: ['wiener'],
+                    password: ['peter']
+                }
+            }
+        });
+        background.handleWebRequestSendHeaders({
+            requestId: '101',
+            tabId: 5,
+            frameId: 0,
+            requestHeaders: [
+                { name: 'Content-Type', value: 'application/x-www-form-urlencoded' },
+                { name: 'Cookie', value: 'session=secret' },
+                { name: 'X-Custom', value: '1' }
+            ]
+        });
+        background.handleWebRequestResponse({
+            requestId: '101',
+            tabId: 5,
+            frameId: 0,
+            statusCode: 200,
+            statusLine: 'HTTP/1.1 200 OK',
+            responseHeaders: [{ name: 'Content-Type', value: 'text/html' }]
+        }, true);
+
+        const captured = background.getCapturedRequests();
+        expect(captured['GET:/login']).toBeUndefined();
+        const postEntry = captured['POST:/login'];
+        expect(postEntry).toBeDefined();
+        expect(postEntry.method).toBe('POST');
+        expect(postEntry.headers['content-type']).toBe('application/x-www-form-urlencoded');
+        expect(postEntry.headers['x-custom']).toBe('1');
+        expect(postEntry.headers['cookie']).toBeUndefined();
+        expect(postEntry.bodyVariations).toHaveLength(1);
+        const parsedBody = new URLSearchParams(postEntry.bodyVariations[0]);
+        expect(parsedBody.get('username')).toBe('wiener');
+        expect(parsedBody.get('password')).toBe('peter');
+        expect(postEntry.statuses).toEqual({ '200': 1 });
+    });
+
+    it('tracks POST -> 302 -> GET redirect chain sharing the same Chrome requestId as separate endpoints', () => {
+        const host = 'https://0ae4009404e2b0a881342a9900f300a8.web-security-academy.net';
+
+        // Hop 1: POST /login -> 302
+        background.handleWebRequestBeforeRequest({
+            requestId: '202',
+            url: `${host}/login`,
+            method: 'POST',
+            type: 'main_frame',
+            tabId: 7,
+            frameId: 0,
+            requestBody: { formData: { username: ['wiener'], password: ['peter'] } }
+        });
+        background.handleWebRequestResponse({
+            requestId: '202',
+            tabId: 7,
+            frameId: 0,
+            statusCode: 302,
+            statusLine: 'HTTP/1.1 302 Found',
+            responseHeaders: [{ name: 'Location', value: '/my-account' }]
+        }, false);
+
+        // Hop 2: GET /my-account -> 200 (same requestId!)
+        background.handleWebRequestBeforeRequest({
+            requestId: '202',
+            url: `${host}/my-account`,
+            method: 'GET',
+            type: 'main_frame',
+            tabId: 7,
+            frameId: 0
+        });
+        background.handleWebRequestResponse({
+            requestId: '202',
+            tabId: 7,
+            frameId: 0,
+            statusCode: 200,
+            statusLine: 'HTTP/1.1 200 OK',
+            responseHeaders: [{ name: 'Content-Type', value: 'text/html' }]
+        }, true);
+
+        const captured = background.getCapturedRequests();
+        expect(captured['POST:/login']).toBeDefined();
+        expect(captured['POST:/login'].statuses).toEqual({ '302': 1 });
+        expect(captured['GET:/my-account']).toBeDefined();
+        expect(captured['GET:/my-account'].statuses).toEqual({ '200': 1 });
+    });
+
+    it('captures sub_frame POSTs while ignoring noisy sub_frame GETs', () => {
+        const host = 'https://0ae4009404e2b0a881342a9900f300a8.web-security-academy.net';
+        background.handleWebRequestBeforeRequest({
+            requestId: '301',
+            url: `${host}/iframe-page`,
+            method: 'GET',
+            type: 'sub_frame',
+            tabId: 8,
+            frameId: 12
+        });
+        background.handleWebRequestBeforeRequest({
+            requestId: '302',
+            url: `${host}/iframe-submit`,
+            method: 'POST',
+            type: 'sub_frame',
+            tabId: 8,
+            frameId: 12,
+            requestBody: { formData: { action: ['go'] } }
+        });
+
+        const captured = background.getCapturedRequests();
+        expect(captured['GET:/iframe-page']).toBeUndefined();
+        expect(captured['POST:/iframe-submit']).toBeDefined();
+        expect(captured['POST:/iframe-submit'].bodyVariations).toEqual(['action=go']);
+    });
+});

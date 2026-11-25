@@ -6,9 +6,11 @@
   "permissions": [
     "storage",
     "activeTab",
+    "tabs",
     "cookies",
     "scripting",
     "webNavigation",
+    "webRequest",
     "sidePanel",
     "unlimitedStorage"
   ],
