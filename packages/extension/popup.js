@@ -1319,23 +1319,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     showCrawlStatus("Please enable Traffic Recording first!", "error");
                     return;
                 }
-                if (activeTabHost && !isHostInScope(activeTabHost, targetDomains)) {
-                    showCrawlStatus("Current site is not in scope. Click 'Track this site' first.", "error");
-                    return;
-                }
 
                 showCrawlStatus("Initiating crawl on active tab...", "info");
                 btnCrawlTab.disabled = true;
 
-                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                    if (!tabs || tabs.length === 0) {
-                        showCrawlStatus("No active tab found.", "error");
-                        btnCrawlTab.disabled = false;
-                        return;
-                    }
-                    const activeTab = tabs[0];
-                    chrome.tabs.sendMessage(activeTab.id, { source: 'swazz-detector', type: 'start_crawl', tabId: activeTab.id }, { frameId: 0 }, (response) => {
+                const sendStartCrawl = (tabId, allowInjectRetry) => {
+                    chrome.tabs.sendMessage(tabId, { source: 'swazz-detector', type: 'start_crawl', tabId }, { frameId: 0 }, (response) => {
                         if (chrome.runtime.lastError) {
+                            if (allowInjectRetry && chrome.scripting && chrome.scripting.executeScript) {
+                                chrome.scripting.executeScript(
+                                    { target: { tabId, frameIds: [0] }, files: ['scope.js', 'content.js'] },
+                                    () => {
+                                        if (chrome.runtime.lastError) {
+                                            showCrawlStatus("Could not communicate with tab. Make sure the page is fully loaded and refresh it.", "error");
+                                            btnCrawlTab.disabled = false;
+                                            return;
+                                        }
+                                        sendStartCrawl(tabId, false);
+                                    }
+                                );
+                                return;
+                            }
                             showCrawlStatus("Could not communicate with tab. Make sure the page is fully loaded and refresh it.", "error");
                             btnCrawlTab.disabled = false;
                             return;
@@ -1350,6 +1354,35 @@ document.addEventListener('DOMContentLoaded', () => {
                             btnCrawlTab.disabled = false;
                         }
                     });
+                };
+
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                    if (!tabs || tabs.length === 0) {
+                        showCrawlStatus("No active tab found.", "error");
+                        btnCrawlTab.disabled = false;
+                        return;
+                    }
+                    const activeTab = tabs[0];
+                    let tabHost = null;
+                    try {
+                        const u = new URL(activeTab.url || '');
+                        if (u.protocol === 'http:' || u.protocol === 'https:') {
+                            tabHost = u.host;
+                        }
+                    } catch (e) {}
+
+                    if (!tabHost) {
+                        showCrawlStatus("Open an HTTP/HTTPS page to crawl.", "error");
+                        btnCrawlTab.disabled = false;
+                        return;
+                    }
+                    if (!isHostInScope(tabHost, targetDomains)) {
+                        showCrawlStatus("Current site is not in scope. Click 'Track this site' first.", "error");
+                        btnCrawlTab.disabled = false;
+                        return;
+                    }
+
+                    sendStartCrawl(activeTab.id, true);
                 });
             });
         });

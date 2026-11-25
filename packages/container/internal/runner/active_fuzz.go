@@ -275,6 +275,7 @@ func (r *Runner) runActiveParameterFuzzing(
 				sac := r.prepareEndpointPoolFiltered(ctx, epIdx, skipLoc, skipPath)
 				r.overlayBindingsFiltered(epIdx, &built, sac, skipLoc, skipPath)
 			}
+			r.enforceRequiredParams(endpoint, &built, safeGen, 0)
 
 			// A skipped payload still takes its iteration index, so a resume's iterToSkip
 			// (a count of walked iterations) lines up with what was sent.
@@ -331,6 +332,7 @@ func (r *Runner) runActiveParameterFuzzing(
 					p, profile, qp, gh,
 					endpoint.ContentType, ot, pn,
 				)
+				r.observeRequiredParams(endpoint, p, qp, result.Status, result.ResponseBody)
 
 				if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {
 					r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)

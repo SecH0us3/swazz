@@ -1,3 +1,7 @@
+(function() {
+if (window.__swazz_content_loaded) return;
+window.__swazz_content_loaded = true;
+
 // Helpers from scope.js. scope.js is a separate manifest entry, so if it ever
 // fails to load these would be undefined and the highlighter and crawler would
 // die with a TypeError — fall back to local equivalents instead.
@@ -114,7 +118,7 @@ let mutationObserver = null;
 let injectedStyles = null;
 
 function injectHighlighterStyles() {
-    if (injectedStyles) return;
+    if (injectedStyles || !document.head) return;
     
     injectedStyles = document.createElement('style');
     injectedStyles.id = 'swazz-highlighter-styles';
@@ -283,7 +287,21 @@ function disableHighlighter() {
     });
 }
 
+let pendingHighlighterEnable = false;
+
 function enableHighlighter() {
+    if (!document.head || !document.body) {
+        if (!pendingHighlighterEnable) {
+            pendingHighlighterEnable = true;
+            document.addEventListener('DOMContentLoaded', () => {
+                pendingHighlighterEnable = false;
+                chrome.storage.local.get(['recording', 'targetDomains'], (state) => {
+                    updateHighlightState(!!state.recording, state.targetDomains || []);
+                });
+            }, { once: true });
+        }
+        return;
+    }
     injectHighlighterStyles();
     scanAndHighlight();
 
@@ -485,6 +503,11 @@ async function runCrawlStep() {
     clickables.forEach(btn => {
         if (!btn.dataset.swazzClicked) {
             btn.dataset.swazzClicked = 'true';
+
+            // Skip form submit buttons — forms are already handled by step 3.
+            if (btn.closest('form') && btn.tagName === 'BUTTON' && (btn.getAttribute('type') || 'submit').toLowerCase() !== 'button') {
+                return;
+            }
             
             const text = (btn.textContent || btn.value || '').toLowerCase().trim();
             const isIgnored = /logout|log[ -]?out|sign[ -]?out|delete|remove|clear|cancel|exit/i.test(text);
@@ -634,4 +657,5 @@ if (isTopFrame) {
         }
     });
 }
+})();
 
