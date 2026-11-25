@@ -197,3 +197,20 @@ func TestPool_ParentTuplesAndCoerceString(t *testing.T) {
 	assert.Equal(t, int64(42), CoerceString("42", &swagger.SchemaProperty{Type: "integer"}))
 	assert.Equal(t, "42", CoerceString("42", &swagger.SchemaProperty{Type: "string"}))
 }
+
+func TestPool_RecordHitResetsConsecutiveMisses(t *testing.T) {
+	pool := NewPool()
+	pool.Put("res:orders:id", "ord-1", "ord-1")
+
+	pool.RecordMiss("res:orders:id", "ord-1")
+	assert.Equal(t, 1, pool.LiveCount("res:orders:id"))
+
+	// A 2xx response resets the consecutive miss streak so another single 404 does not evict.
+	pool.RecordHit("res:orders:id", "ord-1")
+	pool.RecordMiss("res:orders:id", "ord-1")
+	assert.Equal(t, 1, pool.LiveCount("res:orders:id"), "expected RecordHit to reset strike streak before 2nd single miss")
+
+	// Two consecutive misses without an intervening hit still evict at MaxConsecutiveMisses.
+	pool.RecordMiss("res:orders:id", "ord-1")
+	assert.Equal(t, 0, pool.LiveCount("res:orders:id"), "expected two consecutive misses to evict")
+}

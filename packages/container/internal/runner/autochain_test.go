@@ -1529,3 +1529,76 @@ func TestRunner_NestedResourceParentChildTupleConsistency(t *testing.T) {
 	assert.Zero(t, patchMismatches.Load(), "expected zero mismatched (orgId, projectId) pairs on PATCH")
 	assert.Zero(t, deleteMismatches.Load(), "expected zero mismatched (orgId, projectId) pairs on DELETE")
 }
+
+func TestRunner_ActiveParameterFuzzingNestedChild404PreservesParentID(t *testing.T) {
+	var (
+		child404Count        atomic.Int32
+		orgPostAfterChild404 atomic.Int32
+		projPostAfter404     atomic.Int32
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/orgs" && r.Method == http.MethodPost:
+			if child404Count.Load() > 0 {
+				orgPostAfterChild404.Add(1)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "org-1"})
+		case r.URL.Path == "/api/orgs/org-1/projects" && r.Method == http.MethodPost:
+			if child404Count.Load() > 0 {
+				projPostAfter404.Add(1)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "proj-1", "orgId": "org-1"})
+		case r.URL.Path == "/api/orgs/org-1/projects/proj-1" && r.Method == http.MethodGet:
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "proj-1"})
+		default:
+			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/projects/") {
+				child404Count.Add(1)
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	cfg := &swagger.Config{
+		BaseURL:  srv.URL,
+		Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{
+			IterationsPerProfile:   5,
+			Concurrency:            1,
+			TimeoutMs:              5000,
+			ActiveParameterFuzzing: true,
+			Profiles:               []swagger.FuzzingProfile{swagger.ProfileMalicious},
+		},
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/api/orgs",
+				Method: "POST",
+				Schema: swagger.SchemaProperty{Type: "object", Properties: map[string]*swagger.SchemaProperty{"name": {Type: "string"}}},
+			},
+			{
+				Path:       "/api/orgs/{orgId}/projects",
+				Method:     "POST",
+				PathParams: map[string]*swagger.SchemaProperty{"orgId": {Type: "string"}},
+				Schema:     swagger.SchemaProperty{Type: "object", Properties: map[string]*swagger.SchemaProperty{"title": {Type: "string"}}},
+			},
+			{
+				Path:       "/api/orgs/{orgId}/projects/{projectId}",
+				Method:     "GET",
+				PathParams: map[string]*swagger.SchemaProperty{"orgId": {Type: "string"}, "projectId": {Type: "string"}},
+			},
+		},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+	require.NoError(t, r.Start(context.Background()))
+
+	assert.GreaterOrEqual(t, child404Count.Load(), int32(2), "expected ActiveParameterFuzzing on child GET to generate >=2 404s")
+	assert.Zero(t, orgPostAfterChild404.Load(), "expected 404s while fuzzing child {projectId} not to evict or re-seed parent org-1")
+	assert.Zero(t, projPostAfter404.Load(), "expected 404s while fuzzing {orgId} not to evict or re-seed child proj-1")
+	assert.Equal(t, 1, r.chainPool.LiveCount("res:orgs:id"))
+	assert.Equal(t, 1, r.chainPool.LiveCount("res:orgs/projects:id"))
+}

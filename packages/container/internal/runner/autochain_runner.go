@@ -49,8 +49,11 @@ func (r *Runner) activeEndpoints() []swagger.EndpointConfig {
 	return cfgEps
 }
 
-func (r *Runner) hasAutoChainProducerFor(originalPath, method string) bool {
-	if r.chainPool == nil || r.chainPlan == nil {
+func (r *Runner) shouldHarvestAutoChain(originalPath, method string, status int, profile swagger.FuzzingProfile) bool {
+	if r.chainPool == nil || r.chainPlan == nil || status < 200 || status >= 300 {
+		return false
+	}
+	if profile != swagger.ProfileRandom && profile != swagger.FuzzingProfile("BASELINE") {
 		return false
 	}
 	epIdx, ok := r.chainIndex[strings.ToUpper(method)+" "+originalPath]
@@ -314,10 +317,7 @@ func sentPathAndPinnedScalars(originalPath, resolvedPath string, pinned []autoch
 }
 
 func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, status int, profile swagger.FuzzingProfile, headers http.Header, rawBody []byte, payload, queryParams any, pinned []autochain.PinnedBinding) {
-	if r.chainPool == nil || r.chainPlan == nil || status < 200 || status >= 300 {
-		return
-	}
-	if profile != swagger.ProfileRandom && profile != swagger.FuzzingProfile("BASELINE") {
+	if !r.shouldHarvestAutoChain(originalPath, method, status, profile) {
 		return
 	}
 	epIdx, ok := r.chainIndex[strings.ToUpper(method)+" "+originalPath]
@@ -325,9 +325,6 @@ func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, sta
 		return
 	}
 	rules := r.chainPlan.Producers[epIdx]
-	if len(rules) == 0 {
-		return
-	}
 	if len(pinned) == 0 {
 		for _, b := range r.chainPlan.Bindings[epIdx] {
 			if r.chainPool.LiveCount(b.PoolKey) > 0 {
@@ -349,12 +346,54 @@ func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, sta
 	r.chainPool.HarvestResponseWithParents(rules, headers, rawBody, parentPins, payload, queryParams, sentPathAndPinnedScalars(originalPath, resolvedPath, pinned))
 }
 
-func (r *Runner) recordAutoChainMisses(method string, status int, pinned []autochain.PinnedBinding) {
-	if r.chainPool == nil || len(pinned) == 0 || strings.EqualFold(method, "DELETE") {
+func (r *Runner) recordAutoChainOutcome(originalPath, method string, status int, pinned []autochain.PinnedBinding) {
+	if r.chainPool == nil || len(pinned) == 0 {
 		return
 	}
-	if status != http.StatusNotFound && status != http.StatusGone {
+	if status >= 200 && status < 300 {
+		for _, pb := range pinned {
+			r.chainPool.RecordHit(pb.PoolKey, pb.StrVal)
+		}
 		return
+	}
+	if strings.EqualFold(method, "DELETE") || (status != http.StatusNotFound && status != http.StatusGone) {
+		return
+	}
+	if r.chainPlan != nil {
+		if epIdx, ok := r.chainIndex[strings.ToUpper(method)+" "+originalPath]; ok && epIdx < len(r.chainPlan.Ordered) {
+			ep := r.chainPlan.Ordered[epIdx]
+			if len(ep.PathParams) > 0 {
+				pinnedPathCount := 0
+				leafPathIdx := -1
+				lastPathIdx := -1
+				leafParam := leafDeletePathParam(ep.Path)
+				for i, pb := range pinned {
+					if pb.Location == autochain.LocPath {
+						pinnedPathCount++
+						lastPathIdx = i
+						if len(pb.ParamPath) == 1 && pb.ParamPath[0] == leafParam {
+							leafPathIdx = i
+						}
+					}
+				}
+				if pinnedPathCount < len(ep.PathParams) {
+					// An unpinned/fuzzed path parameter was present on the URL, so 404/410
+					// cannot be reliably attributed to pinned ancestor IDs.
+					return
+				}
+				if leafPathIdx < 0 {
+					leafPathIdx = lastPathIdx
+				}
+				if leafPathIdx >= 0 {
+					pb := pinned[leafPathIdx]
+					r.chainPool.RecordMiss(pb.PoolKey, pb.StrVal)
+					return
+				}
+			}
+			if len(pinned) < len(r.chainPlan.Bindings[epIdx]) {
+				return
+			}
+		}
 	}
 	for _, pb := range pinned {
 		r.chainPool.RecordMiss(pb.PoolKey, pb.StrVal)

@@ -194,6 +194,41 @@ func (p *Pool) RecordMiss(poolKey, strVal string) {
 	}
 }
 
+// RecordHit resets any accumulated consecutive miss strikes on a live entry after a 2xx response.
+func (p *Pool) RecordHit(poolKey, strVal string) {
+	if p == nil || poolKey == "" || strVal == "" {
+		return
+	}
+	p.mu.RLock()
+	b := p.buckets[poolKey]
+	hasMisses := false
+	if b != nil {
+		for i := range b.entries {
+			if b.entries[i].strVal == strVal {
+				hasMisses = b.entries[i].misses > 0
+				break
+			}
+		}
+	}
+	p.mu.RUnlock()
+	if !hasMisses {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	b = p.buckets[poolKey]
+	if b == nil {
+		return
+	}
+	for i := range b.entries {
+		if b.entries[i].strVal == strVal {
+			b.entries[i].misses = 0
+			return
+		}
+	}
+}
+
 // LiveCount returns the number of currently active entries under poolKey.
 func (p *Pool) LiveCount(poolKey string) int {
 	if p == nil {

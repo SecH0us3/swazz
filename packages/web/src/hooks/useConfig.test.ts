@@ -210,7 +210,9 @@ describe('useConfig', () => {
                 base_url: 'https://api.com',
                 settings: {
                     concurrency: 5,
-                    bola_similarity_threshold: 0.9
+                    bola_similarity_threshold: 0.9,
+                    enable_auto_chaining: false,
+                    enable_semantic_mutation: true
                 },
                 security: {
                     allow_private_ips: true
@@ -237,6 +239,8 @@ describe('useConfig', () => {
             expect(() => validateConfig({ settings: { debug: 'true' } })).toThrow('settings.debug must be a boolean');
             expect(() => validateConfig({ settings: { bola_similarity_threshold: '0.85' } })).toThrow('settings.bola_similarity_threshold must be a number');
             expect(() => validateConfig({ settings: { oob_server_url: 123 } })).toThrow('settings.oob_server_url must be a string');
+            expect(() => validateConfig({ settings: { enable_auto_chaining: 'false' } })).toThrow('settings.enable_auto_chaining must be a boolean');
+            expect(() => validateConfig({ settings: { enable_semantic_mutation: 'true' } })).toThrow('settings.enable_semantic_mutation must be a boolean');
         });
 
         it('should throw when security properties are incorrect', () => {

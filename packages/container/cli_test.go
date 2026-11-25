@@ -14,6 +14,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"swazz-engine/internal/config"
 	"testing"
 	"time"
@@ -469,4 +471,70 @@ func TestRunCLIErr_WAFPatch_Success(t *testing.T) {
 		"-disable-telemetry",
 	})
 	assert.NoError(t, err)
+}
+
+func TestRunCLIErr_NoAutoChainFlagOverridesConfig(t *testing.T) {
+	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
+
+	var mu sync.Mutex
+	var seen []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		if r.URL.Path == "/api/orders" && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"ord-1"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	cfgPath := filepath.Join(t.TempDir(), "config_autochain.json")
+	cfgJSON := fmt.Sprintf(`{
+		"base_url": "%s",
+		"endpoint_definitions": [
+			{"path": "/api/orders/{orderId}", "method": "DELETE", "pathParams": {"orderId": {"type": "string"}}},
+			{"path": "/api/orders", "method": "POST"}
+		],
+		"settings": {
+			"enable_auto_chaining": true,
+			"iterations_per_profile": 1,
+			"concurrency": 1,
+			"timeout_ms": 2000,
+			"profiles": ["RANDOM"]
+		}
+	}`, ts.URL)
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfgJSON), 0600))
+
+	err := runCLIErr([]string{
+		"-config", cfgPath,
+		"-no-auto-chain",
+		"-quiet",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	})
+	require.NoError(t, err)
+
+	mu.Lock()
+	withFlag := append([]string(nil), seen...)
+	seen = nil
+	mu.Unlock()
+	require.NotEmpty(t, withFlag)
+	assert.True(t, strings.HasPrefix(withFlag[0], "DELETE /api/orders/"), "expected -no-auto-chain to preserve raw endpoint order, got %v", withFlag)
+
+	err = runCLIErr([]string{
+		"-config", cfgPath,
+		"-quiet",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	})
+	require.NoError(t, err)
+
+	mu.Lock()
+	withoutFlag := append([]string(nil), seen...)
+	mu.Unlock()
+	require.NotEmpty(t, withoutFlag)
+	assert.Equal(t, "POST /api/orders", withoutFlag[0], "expected default DAG order to schedule POST before DELETE, got %v", withoutFlag)
 }

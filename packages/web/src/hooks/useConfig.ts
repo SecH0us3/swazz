@@ -86,6 +86,12 @@ export function validateConfig(config: any): void {
         if (s.active_parameter_fuzzing !== undefined && typeof s.active_parameter_fuzzing !== 'boolean') {
             throw new Error('settings.active_parameter_fuzzing must be a boolean');
         }
+        if (s.enable_auto_chaining !== undefined && typeof s.enable_auto_chaining !== 'boolean') {
+            throw new Error('settings.enable_auto_chaining must be a boolean');
+        }
+        if (s.enable_semantic_mutation !== undefined && typeof s.enable_semantic_mutation !== 'boolean') {
+            throw new Error('settings.enable_semantic_mutation must be a boolean');
+        }
     }
     if (config.endpoints !== undefined && !Array.isArray(config.endpoints)) {
         throw new Error('endpoints must be an array');

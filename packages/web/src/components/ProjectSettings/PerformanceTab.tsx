@@ -248,6 +248,22 @@ export function PerformanceTab() {
                         </span>
                     </div>
 
+                    {/* Automatic Request Chaining (DAG) */}
+                    <div className="fuzz-setting-checkbox-group">
+                        <label className="premium-checkbox-label">
+                            <input
+                                type="checkbox"
+                                className="premium-checkbox"
+                                checked={config.settings.enable_auto_chaining !== false}
+                                onChange={(e) => updateSettings({ enable_auto_chaining: e.target.checked })}
+                            />
+                            <strong className="performance-label-md">Automatic Request Chaining (DAG)</strong>
+                        </label>
+                        <span className="fuzz-setting-checkbox-hint">
+                            Order producer → consumer waves, pin live resource IDs across nested routes, and isolate destructive DELETEs. Disable for stateless raw-speed scans.
+                        </span>
+                    </div>
+
                     {/* HAR Domain Filter */}
                     <div className="performance-input-group performance-divider-top">
                         <label htmlFor="har-domain-filter" className="performance-label">HAR Domain Filter</label>

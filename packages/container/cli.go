@@ -68,6 +68,7 @@ func runCLIErr(args []string) error {
 	mcpFuzzMethods := flags.Bool("mcp-fuzz-methods", false, "Fuzz MCP server method/tool name dispatching for reflection, traversal and prototype pollution vulnerabilities")
 	wafPatchVendor := flags.String("waf-patch", "", "Generate WAF virtual patch rules for vendor (e.g. cloudflare, aws, all)")
 	wafPatchOutput := flags.String("waf-patch-output", "", "Path to save generated WAF virtual patch rules")
+	noAutoChain := flags.Bool("no-auto-chain", false, "Disable automatic request chaining DAG and live ID pooling (overrides settings.enable_auto_chaining)")
 
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -159,6 +160,11 @@ func runCLIErr(args []string) error {
 	if *mcpFuzzMethods {
 		b := true
 		cliCfg.Settings.EnableMCPMethodFuzzing = &b
+	}
+
+	if *noAutoChain {
+		f := false
+		cliCfg.Settings.EnableAutoChaining = &f
 	}
 
 	runCfg, err := config.BuildRunnerConfig(&cliCfg)

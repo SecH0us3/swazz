@@ -445,7 +445,7 @@ func (r *Runner) sendRequest(
 
 		var respBody any
 		var rawBodyBytes []byte
-		needsBody := resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody || r.hasChainingRuleFor(originalPath) || r.hasAutoChainProducerFor(originalPath, method)
+		needsBody := resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody || r.hasChainingRuleFor(originalPath) || r.shouldHarvestAutoChain(originalPath, method, resp.StatusCode, profile)
 		if needsBody {
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
@@ -559,7 +559,7 @@ func (r *Runner) sendRequest(
 			r.detector.Load().ExtractVariablesFromResponse(originalPath, method, resp.StatusCode, respBody)
 		}
 		r.harvestAutoChain(originalPath, resolvedPath, method, resp.StatusCode, profile, resp.Header, rawBodyBytes, payload, queryParams, pinned)
-		r.recordAutoChainMisses(method, resp.StatusCode, pinned)
+		r.recordAutoChainOutcome(originalPath, method, resp.StatusCode, pinned)
 
 		if r.config.Settings.AnalyzeResponseBody {
 			baselineSize, multiplier, baselineTime := r.anomalyBaselines(method, originalPath, profile, r.config.Settings)
