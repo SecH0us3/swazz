@@ -149,13 +149,11 @@ func (r *Runner) prepareEndpointPoolDepth(ctx context.Context, epIdx int, skipLo
 			if st.pool.LiveCount(b.PoolKey) <= 1 && b.PrimaryProd >= 0 {
 				r.mintFromProducerDepth(ctx, b.PrimaryProd, depth)
 			}
-			if st.pool.LiveCount(b.PoolKey) > 1 {
-				if val, str, parents, ok := st.pool.TakeSacrificialEntry(b.PoolKey, b.TargetSchema); ok {
-					if sac == nil {
-						sac = make(map[string]sacrificialVal, 2)
-					}
-					sac[b.PoolKey] = sacrificialVal{coerced: val, str: str, parents: parents}
+			if val, str, parents, ok := st.pool.TakeSacrificialEntryIfMoreThan(b.PoolKey, b.TargetSchema, 1); ok {
+				if sac == nil {
+					sac = make(map[string]sacrificialVal, 2)
 				}
+				sac[b.PoolKey] = sacrificialVal{coerced: val, str: str, parents: parents}
 			}
 			continue
 		}
@@ -350,7 +348,7 @@ func sentPathAndPinnedScalars(originalPath, resolvedPath string, pinned []autoch
 }
 
 func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, status int, profile swagger.FuzzingProfile, headers http.Header, rawBody []byte, payload, queryParams any, pinned []autochain.PinnedBinding) {
-	if !r.shouldHarvestAutoChain(originalPath, method, status, profile) {
+	if status < 200 || status >= 300 || (profile != swagger.ProfileRandom && profile != swagger.FuzzingProfile("BASELINE")) {
 		return
 	}
 	st := r.chain.Load()
@@ -358,7 +356,7 @@ func (r *Runner) harvestAutoChain(originalPath, resolvedPath, method string, sta
 		return
 	}
 	epIdx, ok := st.index[strings.ToUpper(method)+" "+originalPath]
-	if !ok || epIdx >= len(st.plan.Producers) {
+	if !ok || epIdx >= len(st.plan.Producers) || len(st.plan.Producers[epIdx]) == 0 {
 		return
 	}
 	rules := st.plan.Producers[epIdx]

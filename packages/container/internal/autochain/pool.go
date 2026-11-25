@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -87,7 +88,17 @@ func (p *Pool) PutWithParents(poolKey, strVal string, rawVal any, parents map[st
 	}
 
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.putLocked(poolKey, strVal, rawVal, clonedParents)
+	p.mu.Unlock()
+}
+
+func (p *Pool) putLocked(poolKey, strVal string, rawVal any, clonedParents map[string]string) {
+	if poolKey == "" || !isValidChainScalar(strVal) {
+		return
+	}
+	if rawVal == nil {
+		rawVal = strVal
+	}
 
 	b := p.buckets[poolKey]
 	if b == nil {
@@ -148,12 +159,19 @@ func (p *Pool) TakeSacrificial(poolKey string, schema *swagger.SchemaProperty) (
 
 // TakeSacrificialEntry pops the newest live entry from poolKey together with its recorded parent pins.
 func (p *Pool) TakeSacrificialEntry(poolKey string, schema *swagger.SchemaProperty) (any, string, map[string]string, bool) {
+	return p.TakeSacrificialEntryIfMoreThan(poolKey, schema, 0)
+}
+
+// TakeSacrificialEntryIfMoreThan atomically verifies that poolKey has strictly more than
+// minRemaining live entries and pops the newest entry under a single write lock, eliminating
+// TOCTOU races that could otherwise drain the last surviving shared ID.
+func (p *Pool) TakeSacrificialEntryIfMoreThan(poolKey string, schema *swagger.SchemaProperty, minRemaining int) (any, string, map[string]string, bool) {
 	if p == nil {
 		return nil, "", nil, false
 	}
 	p.mu.Lock()
 	b := p.buckets[poolKey]
-	if b == nil || len(b.entries) == 0 {
+	if b == nil || len(b.entries) <= minRemaining {
 		p.mu.Unlock()
 		return nil, "", nil, false
 	}
@@ -187,7 +205,7 @@ func (p *Pool) RecordMiss(poolKey, strVal string) {
 		if b.entries[i].strVal == strVal {
 			b.entries[i].misses++
 			if b.entries[i].misses >= MaxConsecutiveMisses {
-				b.entries = append(b.entries[:i], b.entries[i+1:]...)
+				b.entries = slices.Delete(b.entries, i, i+1)
 			}
 			return
 		}
@@ -282,9 +300,15 @@ func (p *Pool) HarvestResponseWithParents(rules []ProducerRule, headers http.Hea
 		return
 	}
 
-	echoed := make(map[string]bool)
+	var echoed map[string]bool
 	for _, s := range sent {
+		if s == nil {
+			continue
+		}
 		walkSentScalars(s, 0, func(k, v string) {
+			if echoed == nil {
+				echoed = make(map[string]bool, 8)
+			}
 			echoed[strings.ToLower(k)+"\x00"+v] = true
 		})
 	}
@@ -304,16 +328,30 @@ func (p *Pool) HarvestResponseWithParents(rules []ProducerRule, headers http.Hea
 		return parsedBody
 	}
 
+	type harvestedItem struct {
+		poolKey string
+		strVal  string
+		rawVal  any
+	}
+	var batchBuf [8]harvestedItem
+	batch := batchBuf[:0]
+	queue := func(poolKey, strVal string, rawVal any) {
+		if poolKey == "" || !isValidChainScalar(strVal) {
+			return
+		}
+		batch = append(batch, harvestedItem{poolKey: poolKey, strVal: strVal, rawVal: rawVal})
+	}
+
 	for _, rule := range rules {
 		if rule.ResponseExpr != "" {
 			if strings.HasPrefix(rule.ResponseExpr, "$header.") {
 				hName := strings.TrimPrefix(rule.ResponseExpr, "$header.")
 				if strings.EqualFold(hName, "Location") {
 					if locID != "" {
-						p.PutWithParents(rule.PoolKey, locID, toTypedScalar(locID), parentPins)
+						queue(rule.PoolKey, locID, toTypedScalar(locID))
 					}
 				} else if hv := headers.Get(hName); hv != "" {
-					p.PutWithParents(rule.PoolKey, hv, hv, parentPins)
+					queue(rule.PoolKey, hv, hv)
 				}
 				continue
 			}
@@ -326,7 +364,7 @@ func (p *Pool) HarvestResponseWithParents(rules []ProducerRule, headers http.Hea
 						leaf = leaf[dot+1:]
 					}
 					if !echoed[strings.ToLower(leaf)+"\x00"+str] {
-						p.PutWithParents(rule.PoolKey, str, gjsonScalarValue(res), parentPins)
+						queue(rule.PoolKey, str, gjsonScalarValue(res))
 					}
 				}
 			}
@@ -337,16 +375,29 @@ func (p *Pool) HarvestResponseWithParents(rules []ProducerRule, headers http.Hea
 		if root := ensureDecoded(); root != nil {
 			walkJSONIDs(root, 0, func(key, str string, raw any) {
 				if !echoed[strings.ToLower(key)+"\x00"+str] {
-					p.PutWithParents(rule.PoolKey, str, raw, parentPins)
+					queue(rule.PoolKey, str, raw)
 				}
 			})
 		}
 		if locID != "" {
 			if colSeg := resourceCollectionSegment(rule.PoolKey); colSeg == "" || !strings.EqualFold(locID, colSeg) {
-				p.PutWithParents(rule.PoolKey, locID, toTypedScalar(locID), parentPins)
+				queue(rule.PoolKey, locID, toTypedScalar(locID))
 			}
 		}
 	}
+
+	if len(batch) == 0 {
+		return
+	}
+	var clonedParents map[string]string
+	if len(parentPins) > 0 {
+		clonedParents = maps.Clone(parentPins)
+	}
+	p.mu.Lock()
+	for _, item := range batch {
+		p.putLocked(item.poolKey, item.strVal, item.rawVal, clonedParents)
+	}
+	p.mu.Unlock()
 }
 
 func resourceCollectionSegment(poolKey string) string {

@@ -464,6 +464,9 @@ func TestParseSpec_DeterministicOrderAndResponseMetadata(t *testing.T) {
 		if len(createEP.Links) != 1 || createEP.Links[0].OperationID != "getItem" || createEP.Links[0].Parameters["itemId"] != "$response.body#/id" {
 			t.Fatalf("expected OpenAPI link to getItem, got %+v", createEP.Links)
 		}
+		if res.Endpoints[1].ResponseSchema != nil {
+			t.Fatalf("expected GET endpoint to skip ResponseSchema extraction to avoid config bloat, got %+v", res.Endpoints[1].ResponseSchema)
+		}
 	}
 }
 

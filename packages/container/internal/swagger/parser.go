@@ -142,12 +142,21 @@ func ParseSpec(raw json.RawMessage, opts ...ParserOption) (*ParseResult, error) 
 			pathParams := extractPathParams(allParams)
 			headerParams := extractHeaderParams(allParams, fullSpec, endpointHint, o.maxNodes, o.maxDepth)
 
+			upperMethod := strings.ToUpper(method)
+			var respSchema *SchemaProperty
+			if upperMethod == "POST" || upperMethod == "PUT" {
+				// Auto-chaining only inspects scalar fields on POST/PUT responses up to depth 3.
+				// Bounding response schema resolution prevents large GET DTO graphs from bloating
+				// serialized project configs and memory.
+				respSchema = extractResponseSchema(operation, fullSpec, endpointHint, min(o.maxNodes, 256), min(o.maxDepth, 4))
+			}
+
 			ep := EndpointConfig{
 				Path:           path,
-				Method:         strings.ToUpper(method),
+				Method:         upperMethod,
 				OperationID:    getStringField(operation, "operationId"),
 				Schema:         schema,
-				ResponseSchema: extractResponseSchema(operation, fullSpec, endpointHint, o.maxNodes, o.maxDepth),
+				ResponseSchema: respSchema,
 				Links:          extractResponseLinks(operation, fullSpec),
 			}
 			if len(pathParams) > 0 {

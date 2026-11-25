@@ -214,3 +214,26 @@ func TestPool_RecordHitResetsConsecutiveMisses(t *testing.T) {
 	pool.RecordMiss("res:orders:id", "ord-1")
 	assert.Equal(t, 0, pool.LiveCount("res:orders:id"), "expected two consecutive misses to evict")
 }
+
+func TestPool_TakeSacrificialEntryIfMoreThanAndBatchHarvest(t *testing.T) {
+	pool := NewPool()
+	pool.HarvestResponseWithParents(
+		[]ProducerRule{{PoolKey: "res:orgs/projects:id", ResponseExpr: ""}},
+		nil,
+		[]byte(`[{"id":"proj-1"},{"id":"proj-2"}]`),
+		map[string]string{"res:orgs:id": "org-1"},
+	)
+	require.Equal(t, 2, pool.LiveCount("res:orgs/projects:id"))
+
+	// Pop newest when strictly more than 1 remains
+	_, str, parents, ok := pool.TakeSacrificialEntryIfMoreThan("res:orgs/projects:id", nil, 1)
+	require.True(t, ok)
+	assert.Equal(t, "proj-2", str)
+	assert.Equal(t, map[string]string{"res:orgs:id": "org-1"}, parents)
+	assert.Equal(t, 1, pool.LiveCount("res:orgs/projects:id"))
+
+	// Must refuse to pop the last surviving entry when minRemaining == 1
+	_, _, _, ok = pool.TakeSacrificialEntryIfMoreThan("res:orgs/projects:id", nil, 1)
+	assert.False(t, ok)
+	assert.Equal(t, 1, pool.LiveCount("res:orgs/projects:id"))
+}
