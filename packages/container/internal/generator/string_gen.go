@@ -218,11 +218,31 @@ func (g *Generator) oobURL(uuidStr string) string {
 	return fmt.Sprintf("%s/%s", strings.TrimRight(baseURL, "/"), uuidStr)
 }
 
-var sstiPrimes = []int{11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97}
+const (
+	sstiAddMin    = 1_000_000
+	sstiAddMax    = 4_999_999
+	sstiMulMin    = 1_001
+	sstiMulMax    = 9_999
+	sstiConcatMin = 1_000
+	sstiConcatMax = 9_999
+)
 
-// randomizeSSTI replaces a 7*7 or 7+'7' probe in s with a random expression and returns the new
-// string with the result that expression evaluates to; ok is false when s has no probe or the run
-// has no store. The caller registers the string it finally sends.
+func randDistinctPair(minVal, maxVal int) (int, int) {
+	if maxVal <= minVal {
+		return minVal, maxVal
+	}
+	span := maxVal - minVal + 1
+	a := minVal + rand.IntN(span) // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
+	b := minVal + rand.IntN(span) // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
+	for a == b {
+		b = minVal + rand.IntN(span) // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
+	}
+	return a, b
+}
+
+// randomizeSSTI replaces a 7*7 or 7+'7' probe in s with a random high-entropy expression and
+// returns the new string with the result that expression evaluates to; ok is false when s has no
+// probe or the run has no store. The caller registers the string it finally sends.
 func (g *Generator) randomizeSSTI(s string) (newS string, ctx sstistore.SSTIContext, ok bool) {
 	// Without a run's store nothing could match a random expression; the fixed 7*7 / 7+'7' probe is
 	// what the analyzer's static fallback recognises.
@@ -239,19 +259,16 @@ func (g *Generator) randomizeSSTI(s string) (newS string, ctx sstistore.SSTICont
 		return s, ctx, false
 	}
 
-	p1 := sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
-	p2 := sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
-	for p1 == p2 {
-		p2 = sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
-	}
-
 	switch {
 	case probe == "7+'7'":
-		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d+'%d'", p1, p2), Expected: fmt.Sprintf("%d%d", p1, p2)}
+		a, b := randDistinctPair(sstiConcatMin, sstiConcatMax)
+		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d+'%d'", a, b), Expected: fmt.Sprintf("%d%d", a, b)}
 	case rand.Float64() < 0.5: // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
-		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d*%d", p1, p2), Expected: fmt.Sprintf("%d", p1*p2)}
+		a, b := randDistinctPair(sstiMulMin, sstiMulMax)
+		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d*%d", a, b), Expected: fmt.Sprintf("%d", a*b)}
 	default:
-		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d+%d", p1, p2), Expected: fmt.Sprintf("%d", p1+p2)}
+		a, b := randDistinctPair(sstiAddMin, sstiAddMax)
+		ctx = sstistore.SSTIContext{RawExpr: fmt.Sprintf("%d+%d", a, b), Expected: fmt.Sprintf("%d", a+b)}
 	}
 	return strings.ReplaceAll(s, probe, ctx.RawExpr), ctx, true
 }

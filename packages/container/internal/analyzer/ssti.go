@@ -50,7 +50,8 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		if ctx, ok := a.Store.Get(payloadStr); ok {
 			evalValBytes := []byte(ctx.Expected)
 			rawExprBytes := []byte(ctx.RawExpr)
-			if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
+			allowGrouping := !strings.Contains(ctx.RawExpr, "'")
+			if matchesEvaluatedNumber(input.ResponseBody, evalValBytes, allowGrouping) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/ssti-leak",
 					Level:            "error",
@@ -88,9 +89,132 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	return findings
 }
 
+var thousandSeparators = [][]byte{
+	[]byte(","),
+	[]byte(" "),
+	[]byte("\u00a0"),
+	[]byte("\u202f"),
+	[]byte("."),
+}
+
+func matchesEvaluatedNumber(body, evalValBytes []byte, allowGrouping bool) bool {
+	if hasStandaloneNumber(body, evalValBytes) {
+		return true
+	}
+	// Java FreeMarker and similar locale-aware engines format integers >= 1000 with
+	// grouping separators (e.g. "28,497,417"). Pre-filter on the trailing 3 digits
+	// and format into a stack buffer so non-matching responses incur zero allocations.
+	if allowGrouping && len(evalValBytes) >= 4 && bytes.Contains(body, evalValBytes[len(evalValBytes)-3:]) {
+		var buf [64]byte
+		for _, sep := range thousandSeparators {
+			if grouped := appendFormattedThousands(buf[:0], evalValBytes, sep); grouped != nil && hasStandaloneGroupedNumber(body, grouped, sep) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasStandaloneGroupedNumber(body, grouped, sep []byte) bool {
+	if len(grouped) == 0 {
+		return false
+	}
+	idx := 0
+	for {
+		i := bytes.Index(body[idx:], grouped)
+		if i == -1 {
+			return false
+		}
+		start := idx + i
+		end := start + len(grouped)
+
+		beforeOk := start == 0 || !isASCIIDigit(body[start-1])
+		if beforeOk && start > len(sep) && bytes.Equal(body[start-len(sep):start], sep) && isASCIIDigit(body[start-len(sep)-1]) {
+			beforeOk = false
+		}
+		afterOk := end >= len(body) || !isASCIIDigit(body[end])
+		if afterOk && end+len(sep) < len(body) && bytes.Equal(body[end:end+len(sep)], sep) && isASCIIDigit(body[end+len(sep)]) {
+			afterOk = false
+		}
+
+		if beforeOk && afterOk && !hasHexPrefix(body, start) {
+			return true
+		}
+		idx = start + 1
+	}
+}
+
+func appendFormattedThousands(dst, digits, sep []byte) []byte {
+	n := len(digits)
+	if n < 4 {
+		return nil
+	}
+	for _, b := range digits {
+		if !isASCIIDigit(b) {
+			return nil
+		}
+	}
+	rem := n % 3
+	if rem == 0 {
+		rem = 3
+	}
+	dst = append(dst, digits[:rem]...)
+	for i := rem; i < n; i += 3 {
+		dst = append(dst, sep...)
+		dst = append(dst, digits[i:i+3]...)
+	}
+	return dst
+}
+
+func isASCIIDigit(b byte) bool {
+	return b >= '0' && b <= '9'
+}
+
+func isASCIIAlpha(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+func isHexByte(b byte) bool {
+	return isASCIIDigit(b) || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
+// isInsideHexToken reports whether body[start:end] is part of a longer pure-hex token
+// (e.g. "90" inside UUID segment "90be" or trace ID "4f8a49c2e1"), while allowing numbers
+// attached to ordinary words (e.g. "name28497417").
+func isInsideHexToken(body []byte, start, end int) bool {
+	lo := start
+	for lo > 0 && isHexByte(body[lo-1]) {
+		lo--
+	}
+	hi := end
+	for hi < len(body) && isHexByte(body[hi]) {
+		hi++
+	}
+	if lo == start && hi == end {
+		return false
+	}
+	if lo > 0 && isASCIIAlpha(body[lo-1]) {
+		return false
+	}
+	if hi < len(body) && isASCIIAlpha(body[hi]) {
+		return false
+	}
+	return true
+}
+
+func hasHexPrefix(body []byte, start int) bool {
+	if start < 2 || body[start-2] != '0' || (body[start-1] != 'x' && body[start-1] != 'X') {
+		return false
+	}
+	return start == 2 || (!isASCIIAlpha(body[start-3]) && !isASCIIDigit(body[start-3]))
+}
+
 // hasStandaloneNumber returns true if val appears in body as a standalone number,
-// i.e. not immediately adjacent to other digit characters.
+// i.e. not immediately adjacent to other digit characters or embedded inside a hex/UUID token.
 func hasStandaloneNumber(body, val []byte) bool {
+	if len(val) == 0 {
+		return false
+	}
 	idx := 0
 	for {
 		i := bytes.Index(body[idx:], val)
@@ -100,25 +224,12 @@ func hasStandaloneNumber(body, val []byte) bool {
 		start := idx + i
 		end := start + len(val)
 
-		beforeOk := true
-		if start > 0 {
-			c := body[start-1]
-			if c >= '0' && c <= '9' {
-				beforeOk = false
-			}
-		}
+		beforeOk := start == 0 || !isASCIIDigit(body[start-1])
+		afterOk := end >= len(body) || !isASCIIDigit(body[end])
 
-		afterOk := true
-		if end < len(body) {
-			c := body[end]
-			if c >= '0' && c <= '9' {
-				afterOk = false
-			}
-		}
-
-		if beforeOk && afterOk {
+		if beforeOk && afterOk && !hasHexPrefix(body, start) && !isInsideHexToken(body, start, end) {
 			return true
 		}
-		idx = end
+		idx = start + 1
 	}
 }

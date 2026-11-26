@@ -6,6 +6,9 @@
 package generator
 
 import (
+	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -470,6 +473,78 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 		input := "just a regular string"
 		out := g.randomizeAndRegisterSSTI(input)
 		assert.Equal(t, input, out)
+	})
+
+	t.Run("high-entropy operand bounds and 32-bit int safety", func(t *testing.T) {
+		seenAdd, seenMul := false, false
+		for range 150 {
+			out := g.randomizeAndRegisterSSTI("<%= 7*7 %>")
+			ctx, found := g.SSTIStore.Get(out)
+			require.True(t, found)
+
+			if strings.Contains(ctx.RawExpr, "+") {
+				seenAdd = true
+				parts := strings.Split(ctx.RawExpr, "+")
+				require.Len(t, parts, 2)
+				a, err := strconv.Atoi(parts[0])
+				require.NoError(t, err)
+				b, err := strconv.Atoi(parts[1])
+				require.NoError(t, err)
+				assert.NotEqual(t, a, b)
+				assert.GreaterOrEqual(t, a, sstiAddMin)
+				assert.LessOrEqual(t, a, sstiAddMax)
+				assert.GreaterOrEqual(t, b, sstiAddMin)
+				assert.LessOrEqual(t, b, sstiAddMax)
+				assert.Equal(t, strconv.Itoa(a+b), ctx.Expected)
+				assert.Len(t, ctx.Expected, 7)
+			} else if strings.Contains(ctx.RawExpr, "*") {
+				seenMul = true
+				parts := strings.Split(ctx.RawExpr, "*")
+				require.Len(t, parts, 2)
+				a, err := strconv.Atoi(parts[0])
+				require.NoError(t, err)
+				b, err := strconv.Atoi(parts[1])
+				require.NoError(t, err)
+				assert.NotEqual(t, a, b)
+				assert.GreaterOrEqual(t, a, sstiMulMin)
+				assert.LessOrEqual(t, a, sstiMulMax)
+				assert.GreaterOrEqual(t, b, sstiMulMin)
+				assert.LessOrEqual(t, b, sstiMulMax)
+				prod := a * b
+				assert.LessOrEqual(t, prod, math.MaxInt32)
+				assert.Equal(t, strconv.Itoa(prod), ctx.Expected)
+				assert.GreaterOrEqual(t, len(ctx.Expected), 7)
+				assert.LessOrEqual(t, len(ctx.Expected), 8)
+			}
+		}
+		assert.True(t, seenAdd, "expected addition branch to be exercised")
+		assert.True(t, seenMul, "expected multiplication branch to be exercised")
+
+		for range 50 {
+			out := g.randomizeAndRegisterSSTI("{{7+'7'}}")
+			ctx, found := g.SSTIStore.Get(out)
+			require.True(t, found)
+			parts := strings.Split(ctx.RawExpr, "+'")
+			require.Len(t, parts, 2)
+			a, err := strconv.Atoi(parts[0])
+			require.NoError(t, err)
+			b, err := strconv.Atoi(strings.TrimSuffix(parts[1], "'"))
+			require.NoError(t, err)
+			assert.NotEqual(t, a, b)
+			assert.GreaterOrEqual(t, a, sstiConcatMin)
+			assert.LessOrEqual(t, a, sstiConcatMax)
+			assert.GreaterOrEqual(t, b, sstiConcatMin)
+			assert.LessOrEqual(t, b, sstiConcatMax)
+			assert.Equal(t, fmt.Sprintf("%d%d", a, b), ctx.Expected)
+			assert.Len(t, ctx.Expected, 8)
+		}
+
+		// Exercise randDistinctPair's retry loop on a minimal 2-element range (~50% retry per call).
+		for range 20 {
+			a, b := randDistinctPair(1, 2)
+			assert.NotEqual(t, a, b)
+			assert.True(t, (a == 1 && b == 2) || (a == 2 && b == 1))
+		}
 	})
 }
 
