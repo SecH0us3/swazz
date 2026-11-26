@@ -50,7 +50,8 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		if ctx, ok := a.Store.Get(payloadStr); ok {
 			evalValBytes := []byte(ctx.Expected)
 			rawExprBytes := []byte(ctx.RawExpr)
-			if matchesEvaluatedNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
+			allowGrouping := !strings.Contains(ctx.RawExpr, "'")
+			if matchesEvaluatedNumber(input.ResponseBody, evalValBytes, allowGrouping) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/ssti-leak",
 					Level:            "error",
@@ -96,14 +97,14 @@ var thousandSeparators = [][]byte{
 	[]byte("."),
 }
 
-func matchesEvaluatedNumber(body, evalValBytes []byte) bool {
+func matchesEvaluatedNumber(body, evalValBytes []byte, allowGrouping bool) bool {
 	if hasStandaloneNumber(body, evalValBytes) {
 		return true
 	}
 	// Java FreeMarker and similar locale-aware engines format integers >= 1000 with
 	// grouping separators (e.g. "28,497,417"). Pre-filter on the trailing 3 digits
 	// and format into a stack buffer so non-matching responses incur zero allocations.
-	if len(evalValBytes) >= 4 && bytes.Contains(body, evalValBytes[len(evalValBytes)-3:]) {
+	if allowGrouping && len(evalValBytes) >= 4 && bytes.Contains(body, evalValBytes[len(evalValBytes)-3:]) {
 		var buf [64]byte
 		for _, sep := range thousandSeparators {
 			if grouped := appendFormattedThousands(buf[:0], evalValBytes, sep); grouped != nil && hasStandaloneGroupedNumber(body, grouped, sep) {
@@ -136,7 +137,7 @@ func hasStandaloneGroupedNumber(body, grouped, sep []byte) bool {
 			afterOk = false
 		}
 
-		if beforeOk && afterOk {
+		if beforeOk && afterOk && !hasHexPrefix(body, start) {
 			return true
 		}
 		idx = start + 1

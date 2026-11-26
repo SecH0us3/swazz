@@ -21,6 +21,7 @@ func TestSSTIAnalyzer(t *testing.T) {
 	store.Register("{{23+'37'}}", sstistore.SSTIContext{RawExpr: "23+'37'", Expected: "2337"})
 	store.Register("<%= 53+37 %>", sstistore.SSTIContext{RawExpr: "53+37", Expected: "90"})
 	store.Register("<%= 4173*6829 %>", sstistore.SSTIContext{RawExpr: "4173*6829", Expected: "28497417"})
+	store.Register("{{4821+'7394'}}", sstistore.SSTIContext{RawExpr: "4821+'7394'", Expected: "48217394"})
 
 	tests := []struct {
 		name          string
@@ -136,9 +137,25 @@ func TestSSTIAnalyzer(t *testing.T) {
 			expectedRule:  "swazz/ssti-leak",
 		},
 		{
-			name:          "True positive: space, narrow NBSP, and dot thousand-separated results match",
+			name:          "True positive: space thousand-separated result matches",
 			payload:       "<%= 4173*6829 %>",
-			response:      "space: 28 497 417 | narrow: 28\u202f497\u202f417 | dot: 28.497.417",
+			response:      "Total: 28 497 417",
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
+		},
+		{
+			name:          "True positive: narrow NBSP thousand-separated result matches",
+			payload:       "<%= 4173*6829 %>",
+			response:      "Total: 28\u202f497\u202f417",
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
+		},
+		{
+			name:          "True positive: dot thousand-separated result matches",
+			payload:       "<%= 4173*6829 %>",
+			response:      "Total: 28.497.417",
 			profile:       swagger.ProfileMalicious,
 			expectedCount: 1,
 			expectedRule:  "swazz/ssti-leak",
@@ -149,6 +166,35 @@ func TestSSTIAnalyzer(t *testing.T) {
 			response:      `{"version":"1.28.497.417"}`,
 			profile:       swagger.ProfileMalicious,
 			expectedCount: 0,
+		},
+		{
+			name:          "False positive: comma-grouped number with trailing group should not match",
+			payload:       "<%= 4173*6829 %>",
+			response:      `{"amount":"28,497,417,123"}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "False positive: 0x hex prefix on grouped number should not match",
+			payload:       "<%= 4173*6829 %>",
+			response:      `{"val":"0x28,497,417"}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "False positive: string concat probe skips locale thousand grouping",
+			payload:       "{{4821+'7394'}}",
+			response:      `{"val":"48,217,394"}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "True positive: string concat probe matches unformatted concatenation",
+			payload:       "{{4821+'7394'}}",
+			response:      `{"val":"48217394"}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
 		},
 		{
 			name:          "False positive: thousand-separated result with adjacent leading digit should not match",
@@ -310,5 +356,18 @@ func BenchmarkSSTIAnalyzer_SuffixCollision(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		_ = a.Analyze(input)
+	}
+}
+
+func TestMatchesEvaluatedNumber_ZeroAllocs(t *testing.T) {
+	eval := []byte("28497417")
+	bodyNoMatch := []byte(`{"status":"ok","code":417,"ticketId":"ca2daac4-b122-4a4d-90be-8ac6149dfe20"}`)
+	allocs := testing.AllocsPerRun(100, func() {
+		if matchesEvaluatedNumber(bodyNoMatch, eval, true) {
+			t.Fatal("unexpected match")
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("expected 0 allocs/op on suffix-collision non-match, got %v", allocs)
 	}
 }

@@ -539,7 +539,7 @@ func TestStringGen_RandomizeAndRegisterSSTI(t *testing.T) {
 			assert.Len(t, ctx.Expected, 8)
 		}
 
-		// Deterministically exercise randDistinctPair's retry loop on a minimal 2-element range.
+		// Exercise randDistinctPair's retry loop on a minimal 2-element range (~50% retry per call).
 		for range 20 {
 			a, b := randDistinctPair(1, 2)
 			assert.NotEqual(t, a, b)
