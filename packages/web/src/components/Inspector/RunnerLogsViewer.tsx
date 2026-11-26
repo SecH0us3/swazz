@@ -20,6 +20,27 @@ interface RunnerLog {
   timestamp: string;
 }
 
+type LogKind = 'error' | 'warn' | 'adaptive' | 'module' | 'lifecycle' | 'debug' | 'info';
+
+const ANSI_ESCAPE_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+
+function stripAnsi(s: string): string {
+  return s.replace(ANSI_ESCAPE_RE, '');
+}
+
+function classifyLog(level: string, message: string): LogKind {
+  const upper = (level || 'INFO').toUpperCase();
+  if (upper === 'ERROR' || message.includes('🚨')) return 'error';
+  if (upper === 'WARN' || upper === 'WARNING') return 'warn';
+  if (upper === 'DEBUG') return 'debug';
+  if (message.includes('[Adaptive]')) return 'adaptive';
+  if (/\[(BOLA|Auth|AutoChain|Chaining|OOB|WAF)\]/i.test(message)) return 'module';
+  if (message.includes('🚀') || message.includes('🏁') || message.includes('✨') || message.includes('═══')) {
+    return 'lifecycle';
+  }
+  return 'info';
+}
+
 export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; isRunning?: boolean }) {
   const [logs, setLogs] = useState<RunnerLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,16 +136,6 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
     setAutoScroll(isAtBottom);
   };
 
-  const getLogColor = (level: string) => {
-    switch (level?.toUpperCase()) {
-      case 'ERROR': return 'var(--danger)';
-      case 'WARN': 
-      case 'WARNING': return 'var(--warning)';
-      case 'DEBUG': return 'var(--text-muted)';
-      default: return 'var(--text-normal)';
-    }
-  };
-
   const levelScore: Record<string, number> = { 'DEBUG': -1, 'INFO': 0, 'WARN': 1, 'WARNING': 1, 'ERROR': 2 };
   const minLevelScore = levelScore[minLevel] || 0;
   
@@ -179,17 +190,21 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
         {loading && logs.length === 0 && <div style={{ color: 'var(--text-muted)' }}>Loading logs...</div>}
         {error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
         
-        {filteredLogs.map((log, i) => (
-          <div key={i} style={{ marginBottom: '4px', display: 'flex', gap: '12px', wordBreak: 'break-all' }}>
-            <span style={{ color: '#4c566a', flexShrink: 0, minWidth: '85px' }}>
-              {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            </span>
-            <span style={{ color: getLogColor(log.level), flexShrink: 0, minWidth: '45px' }}>
-              [{log.level.toUpperCase() === 'WARNING' ? 'WARN' : log.level.toUpperCase()}]
-            </span>
-            <span style={{ color: getLogColor(log.level) }}>{log.message}</span>
-          </div>
-        ))}
+        {filteredLogs.map((log, i) => {
+          const cleanMessage = stripAnsi(log.message);
+          const kind = classifyLog(log.level, cleanMessage);
+          return (
+            <div key={i} className={`runner-log-row runner-log-${kind}`}>
+              <span style={{ color: '#4c566a', flexShrink: 0, minWidth: '85px' }}>
+                {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+              <span className={`runner-log-level-${kind}`} style={{ flexShrink: 0, minWidth: '45px' }}>
+                [{log.level.toUpperCase() === 'WARNING' ? 'WARN' : log.level.toUpperCase()}]
+              </span>
+              <span className={`runner-log-msg-${kind}`}>{cleanMessage}</span>
+            </div>
+          );
+        })}
         {filteredLogs.length === 0 && logs.length > 0 && <div style={{ color: 'var(--text-muted)' }}>Logs exist, but are hidden by the current filter.</div>}
         {logs.length === 0 && !loading && !error && <div style={{ color: 'var(--text-muted)' }}>No logs found for this scan.</div>}
         <div ref={logsEndRef} />

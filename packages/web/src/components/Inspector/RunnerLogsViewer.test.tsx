@@ -81,4 +81,44 @@ describe('RunnerLogsViewer', () => {
         expect(screen.queryByText('just info')).not.toBeInTheDocument();
         expect(screen.getByText('Logs exist, but are hidden by the current filter.')).toBeInTheDocument();
     });
+
+    it('highlights [Adaptive] and module logs semantically and strips ANSI codes', async () => {
+        mockFetchOnce({
+            json: async () => ({
+                logs: [
+                    {
+                        id: '1',
+                        scan_id: 's',
+                        type: 'runner_log',
+                        payload: JSON.stringify({
+                            level: 'info',
+                            message: '\x1b[33m[Adaptive] Learned required parameter(s) [csrf] on POST /login (HTTP 400)\x1b[0m',
+                            timestamp: '2026-01-01T00:00:00Z',
+                        }),
+                        created_at: 'x',
+                    },
+                    {
+                        id: '2',
+                        scan_id: 's',
+                        type: 'runner_log',
+                        payload: JSON.stringify({
+                            level: 'info',
+                            message: '[BOLA] Probing /users/{id}',
+                            timestamp: '2026-01-01T00:00:01Z',
+                        }),
+                        created_at: 'x',
+                    },
+                ],
+            }),
+        });
+
+        render(<RunnerLogsViewer runId="run-1" isRunning={false} />);
+        const adaptiveMsg = await screen.findByText('[Adaptive] Learned required parameter(s) [csrf] on POST /login (HTTP 400)');
+        expect(adaptiveMsg).toHaveClass('runner-log-msg-adaptive');
+        expect(adaptiveMsg.closest('.runner-log-row')).toHaveClass('runner-log-adaptive');
+
+        const bolaMsg = screen.getByText('[BOLA] Probing /users/{id}');
+        expect(bolaMsg).toHaveClass('runner-log-msg-module');
+        expect(bolaMsg.closest('.runner-log-row')).toHaveClass('runner-log-module');
+    });
 });

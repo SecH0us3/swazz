@@ -11894,3 +11894,57 @@ kbd {
     color: var(--text-muted);
     line-height: 1.5;
 }
+
+/* Runner Logs Semantic Colors */
+.runner-log-row {
+    margin-bottom: 4px;
+    display: flex;
+    gap: 12px;
+    word-break: break-all;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.runner-log-row.runner-log-adaptive {
+    background: rgba(250, 204, 21, 0.08);
+    border-left: 2px solid #facc15;
+    padding-left: 6px;
+}
+
+.runner-log-level-error,
+.runner-log-msg-error {
+    color: #f87171;
+}
+
+.runner-log-level-warn,
+.runner-log-msg-warn {
+    color: #fbbf24;
+}
+
+.runner-log-level-adaptive,
+.runner-log-msg-adaptive {
+    color: #fde047;
+}
+
+.runner-log-level-module,
+.runner-log-msg-module {
+    color: #c084fc;
+}
+
+.runner-log-level-lifecycle,
+.runner-log-msg-lifecycle {
+    color: #34d399;
+}
+
+.runner-log-level-debug,
+.runner-log-msg-debug {
+    color: #64748b;
+}
+
+.runner-log-level-info {
+    color: #38bdf8;
+}
+
+.runner-log-msg-info {
+    color: #cbd5e1;
+}

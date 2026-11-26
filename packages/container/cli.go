@@ -62,6 +62,7 @@ func runCLIErr(args []string) error {
 	logLevelFlag := flags.String("log-level", "", "Log level: debug, info, warn, error")
 	quietFlag := flags.Bool("quiet", false, "Silence all progress output (only show errors)")
 	qFlag := flags.Bool("q", false, "Silence all progress output (alias of -quiet)")
+	noColorFlag := flags.Bool("no-color", false, "Disable ANSI colored log output (also respects NO_COLOR env var)")
 	progressOnChangeFlag := flags.Bool("progress-on-change", false, "Only print progress when the active endpoint changes")
 	disableTelemetry := flags.Bool("disable-telemetry", false, "Disable reporting anonymous global scan count telemetry")
 	mcpListTools := flags.Bool("mcp-list-tools", false, "List the target MCP server's tools and exit without fuzzing")
@@ -72,6 +73,9 @@ func runCLIErr(args []string) error {
 
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	if *noColorFlag {
+		logger.SetNoColor(true)
 	}
 
 	if err := safenet.TrustProxies(trustedProxies); err != nil {

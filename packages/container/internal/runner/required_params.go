@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	"swazz-engine/internal/generator"
-	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
@@ -483,7 +482,7 @@ func (r *Runner) observeRequiredParams(ep swagger.EndpointConfig, sentBody, sent
 	}
 	learned := r.requiredParams.ObserveResponse(ep, sentBody, sentQuery, status, responseBodyToString(responseBody))
 	if len(learned) > 0 {
-		logger.Info("[Adaptive] Learned required parameter(s) [%s] on %s %s (HTTP %d) — pinning baseline value",
+		r.logInfo("[Adaptive] Learned required parameter(s) [%s] on %s %s (HTTP %d) — pinning baseline value",
 			strings.Join(learned, ", "), ep.Method, ep.Path, status)
 	}
 }

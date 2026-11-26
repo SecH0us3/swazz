@@ -30,11 +30,92 @@ type crlfWriter struct {
 }
 
 var (
-	currentLevel  = LevelInfo
-	logFilter     = ""
-	isJSONFormat  = false
-	isRawTerminal atomic.Bool
+	currentLevel   = LevelInfo
+	logFilter      = ""
+	isJSONFormat   = false
+	isRawTerminal  atomic.Bool
+	noColorFlag    atomic.Bool
+	forceColorFlag atomic.Bool
 )
+
+const (
+	ansiReset   = "\x1b[0m"
+	ansiGray    = "\x1b[90m"
+	ansiRed     = "\x1b[31m"
+	ansiGreen   = "\x1b[32m"
+	ansiYellow  = "\x1b[33m"
+	ansiMagenta = "\x1b[35m"
+	ansiCyan    = "\x1b[36m"
+)
+
+// SetNoColor explicitly enables or disables ANSI color output.
+func SetNoColor(disabled bool) {
+	noColorFlag.Store(disabled)
+}
+
+// IsColorEnabled reports whether ANSI colors should be emitted for text logs.
+// Respects NO_COLOR, -no-color, TERM=dumb, JSON mode, CI runners (GitLab CI,
+// GitHub Actions), FORCE_COLOR, and TTY detection on stderr.
+func IsColorEnabled() bool {
+	if isJSONFormat || noColorFlag.Load() || os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if forceColorFlag.Load() || os.Getenv("FORCE_COLOR") != "" || os.Getenv("CLICOLOR_FORCE") != "" {
+		return true
+	}
+	if os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	if os.Getenv("GITLAB_CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
+		return true
+	}
+	fi, err := os.Stderr.Stat()
+	return err == nil && (fi.Mode()&os.ModeCharDevice) != 0
+}
+
+func formatTextLine(level LogLevel, msg string) string {
+	var tag string
+	switch level {
+	case LevelDebug:
+		tag = "DEBUG"
+	case LevelInfo:
+		tag = "INFO"
+	case LevelWarn:
+		tag = "WARN"
+	case LevelError:
+		tag = "ERROR"
+	default:
+		tag = "INFO"
+	}
+
+	if !IsColorEnabled() {
+		return fmt.Sprintf("[%s] %s", tag, msg)
+	}
+
+	switch level {
+	case LevelDebug:
+		return ansiGray + "[" + tag + "] " + msg + ansiReset
+	case LevelWarn:
+		return ansiYellow + "[" + tag + "] " + msg + ansiReset
+	case LevelError:
+		return ansiRed + "[" + tag + "] " + msg + ansiReset
+	case LevelInfo:
+		switch {
+		case strings.Contains(msg, "[Adaptive]"):
+			return ansiYellow + "[" + tag + "] " + msg + ansiReset
+		case strings.Contains(msg, "🚨"):
+			return ansiRed + "[" + tag + "] " + msg + ansiReset
+		case strings.Contains(msg, "🏁") || strings.Contains(msg, "✨"):
+			return ansiGreen + "[" + tag + "] " + msg + ansiReset
+		case strings.Contains(msg, "[BOLA]") || strings.Contains(msg, "[Auth]") || strings.Contains(msg, "[AutoChain]") || strings.Contains(msg, "[OOB]"):
+			return ansiMagenta + "[" + tag + "] " + msg + ansiReset
+		default:
+			return ansiCyan + "[" + tag + "]" + ansiReset + " " + msg
+		}
+	default:
+		return ansiCyan + "[" + tag + "]" + ansiReset + " " + msg
+	}
+}
 
 // SetRawTerminal enables or disables CRLF translation for terminal raw mode.
 func SetRawTerminal(raw bool) {
@@ -143,7 +224,7 @@ func Debug(format string, v ...interface{}) {
 		if isJSONFormat {
 			logJSON("debug", msg)
 		} else {
-			log.Printf("[DEBUG] %s", msg)
+			log.Print(formatTextLine(LevelDebug, msg))
 		}
 	}
 }
@@ -154,7 +235,7 @@ func Info(format string, v ...interface{}) {
 		if isJSONFormat {
 			logJSON("info", msg)
 		} else {
-			log.Printf("[INFO] %s", msg)
+			log.Print(formatTextLine(LevelInfo, msg))
 		}
 	}
 }
@@ -165,7 +246,7 @@ func Warn(format string, v ...interface{}) {
 		if isJSONFormat {
 			logJSON("warn", msg)
 		} else {
-			log.Printf("[WARN] %s", msg)
+			log.Print(formatTextLine(LevelWarn, msg))
 		}
 	}
 }
@@ -176,7 +257,7 @@ func Error(format string, v ...interface{}) {
 		if isJSONFormat {
 			logJSON("error", msg)
 		} else {
-			log.Printf("[ERROR] %s", msg)
+			log.Print(formatTextLine(LevelError, msg))
 		}
 	}
 }
