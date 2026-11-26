@@ -302,7 +302,7 @@ func EvaluateOWASPAPI(ctx *ClassificationContext) []ClassificationMatch {
 		cwe := "CWE-434"
 		reason := "Server accepted unvalidated file upload probe without magic-byte or filename verification"
 		if ruleID == "swazz/file-parser-error" {
-			cwe = "CWE-409"
+			cwe = "CWE-755"
 			reason = "File parser crashed or leaked internal error on malformed/truncated upload probe"
 		}
 		matches = append(matches, ClassificationMatch{

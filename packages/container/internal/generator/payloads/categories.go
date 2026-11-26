@@ -12,11 +12,11 @@ package payloads
 
 // Boundary category IDs
 const (
-	CatBoundaryStrings  = "boundary_strings"
-	CatBoundaryIntegers = "boundary_integers"
-	CatBoundaryNumbers  = "boundary_numbers"
-	CatBoundaryDates    = "boundary_dates"
-	CatBoundaryBooleans = "boundary_booleans"
+	CatBoundaryStrings    = "boundary_strings"
+	CatBoundaryIntegers   = "boundary_integers"
+	CatBoundaryNumbers    = "boundary_numbers"
+	CatBoundaryDates      = "boundary_dates"
+	CatBoundaryBooleans   = "boundary_booleans"
 	CatBoundaryArrays     = "boundary_arrays"
 	CatBoundaryUUIDs      = "boundary_uuids"
 	CatBoundaryFileUpload = "boundary_file_upload"
@@ -101,7 +101,7 @@ var BoundaryCategories = []Category{
 	{ID: CatBoundaryBooleans, Label: "Booleans", Description: "True/false, nil, string coercions (yes/no, 1/0)", Items: BoundaryBooleans},
 	{ID: CatBoundaryArrays, Label: "Array Sizes", Description: "0, 1, 5, 10, 50, 100 element arrays", Items: toAny(BoundaryArraySizes)},
 	{ID: CatBoundaryUUIDs, Label: "UUIDs", Description: "Nil UUID, max UUID, invalid format, empty string", Items: BoundaryUUIDs},
-	{ID: CatBoundaryFileUpload, Label: "File Upload Boundaries", Description: "Empty file, 255-char filename, uncompressed size-limit probe", Items: nil},
+	{ID: CatBoundaryFileUpload, Label: "File Upload Boundaries", Description: "Empty file, 255-char filename, uncompressed size-limit probe", Items: toAny(BoundaryFileUploads(1024))},
 }
 
 // MaliciousCategories lists all malicious categories in display order.
@@ -127,7 +127,7 @@ var MaliciousCategories = []Category{
 	{ID: CatMaliciousSSRF, Label: "SSRF & Cloud Metadata", Description: "AWS IMDS, GCP metadata, Azure compute, Kubernetes SA tokens", Items: MaliciousSSRF},
 	{ID: CatMaliciousMassAssignment, Label: "Mass Assignment", Description: "Privilege escalation and attribute tampering (role: admin, is_admin: true)", Items: MaliciousMassAssignment},
 	{ID: CatMaliciousGraphQL, Label: "GraphQL Abuse", Description: "Introspection, field suggestions, and query depth batching DoS", Items: MaliciousGraphQL},
-	{ID: CatMaliciousFileUpload, Label: "File Upload Validation", Description: "Non-destructive MIME/magic-bytes mismatch, truncated headers, traversal & double-extension filenames, SVG upload probes", Items: nil},
+	{ID: CatMaliciousFileUpload, Label: "File Upload Validation", Description: "Non-destructive MIME/magic-bytes mismatch, truncated headers, traversal & double-extension filenames, SVG upload probes", Items: toAny(MaliciousFileUploads)},
 }
 
 // RandomCategories lists all random categories.

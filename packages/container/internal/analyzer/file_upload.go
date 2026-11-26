@@ -14,7 +14,7 @@ import (
 	"swazz-engine/internal/swagger"
 )
 
-// FileUploadAnalyzer evaluates responses to multipart/form-data file upload probes.
+// FileUploadAnalyzer evaluates responses to multipart/form-data and raw binary file upload probes.
 type FileUploadAnalyzer struct{}
 
 type uploadProbeHit struct {
@@ -61,7 +61,7 @@ func collectUploadFiles(v any, field string, out []uploadProbeHit) []uploadProbe
 const fileUploadRemediation = "Validate file magic bytes (not just filename or Content-Type), enforce pre-decode image dimensions and pixel caps (e.g. image.DecodeConfig in Go, Image.MAX_IMAGE_PIXELS in Pillow, limitInputPixels in Sharp, policy.xml in ImageMagick), cap request stream size (http.MaxBytesReader / io.LimitReader), and sanitize/randomize stored filenames."
 
 func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
-	if input == nil || input.SentPayload == nil {
+	if input == nil || !input.FileUploadSent || input.SentPayload == nil {
 		return nil
 	}
 	uploads := collectUploadFiles(input.SentPayload, "", nil)
@@ -87,16 +87,30 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 			kind := hit.file.ProbeKind
 			switch kind {
 			case "mime_mismatch_png", "mime_mismatch_jpeg", "mime_mismatch_pdf",
-				"truncated_png", "truncated_zip", "traversal_filename":
-				cwe := []string{"CWE-434"}
-				if kind == "traversal_filename" {
-					cwe = []string{"CWE-434", "CWE-22"}
-				}
+				"truncated_png", "truncated_zip":
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            "error",
 					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode),
 					Evidence:         fmt.Sprintf("Field: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Status: %d | %s", hit.field, hit.file.Filename, hit.file.ContentType, kind, input.StatusCode, fileUploadRemediation),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A06:2025 Insecure Design"},
+					CWEIDs:           []string{"CWE-434"},
+				})
+			case "traversal_filename":
+				reflected := bytes.Contains(input.ResponseBody, []byte("../")) ||
+					bytes.Contains(input.ResponseBody, []byte("swazz-probe.txt"))
+				level := "warning"
+				cwe := []string{"CWE-434"}
+				if reflected {
+					level = "error"
+					cwe = []string{"CWE-434", "CWE-22"}
+				}
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:           "swazz/unvalidated-file-upload",
+					Level:            level,
+					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode),
+					Evidence:         fmt.Sprintf("Field: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Reflected: %t | Status: %d | %s", hit.field, hit.file.Filename, hit.file.ContentType, kind, reflected, input.StatusCode, fileUploadRemediation),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
 					OWASPCategory:    []string{"A06:2025 Insecure Design"},
 					CWEIDs:           cwe,
@@ -120,14 +134,24 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 		for _, sig := range parserErrorSignatures {
 			if bytes.Contains(lower, sig) {
 				first := uploads[0]
+				msg := fmt.Sprintf("File parser crashed or leaked internal error (%q) with HTTP %d on %s probe.", string(sig), input.StatusCode, first.file.ProbeKind)
+				uploadsSummary := ""
+				if len(uploads) > 1 {
+					parts := make([]string, len(uploads))
+					for i, u := range uploads {
+						parts[i] = fmt.Sprintf("%s:%s", u.field, u.file.ProbeKind)
+					}
+					uploadsSummary = fmt.Sprintf(" | Uploads: %s", strings.Join(parts, ", "))
+					msg = fmt.Sprintf("File parser crashed or leaked internal error (%q) with HTTP %d across %d upload probes.", string(sig), input.StatusCode, len(uploads))
+				}
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/file-parser-error",
 					Level:            "error",
-					Message:          fmt.Sprintf("File parser crashed or leaked internal error (%q) with HTTP %d on %s probe.", string(sig), input.StatusCode, first.file.ProbeKind),
-					Evidence:         fmt.Sprintf("MatchedSignature: %s | Field: %s | Filename: %s | ProbeKind: %s | Status: %d | %s", strings.TrimSpace(string(sig)), first.field, first.file.Filename, first.file.ProbeKind, input.StatusCode, fileUploadRemediation),
+					Message:          msg,
+					Evidence:         fmt.Sprintf("MatchedSignature: %s | Field: %s | Filename: %s | ProbeKind: %s%s | Status: %d | %s", strings.TrimSpace(string(sig)), first.field, first.file.Filename, first.file.ProbeKind, uploadsSummary, input.StatusCode, fileUploadRemediation),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-					OWASPCategory:    []string{"A05:2025 Injection"},
-					CWEIDs:           []string{"CWE-409", "CWE-209"},
+					OWASPCategory:    []string{"A10:2025 Mishandling of Exceptional Conditions"},
+					CWEIDs:           []string{"CWE-20", "CWE-755", "CWE-209"},
 				})
 				break
 			}

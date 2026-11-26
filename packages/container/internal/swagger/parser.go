@@ -323,29 +323,29 @@ func extractRequestSchema(operation map[string]any, allParams []any, spec map[st
 
 	// Swagger 2.0: parameters with in: "body"
 	for _, p := range allParams {
-			if pm, ok := p.(map[string]any); ok {
-				if pm["in"] == "body" {
-					if s, ok := pm["schema"]; ok {
-						var example any
-						if ex, ok := pm["example"]; ok {
-							example = ex
-						} else if xex, ok := pm["x-examples"]; ok {
-							example = xex
-						} else {
-							if sm, ok := s.(map[string]any); ok {
-								if ex, ok := sm["example"]; ok {
-									example = ex
-								} else if df, ok := sm["default"]; ok {
-									example = df
-								}
+		if pm, ok := p.(map[string]any); ok {
+			if pm["in"] == "body" {
+				if s, ok := pm["schema"]; ok {
+					var example any
+					if ex, ok := pm["example"]; ok {
+						example = ex
+					} else if xex, ok := pm["x-examples"]; ok {
+						example = xex
+					} else {
+						if sm, ok := s.(map[string]any); ok {
+							if ex, ok := sm["example"]; ok {
+								example = ex
+							} else if df, ok := sm["default"]; ok {
+								example = df
 							}
 						}
-						return &bodyResult{
-							schema:      resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth),
-							contentType: "application/json",
-							example:     example,
-						}
 					}
+					return &bodyResult{
+						schema:      resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth),
+						contentType: "application/json",
+						example:     example,
+					}
+				}
 			}
 		}
 	}

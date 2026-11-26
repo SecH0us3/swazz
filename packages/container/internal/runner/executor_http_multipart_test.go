@@ -167,3 +167,178 @@ func TestExecuteSingleRequest_MultipartSlicesPointersFallbacksAnd5xx(t *testing.
 	require.NotEmpty(t, res.AnalyzerFindings)
 	assert.Equal(t, "swazz/file-parser-error", res.AnalyzerFindings[0].RuleID)
 }
+
+func TestExecuteSingleRequest_RawBinaryAndNonMultipartContentTypes(t *testing.T) {
+	t.Run("application/octet-stream raw UploadFile sends raw bytes and triggers analyzer", func(t *testing.T) {
+		var gotCT string
+		var gotBody []byte
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotCT = r.Header.Get("Content-Type")
+			gotBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		defer srv.Close()
+
+		cfg := &swagger.Config{
+			BaseURL:  srv.URL,
+			Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+			Settings: swagger.Settings{AnalyzeResponseBody: true, TimeoutMs: 5000},
+		}
+		r := New(cfg, nil)
+		defer r.Close()
+		r.analyzer = analyzer.NewRegistry(nil)
+
+		probe := payloads.MaliciousFileUploads[0] // mime_mismatch_png (CT: image/png)
+		res := r.executeGeneratedRequest(
+			t.Context(),
+			srv.URL, "/raw-upload", "/raw-upload", "POST",
+			nil, nil,
+			probe,
+			swagger.ProfileMalicious,
+			nil, nil,
+			"application/octet-stream",
+			nil,
+		)
+
+		require.NotNil(t, res)
+		assert.Equal(t, http.StatusOK, res.Status)
+		assert.Equal(t, probe.ContentType, gotCT)
+		assert.Equal(t, probe.Data, gotBody)
+		require.NotEmpty(t, res.AnalyzerFindings)
+		assert.Equal(t, "swazz/unvalidated-file-upload", res.AnalyzerFindings[0].RuleID)
+	})
+
+	t.Run("application/json with UploadFile does not trigger FileUploadAnalyzer", func(t *testing.T) {
+		var gotCT, gotBody string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotCT = r.Header.Get("Content-Type")
+			b, _ := io.ReadAll(r.Body)
+			gotBody = string(b)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		defer srv.Close()
+
+		cfg := &swagger.Config{
+			BaseURL:  srv.URL,
+			Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+			Settings: swagger.Settings{AnalyzeResponseBody: true, TimeoutMs: 5000},
+		}
+		r := New(cfg, nil)
+		defer r.Close()
+		r.analyzer = analyzer.NewRegistry(nil)
+
+		res := r.executeGeneratedRequest(
+			t.Context(),
+			srv.URL, "/json-endpoint", "/json-endpoint", "POST",
+			nil, nil,
+			map[string]any{"file": payloads.MaliciousFileUploads[0]},
+			swagger.ProfileMalicious,
+			nil, nil,
+			"application/json",
+			nil,
+		)
+
+		require.NotNil(t, res)
+		assert.Equal(t, http.StatusOK, res.Status)
+		assert.Equal(t, "application/json", gotCT)
+		assert.Contains(t, gotBody, `"file":`)
+		for _, f := range res.AnalyzerFindings {
+			assert.NotEqual(t, "swazz/unvalidated-file-upload", f.RuleID)
+		}
+	})
+
+	t.Run("x-www-form-urlencoded formats UploadFile as filename and does not trigger analyzer", func(t *testing.T) {
+		var gotBody string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			gotBody = string(b)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		defer srv.Close()
+
+		cfg := &swagger.Config{
+			BaseURL:  srv.URL,
+			Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+			Settings: swagger.Settings{AnalyzeResponseBody: true, TimeoutMs: 5000},
+		}
+		r := New(cfg, nil)
+		defer r.Close()
+		r.analyzer = analyzer.NewRegistry(nil)
+
+		probe := payloads.MaliciousFileUploads[0]
+		res := r.executeGeneratedRequest(
+			t.Context(),
+			srv.URL, "/form-endpoint", "/form-endpoint", "POST",
+			nil, nil,
+			map[string]any{"file": probe},
+			swagger.ProfileMalicious,
+			nil, nil,
+			"application/x-www-form-urlencoded",
+			nil,
+		)
+
+		require.NotNil(t, res)
+		assert.Equal(t, http.StatusOK, res.Status)
+		assert.Contains(t, gotBody, "file="+strings.ReplaceAll(probe.Filename, " ", "+"))
+		assert.NotContains(t, gotBody, "%7B") // no raw Go struct { ... } dump
+		for _, f := range res.AnalyzerFindings {
+			assert.NotEqual(t, "swazz/unvalidated-file-upload", f.RuleID)
+		}
+	})
+
+	t.Run("multipart nested map field is JSON-serialized", func(t *testing.T) {
+		var gotMeta string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mr, err := r.MultipartReader()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			for {
+				part, err := mr.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				b, _ := io.ReadAll(part)
+				if part.FormName() == "meta" {
+					gotMeta = string(b)
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		cfg := &swagger.Config{
+			BaseURL:  srv.URL,
+			Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+			Settings: swagger.Settings{AnalyzeResponseBody: false, TimeoutMs: 5000},
+		}
+		r := New(cfg, nil)
+		defer r.Close()
+
+		res := r.executeGeneratedRequest(
+			t.Context(),
+			srv.URL, "/upload-meta", "/upload-meta", "POST",
+			nil, nil,
+			map[string]any{
+				"meta": map[string]any{"tag": "avatar", "public": true},
+				"file": payloads.ValidPNGFile(),
+			},
+			swagger.ProfileRandom,
+			nil, nil,
+			"multipart/form-data",
+			nil,
+		)
+
+		require.NotNil(t, res)
+		assert.Equal(t, http.StatusOK, res.Status)
+		assert.JSONEq(t, `{"public":true,"tag":"avatar"}`, gotMeta)
+	})
+}

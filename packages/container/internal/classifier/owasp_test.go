@@ -130,7 +130,10 @@ func TestEvaluateOWASPAPI_FileUploadRules(t *testing.T) {
 	})
 	require.Len(parserMatches, 1)
 	require.Equal("API8:2023 Security Misconfiguration", parserMatches[0].Category)
-	require.Equal("CWE-409", parserMatches[0].CWE)
+	require.Equal("CWE-755", parserMatches[0].CWE)
+
+	require.Equal([]string{"A06:2025 Insecure Design"}, OWASPCategories("swazz/unvalidated-file-upload"))
+	require.Equal([]string{"A10:2025 Mishandling of Exceptional Conditions"}, OWASPCategories("swazz/file-parser-error"))
 }
 
 // TestClassifyAllKeepsAnalyzerTaxonomy covers the real call site: swazz/prototype-pollution

@@ -179,10 +179,10 @@ type Runner struct {
 	timeBaselines  *sync.Map
 	requiredParams *RequiredParamTracker
 	resultsMu      sync.Mutex
-	allResults    []*swagger.FuzzResult // see retainResult
-	retained      retainedResults
-	limiter       *ConcurrencyLimiter
-	gate          license.Gate
+	allResults     []*swagger.FuzzResult // see retainResult
+	retained       retainedResults
+	limiter        *ConcurrencyLimiter
+	gate           license.Gate
 
 	analyzer *analyzer.AnalyzerRegistry
 	// detector harvests IDs from responses during a run and replays them in its BOLA phase.

@@ -960,13 +960,13 @@ func TestRunner_AutoChainingActiveFuzzingDeleteAndEvictionRecovery(t *testing.T)
 
 func TestRunner_AutoChainingCheckpointResumeSeedsOtherEndpointsForSubsequentProfiles(t *testing.T) {
 	var (
-		mu                 sync.Mutex
-		nextUser           int64
-		nextOrder          int64
-		users              = make(map[string]bool)
-		orders             = make(map[string]bool)
-		maliciousUser200   atomic.Bool
-		maliciousOrder200  atomic.Bool
+		mu                sync.Mutex
+		nextUser          int64
+		nextOrder         int64
+		users             = make(map[string]bool)
+		orders            = make(map[string]bool)
+		maliciousUser200  atomic.Bool
+		maliciousOrder200 atomic.Bool
 	)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1110,12 +1110,12 @@ func TestRunner_AutoChainingCheckpointResumeSeedsOtherEndpointsForSubsequentProf
 func TestRunner_AutoChainingNestedDeleteAndSubresourceEcho(t *testing.T) {
 	t.Run("NestedDeletePreservesAncestorAndRejectsPathEcho", func(t *testing.T) {
 		var (
-			mu                 sync.Mutex
-			nextOrg            int64
-			nextProj           int64
-			orgs               = make(map[string]bool)
-			projects           = make(map[string]string) // projID -> orgID
-			nestedDelete200    atomic.Bool
+			mu                  sync.Mutex
+			nextOrg             int64
+			nextProj            int64
+			orgs                = make(map[string]bool)
+			projects            = make(map[string]string) // projID -> orgID
+			nestedDelete200     atomic.Bool
 			pollutedProjWithOrg atomic.Bool
 		)
 

@@ -165,8 +165,10 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		if is(payloads.CatBoundaryUUIDs) && len(payloads.BoundaryUUIDs) > max {
 			max = len(payloads.BoundaryUUIDs)
 		}
-		if is(payloads.CatBoundaryFileUpload) && 3 > max {
-			max = 3
+		if is(payloads.CatBoundaryFileUpload) {
+			if n := len(payloads.BoundaryFileUploads(1024)); n > max {
+				max = n
+			}
 		}
 		return max
 
