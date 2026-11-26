@@ -19,6 +19,8 @@ func TestSSTIAnalyzer(t *testing.T) {
 	store.Register("{{23*37}}", sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"})
 	store.Register("{{23+37}}", sstistore.SSTIContext{RawExpr: "23+37", Expected: "60"})
 	store.Register("{{23+'37'}}", sstistore.SSTIContext{RawExpr: "23+'37'", Expected: "2337"})
+	store.Register("<%= 53+37 %>", sstistore.SSTIContext{RawExpr: "53+37", Expected: "90"})
+	store.Register("<%= 4173*6829 %>", sstistore.SSTIContext{RawExpr: "4173*6829", Expected: "28497417"})
 
 	tests := []struct {
 		name          string
@@ -103,6 +105,65 @@ func TestSSTIAnalyzer(t *testing.T) {
 			profile:       swagger.ProfileBoundary,
 			expectedCount: 0,
 		},
+		{
+			name:          "False positive regression: 90 inside UUID segment 90be should not match",
+			payload:       "<%= 53+37 %>",
+			response:      `{"availableMethods":null,"defaultText":"","exceptionType":"ContractValidation","info":null,"key":null,"message":"No Product with Id=04500e5a-a278-47d0-bba6-d0e69fac4b24","ticketId":"ca2daac4-b122-4a4d-90be-8ac6149dfe20"}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "False positive: static 7*7 -> 49 inside hex traceId should not match",
+			payload:       "{{7*7}}",
+			response:      `{"traceId":"4f8a49c2e1"}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "True positive: FreeMarker comma thousand-separated result matches",
+			payload:       "<%= 4173*6829 %>",
+			response:      `<p>Total: 28,497,417</p>`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
+		},
+		{
+			name:          "True positive: NBSP thousand-separated result matches",
+			payload:       "<%= 4173*6829 %>",
+			response:      "Total: 28\u00a0497\u00a0417",
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
+		},
+		{
+			name:          "True positive: space, narrow NBSP, and dot thousand-separated results match",
+			payload:       "<%= 4173*6829 %>",
+			response:      "space: 28 497 417 | narrow: 28\u202f497\u202f417 | dot: 28.497.417",
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
+		},
+		{
+			name:          "False positive: dot-grouped number with leading group should not match",
+			payload:       "<%= 4173*6829 %>",
+			response:      `{"version":"1.28.497.417"}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "False positive: thousand-separated result with adjacent leading digit should not match",
+			payload:       "<%= 4173*6829 %>",
+			response:      `{"id": "128,497,417"}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "Reflection of raw expression alongside formatted result should not match",
+			payload:       "<%= 4173*6829 %>",
+			response:      `28,497,417 (4173*6829)`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -136,6 +197,18 @@ func TestHasStandaloneNumber(t *testing.T) {
 		{"port: 8077", "77", false},
 		{"77 bottles", "77", true},
 		{"value=77.", "77", true},
+		{"ca2daac4-b122-4a4d-90be-8ac6149dfe20", "90", false},
+		{`"traceId":"4f8a49c2e1"`, "49", false},
+		{`"etag":"\"a851f\""`, "851", false},
+		{"name28497417", "28497417", true},
+		{"49apple", "49", true},
+		{"name90be", "90", true},
+		{"90be", "90", false},
+		{"ab90", "90", false},
+		{"anything", "", false},
+		{"<td>7034790</td>", "7034790", true},
+		{`{"description":"48217394"}`, "48217394", true},
+		{"ticketId=ca2daac4-b122-4a4d-90be-8ac6149dfe20, count=90", "90", true},
 	}
 
 	for _, tt := range tests {
@@ -174,4 +247,48 @@ func hasRule(findings []swagger.AnalysisFinding, rule string) bool {
 		}
 	}
 	return false
+}
+
+func TestFormatThousands(t *testing.T) {
+	tests := []struct {
+		digits   string
+		sep      string
+		expected string
+	}{
+		{"999", ",", ""},
+		{"-1234", ",", ""},
+		{"12a4", ",", ""},
+		{"1234", ",", "1,234"},
+		{"123456", ",", "123,456"},
+		{"7034790", " ", "7 034 790"},
+		{"28497417", ".", "28.497.417"},
+	}
+
+	for _, tt := range tests {
+		got := formatThousands([]byte(tt.digits), tt.sep)
+		if tt.expected == "" {
+			if got != nil {
+				t.Errorf("formatThousands(%q, %q) = %q, want nil", tt.digits, tt.sep, string(got))
+			}
+		} else if string(got) != tt.expected {
+			t.Errorf("formatThousands(%q, %q) = %q, want %q", tt.digits, tt.sep, string(got), tt.expected)
+		}
+	}
+}
+
+func BenchmarkSSTIAnalyzer_NoMatch(b *testing.B) {
+	store := sstistore.NewStore()
+	store.Register("<%= 4173*6829 %>", sstistore.SSTIContext{RawExpr: "4173*6829", Expected: "28497417"})
+	a := &SSTIAnalyzer{Store: store}
+	input := &AnalysisInput{
+		SentPayload:  "<%= 4173*6829 %>",
+		ResponseBody: []byte(`{"availableMethods":null,"defaultText":"","exceptionType":"ContractValidation","info":null,"key":null,"message":"No Product with Id=04500e5a-a278-47d0-bba6-d0e69fac4b24","ticketId":"ca2daac4-b122-4a4d-90be-8ac6149dfe20"}`),
+		Profile:      swagger.ProfileMalicious,
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		_ = a.Analyze(input)
+	}
 }
