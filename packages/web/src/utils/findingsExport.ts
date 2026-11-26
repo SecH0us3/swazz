@@ -100,7 +100,6 @@ export interface BuildGroupedFindingsOptions {
 interface InternalTargetAccumulator {
     target: GroupedFindingTarget;
     identitySet: Set<string>;
-    exampleSignatures: Set<string>;
 }
 
 interface InternalGroupAccumulator {
@@ -187,8 +186,22 @@ function toFindingExample(row: ResultSummary): FindingExample {
     };
 }
 
-function getExampleSignature(row: ResultSummary): string {
-    return `${row.requestUri || row.resolvedPath}::${row.status}::${row.identity || ''}::${row.payloadPreview}`;
+function isSameExample(ex: FindingExample, row: ResultSummary): boolean {
+    return (
+        (ex.requestUri || ex.resolvedPath) === (row.requestUri || row.resolvedPath) &&
+        ex.status === row.status &&
+        (ex.identity || '') === (row.identity || '') &&
+        ex.payloadPreview === row.payloadPreview
+    );
+}
+
+interface TargetMeta {
+    ruleId?: string;
+    message: string;
+    severity?: string;
+    status?: number;
+    subtype?: string;
+    finding?: AnalysisFinding;
 }
 
 function recordTargetHit(
@@ -196,17 +209,11 @@ function recordTargetHit(
     dedupeKey: string,
     row: ResultSummary,
     maxExamples: number,
-    meta: {
-        ruleId?: string;
-        message: string;
-        severity?: string;
-        status?: number;
-        subtype?: string;
-        finding?: AnalysisFinding;
-    }
+    createMeta: () => TargetMeta
 ): void {
     let acc = group.seenMap.get(dedupeKey);
     if (!acc) {
+        const meta = createMeta();
         const owaspCategory = mergeUniqueStrings(meta.finding?.owaspCategory, row.owaspCategory);
         const owaspApiCategory = mergeUniqueStrings(meta.finding?.owaspApiCategory, row.owaspApiCategory);
         const cweIds = mergeUniqueStrings(meta.finding?.cweIds, row.cweIds);
@@ -231,7 +238,6 @@ function recordTargetHit(
         acc = {
             target,
             identitySet: new Set<string>(),
-            exampleSignatures: new Set<string>(),
         };
         group.seenMap.set(dedupeKey, acc);
         group.targets.push(target);
@@ -249,16 +255,14 @@ function recordTargetHit(
     }
 
     if (acc.target.examples.length < maxExamples) {
-        const sig = getExampleSignature(row);
-        if (!acc.exampleSignatures.has(sig)) {
-            acc.exampleSignatures.add(sig);
+        if (!acc.target.examples.some((ex) => isSameExample(ex, row))) {
             acc.target.examples.push(toFindingExample(row));
         }
     }
 }
 
-function finalizeGroups(groupsMap: Record<string, InternalGroupAccumulator>): GroupedFindingCategory[] {
-    return Object.values(groupsMap)
+function finalizeGroups(groupsMap: Map<string, InternalGroupAccumulator>): GroupedFindingCategory[] {
+    return Array.from(groupsMap.values())
         .map((g) => ({
             id: g.id,
             section: g.section,
@@ -288,21 +292,22 @@ export function buildGroupedFindingsExport(
     const rawMax = options.maxExamplesPerFinding ?? 2;
     const maxExamples = Math.min(2, Math.max(1, Math.floor(rawMax)));
     const excludedStatuses = options.excludedStatuses ?? new Set<number>();
+    const hasExcluded = excludedStatuses.size > 0;
 
-    const filteredRows = rows.filter((row) => !excludedStatuses.has(row.status));
-
-    const securityGroups: Record<string, InternalGroupAccumulator> = {};
-    const infraGroups: Record<string, InternalGroupAccumulator> = {};
+    const securityGroups = new Map<string, InternalGroupAccumulator>();
+    const infraGroups = new Map<string, InternalGroupAccumulator>();
     let matchedRowCount = 0;
 
-    for (const row of filteredRows) {
+    for (const row of rows) {
+        if (hasExcluded && excludedStatuses.has(row.status)) continue;
         let placed = false;
 
         if (row.analyzerFindings && row.analyzerFindings.length > 0) {
             for (const f of row.analyzerFindings) {
                 const cat = categorizeFinding(f, row.responsePreview);
-                if (!securityGroups[cat.key]) {
-                    securityGroups[cat.key] = {
+                let group = securityGroups.get(cat.key);
+                if (!group) {
+                    group = {
                         id: cat.key,
                         section: 'security',
                         title: cat.title,
@@ -310,15 +315,16 @@ export function buildGroupedFindingsExport(
                         targets: [],
                         seenMap: new Map(),
                     };
+                    securityGroups.set(cat.key, group);
                 }
                 const dedupeKey = `${row.method} ${row.endpoint}::${f.ruleId}::${f.message}`;
-                recordTargetHit(securityGroups[cat.key], dedupeKey, row, maxExamples, {
+                recordTargetHit(group, dedupeKey, row, maxExamples, () => ({
                     ruleId: f.ruleId,
                     message: f.message,
                     severity: f.level,
                     status: row.status,
                     finding: f,
-                });
+                }));
                 placed = true;
             }
         }
@@ -326,8 +332,9 @@ export function buildGroupedFindingsExport(
         if (!placed) {
             const classified = classifyInfrastructureError(row);
             if (classified) {
-                if (!infraGroups[classified.groupKey]) {
-                    infraGroups[classified.groupKey] = {
+                let group = infraGroups.get(classified.groupKey);
+                if (!group) {
+                    group = {
                         id: classified.groupKey,
                         section: 'infrastructure',
                         title: classified.title,
@@ -341,6 +348,7 @@ export function buildGroupedFindingsExport(
                         targets: [],
                         seenMap: new Map(),
                     };
+                    infraGroups.set(classified.groupKey, group);
                 }
 
                 const dedupeKey = getCleanDedupeKey(
@@ -349,11 +357,11 @@ export function buildGroupedFindingsExport(
                     classified.displayStatus,
                     row.error || row.responsePreview
                 );
-                recordTargetHit(infraGroups[classified.groupKey], dedupeKey, row, maxExamples, {
+                recordTargetHit(group, dedupeKey, row, maxExamples, () => ({
                     message: row.error || classified.subtypeTitle || `HTTP ${classified.displayStatus}`,
                     status: classified.displayStatus,
                     ...(classified.subtypeTitle ? { subtype: classified.subtypeTitle } : {}),
-                });
+                }));
                 placed = true;
             }
         }
