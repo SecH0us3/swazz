@@ -59,6 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const crawlStatusMsg = document.getElementById('crawl-status-msg');
     const lblCurrentSiteHost = document.getElementById('lbl-current-site-host');
     const btnTrackSite = document.getElementById('btn-track-site');
+    const btnTrackOnlySite = document.getElementById('btn-track-only-site');
+    const domainChipsList = document.getElementById('domain-chips-list');
 
     let isRecording = false;
     let targetDomains = [];
@@ -67,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeToken = null;
     let activeSwazzUrl = DEFAULT_SWAZZ_URL;
     let activeProjectId = null;
+    let activeProjectName = "";
     let projectsList = [];
     let droppedOutOfScope = 0;
     let droppedNoScope = 0;
@@ -157,6 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
             activeToken = state.token || null;
             activeSwazzUrl = state.swazzUrl || DEFAULT_SWAZZ_URL;
             activeProjectId = state.projectId || null;
+            activeProjectName = state.projectName || "";
 
             // Sync toggle
             toggleRecord.checked = isRecording;
@@ -180,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Sync connection card
             cardActiveProject.textContent = state.projectName || (activeProjectId ? `Project ID: ${activeProjectId.slice(0, 8)}...` : 'None Selected');
-            cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
+            renderDomainChips();
 
             // Render endpoints first: it seeds the default selection that the
             // Sync and HAR buttons key off, so updating them before this would
@@ -242,13 +246,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function renderDomainChips() {
+        if (cardActiveDomains) {
+            cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
+            cardActiveDomains.classList.toggle('hidden', targetDomains.length > 0);
+        }
+        if (!domainChipsList) return;
+        domainChipsList.innerHTML = '';
+        targetDomains.forEach((domain) => {
+            const chip = document.createElement('span');
+            chip.className = 'domain-chip';
+
+            const txt = document.createElement('span');
+            txt.className = 'domain-chip-text';
+            txt.textContent = domain;
+            txt.title = domain;
+
+            const rm = document.createElement('button');
+            rm.className = 'domain-chip-remove';
+            rm.type = 'button';
+            rm.textContent = '✕';
+            rm.title = `Remove ${domain} from scope`;
+            rm.addEventListener('click', () => {
+                targetDomains = targetDomains.filter(d => d !== domain);
+                inputDomains.value = targetDomains.join(', ');
+                chrome.storage.local.set({ targetDomains });
+                renderDomainChips();
+                updateScopeWarningUI();
+                updateSyncButtonState();
+                updateTrackSiteUI();
+            });
+
+            chip.appendChild(txt);
+            chip.appendChild(rm);
+            domainChipsList.appendChild(chip);
+        });
+    }
+
     function addDomainToScope(host) {
         const clean = host.trim().toLowerCase();
         if (!clean) return;
         if (!targetDomains.includes(clean)) {
             targetDomains.push(clean);
             inputDomains.value = targetDomains.join(', ');
-            cardActiveDomains.textContent = `Domains: ${targetDomains.join(', ')}`;
+            renderDomainChips();
         }
         // Only clear what this host accounted for; other ignored domains stay
         // visible so they are not silently forgotten.
@@ -356,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(d => d.length > 0);
         targetDomains = domains;
         chrome.storage.local.set({ targetDomains: domains });
-        cardActiveDomains.textContent = domains.length > 0 ? `Domains: ${domains.join(', ')}` : 'Scope: Empty';
+        renderDomainChips();
         updateScopeWarningUI();
         updateSyncButtonState();
         updateTrackSiteUI();
@@ -390,9 +431,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const updates = { projectId: activeProjectId };
         if (selectedProj) {
+            activeProjectName = selectedProj.name;
             updates.projectName = selectedProj.name;
             cardActiveProject.textContent = selectedProj.name;
         } else {
+            activeProjectName = "";
             updates.projectName = "";
             cardActiveProject.textContent = "None Selected";
         }
@@ -500,8 +543,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (activeProjectId) {
                 const activeP = projectsList.find(p => p.id === activeProjectId);
                 if (activeP) {
+                    activeProjectName = activeP.name;
                     chrome.storage.local.set({ projectName: activeP.name });
                     cardActiveProject.textContent = activeP.name;
+                    updateSyncButtonState();
                 }
             }
 
@@ -536,6 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btnTrackSite.textContent = '🎯 Track this site';
             btnTrackSite.classList.remove('tracking');
             btnTrackSite.title = '';
+            if (btnTrackOnlySite) btnTrackOnlySite.classList.add('hidden');
             return;
         }
 
@@ -544,6 +590,12 @@ document.addEventListener('DOMContentLoaded', () => {
         btnTrackSite.disabled = false;
 
         const inScope = isHostInScope(activeTabHost, targetDomains);
+        const cleanActive = activeTabHost.trim().toLowerCase();
+        const hasOtherDomains = targetDomains.some(d => d.trim().toLowerCase() !== cleanActive);
+        if (btnTrackOnlySite) {
+            btnTrackOnlySite.classList.toggle('hidden', !hasOtherDomains);
+        }
+
         if (inScope && isRecording) {
             btnTrackSite.textContent = '✓ Tracking';
             btnTrackSite.classList.add('tracking');
@@ -613,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 inputDomains.value = targetDomains.join(', ');
-                cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
+                renderDomainChips();
                 chrome.storage.local.set({ targetDomains });
                 updateScopeWarningUI();
                 updateSyncButtonState();
@@ -631,6 +683,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 updateTrackSiteUI();
             }
+        });
+    }
+
+    if (btnTrackOnlySite) {
+        btnTrackOnlySite.addEventListener('click', () => {
+            if (!activeTabHost) return;
+            const clean = activeTabHost.trim().toLowerCase();
+            targetDomains = [clean];
+            inputDomains.value = clean;
+            isRecording = true;
+            toggleRecord.checked = true;
+            chrome.storage.local.set({ targetDomains, recording: true });
+            renderDomainChips();
+            updateRecordingUI();
+            updateScopeWarningUI();
+            updateSyncButtonState();
+            updateTrackSiteUI();
         });
     }
 
@@ -714,6 +783,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function extractBodyParamSummary(req) {
+        const raw = (req.bodyVariations && req.bodyVariations.length > 0) ? req.bodyVariations[0] : '';
+        if (!raw) return null;
+        const ct = Object.entries(req.headers || {}).find(([k]) => k.toLowerCase() === 'content-type')?.[1] || '';
+        const lowerCt = String(ct).toLowerCase();
+        if (lowerCt.includes('x-www-form-urlencoded') || (!lowerCt.includes('json') && /^[^=\s]+=[^&]*(&[^=\s]+=[^&]*)*$/.test(raw))) {
+            try {
+                const entries = [];
+                new URLSearchParams(raw).forEach((v, k) => entries.push([k, v]));
+                if (entries.length > 0) return { kind: 'form', count: entries.length, entries };
+            } catch (e) {}
+        }
+        if (lowerCt.includes('json') || raw.trim().startsWith('{')) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    const entries = Object.entries(parsed).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)]);
+                    if (entries.length > 0) return { kind: 'json', count: entries.length, entries };
+                }
+            } catch (e) {}
+        }
+        return null;
+    }
+
     // Render list of captured endpoints (C3, C4)
     function renderEndpoints() {
         const allKeys = Object.keys(capturedRequests);
@@ -734,7 +827,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!req) return false;
             const methodMatch = (req.method || '').toLowerCase().includes(searchQuery);
             const pathMatch = (req.path || '').toLowerCase().includes(searchQuery);
-            return methodMatch || pathMatch;
+            const hostMatch = (req.host || '').toLowerCase().includes(searchQuery);
+            return methodMatch || pathMatch || hostMatch;
         });
 
         let selectedCount = 0;
@@ -742,8 +836,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (selectedKeys.has(k)) selectedCount++;
         });
         if (lblSelectedCount) {
-            lblSelectedCount.textContent = `(${selectedCount} selected)`;
+            lblSelectedCount.textContent = `(${selectedCount})`;
         }
+
+        const distinctHosts = new Set(
+            allKeys.map(k => capturedRequests[k] && capturedRequests[k].host).filter(Boolean)
+        );
+        const showHostSubtitle = distinctHosts.size > 1;
 
         if (chkSelectAll) {
             chkSelectAll.checked = allKeys.length > 0 && selectedCount === allKeys.length;
@@ -840,7 +939,20 @@ document.addEventListener('DOMContentLoaded', () => {
             rightSide.style.gap = '6px';
             rightSide.style.flexShrink = '0';
 
-            // Response status chips (C4)
+            // Response status chips + param pills (C4)
+            const bodySummary = extractBodyParamSummary(req);
+            if (bodySummary) {
+                const paramPill = document.createElement('span');
+                paramPill.className = 'badge-params';
+                paramPill.textContent = `${bodySummary.kind}: ${bodySummary.count}`;
+                rightSide.appendChild(paramPill);
+            } else if (req.queryKeys && req.queryKeys.length > 0) {
+                const qPill = document.createElement('span');
+                qPill.className = 'badge-params';
+                qPill.textContent = `query: ${req.queryKeys.length}`;
+                rightSide.appendChild(qPill);
+            }
+
             if (req.statuses && Object.keys(req.statuses).length > 0) {
                 const chipsContainer = document.createElement('div');
                 chipsContainer.className = 'status-chips-container';
@@ -868,6 +980,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             itemRow.appendChild(rightSide);
             item.appendChild(itemRow);
+
+            if (showHostSubtitle && req.host) {
+                const hostLbl = document.createElement('div');
+                hostLbl.className = 'item-host-label';
+                hostLbl.textContent = req.host;
+                item.appendChild(hostLbl);
+            }
 
             // Row click toggles expansion
             itemRow.style.cursor = 'pointer';
@@ -907,9 +1026,34 @@ document.addEventListener('DOMContentLoaded', () => {
             queryKeysSection.appendChild(qkValue);
             detailsContainer.appendChild(queryKeysSection);
 
-            // Body sample
+            // Body sample (structured key-value list when form/JSON, otherwise raw text)
             const bodySample = (req.bodyVariations && req.bodyVariations.length > 0) ? req.bodyVariations[0] : (req.lastResponse && req.lastResponse.bodySample ? req.lastResponse.bodySample : "");
-            if (bodySample) {
+            if (bodySummary && bodySummary.entries.length > 0) {
+                const bodySection = document.createElement('div');
+                bodySection.className = 'item-detail-section';
+                const bodyLabel = document.createElement('span');
+                bodyLabel.className = 'item-detail-label';
+                bodyLabel.textContent = `Captured Body Parameters (${bodySummary.entries.length}):`;
+                const kvList = document.createElement('div');
+                kvList.className = 'kv-list';
+                bodySummary.entries.forEach(([k, v]) => {
+                    const kvRow = document.createElement('div');
+                    kvRow.className = 'kv-row';
+                    const kvKey = document.createElement('span');
+                    kvKey.className = 'kv-key';
+                    kvKey.textContent = `${k} =`;
+                    const kvVal = document.createElement('span');
+                    kvVal.className = 'kv-val';
+                    const strVal = String(v ?? '');
+                    kvVal.textContent = strVal.length > 120 ? strVal.slice(0, 120) + '...' : strVal;
+                    kvRow.appendChild(kvKey);
+                    kvRow.appendChild(kvVal);
+                    kvList.appendChild(kvRow);
+                });
+                bodySection.appendChild(bodyLabel);
+                bodySection.appendChild(kvList);
+                detailsContainer.appendChild(bodySection);
+            } else if (bodySample) {
                 const bodySection = document.createElement('div');
                 bodySection.className = 'item-detail-section';
                 const bodyLabel = document.createElement('span');
@@ -937,6 +1081,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const hasSelected = selectedCount > 0;
 
         btnSyncSwazz.disabled = !(hasProject && hasToken && hasSelected);
+        if (!hasToken) {
+            btnSyncSwazz.textContent = '🔑 Sign in to Swazz to Sync';
+        } else if (!hasProject) {
+            btnSyncSwazz.textContent = '📁 Select a Project to Sync';
+        } else if (!hasSelected) {
+            btnSyncSwazz.textContent = '☑ Select Endpoints to Sync';
+        } else {
+            const projLabel = activeProjectName ? ` → ${activeProjectName}` : '';
+            btnSyncSwazz.textContent = `🚀 Sync ${selectedCount} endpoint${selectedCount === 1 ? '' : 's'}${projLabel}`;
+        }
+
         if (btnExportHar) {
             btnExportHar.disabled = !hasSelected;
         }
@@ -1272,7 +1427,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (changes.targetDomains) {
             targetDomains = changes.targetDomains.newValue || [];
             inputDomains.value = targetDomains.join(', ');
-            cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
+            renderDomainChips();
             updateScopeWarningUI();
             updateSyncButtonState();
             updateTrackSiteUI();
@@ -1291,6 +1446,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (changes.projectId || changes.projectName) {
             chrome.storage.local.get(['projectId', 'projectName'], (state) => {
                 activeProjectId = state.projectId || null;
+                activeProjectName = state.projectName || "";
                 cardActiveProject.textContent = state.projectName || (activeProjectId ? `Project ID: ${activeProjectId.slice(0, 8)}...` : 'None Selected');
                 updateSyncButtonState();
             });

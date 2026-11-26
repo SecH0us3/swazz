@@ -25,53 +25,18 @@
                 <span class="logo-subtitle">Capturer</span>
             </div>
             <div class="header-right">
-                <a href="#" id="link-open-sidepanel" class="header-link" title="Open in Chrome side panel">Open in side panel</a>
-                <button id="btn-close-sidepanel" class="btn-close-panel hidden" title="Close side panel" aria-label="Close side panel">✕</button>
+                <a href="#" id="link-open-sidepanel" class="header-link" title="Open in Chrome side panel">Side panel</a>
                 <div class="status-indicator">
                     <span class="pulse-dot" id="recording-pulse"></span>
                     <span class="status-text" id="recording-status">Idle</span>
                 </div>
+                <button id="settings-toggle" class="btn-icon-header" title="Connection & Scope Settings" aria-label="Settings">⚙️</button>
+                <button id="btn-close-sidepanel" class="btn-close-panel hidden" title="Close side panel" aria-label="Close side panel">✕</button>
             </div>
         </header>
 
-        <!-- Recording Controls Area -->
-        <section class="control-panel">
-            <div class="panel-row">
-                <div class="toggle-desc">
-                    <h3>Traffic Recording</h3>
-                    <p id="toggle-desc-sub">Sniff API traffic on targeted domains</p>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" id="btn-toggle-record">
-                    <span class="slider round"></span>
-                </label>
-            </div>
-            <div class="panel-row track-site-row" id="track-site-row">
-                <div class="toggle-desc track-site-info">
-                    <h3>Current Site</h3>
-                    <p id="lbl-current-site-host">No active web page</p>
-                </div>
-                <button class="btn btn-track btn-sm" id="btn-track-site" disabled>🎯 Track this site</button>
-            </div>
-            <div class="panel-row crawl-row">
-                <div class="toggle-desc">
-                    <h3>Page Crawler</h3>
-                    <p id="crawl-status-sub">Programmatically discover links and forms</p>
-                </div>
-                <button class="btn btn-secondary btn-sm" id="btn-crawl-tab">🕷 Crawl Tab</button>
-            </div>
-            <div class="crawl-status-message hidden" id="crawl-status-msg"></div>
-        </section>
-
-        <!-- Settings section (collapsible) -->
+        <!-- Settings drawer (toggled by ⚙️ in header) -->
         <section class="settings-panel">
-            <div class="settings-header" id="settings-toggle">
-                <span>⚙️ Connection & Scope Settings</span>
-                <svg class="arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-            </div>
-            
             <div class="settings-content hidden" id="settings-content">
                 <div class="form-group">
                     <label>Swazz URL</label>
@@ -81,15 +46,8 @@
                     <label>API Auth Token</label>
                     <input type="password" id="input-token" placeholder="Auto-synced or paste JWT token">
                 </div>
-                <div class="form-group">
-                    <label>Active Project</label>
-                    <select id="select-project">
-                        <option value="">-- No projects loaded --</option>
-                    </select>
-                    <button class="btn btn-ghost btn-sm" id="btn-refresh-projects">🔄 Refresh Projects</button>
-                </div>
                 <div class="form-group project-create-group">
-                    <label>Or Create New Project</label>
+                    <label>Create New Project</label>
                     <div class="input-action-row">
                         <input type="text" id="input-new-project-name" placeholder="Project Name">
                         <button class="btn btn-primary btn-sm" id="btn-create-project">➕ Create</button>
@@ -104,50 +62,84 @@
             </div>
         </section>
 
-        <!-- Scope Warning / Dropped Requests (C2) -->
+        <!-- Unified Recording & Site Controls -->
+        <section class="control-panel">
+            <div class="panel-row track-site-row" id="track-site-row">
+                <div class="toggle-desc track-site-info">
+                    <h3>Current Site</h3>
+                    <p id="lbl-current-site-host">No active web page</p>
+                </div>
+                <div class="track-site-actions">
+                    <button class="btn btn-ghost btn-sm hidden" id="btn-track-only-site" title="Replace scope with only this site and start recording">Only this</button>
+                    <button class="btn btn-track btn-sm" id="btn-track-site" disabled>🎯 Track this site</button>
+                </div>
+            </div>
+            <div class="panel-row inline-controls-row">
+                <div class="inline-record-group">
+                    <label class="switch">
+                        <input type="checkbox" id="btn-toggle-record">
+                        <span class="slider round"></span>
+                    </label>
+                    <div class="toggle-desc">
+                        <h3>Recording</h3>
+                        <p id="toggle-desc-sub">Sniff API traffic on scope</p>
+                    </div>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-crawl-tab" title="Programmatically discover links and forms">🕷 Crawl Tab</button>
+            </div>
+            <div class="crawl-status-message hidden" id="crawl-status-msg"></div>
+        </section>
+
+        <!-- Scope Warning / Dropped Requests -->
         <div class="scope-warning-box hidden" id="scope-warning-box">
             <span class="warning-icon">⚠️</span>
             <span class="warning-text" id="scope-warning-text">Recording is on but scope is empty — nothing will be captured</span>
             <button class="btn btn-warning-action btn-sm" id="btn-scope-warning-action">Use current tab</button>
         </div>
 
-        <!-- Current Target Connection Card -->
+        <!-- Inline Target Project & Scope Chips -->
         <div class="connection-card" id="connection-card">
-            <span class="card-icon">🔗</span>
-            <div class="card-details">
-                <span class="card-title">Target: <strong id="lbl-active-project">None</strong></span>
+            <div class="connection-project-row">
+                <span class="connection-label">Project</span>
+                <select id="select-project" class="inline-project-select">
+                    <option value="">-- No projects loaded --</option>
+                </select>
+                <button class="btn btn-ghost btn-sm btn-icon-sm" id="btn-refresh-projects" title="Refresh Projects">🔄</button>
+                <strong id="lbl-active-project" class="hidden">None</strong>
+            </div>
+            <div class="connection-scope-row">
+                <span class="connection-label">Scope</span>
+                <div class="domain-chips-list" id="domain-chips-list"></div>
                 <span class="card-subtitle" id="lbl-active-domains">Scope: Empty</span>
             </div>
         </div>
 
         <!-- Captured Endpoints List -->
         <section class="endpoints-section">
-            <div class="view-tabs">
-                <button class="view-tab active" id="tab-captured" data-view="captured">
-                    Captured (<span id="lbl-endpoint-count-tab">0</span>)
-                </button>
-                <button class="view-tab" id="tab-ignored" data-view="ignored">
-                    Ignored (<span id="lbl-ignored-count-tab">0</span>)
-                </button>
-            </div>
-
-            <div class="section-header" id="captured-header">
-                <h2>Captured Endpoints (<span id="lbl-endpoint-count">0</span>)</h2>
-                <div class="section-header-actions">
+            <div class="view-tabs-bar">
+                <div class="view-tabs">
+                    <button class="view-tab active" id="tab-captured" data-view="captured">
+                        Captured (<span id="lbl-endpoint-count">0</span>)
+                    </button>
+                    <button class="view-tab" id="tab-ignored" data-view="ignored">
+                        Ignored (<span id="lbl-ignored-count-tab">0</span>)
+                    </button>
+                </div>
+                <div class="section-header-actions" id="captured-header">
                     <input type="file" id="input-import-har" accept=".har,.json" style="display: none;">
-                    <button class="btn btn-ghost btn-sm" id="btn-import-har">📂 Import HAR</button>
+                    <button class="btn btn-ghost btn-sm" id="btn-import-har" title="Import HAR file">📂 HAR</button>
                     <button class="btn btn-ghost btn-sm" id="btn-clear-endpoints">Clear</button>
                 </div>
             </div>
 
             <div class="endpoints-search-bar">
-                <input type="text" id="input-endpoint-search" placeholder="Search method or path...">
+                <input type="text" id="input-endpoint-search" placeholder="Search method, host or path...">
                 <div class="selection-meta">
                     <label class="select-all-label">
                         <input type="checkbox" id="chk-select-all" checked>
                         <span>All</span>
                     </label>
-                    <span id="lbl-selected-count">(0 selected)</span>
+                    <span id="lbl-selected-count">(0)</span>
                 </div>
             </div>
             
@@ -155,7 +147,7 @@
                 <div class="empty-state" id="empty-state">
                     <div class="empty-icon">🕸️</div>
                     <p>No endpoints recorded yet.</p>
-                    <p class="sub">Enable recording and browse your target application to capture API calls.</p>
+                    <p class="sub">Click <strong>Track this site</strong> above and browse your target application.</p>
                 </div>
                 <div class="endpoints-list" id="endpoints-list">
                     <!-- Dynamic entries render here -->
@@ -167,13 +159,12 @@
                 <div class="section-header">
                     <h2>Ignored Domains</h2>
                     <div class="section-header-actions">
-                        <button class="btn btn-ghost btn-sm" id="btn-add-all-ignored">Add all to scope</button>
+                        <button class="btn btn-ghost btn-sm" id="btn-add-all-ignored">Add all</button>
                         <button class="btn btn-ghost btn-sm" id="btn-clear-ignored">Clear</button>
                     </div>
                 </div>
                 <div class="ignored-hint">
-                    Requests seen while recording but dropped because their host is not in scope.
-                    Add the ones you are allowed to test.
+                    Out-of-scope requests seen while recording. Add only domains you are authorized to test.
                 </div>
                 <div class="endpoints-search-bar">
                     <input type="text" id="input-ignored-search" placeholder="Search domain...">
@@ -191,21 +182,19 @@
 
         <!-- Footer Actions -->
         <footer class="footer">
-            <div class="cookie-sync-option">
-                <label>
+            <div class="sync-options-row">
+                <label class="sync-option-label">
                     <input type="checkbox" id="chk-sync-cookies" checked>
-                    Sync active session cookies
+                    <span>Sync cookies</span>
                 </label>
-            </div>
-            <div class="cookie-sync-option">
-                <label>
+                <label class="sync-option-label">
                     <input type="checkbox" id="chk-replace-endpoints">
-                    Replace existing project endpoints
+                    <span>Replace endpoints</span>
                 </label>
             </div>
             <div class="footer-actions">
                 <button class="btn btn-primary" id="btn-sync-swazz" disabled>
-                    🚀 Sync to Swazz Dashboard
+                    🔑 Sign in to Swazz to Sync
                 </button>
                 <button class="btn btn-ghost" id="btn-export-har" disabled>
                     ⬇ HAR

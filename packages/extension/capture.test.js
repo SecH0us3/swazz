@@ -25,10 +25,10 @@ describe('Traffic Capture logic (B1 Regression & Scope rules)', () => {
         background.processCapturedRequest(reqData, senderTab);
 
         const captured = background.getCapturedRequests();
-        expect(captured['GET:/v1/users/{id}']).toBeDefined();
-        expect(captured['GET:/v1/users/{id}'].count).toBe(1);
-        expect(captured['GET:/v1/users/{id}'].queryKeys).toContain('filter');
-        expect(captured['GET:/v1/users/{id}'].queryVariations).toContain('?filter=active');
+        expect(captured['GET:api.example.com/v1/users/{id}']).toBeDefined();
+        expect(captured['GET:api.example.com/v1/users/{id}'].count).toBe(1);
+        expect(captured['GET:api.example.com/v1/users/{id}'].queryKeys).toContain('filter');
+        expect(captured['GET:api.example.com/v1/users/{id}'].queryVariations).toContain('?filter=active');
         expect(background.getDroppedOutOfScope()).toBe(0);
     });
 
@@ -138,9 +138,9 @@ describe('Response correlation across tabs and frames', () => {
         );
 
         const captured = background.getCapturedRequests();
-        expect(captured['GET:/alpha'].statuses).toEqual({ '500': 1 });
-        expect(captured['GET:/beta'].statuses).toEqual({});
-        expect(captured['GET:/beta'].lastResponse).toBeUndefined();
+        expect(captured['GET:api.example.com/alpha'].statuses).toEqual({ '500': 1 });
+        expect(captured['GET:api.example.com/beta'].statuses).toEqual({});
+        expect(captured['GET:api.example.com/beta'].lastResponse).toBeUndefined();
     });
 
     it('pairs a response with its own request', () => {
@@ -152,8 +152,8 @@ describe('Response correlation across tabs and frames', () => {
         );
 
         const captured = background.getCapturedRequests();
-        expect(captured['GET:/solo'].statuses).toEqual({ '201': 1 });
-        expect(captured['GET:/solo'].lastResponse.status).toBe(201);
+        expect(captured['GET:api.example.com/solo'].statuses).toEqual({ '201': 1 });
+        expect(captured['GET:api.example.com/solo'].lastResponse.status).toBe(201);
     });
 
     it('routes a message through handleRuntimeMessage end to end', () => {
@@ -171,7 +171,7 @@ describe('Response correlation across tabs and frames', () => {
             sender
         );
 
-        expect(background.getCapturedRequests()['GET:/routed'].statuses).toEqual({ '404': 1 });
+        expect(background.getCapturedRequests()['GET:api.example.com/routed'].statuses).toEqual({ '404': 1 });
     });
 });
 
@@ -244,7 +244,7 @@ describe('Service worker lifecycle and request accounting', () => {
         background.processCapturedRequest({ ...base, body: '' }, sender.tab, sender);
         background.processCapturedRequest({ ...base, body: '{"a":1}' }, sender.tab, sender);
 
-        const entry = background.getCapturedRequests()['POST:/v1/items'];
+        const entry = background.getCapturedRequests()['POST:api.example.com/v1/items'];
         expect(entry.count).toBe(1);
         expect(entry.bodyVariations).toEqual(['{"a":1}']);
     });
@@ -254,7 +254,7 @@ describe('Service worker lifecycle and request accounting', () => {
         const base = { url: 'https://api.example.com/v1/items', method: 'GET', headers: {}, body: '' };
         background.processCapturedRequest({ ...base, requestId: 1 }, sender.tab, sender);
         background.processCapturedRequest({ ...base, requestId: 2 }, sender.tab, sender);
-        expect(background.getCapturedRequests()['GET:/v1/items'].count).toBe(2);
+        expect(background.getCapturedRequests()['GET:api.example.com/v1/items'].count).toBe(2);
     });
 
     it('exposes a hydration gate so a cold worker cannot drop events', () => {
@@ -378,8 +378,8 @@ describe('Full-page navigation and form POST capture via webRequest', () => {
         }, true);
 
         const captured = background.getCapturedRequests();
-        expect(captured['GET:/login']).toBeUndefined();
-        const postEntry = captured['POST:/login'];
+        expect(captured['GET:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/login']).toBeUndefined();
+        const postEntry = captured['POST:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/login'];
         expect(postEntry).toBeDefined();
         expect(postEntry.method).toBe('POST');
         expect(postEntry.headers['content-type']).toBe('application/x-www-form-urlencoded');
@@ -433,10 +433,10 @@ describe('Full-page navigation and form POST capture via webRequest', () => {
         }, true);
 
         const captured = background.getCapturedRequests();
-        expect(captured['POST:/login']).toBeDefined();
-        expect(captured['POST:/login'].statuses).toEqual({ '302': 1 });
-        expect(captured['GET:/my-account']).toBeDefined();
-        expect(captured['GET:/my-account'].statuses).toEqual({ '200': 1 });
+        expect(captured['POST:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/login']).toBeDefined();
+        expect(captured['POST:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/login'].statuses).toEqual({ '302': 1 });
+        expect(captured['GET:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/my-account']).toBeDefined();
+        expect(captured['GET:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/my-account'].statuses).toEqual({ '200': 1 });
     });
 
     it('captures sub_frame POSTs while ignoring noisy sub_frame GETs', () => {
@@ -460,8 +460,71 @@ describe('Full-page navigation and form POST capture via webRequest', () => {
         });
 
         const captured = background.getCapturedRequests();
-        expect(captured['GET:/iframe-page']).toBeUndefined();
-        expect(captured['POST:/iframe-submit']).toBeDefined();
-        expect(captured['POST:/iframe-submit'].bodyVariations).toEqual(['action=go']);
+        expect(captured['GET:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/iframe-page']).toBeUndefined();
+        expect(captured['POST:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/iframe-submit']).toBeDefined();
+        expect(captured['POST:0ae4009404e2b0a881342a9900f300a8.web-security-academy.net/iframe-submit'].bodyVariations).toEqual(['action=go']);
+    });
+
+    it('keeps endpoints with the same path on different hosts isolated', () => {
+        background.setTargetDomains(['lab1.example.com', 'lab2.example.com']);
+        background.handleWebRequestBeforeRequest({
+            requestId: '401',
+            url: 'https://lab1.example.com/login',
+            method: 'POST',
+            type: 'main_frame',
+            tabId: 1,
+            frameId: 0,
+            requestBody: { formData: { csrf: ['tok1'], username: ['a'] } }
+        });
+        background.handleWebRequestBeforeRequest({
+            requestId: '402',
+            url: 'https://lab2.example.com/login',
+            method: 'POST',
+            type: 'main_frame',
+            tabId: 2,
+            frameId: 0,
+            requestBody: { formData: { csrf: ['tok2'], username: ['b'] } }
+        });
+
+        const captured = background.getCapturedRequests();
+        expect(captured['POST:lab1.example.com/login']).toBeDefined();
+        expect(captured['POST:lab2.example.com/login']).toBeDefined();
+        expect(captured['POST:lab1.example.com/login'].bodyVariations[0]).toContain('tok1');
+        expect(captured['POST:lab2.example.com/login'].bodyVariations[0]).toContain('tok2');
+    });
+
+    it('does not count Swazz Dashboard traffic as ignored out-of-scope', () => {
+        background.setTargetDomains(['lab1.example.com']);
+        background.setSwazzUrl('https://swazz.secmy.app');
+
+        background.processCapturedRequest(
+            { url: 'https://swazz.secmy.app/api/scans/123/runner-logs', method: 'GET', headers: {}, body: '' },
+            { id: 1, url: 'https://swazz.secmy.app/' }
+        );
+        background.processCapturedRequest(
+            { url: 'http://localhost:5173/api/projects', method: 'GET', headers: {}, body: '' },
+            { id: 1, url: 'http://localhost:5173/' }
+        );
+
+        expect(background.getDroppedOutOfScope()).toBe(0);
+        expect(background.getDroppedHosts()).toEqual({});
+    });
+
+    it('matches exact host:port for swazzUrl so other local ports are still tracked as ignored', () => {
+        background.setTargetDomains(['example.invalid']);
+        background.setSwazzUrl('http://localhost:5173');
+
+        background.processCapturedRequest(
+            { url: 'http://localhost:5173/api/runs', method: 'GET', headers: {}, body: '' },
+            { id: 1, url: 'http://localhost:5173/' }
+        );
+        background.processCapturedRequest(
+            { url: 'http://localhost:8788/users', method: 'GET', headers: {}, body: '' },
+            { id: 2, url: 'http://127.0.0.1:8788/welcome' }
+        );
+
+        const dropped = background.getDroppedHosts();
+        expect(dropped['localhost:5173']).toBeUndefined();
+        expect(dropped['localhost:8788']).toBe(1);
     });
 });

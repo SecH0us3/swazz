@@ -267,9 +267,10 @@
 
             const method = (req.method || 'GET').toUpperCase();
             const isWebMcp = parsedUrl.protocol === 'webmcp:';
+            const host = isWebMcp ? '' : parsedUrl.host;
             const path = isWebMcp ? req.url : (parsedUrl.pathname || '/');
             const normalized = isWebMcp ? req.url : normalizePath(path);
-            const key = `${method}:${normalized}`;
+            const key = isWebMcp ? `${method}:${normalized}` : `${method}:${host}${normalized}`;
 
             const headers = {};
             if (Array.isArray(req.headers)) {
@@ -285,6 +286,7 @@
                 existing = {
                     key,
                     method,
+                    host,
                     path: normalized,
                     exampleUrl: req.url,
                     headers,
