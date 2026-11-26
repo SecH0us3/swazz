@@ -3,14 +3,19 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding, SwazzConfig, WAFPatchReport } from '../../types.js';
-import { extractErrorSubtype, getCleanDedupeKey } from '../../utils/errors.js';
-import { categorizeFinding } from '../../utils/findings.js';
+import { getCleanDedupeKey } from '../../utils/errors.js';
+import { categorizeFinding, classifyInfrastructureError } from '../../utils/findings.js';
+import {
+    buildGroupedFindingsExport,
+    downloadTextFile,
+    formatGroupedFindingsMarkdown,
+} from '../../utils/findingsExport.js';
 import { FindingItem } from './FindingItem.js';
 import { StatusFilterDropdown } from './StatusFilterDropdown.js';
 import { WafPatchViewer } from './WafPatchViewer.js';
@@ -71,6 +76,47 @@ export function Inspector({
     const [limit, setLimit] = useState(PAGE_SIZE);
     const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
+    const [examplesPerFinding, setExamplesPerFinding] = useState<1 | 2>(2);
+    const exportMenuRef = useRef<HTMLDivElement | null>(null);
+    const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const exportTriggerId = useId();
+    const pendingFocusFirstMenuItemRef = useRef(false);
+
+    useEffect(() => {
+        if (!exportMenuOpen) return;
+        if (pendingFocusFirstMenuItemRef.current) {
+            pendingFocusFirstMenuItemRef.current = false;
+            const firstItem = exportMenuRef.current?.querySelector<HTMLButtonElement>(
+                '[role="menuitem"]:not(:disabled)'
+            );
+            firstItem?.focus();
+        }
+        const handleMouseDown = (event: MouseEvent) => {
+            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+                setExportMenuOpen(false);
+            }
+        };
+        const handleFocusIn = (event: FocusEvent) => {
+            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+                setExportMenuOpen(false);
+            }
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setExportMenuOpen(false);
+                exportTriggerRef.current?.focus();
+            }
+        };
+        document.addEventListener('mousedown', handleMouseDown);
+        document.addEventListener('focusin', handleFocusIn);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handleMouseDown);
+            document.removeEventListener('focusin', handleFocusIn);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [exportMenuOpen]);
 
     const [identityFilter, setIdentityFilter] = useState<string>('all');
     const [seenIdentities, setSeenIdentities] = useState<Set<string>>(new Set(['User A']));
@@ -192,38 +238,23 @@ export function Inspector({
             }
 
             if (!placed) {
-                const isMcpErr = row.method === 'CALL' || row.method === 'MCP' || (row.endpoint && row.endpoint.startsWith('mcp://tool/'));
-                const isErrorStatus = row.status >= 400 || 
-                                     (row.status === 0 && row.error) ||
-                                     isMcpErr;
-                if (isErrorStatus) {
-                    const displayStatus = isMcpErr ? (row.status === 200 ? 400 : row.status) : row.status;
-                    let categoryTitle = `HTTP ${displayStatus} Error`;
-                    let groupKey = `status_${displayStatus}`;
-                    let color = displayStatus >= 500 ? 'var(--color-error)' : 'var(--color-warning)';
-
-                    if (row.status === 0) {
-                        categoryTitle = 'Network Timeout / Error';
-                        groupKey = 'status_0';
-                        color = 'var(--color-error)';
-                    } else {
-                        const subType = extractErrorSubtype(row.responsePreview);
-                        if (subType) {
-                            if (subType.key.startsWith('mcp_')) {
-                                categoryTitle = subType.title;
-                                groupKey = subType.key;
-                            } else {
-                                categoryTitle = `${displayStatus} - ${subType.title}`;
-                                groupKey = `status_${displayStatus}_${subType.key}`;
-                            }
-                        }
+                const classified = classifyInfrastructureError(row);
+                if (classified) {
+                    if (!infraGroups[classified.groupKey]) {
+                        infraGroups[classified.groupKey] = {
+                            title: classified.title,
+                            color: classified.color,
+                            items: [],
+                            seenMap: new Map(),
+                        };
                     }
-
-                    if (!infraGroups[groupKey]) {
-                        infraGroups[groupKey] = { title: categoryTitle, color, items: [], seenMap: new Map() };
-                    }
-                    const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error || row.responsePreview);
-                    const existing = infraGroups[groupKey].seenMap.get(dedupeKey);
+                    const dedupeKey = getCleanDedupeKey(
+                        row.method,
+                        row.endpoint,
+                        classified.displayStatus,
+                        row.error || row.responsePreview
+                    );
+                    const existing = infraGroups[classified.groupKey].seenMap.get(dedupeKey);
                     if (existing) {
                         existing.count += 1;
                         if (row.triage && row.triage !== 'none' && (!existing.result.triage || existing.result.triage === 'none')) {
@@ -231,8 +262,8 @@ export function Inspector({
                         }
                     } else {
                         const newItem = { result: row, count: 1 };
-                        infraGroups[groupKey].seenMap.set(dedupeKey, newItem);
-                        infraGroups[groupKey].items.push(newItem);
+                        infraGroups[classified.groupKey].seenMap.set(dedupeKey, newItem);
+                        infraGroups[classified.groupKey].items.push(newItem);
                     }
                 }
             }
@@ -304,6 +335,36 @@ export function Inspector({
         searchDebounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
         return () => { searchDebounceRef.current && clearTimeout(searchDebounceRef.current); };
     }, [search]);
+
+    const handleExportGrouped = useCallback(
+        (format: 'json' | 'markdown') => {
+            const report = buildGroupedFindingsExport(rows, {
+                runId,
+                baseUrl: config?.base_url,
+                maxExamplesPerFinding: examplesPerFinding,
+                excludedStatuses,
+                search: debouncedSearch.trim() || undefined,
+                identityFilter,
+                totalAvailableRows: total,
+            });
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            if (format === 'json') {
+                downloadTextFile(
+                    `swazz-findings-grouped-${ts}.json`,
+                    JSON.stringify(report, null, 2),
+                    'application/json'
+                );
+            } else {
+                downloadTextFile(
+                    `swazz-findings-grouped-${ts}.md`,
+                    formatGroupedFindingsMarkdown(report),
+                    'text/markdown;charset=utf-8'
+                );
+            }
+            setExportMenuOpen(false);
+        },
+        [rows, runId, config?.base_url, examplesPerFinding, excludedStatuses, debouncedSearch, identityFilter, total]
+    );
 
     // Reload results from IDB when any filter/run changes or liveCount ticks
     const reloadRef = useRef(0);
@@ -512,16 +573,134 @@ export function Inspector({
                             </>
                         )}
                     </span>
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        title="Export results as JSON"
-                        onClick={onExport}
-                    >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        Export
-                    </button>
+                    {findingsOnly ? (
+                        <div className="findings-export-dropdown" ref={exportMenuRef}>
+                            <button
+                                id={exportTriggerId}
+                                ref={exportTriggerRef}
+                                type="button"
+                                className="btn btn-ghost btn-sm findings-export-trigger"
+                                title="Export grouped findings or full log"
+                                aria-haspopup="menu"
+                                aria-expanded={exportMenuOpen}
+                                onClick={() => setExportMenuOpen((prev) => !prev)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        if (!exportMenuOpen) {
+                                            pendingFocusFirstMenuItemRef.current = true;
+                                            setExportMenuOpen(true);
+                                        } else {
+                                            const firstItem = exportMenuRef.current?.querySelector<HTMLButtonElement>(
+                                                '[role="menuitem"]:not(:disabled)'
+                                            );
+                                            firstItem?.focus();
+                                        }
+                                    }
+                                }}
+                            >
+                                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                Export <span aria-hidden="true">▾</span>
+                            </button>
+                            {exportMenuOpen && (
+                                <div
+                                    className="findings-export-menu"
+                                    role="menu"
+                                    aria-labelledby={exportTriggerId}
+                                    onKeyDown={(e) => {
+                                        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+                                        const items = Array.from(
+                                            exportMenuRef.current?.querySelectorAll<HTMLButtonElement>(
+                                                '[role="menuitem"]:not(:disabled)'
+                                            ) ?? []
+                                        );
+                                        if (items.length === 0) return;
+                                        e.preventDefault();
+                                        const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+                                        let nextIndex = 0;
+                                        if (e.key === 'Home') {
+                                            nextIndex = 0;
+                                        } else if (e.key === 'End') {
+                                            nextIndex = items.length - 1;
+                                        } else if (e.key === 'ArrowDown') {
+                                            nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+                                        } else if (e.key === 'ArrowUp') {
+                                            nextIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+                                        }
+                                        items[nextIndex]?.focus();
+                                    }}
+                                >
+                                    <div className="findings-export-examples-row">
+                                        <span className="findings-export-examples-label">Examples / finding:</span>
+                                        <div className="findings-export-examples-toggle" role="group" aria-label="Examples per finding">
+                                            <button
+                                                type="button"
+                                                aria-pressed={examplesPerFinding === 1}
+                                                className={`findings-export-example-btn ${examplesPerFinding === 1 ? 'active' : ''}`}
+                                                onClick={() => setExamplesPerFinding(1)}
+                                            >
+                                                1
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-pressed={examplesPerFinding === 2}
+                                                className={`findings-export-example-btn ${examplesPerFinding === 2 ? 'active' : ''}`}
+                                                onClick={() => setExamplesPerFinding(2)}
+                                            >
+                                                2
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        disabled={filteredFindingsCount === 0}
+                                        className="findings-export-item"
+                                        onClick={() => handleExportGrouped('json')}
+                                    >
+                                        <span className="findings-export-item-title">Grouped Findings (JSON)</span>
+                                        <span className="findings-export-item-desc">Compact report with {examplesPerFinding} example{examplesPerFinding > 1 ? 's' : ''}/finding</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        disabled={filteredFindingsCount === 0}
+                                        className="findings-export-item"
+                                        onClick={() => handleExportGrouped('markdown')}
+                                    >
+                                        <span className="findings-export-item-title">Grouped Findings (Markdown)</span>
+                                        <span className="findings-export-item-desc">Readable summary with {examplesPerFinding} example{examplesPerFinding > 1 ? 's' : ''}/finding</span>
+                                    </button>
+                                    <hr className="findings-export-divider" />
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="findings-export-item"
+                                        onClick={() => {
+                                            setExportMenuOpen(false);
+                                            onExport();
+                                        }}
+                                    >
+                                        <span className="findings-export-item-title">Full Scan Log (JSON)</span>
+                                        <span className="findings-export-item-desc">All raw requests and responses</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            title="Export results as JSON"
+                            onClick={onExport}
+                        >
+                            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Export
+                        </button>
+                    )}
                 </div>
             </div>
 

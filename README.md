@@ -59,7 +59,7 @@ Swazz is divided into multiple packages across the stack. The coverage is contin
 - **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
 - **🛡️ Compliance & Taxonomy Mapping**: Automatically map all discovered vulnerabilities to both the **OWASP API Security Top 10 (2023)** and **OWASP Web Top 10 (2025)** standards, along with standard **CWE** identifiers, in reports and the Web Dashboard.
 - **🎯 Precision Control**: Define custom rules to ignore specific status codes or elevate them to errors/warnings.
-- **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, **JUnit XML**, **Markdown**, or standalone **HTML** reports (now also accessible directly from the Web UI).
+- **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON** (full scan logs or compact grouped Findings with 1–2 representative request/response examples and redacted auth headers directly from the Web UI Findings tab), **JUnit XML**, **Markdown**, or standalone **HTML** reports.
 - **🔄 Multi-Scan Comparison**: Side-by-side analysis of scan runs to compare coverage metrics, HTTP status code distributions, and findings diffs (New, Fixed, and Common vulnerabilities).
 - **🛠 Interactive Wizard**: Fast setup with `swazz-engine wizard` — no manual JSON editing required.
 - 🌐 **Web Dashboard**: Real-time Heatmap, Request Inspector, Sidebar Endpoint Tree with **Included Only** filter toggle, and OWASP Compliance dashboard for deep-dive analysis.

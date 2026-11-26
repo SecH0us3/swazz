@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { Inspector } from './Inspector.js';
 import type { ResultSummary } from '../../hooks/useRunner.js';
+import * as findingsExport from '../../utils/findingsExport.js';
 
 // Mock react-virtuoso for stable rendering in JSDOM environment
 vi.mock('react-virtuoso', () => ({
@@ -661,6 +662,251 @@ describe('Inspector Component', () => {
 
         expect(screen.getByText('Waiting for requests')).toBeInTheDocument();
         expect(screen.getByText(/Start a fuzz test to see results appear here in real time/i)).toBeInTheDocument();
+    });
+
+    it('renders compact grouped export dropdown in findingsOnly mode and supports JSON, Markdown, and Full Log', async () => {
+        const downloadSpy = vi.spyOn(findingsExport, 'downloadTextFile').mockImplementation(() => {});
+        const onExport = vi.fn();
+
+        const findingRows: ResultSummary[] = [
+            {
+                id: 'f1',
+                timestamp: 1700000000000,
+                method: 'POST',
+                endpoint: '/api/render',
+                resolvedPath: '/api/render',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 25,
+                payloadSize: 18,
+                retries: 0,
+                payloadPreview: '{"tpl":"{{7*7}}"}',
+                responsePreview: '49',
+                responseSize: 2,
+                analyzerFindings: [{ ruleId: 'ssti', level: 'error', message: 'SSTI detected' }],
+            },
+            {
+                id: 'f2',
+                timestamp: 1700000001000,
+                method: 'POST',
+                endpoint: '/api/render',
+                resolvedPath: '/api/render',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 28,
+                payloadSize: 18,
+                retries: 0,
+                payloadPreview: '{"tpl":"${7*7}"}',
+                responsePreview: '49',
+                responseSize: 2,
+                analyzerFindings: [{ ruleId: 'ssti', level: 'error', message: 'SSTI detected' }],
+            },
+            {
+                id: 'f3',
+                timestamp: 1700000002000,
+                method: 'POST',
+                endpoint: '/api/render',
+                resolvedPath: '/api/render',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 30,
+                payloadSize: 18,
+                retries: 0,
+                payloadPreview: '{"tpl":"#{7*7}"}',
+                responsePreview: '49',
+                responseSize: 2,
+                analyzerFindings: [{ ruleId: 'ssti', level: 'error', message: 'SSTI detected' }],
+            },
+        ];
+        mockQueryResults.mockResolvedValue({ rows: findingRows, total: findingRows.length });
+
+        render(
+            <Inspector
+                runId="run-exp"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={onExport}
+                findingsOnly={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument();
+        });
+
+        // Clicking Export opens the dropdown instead of calling onExport immediately
+        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+        expect(onExport).not.toHaveBeenCalled();
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+
+        // Switch examples per finding to 1 and export Grouped Findings (JSON)
+        const btn1 = screen.getByRole('button', { name: '1' });
+        const btn2 = screen.getByRole('button', { name: '2' });
+        expect(btn2).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(btn1);
+        expect(btn1).toHaveAttribute('aria-pressed', 'true');
+        expect(btn2).toHaveAttribute('aria-pressed', 'false');
+        fireEvent.click(screen.getByRole('menuitem', { name: /Grouped Findings \(JSON\)/i }));
+
+        expect(downloadSpy).toHaveBeenCalledTimes(1);
+        const [jsonName, jsonContent, jsonMime] = downloadSpy.mock.calls[0];
+        expect(jsonName).toMatch(/^swazz-findings-grouped-.*\.json$/);
+        expect(jsonMime).toBe('application/json');
+        const parsed = JSON.parse(jsonContent);
+        expect(parsed.maxExamplesPerFinding).toBe(1);
+        expect(parsed.securityVulnerabilities[0].targets[0].count).toBe(3);
+        expect(parsed.securityVulnerabilities[0].targets[0].examples).toHaveLength(1);
+
+        // Re-open, switch to 2 examples, export Grouped Findings (Markdown)
+        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+        fireEvent.click(screen.getByRole('button', { name: '2' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: /Grouped Findings \(Markdown\)/i }));
+
+        expect(downloadSpy).toHaveBeenCalledTimes(2);
+        const [mdName, mdContent, mdMime] = downloadSpy.mock.calls[1];
+        expect(mdName).toMatch(/^swazz-findings-grouped-.*\.md$/);
+        expect(mdMime).toContain('text/markdown');
+        expect(mdContent).toContain('# Swazz Grouped Findings Report');
+        expect(mdContent).toContain('Example 2/2');
+
+        // Re-open and click Full Scan Log (JSON) -> calls onExport
+        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+        fireEvent.click(screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i }));
+        expect(onExport).toHaveBeenCalledTimes(1);
+
+        downloadSpy.mockRestore();
+    });
+
+    it('disables grouped export items when there are no findings while keeping Full Scan Log enabled', async () => {
+        mockQueryResults.mockResolvedValue({ rows: [], total: 0 });
+        render(
+            <Inspector
+                runId="run-empty"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+        expect(screen.getByRole('menuitem', { name: /Grouped Findings \(JSON\)/i })).toBeDisabled();
+        expect(screen.getByRole('menuitem', { name: /Grouped Findings \(Markdown\)/i })).toBeDisabled();
+        expect(screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i })).toBeEnabled();
+        expect(screen.getByRole('separator')).toBeInTheDocument();
+
+        // Disabled items are skipped during keyboard navigation
+        const menu = screen.getByRole('menu');
+        const fullItem = screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i });
+        fireEvent.keyDown(menu, { key: 'Home' });
+        expect(document.activeElement).toBe(fullItem);
+        fireEvent.keyDown(menu, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(fullItem);
+    });
+
+    it('supports keyboard navigation (ArrowDown, End, Home, Escape) on the findings export menu', async () => {
+        mockQueryResults.mockResolvedValue({
+            rows: [
+                {
+                    id: 'k1',
+                    timestamp: 1700000000000,
+                    method: 'GET',
+                    endpoint: '/api/err',
+                    resolvedPath: '/api/err',
+                    status: 500,
+                    profile: 'MALICIOUS',
+                    duration: 15,
+                    payloadSize: 0,
+                    retries: 0,
+                    payloadPreview: '',
+                    responsePreview: 'Internal Server Error',
+                    responseSize: 21,
+                },
+            ],
+            total: 1,
+        });
+
+        render(
+            <Inspector
+                runId="run-kbd"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument();
+        });
+
+        const trigger = screen.getByRole('button', { name: /Export/i });
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+
+        const menu = screen.getByRole('menu');
+        const jsonItem = screen.getByRole('menuitem', { name: /Grouped Findings \(JSON\)/i });
+        const mdItem = screen.getByRole('menuitem', { name: /Grouped Findings \(Markdown\)/i });
+        const fullItem = screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i });
+
+        expect(menu).toBeInTheDocument();
+        expect(document.activeElement).toBe(jsonItem);
+
+        fireEvent.keyDown(menu, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(mdItem);
+
+        fireEvent.keyDown(menu, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(fullItem);
+
+        // Wrap-around ArrowDown from last to first
+        fireEvent.keyDown(menu, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(jsonItem);
+
+        // Wrap-around ArrowUp from first to last
+        fireEvent.keyDown(menu, { key: 'ArrowUp' });
+        expect(document.activeElement).toBe(fullItem);
+
+        // ArrowDown on already-open trigger focuses first enabled item
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(jsonItem);
+
+        fireEvent.keyDown(menu, { key: 'End' });
+        expect(document.activeElement).toBe(fullItem);
+
+        fireEvent.keyDown(menu, { key: 'Home' });
+        expect(document.activeElement).toBe(jsonItem);
+
+        fireEvent.keyDown(menu, { key: 'Escape' });
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        expect(document.activeElement).toBe(trigger);
+
+        // Outside mousedown closes menu; inside mousedown keeps it open
+        fireEvent.click(trigger);
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        fireEvent.mouseDown(screen.getByRole('menu'));
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        fireEvent.mouseDown(document.body);
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+
+        // Focus moving outside closes menu
+        fireEvent.click(trigger);
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        const outsideBtn = document.createElement('button');
+        document.body.appendChild(outsideBtn);
+        fireEvent.focusIn(outsideBtn);
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        document.body.removeChild(outsideBtn);
     });
 });
 
