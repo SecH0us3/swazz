@@ -379,6 +379,8 @@ func (r *Runner) sendRequest(
 					reqBody = rawUF.Data
 					bodyReader = bytes.NewReader(reqBody)
 					fileUploadSent = true
+					// Intentionally override application/octet-stream with the probe's Content-Type
+					// so raw binary upload endpoints are tested for MIME/magic-byte validation.
 					ct := strings.TrimSpace(rawUF.ContentType)
 					if ct == "" {
 						if effectiveCT != "" && !strings.Contains(strings.ToLower(effectiveCT), "json") {

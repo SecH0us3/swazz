@@ -98,8 +98,11 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 					CWEIDs:           []string{"CWE-434"},
 				})
 			case "traversal_filename":
-				reflected := bytes.Contains(input.ResponseBody, []byte("../")) ||
-					bytes.Contains(input.ResponseBody, []byte("swazz-probe.txt"))
+				lowerResp := input.lowerBody()
+				reflected := bytes.Contains(lowerResp, []byte("../../swazz-probe.txt")) ||
+					bytes.Contains(lowerResp, []byte(`..\/..\/swazz-probe.txt`)) ||
+					bytes.Contains(lowerResp, []byte("..%2f..%2fswazz-probe.txt")) ||
+					bytes.Contains(lowerResp, []byte(`..\..\swazz-probe.txt`))
 				level := "warning"
 				cwe := []string{"CWE-434"}
 				if reflected {

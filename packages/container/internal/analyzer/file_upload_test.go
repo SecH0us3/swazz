@@ -68,7 +68,7 @@ func TestFileUploadAnalyzer(t *testing.T) {
 		}
 	})
 
-	t.Run("upgrades traversal_filename to error + CWE-22 when reflected", func(t *testing.T) {
+	t.Run("upgrades traversal_filename to error + CWE-22 only on unsanitized reflection", func(t *testing.T) {
 		var traversalProbe swagger.UploadFile
 		for _, uf := range payloads.MaliciousFileUploads {
 			if uf.ProbeKind == "traversal_filename" {
@@ -76,20 +76,44 @@ func TestFileUploadAnalyzer(t *testing.T) {
 				break
 			}
 		}
-		reflected := a.Analyze(&AnalysisInput{
-			SentPayload:    map[string]any{"file": traversalProbe},
-			StatusCode:     200,
-			ResponseBody:   []byte(`{"savedPath":"../../swazz-probe.txt"}`),
-			FileUploadSent: true,
-		})
-		if len(reflected) != 1 {
-			t.Fatalf("expected 1 finding, got %d", len(reflected))
+		for _, body := range []string{
+			`{"filename":"swazz-probe.txt"}`,
+			`<script src="../app.js"></script>`,
+		} {
+			sanitized := a.Analyze(&AnalysisInput{
+				SentPayload:    map[string]any{"file": traversalProbe},
+				StatusCode:     200,
+				ResponseBody:   []byte(body),
+				FileUploadSent: true,
+			})
+			if len(sanitized) != 1 || sanitized[0].Level != "warning" {
+				t.Fatalf("body %s: expected warning, got %+v", body, sanitized)
+			}
+			if len(sanitized[0].CWEIDs) != 1 || sanitized[0].CWEIDs[0] != "CWE-434" {
+				t.Fatalf("body %s: expected [CWE-434], got %v", body, sanitized[0].CWEIDs)
+			}
 		}
-		if reflected[0].Level != "error" {
-			t.Fatalf("expected error level on reflected traversal, got %s", reflected[0].Level)
-		}
-		if len(reflected[0].CWEIDs) != 2 || reflected[0].CWEIDs[1] != "CWE-22" {
-			t.Fatalf("expected [CWE-434 CWE-22], got %v", reflected[0].CWEIDs)
+
+		for _, body := range []string{
+			`{"savedPath":"../../swazz-probe.txt"}`,
+			`{"savedPath":"..\/..\/swazz-probe.txt"}`,
+			`{"url":"/files/..%2F..%2Fswazz-probe.txt"}`,
+		} {
+			reflected := a.Analyze(&AnalysisInput{
+				SentPayload:    map[string]any{"file": traversalProbe},
+				StatusCode:     200,
+				ResponseBody:   []byte(body),
+				FileUploadSent: true,
+			})
+			if len(reflected) != 1 {
+				t.Fatalf("body %s: expected 1 finding, got %d", body, len(reflected))
+			}
+			if reflected[0].Level != "error" {
+				t.Fatalf("body %s: expected error level on reflected traversal, got %s", body, reflected[0].Level)
+			}
+			if len(reflected[0].CWEIDs) != 2 || reflected[0].CWEIDs[1] != "CWE-22" {
+				t.Fatalf("body %s: expected [CWE-434 CWE-22], got %v", body, reflected[0].CWEIDs)
+			}
 		}
 	})
 
