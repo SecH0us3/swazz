@@ -11959,13 +11959,13 @@ kbd {
     position: absolute;
     top: calc(100% + 4px);
     right: 0;
-    z-index: 50;
+    z-index: 100;
     min-width: 240px;
     padding: 6px;
-    background: var(--bg-elevated, #1e293b);
-    border: 1px solid var(--border-color, #334155);
-    border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    background-color: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -11978,7 +11978,7 @@ kbd {
     gap: 8px;
     padding: 4px 8px 6px;
     font-size: 11px;
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted);
 }
 
 .findings-export-examples-toggle {
@@ -11990,19 +11990,19 @@ kbd {
     min-width: 24px;
     height: 22px;
     padding: 0 6px;
-    border-radius: 4px;
-    border: 1px solid var(--border-color, #334155);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-default);
     background: transparent;
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 600;
     cursor: pointer;
 }
 
 .findings-export-example-btn.active {
-    background: var(--accent-primary, #38bdf8);
-    border-color: var(--accent-primary, #38bdf8);
-    color: #0f172a;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
 }
 
 .findings-export-item {
@@ -12013,15 +12013,15 @@ kbd {
     width: 100%;
     padding: 6px 8px;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: transparent;
-    color: var(--text-primary, #f8fafc);
+    color: var(--text-primary);
     text-align: left;
     cursor: pointer;
 }
 
 .findings-export-item:hover {
-    background: rgba(148, 163, 184, 0.12);
+    background: var(--bg-hover);
 }
 
 .findings-export-item-title {
@@ -12031,11 +12031,11 @@ kbd {
 
 .findings-export-item-desc {
     font-size: 11px;
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted);
 }
 
 .findings-export-divider {
     height: 1px;
     margin: 4px 0;
-    background: var(--border-color, #334155);
+    background: var(--border-default);
 }
