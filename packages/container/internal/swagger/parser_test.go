@@ -489,3 +489,85 @@ func TestDerefMap_RefResolutionAndMissingTarget(t *testing.T) {
 		t.Fatalf("expected nil for missing $#ref target, got %+v", missing)
 	}
 }
+
+func TestParseSwagger2_FormDataFileUpload(t *testing.T) {
+	spec := `{
+		"swagger": "2.0",
+		"info": {"title": "Upload API", "version": "1.0"},
+		"paths": {
+			"/upload": {
+				"post": {
+					"consumes": ["multipart/form-data"],
+					"parameters": [
+						{"name": "avatar", "in": "formData", "type": "file", "required": true},
+						{"name": "caption", "in": "formData", "type": "string"}
+					],
+					"responses": {"200": {"description": "ok"}}
+				}
+			}
+		}
+	}`
+	res, err := ParseRawSpec([]byte(spec))
+	require.NoError(t, err)
+	require.Len(t, res.Endpoints, 1)
+
+	ep := res.Endpoints[0]
+	assert.Equal(t, "multipart/form-data", ep.ContentType)
+	assert.Nil(t, ep.QueryParams, "formData parameters must not leak into QueryParams")
+	require.NotNil(t, ep.Schema)
+	assert.Equal(t, "object", ep.Schema.Type)
+	require.Contains(t, ep.Schema.Properties, "avatar")
+	assert.Equal(t, "string", ep.Schema.Properties["avatar"].Type)
+	assert.Equal(t, "binary", ep.Schema.Properties["avatar"].Format)
+	assert.Contains(t, ep.Schema.Required, "avatar")
+	require.Contains(t, ep.Schema.Properties, "caption")
+	assert.Equal(t, "string", ep.Schema.Properties["caption"].Type)
+
+	t.Run("formData without file defaults to x-www-form-urlencoded", func(t *testing.T) {
+		urlEncSpec := `{
+			"swagger": "2.0",
+			"info": {"title": "Form API", "version": "1.0"},
+			"paths": {
+				"/submit": {
+					"post": {
+						"parameters": [
+							{"name": "user", "in": "formData", "type": "string", "required": true}
+						],
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(urlEncSpec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 1)
+		assert.Equal(t, "application/x-www-form-urlencoded", r.Endpoints[0].ContentType)
+	})
+
+	t.Run("formData file without consumes and top-level consumes multipart", func(t *testing.T) {
+		noConsumesSpec := `{
+			"swagger": "2.0",
+			"info": {"title": "File API", "version": "1.0"},
+			"consumes": ["multipart/form-data"],
+			"paths": {
+				"/up1": {
+					"post": {
+						"parameters": [{"name": "doc", "in": "formData", "type": "file"}],
+						"responses": {"200": {"description": "ok"}}
+					}
+				},
+				"/up2": {
+					"post": {
+						"parameters": [{"name": "meta", "in": "formData", "type": "string"}],
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(noConsumesSpec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 2)
+		assert.Equal(t, "multipart/form-data", r.Endpoints[0].ContentType)
+		assert.Equal(t, "multipart/form-data", r.Endpoints[1].ContentType)
+	})
+}

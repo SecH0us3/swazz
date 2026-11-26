@@ -27,10 +27,10 @@ type Generator struct {
 	activeCategories map[string]bool
 
 	// Sequential counters: BOUNDARY
-	bStrIdx, bIntIdx, bNumIdx, bDateIdx, bArrIdx, bBoolIdx, bUUIDIdx int
+	bStrIdx, bIntIdx, bNumIdx, bDateIdx, bArrIdx, bBoolIdx, bUUIDIdx, bFileIdx int
 
 	// Sequential counters: MALICIOUS
-	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx, mUUIDIdx, oobIdx int
+	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx, mUUIDIdx, mFileIdx, oobIdx int
 
 	// Sequential counter: security header rotation
 	mu             sync.Mutex
@@ -324,6 +324,9 @@ func (g *Generator) buildObjectWithDepth(schema *swagger.SchemaProperty, depth i
 func (g *Generator) GenerateArrayItem(propertyName string, schema *swagger.SchemaProperty) any {
 	if schema == nil {
 		return nil
+	}
+	if (schema.Type == "string" && strings.ToLower(schema.Format) == "binary") || schema.Type == "file" {
+		return g.generateFileUpload(propertyName, true)
 	}
 	if schema.Type == "string" {
 		formatLower := strings.ToLower(schema.Format)

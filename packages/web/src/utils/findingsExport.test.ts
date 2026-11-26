@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ResultSummary } from '../hooks/useRunner.js';
-import { classifyInfrastructureError } from './findings.js';
+import { categorizeFinding, classifyInfrastructureError } from './findings.js';
 import { buildGroupedFindingsExport, formatGroupedFindingsMarkdown } from './findingsExport.js';
 
 function makeRow(overrides: Partial<ResultSummary> = {}): ResultSummary {
@@ -383,5 +383,29 @@ describe('buildGroupedFindingsExport', () => {
         expect(md).toContain('- Request Headers:');
         expect(md).toContain('"[REDACTED]"');
         expect(md).toContain('- Error: `upstream reset`');
+    });
+
+    it('categorizes file upload analyzer findings in web UI', () => {
+        const uploadCat = categorizeFinding({
+            ruleId: 'swazz/unvalidated-file-upload',
+            level: 'error',
+            message: 'Accepted mime_mismatch_png',
+        });
+        expect(uploadCat).toEqual({
+            title: 'Unvalidated File Upload',
+            color: 'var(--color-error)',
+            key: 'unvalidated_file_upload',
+        });
+
+        const parserCat = categorizeFinding({
+            ruleId: 'swazz/file-parser-error',
+            level: 'error',
+            message: 'PIL.UnidentifiedImageError',
+        });
+        expect(parserCat).toEqual({
+            title: 'File Parser Crash / Error Disclosure',
+            color: 'var(--color-error)',
+            key: 'file_parser_error',
+        });
     });
 });

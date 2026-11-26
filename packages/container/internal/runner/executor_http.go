@@ -12,9 +12,12 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"mime/multipart"
 	"net/http"
 	"net/http/httputil"
+	"net/textproto"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -296,6 +299,68 @@ func (r *Runner) sendRequest(
 				}
 			}
 
+			if bodyReader == nil && strings.Contains(effectiveCT, "multipart/form-data") {
+				if m, ok := payload.(map[string]any); ok {
+					var mpBuf bytes.Buffer
+					mw := multipart.NewWriter(&mpBuf)
+					keys := make([]string, 0, len(m))
+					for k := range m {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					mpOk := true
+					for _, k := range keys {
+						v := m[k]
+						switch tv := v.(type) {
+						case swagger.UploadFile:
+							if err := writeMultipartFile(mw, k, tv); err != nil {
+								mpOk = false
+							}
+						case *swagger.UploadFile:
+							if tv != nil {
+								if err := writeMultipartFile(mw, k, *tv); err != nil {
+									mpOk = false
+								}
+							}
+						case []any:
+							for _, item := range tv {
+								switch uf := item.(type) {
+								case swagger.UploadFile:
+									if err := writeMultipartFile(mw, k, uf); err != nil {
+										mpOk = false
+									}
+								case *swagger.UploadFile:
+									if uf != nil {
+										if err := writeMultipartFile(mw, k, *uf); err != nil {
+											mpOk = false
+										}
+									}
+								default:
+									if err := mw.WriteField(k, toString(item)); err != nil {
+										mpOk = false
+									}
+								}
+							}
+						default:
+							if err := mw.WriteField(k, toString(v)); err != nil {
+								mpOk = false
+							}
+						}
+					}
+					if err := mw.Close(); err == nil && mpOk {
+						reqBody = mpBuf.Bytes()
+						bodyReader = bytes.NewReader(reqBody)
+						// Ensure Content-Type includes the exact multipart boundary.
+						for hk := range mergedHeaders {
+							if strings.EqualFold(hk, "content-type") && hk != "Content-Type" {
+								delete(mergedHeaders, hk)
+							}
+						}
+						mergedHeaders["Content-Type"] = mw.FormDataContentType()
+					}
+				}
+			}
+
 			if bodyReader == nil {
 				reqBody, _ = json.Marshal(payload)
 				bodyReader = bytes.NewReader(reqBody)
@@ -571,6 +636,7 @@ func (r *Runner) sendRequest(
 				Profile:         profile,
 				Endpoint:        originalPath,
 				Method:          method,
+				StatusCode:      resp.StatusCode,
 				ResponseSize:    responseSize,
 				BaselineSize:    baselineSize,
 				SizeMultiplier:  multiplier,
@@ -632,4 +698,27 @@ func oobUUIDsInRequest(rawURL string, headers map[string]string, body []byte) []
 		}
 	}
 	return matches
+}
+
+var multipartQuoteEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\r", "", "\n", "")
+
+func writeMultipartFile(mw *multipart.Writer, field string, uf swagger.UploadFile) error {
+	h := make(textproto.MIMEHeader)
+	safeField := multipartQuoteEscaper.Replace(field)
+	safeName := multipartQuoteEscaper.Replace(uf.Filename)
+	if safeName == "" {
+		safeName = "upload.bin"
+	}
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, safeField, safeName))
+	ct := strings.TrimSpace(uf.ContentType)
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	h.Set("Content-Type", multipartQuoteEscaper.Replace(ct))
+	part, err := mw.CreatePart(h)
+	if err != nil {
+		return err
+	}
+	_, err = part.Write(uf.Data)
+	return err
 }

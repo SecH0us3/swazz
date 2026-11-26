@@ -352,7 +352,67 @@ func extractRequestSchema(operation map[string]any, spec map[string]any, endpoin
 		}
 	}
 
+	// Swagger 2.0: parameters with in: "formData" (supports type: "file" -> multipart/form-data)
+	if params, ok := operation["parameters"].([]any); ok {
+		props := make(map[string]*SchemaProperty)
+		var required []string
+		hasFile := false
+		for _, p := range params {
+			pm, ok := p.(map[string]any)
+			if !ok || pm["in"] != "formData" {
+				continue
+			}
+			name, _ := pm["name"].(string)
+			if name == "" {
+				continue
+			}
+			typ := getStringField(pm, "type")
+			format := getStringField(pm, "format")
+			if typ == "file" {
+				typ = "string"
+				format = "binary"
+				hasFile = true
+			} else if typ == "" {
+				typ = "string"
+			}
+			props[name] = &SchemaProperty{
+				Type:   typ,
+				Format: format,
+			}
+			if req, ok := pm["required"].(bool); ok && req {
+				required = append(required, name)
+			}
+		}
+		if len(props) > 0 {
+			ct := "application/x-www-form-urlencoded"
+			if hasFile || hasConsumes(operation, "multipart/form-data") || hasConsumes(spec, "multipart/form-data") {
+				ct = "multipart/form-data"
+			}
+			return &bodyResult{
+				schema: SchemaProperty{
+					Type:       "object",
+					Properties: props,
+					Required:   required,
+				},
+				contentType: ct,
+			}
+		}
+	}
+
 	return nil
+}
+
+func hasConsumes(obj map[string]any, target string) bool {
+	consumes, ok := obj["consumes"].([]any)
+	if !ok {
+		return false
+	}
+	for _, c := range consumes {
+		if s, ok := c.(string); ok && strings.EqualFold(s, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // mergeParams merges path-level and operation-level parameters.
@@ -377,7 +437,7 @@ func extractParamsSchema(params []any) *SchemaProperty {
 			continue
 		}
 		in, _ := pm["in"].(string)
-		if in == "body" || in == "header" || in == "path" {
+		if in == "body" || in == "formData" || in == "header" || in == "path" {
 			continue
 		}
 		name, _ := pm["name"].(string)

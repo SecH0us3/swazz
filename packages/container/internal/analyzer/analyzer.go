@@ -23,6 +23,7 @@ type AnalysisInput struct {
 	Profile         swagger.FuzzingProfile
 	Endpoint        string
 	Method          string
+	StatusCode      int
 	ResponseSize    int64
 	BaselineSize    int64
 	SizeMultiplier  float64

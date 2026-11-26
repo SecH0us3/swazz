@@ -92,7 +92,10 @@ func (g *Generator) generateByProfile(typ, format, propName string) any {
 
 	formatLower := strings.ToLower(format)
 
-	// Handle format-specific date-time/uuid before generic string
+	// Handle format-specific date-time/uuid/binary before generic string
+	if (typ == "string" && formatLower == "binary") || typ == "file" {
+		return g.generateFileUpload(propName, false)
+	}
 	if typ == "string" {
 		if formatLower == "date-time" {
 			return g.generateDate()

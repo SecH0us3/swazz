@@ -46,6 +46,7 @@ func NewRegistry(sstiStore *sstistore.Store) *AnalyzerRegistry {
 			&GRPCStatusAnalyzer{},
 			NewWSStatusAnalyzer(),
 			&MCPStatusAnalyzer{},
+			&FileUploadAnalyzer{},
 		},
 	}
 }

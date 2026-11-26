@@ -112,6 +112,27 @@ func TestResolveTaxonomyFallsBackToRuleTables(t *testing.T) {
 	assert.NotEmpty(t, web)
 }
 
+func TestEvaluateOWASPAPI_FileUploadRules(t *testing.T) {
+	uploadMatches := EvaluateOWASPAPI(&ClassificationContext{
+		RuleID:   "swazz/unvalidated-file-upload",
+		Method:   "POST",
+		Endpoint: "/upload",
+	})
+	require := assert.New(t)
+	require.Len(uploadMatches, 1)
+	require.Equal("API8:2023 Security Misconfiguration", uploadMatches[0].Category)
+	require.Equal("CWE-434", uploadMatches[0].CWE)
+
+	parserMatches := EvaluateOWASPAPI(&ClassificationContext{
+		RuleID:   "swazz/file-parser-error",
+		Method:   "POST",
+		Endpoint: "/upload",
+	})
+	require.Len(parserMatches, 1)
+	require.Equal("API8:2023 Security Misconfiguration", parserMatches[0].Category)
+	require.Equal("CWE-409", parserMatches[0].CWE)
+}
+
 // TestClassifyAllKeepsAnalyzerTaxonomy covers the real call site: swazz/prototype-pollution
 // has no entry in the rule-ID lookup tables, so recomputing its taxonomy blanked out the
 // mapping the analyzer had set (see internal/analyzer/prototype_pollution.go).

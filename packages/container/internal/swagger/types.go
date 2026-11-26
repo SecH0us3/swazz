@@ -58,6 +58,16 @@ type SchemaProperty struct {
 	Required   []string                   `json:"required,omitempty"`
 }
 
+// UploadFile represents a synthesized file part for multipart/form-data fuzzing.
+// Data is excluded from JSON serialization so scan logs and UI previews stay compact.
+type UploadFile struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"contentType"`
+	ProbeKind   string `json:"probeKind"`
+	Size        int    `json:"size"`
+	Data        []byte `json:"-"`
+}
+
 // UnmarshalJSON accepts both spellings of JSON Schema's "type": a single string
 // ("string") and a union array (["string","null"]).
 //

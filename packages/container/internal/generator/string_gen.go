@@ -143,6 +143,35 @@ func (g *Generator) getActiveMaliciousStrings() ([]any, bool) {
 	return all, hasAny
 }
 
+func (g *Generator) generateFileUpload(propName string, inArray bool) swagger.UploadFile {
+	validCanary := func() swagger.UploadFile {
+		lower := strings.ToLower(propName)
+		if strings.Contains(lower, "image") || strings.Contains(lower, "img") ||
+			strings.Contains(lower, "avatar") || strings.Contains(lower, "photo") ||
+			strings.Contains(lower, "logo") || strings.Contains(lower, "icon") ||
+			strings.Contains(lower, "pic") {
+			return payloads.ValidPNGFile()
+		}
+		return payloads.ValidTextFile()
+	}
+
+	switch g.profile {
+	case swagger.ProfileMalicious:
+		if g.isCategoryEnabled(payloads.CatMaliciousFileUpload) {
+			return seqPick(&g.mu, payloads.MaliciousFileUploads, &g.mFileIdx)
+		}
+	case swagger.ProfileBoundary:
+		if g.isCategoryEnabled(payloads.CatBoundaryFileUpload) {
+			maxAllowed := max(g.settings.PayloadSizeCap()-payloads.MinEnvelopeBytes, 1024)
+			if inArray && maxAllowed > 1024 {
+				maxAllowed = 1024 // 1KB per item in arrays to prevent OOM
+			}
+			return seqPick(&g.mu, payloads.BoundaryFileUploads(maxAllowed), &g.bFileIdx)
+		}
+	}
+	return validCanary()
+}
+
 func (g *Generator) generateDate() any {
 	switch g.profile {
 	case swagger.ProfileBoundary:
