@@ -801,6 +801,112 @@ describe('Inspector Component', () => {
         expect(screen.getByRole('menuitem', { name: /Grouped Findings \(JSON\)/i })).toBeDisabled();
         expect(screen.getByRole('menuitem', { name: /Grouped Findings \(Markdown\)/i })).toBeDisabled();
         expect(screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i })).toBeEnabled();
+        expect(screen.getByRole('separator')).toBeInTheDocument();
+
+        // Disabled items are skipped during keyboard navigation
+        const menu = screen.getByRole('menu');
+        const fullItem = screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i });
+        fireEvent.keyDown(menu, { key: 'Home' });
+        expect(document.activeElement).toBe(fullItem);
+        fireEvent.keyDown(menu, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(fullItem);
+    });
+
+    it('supports keyboard navigation (ArrowDown, End, Home, Escape) on the findings export menu', async () => {
+        mockQueryResults.mockResolvedValue({
+            rows: [
+                {
+                    id: 'k1',
+                    timestamp: 1700000000000,
+                    method: 'GET',
+                    endpoint: '/api/err',
+                    resolvedPath: '/api/err',
+                    status: 500,
+                    profile: 'MALICIOUS',
+                    duration: 15,
+                    payloadSize: 0,
+                    retries: 0,
+                    payloadPreview: '',
+                    responsePreview: 'Internal Server Error',
+                    responseSize: 21,
+                },
+            ],
+            total: 1,
+        });
+
+        render(
+            <Inspector
+                runId="run-kbd"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument();
+        });
+
+        const trigger = screen.getByRole('button', { name: /Export/i });
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+
+        const menu = screen.getByRole('menu');
+        const jsonItem = screen.getByRole('menuitem', { name: /Grouped Findings \(JSON\)/i });
+        const mdItem = screen.getByRole('menuitem', { name: /Grouped Findings \(Markdown\)/i });
+        const fullItem = screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i });
+
+        expect(menu).toBeInTheDocument();
+        expect(document.activeElement).toBe(jsonItem);
+
+        fireEvent.keyDown(menu, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(mdItem);
+
+        fireEvent.keyDown(menu, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(fullItem);
+
+        // Wrap-around ArrowDown from last to first
+        fireEvent.keyDown(menu, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(jsonItem);
+
+        // Wrap-around ArrowUp from first to last
+        fireEvent.keyDown(menu, { key: 'ArrowUp' });
+        expect(document.activeElement).toBe(fullItem);
+
+        // ArrowDown on already-open trigger focuses first enabled item
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(jsonItem);
+
+        fireEvent.keyDown(menu, { key: 'End' });
+        expect(document.activeElement).toBe(fullItem);
+
+        fireEvent.keyDown(menu, { key: 'Home' });
+        expect(document.activeElement).toBe(jsonItem);
+
+        fireEvent.keyDown(menu, { key: 'Escape' });
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        expect(document.activeElement).toBe(trigger);
+
+        // Outside mousedown closes menu; inside mousedown keeps it open
+        fireEvent.click(trigger);
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        fireEvent.mouseDown(screen.getByRole('menu'));
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        fireEvent.mouseDown(document.body);
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+
+        // Focus moving outside closes menu
+        fireEvent.click(trigger);
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        const outsideBtn = document.createElement('button');
+        document.body.appendChild(outsideBtn);
+        fireEvent.focusIn(outsideBtn);
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        document.body.removeChild(outsideBtn);
     });
 });
 

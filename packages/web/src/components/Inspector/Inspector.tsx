@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
@@ -79,10 +79,25 @@ export function Inspector({
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
     const [examplesPerFinding, setExamplesPerFinding] = useState<1 | 2>(2);
     const exportMenuRef = useRef<HTMLDivElement | null>(null);
+    const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const exportTriggerId = useId();
+    const pendingFocusFirstMenuItemRef = useRef(false);
 
     useEffect(() => {
         if (!exportMenuOpen) return;
+        if (pendingFocusFirstMenuItemRef.current) {
+            pendingFocusFirstMenuItemRef.current = false;
+            const firstItem = exportMenuRef.current?.querySelector<HTMLButtonElement>(
+                '[role="menuitem"]:not(:disabled)'
+            );
+            firstItem?.focus();
+        }
         const handleMouseDown = (event: MouseEvent) => {
+            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+                setExportMenuOpen(false);
+            }
+        };
+        const handleFocusIn = (event: FocusEvent) => {
             if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
                 setExportMenuOpen(false);
             }
@@ -90,12 +105,15 @@ export function Inspector({
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 setExportMenuOpen(false);
+                exportTriggerRef.current?.focus();
             }
         };
         document.addEventListener('mousedown', handleMouseDown);
+        document.addEventListener('focusin', handleFocusIn);
         document.addEventListener('keydown', handleKeyDown);
         return () => {
             document.removeEventListener('mousedown', handleMouseDown);
+            document.removeEventListener('focusin', handleFocusIn);
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [exportMenuOpen]);
@@ -558,23 +576,65 @@ export function Inspector({
                     {findingsOnly ? (
                         <div className="findings-export-dropdown" ref={exportMenuRef}>
                             <button
+                                id={exportTriggerId}
+                                ref={exportTriggerRef}
                                 type="button"
-                                className="btn btn-ghost btn-sm"
+                                className="btn btn-ghost btn-sm findings-export-trigger"
                                 title="Export grouped findings or full log"
                                 aria-haspopup="menu"
                                 aria-expanded={exportMenuOpen}
                                 onClick={() => setExportMenuOpen((prev) => !prev)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        if (!exportMenuOpen) {
+                                            pendingFocusFirstMenuItemRef.current = true;
+                                            setExportMenuOpen(true);
+                                        } else {
+                                            const firstItem = exportMenuRef.current?.querySelector<HTMLButtonElement>(
+                                                '[role="menuitem"]:not(:disabled)'
+                                            );
+                                            firstItem?.focus();
+                                        }
+                                    }
+                                }}
                             >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                                 </svg>
-                                Export ▾
+                                Export <span aria-hidden="true">▾</span>
                             </button>
                             {exportMenuOpen && (
-                                <div className="findings-export-menu" role="menu">
+                                <div
+                                    className="findings-export-menu"
+                                    role="menu"
+                                    aria-labelledby={exportTriggerId}
+                                    onKeyDown={(e) => {
+                                        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+                                        const items = Array.from(
+                                            exportMenuRef.current?.querySelectorAll<HTMLButtonElement>(
+                                                '[role="menuitem"]:not(:disabled)'
+                                            ) ?? []
+                                        );
+                                        if (items.length === 0) return;
+                                        e.preventDefault();
+                                        const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+                                        let nextIndex = 0;
+                                        if (e.key === 'Home') {
+                                            nextIndex = 0;
+                                        } else if (e.key === 'End') {
+                                            nextIndex = items.length - 1;
+                                        } else if (e.key === 'ArrowDown') {
+                                            nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+                                        } else if (e.key === 'ArrowUp') {
+                                            nextIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+                                        }
+                                        items[nextIndex]?.focus();
+                                    }}
+                                >
                                     <div className="findings-export-examples-row">
                                         <span className="findings-export-examples-label">Examples / finding:</span>
-                                        <div className="findings-export-examples-toggle">
+                                        <div className="findings-export-examples-toggle" role="group" aria-label="Examples per finding">
                                             <button
                                                 type="button"
                                                 aria-pressed={examplesPerFinding === 1}
@@ -613,7 +673,7 @@ export function Inspector({
                                         <span className="findings-export-item-title">Grouped Findings (Markdown)</span>
                                         <span className="findings-export-item-desc">Readable summary with {examplesPerFinding} example{examplesPerFinding > 1 ? 's' : ''}/finding</span>
                                     </button>
-                                    <div className="findings-export-divider" />
+                                    <hr className="findings-export-divider" />
                                     <button
                                         type="button"
                                         role="menuitem"
@@ -635,7 +695,7 @@ export function Inspector({
                             title="Export results as JSON"
                             onClick={onExport}
                         >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                             </svg>
                             Export

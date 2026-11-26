@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ResultSummary } from '../hooks/useRunner.js';
+import { classifyInfrastructureError } from './findings.js';
 import { buildGroupedFindingsExport, formatGroupedFindingsMarkdown } from './findingsExport.js';
 
 function makeRow(overrides: Partial<ResultSummary> = {}): ResultSummary {
@@ -254,5 +255,133 @@ describe('buildGroupedFindingsExport', () => {
         expect(md).toContain('      ````text');
         expect(md).toContain('      ```js');
         expect(md).toContain('SQLSTATE[42000]: syntax error');
+    });
+
+    it('covers classifyInfrastructureError edge cases, clamping, filters, triage:none, and group sorting', () => {
+        expect(
+            classifyInfrastructureError({ method: 'GET', endpoint: '/ok', status: 0 })
+        ).toBeNull();
+        expect(
+            classifyInfrastructureError({ method: 'MCP', endpoint: '/tool', status: 200 })?.displayStatus
+        ).toBe(400);
+        expect(
+            classifyInfrastructureError({ method: 'CALL', endpoint: 'mcp://tool/x', status: 500 })?.displayStatus
+        ).toBe(500);
+
+        const subtypeCls = classifyInfrastructureError({
+            method: 'GET',
+            endpoint: '/err',
+            status: 400,
+            responsePreview: '{"error":"ValidationError: bad field"}',
+        });
+        expect(subtypeCls?.groupKey).toMatch(/^status_400_/);
+        expect(subtypeCls?.title).toMatch(/^400 - /);
+
+        const rows: ResultSummary[] = [
+            makeRow({
+                id: 'r1',
+                triage: 'none',
+                owaspApiCategory: ['API1:2023-BOLA', 'API3:2023'],
+                requestHeaders: { 'X-Custom-Secret': 'top-secret', Accept: 'application/json' },
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/oob-interaction',
+                        level: 'error',
+                        message: 'SSRF',
+                        owaspApiCategory: ['API7:2023-SSRF', 'API1:2023-BOLA'],
+                        cweIds: ['CWE-918'],
+                    },
+                ],
+            }),
+            makeRow({
+                id: 'r2',
+                triage: 'acknowledged',
+                payloadPreview: '{"tpl":"v2"}',
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/oob-interaction',
+                        level: 'error',
+                        message: 'SSRF',
+                    },
+                ],
+            }),
+            makeRow({
+                id: 'r3',
+                method: 'GET',
+                endpoint: '/api/info',
+                status: 200,
+                analyzerFindings: [
+                    {
+                        ruleId: 'custom/info-rule',
+                        level: 'note',
+                        message: 'Alpha Info',
+                    },
+                ],
+            }),
+        ];
+
+        const clampedLow = buildGroupedFindingsExport(rows, {
+            runId: 'run-clamp',
+            maxExamplesPerFinding: 0,
+            search: 'api',
+            identityFilter: 'all',
+            totalAvailableRows: rows.length,
+        });
+        expect(clampedLow.maxExamplesPerFinding).toBe(1);
+        expect(clampedLow.filters.search).toBe('api');
+        expect(clampedLow.filters.identityFilter).toBeUndefined();
+        expect(clampedLow.summary.truncated).toBeUndefined();
+
+        const clampedHigh = buildGroupedFindingsExport(rows, {
+            runId: 'run-clamp',
+            maxExamplesPerFinding: 5,
+            identityFilter: 'User A',
+        });
+        expect(clampedHigh.maxExamplesPerFinding).toBe(2);
+        expect(clampedHigh.filters.identityFilter).toBe('User A');
+
+        // Error group sorts before info group
+        expect(clampedHigh.securityVulnerabilities[0].severityColor).toBe('var(--color-error)');
+        expect(clampedHigh.securityVulnerabilities[1].severityColor).toBe('var(--color-info)');
+
+        const ssrfTarget = clampedHigh.securityVulnerabilities[0].targets[0];
+        expect(ssrfTarget.triage).toBe('acknowledged');
+        expect(ssrfTarget.examples[0].triage).toBeUndefined();
+        expect(ssrfTarget.examples[0].requestHeaders?.['X-Custom-Secret']).toBe('[REDACTED]');
+        expect(ssrfTarget.owaspApiCategory).toEqual(['API7:2023-SSRF', 'API1:2023-BOLA', 'API3:2023']);
+    });
+
+    it('renders Markdown _None._ sections, header/error/triage blocks, and backtick-padded inline code', () => {
+        const emptyReport = buildGroupedFindingsExport([], { runId: null });
+        const emptyMd = formatGroupedFindingsMarkdown(emptyReport);
+        expect(emptyMd).toContain('_None._');
+
+        const rows: ResultSummary[] = [
+            makeRow({
+                id: 'md-1',
+                identity: 'User A',
+                triage: 'ignored',
+                error: 'upstream reset',
+                requestHeaders: { Authorization: 'Bearer abc', Host: 'example.com' },
+                analyzerFindings: [
+                    {
+                        ruleId: 'custom/rule',
+                        level: 'warning',
+                        message: 'Edge case',
+                        evidence: '`SELECT`',
+                        cweIds: ['CWE-20'],
+                    },
+                ],
+            }),
+        ];
+        const report = buildGroupedFindingsExport(rows, { runId: 'run-full-md' });
+        const md = formatGroupedFindingsMarkdown(report);
+        expect(md).toContain('Triage: `ignored`');
+        expect(md).toContain('Identities: User A');
+        expect(md).toContain('CWE: CWE-20');
+        expect(md).toContain('Evidence: `` `SELECT` ``');
+        expect(md).toContain('- Request Headers:');
+        expect(md).toContain('"[REDACTED]"');
+        expect(md).toContain('- Error: `upstream reset`');
     });
 });
