@@ -205,6 +205,9 @@ func TestHasStandaloneNumber(t *testing.T) {
 		{"name90be", "90", true},
 		{"90be", "90", false},
 		{"ab90", "90", false},
+		{"0x90", "90", false},
+		{"code=0X49;", "49", false},
+		{"x49", "49", true},
 		{"anything", "", false},
 		{"<td>7034790</td>", "7034790", true},
 		{`{"description":"48217394"}`, "48217394", true},
@@ -265,13 +268,13 @@ func TestFormatThousands(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := formatThousands([]byte(tt.digits), tt.sep)
+		got := appendFormattedThousands(nil, []byte(tt.digits), []byte(tt.sep))
 		if tt.expected == "" {
 			if got != nil {
-				t.Errorf("formatThousands(%q, %q) = %q, want nil", tt.digits, tt.sep, string(got))
+				t.Errorf("appendFormattedThousands(%q, %q) = %q, want nil", tt.digits, tt.sep, string(got))
 			}
 		} else if string(got) != tt.expected {
-			t.Errorf("formatThousands(%q, %q) = %q, want %q", tt.digits, tt.sep, string(got), tt.expected)
+			t.Errorf("appendFormattedThousands(%q, %q) = %q, want %q", tt.digits, tt.sep, string(got), tt.expected)
 		}
 	}
 }
@@ -283,6 +286,23 @@ func BenchmarkSSTIAnalyzer_NoMatch(b *testing.B) {
 	input := &AnalysisInput{
 		SentPayload:  "<%= 4173*6829 %>",
 		ResponseBody: []byte(`{"availableMethods":null,"defaultText":"","exceptionType":"ContractValidation","info":null,"key":null,"message":"No Product with Id=04500e5a-a278-47d0-bba6-d0e69fac4b24","ticketId":"ca2daac4-b122-4a4d-90be-8ac6149dfe20"}`),
+		Profile:      swagger.ProfileMalicious,
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		_ = a.Analyze(input)
+	}
+}
+
+func BenchmarkSSTIAnalyzer_SuffixCollision(b *testing.B) {
+	store := sstistore.NewStore()
+	store.Register("<%= 4173*6829 %>", sstistore.SSTIContext{RawExpr: "4173*6829", Expected: "28497417"})
+	a := &SSTIAnalyzer{Store: store}
+	input := &AnalysisInput{
+		SentPayload:  "<%= 4173*6829 %>",
+		ResponseBody: []byte(`{"status":"ok","code":417,"ticketId":"ca2daac4-b122-4a4d-90be-8ac6149dfe20"}`),
 		Profile:      swagger.ProfileMalicious,
 	}
 

@@ -68,7 +68,7 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		for rawExpr, rawExprBytes := range sstiRawExprBytes {
 			if strings.Contains(payloadStr, rawExpr) {
 				evalValBytes := sstiEvalValBytes[rawExpr]
-				if matchesEvaluatedNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
+				if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
 					evalVal := string(evalValBytes)
 					findings = append(findings, swagger.AnalysisFinding{
 						RuleID:           "swazz/ssti-leak",
@@ -88,7 +88,13 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	return findings
 }
 
-var thousandSeparators = []string{",", " ", "\u00a0", "\u202f", "."}
+var thousandSeparators = [][]byte{
+	[]byte(","),
+	[]byte(" "),
+	[]byte("\u00a0"),
+	[]byte("\u202f"),
+	[]byte("."),
+}
 
 func matchesEvaluatedNumber(body, evalValBytes []byte) bool {
 	if hasStandaloneNumber(body, evalValBytes) {
@@ -96,10 +102,11 @@ func matchesEvaluatedNumber(body, evalValBytes []byte) bool {
 	}
 	// Java FreeMarker and similar locale-aware engines format integers >= 1000 with
 	// grouping separators (e.g. "28,497,417"). Pre-filter on the trailing 3 digits
-	// so non-matching responses incur zero allocations.
+	// and format into a stack buffer so non-matching responses incur zero allocations.
 	if len(evalValBytes) >= 4 && bytes.Contains(body, evalValBytes[len(evalValBytes)-3:]) {
+		var buf [64]byte
 		for _, sep := range thousandSeparators {
-			if grouped := formatThousands(evalValBytes, sep); grouped != nil && hasStandaloneGroupedNumber(body, grouped, []byte(sep)) {
+			if grouped := appendFormattedThousands(buf[:0], evalValBytes, sep); grouped != nil && hasStandaloneGroupedNumber(body, grouped, sep) {
 				return true
 			}
 		}
@@ -136,7 +143,7 @@ func hasStandaloneGroupedNumber(body, grouped, sep []byte) bool {
 	}
 }
 
-func formatThousands(digits []byte, sep string) []byte {
+func appendFormattedThousands(dst, digits, sep []byte) []byte {
 	n := len(digits)
 	if n < 4 {
 		return nil
@@ -146,18 +153,16 @@ func formatThousands(digits []byte, sep string) []byte {
 			return nil
 		}
 	}
-	sepCount := (n - 1) / 3
-	out := make([]byte, 0, n+sepCount*len(sep))
 	rem := n % 3
 	if rem == 0 {
 		rem = 3
 	}
-	out = append(out, digits[:rem]...)
+	dst = append(dst, digits[:rem]...)
 	for i := rem; i < n; i += 3 {
-		out = append(out, sep...)
-		out = append(out, digits[i:i+3]...)
+		dst = append(dst, sep...)
+		dst = append(dst, digits[i:i+3]...)
 	}
-	return out
+	return dst
 }
 
 func isASCIIDigit(b byte) bool {
@@ -196,6 +201,13 @@ func isInsideHexToken(body []byte, start, end int) bool {
 	return true
 }
 
+func hasHexPrefix(body []byte, start int) bool {
+	if start < 2 || body[start-2] != '0' || (body[start-1] != 'x' && body[start-1] != 'X') {
+		return false
+	}
+	return start == 2 || (!isASCIIAlpha(body[start-3]) && !isASCIIDigit(body[start-3]))
+}
+
 // hasStandaloneNumber returns true if val appears in body as a standalone number,
 // i.e. not immediately adjacent to other digit characters or embedded inside a hex/UUID token.
 func hasStandaloneNumber(body, val []byte) bool {
@@ -214,7 +226,7 @@ func hasStandaloneNumber(body, val []byte) bool {
 		beforeOk := start == 0 || !isASCIIDigit(body[start-1])
 		afterOk := end >= len(body) || !isASCIIDigit(body[end])
 
-		if beforeOk && afterOk && !isInsideHexToken(body, start, end) {
+		if beforeOk && afterOk && !hasHexPrefix(body, start) && !isInsideHexToken(body, start, end) {
 			return true
 		}
 		idx = start + 1
