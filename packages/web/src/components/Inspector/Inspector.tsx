@@ -11,6 +11,11 @@ import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding, SwazzConfig, WAFPatchReport } from '../../types.js';
 import { extractErrorSubtype, getCleanDedupeKey } from '../../utils/errors.js';
 import { categorizeFinding } from '../../utils/findings.js';
+import {
+    buildGroupedFindingsExport,
+    downloadTextFile,
+    formatGroupedFindingsMarkdown,
+} from '../../utils/findingsExport.js';
 import { FindingItem } from './FindingItem.js';
 import { StatusFilterDropdown } from './StatusFilterDropdown.js';
 import { WafPatchViewer } from './WafPatchViewer.js';
@@ -71,6 +76,29 @@ export function Inspector({
     const [limit, setLimit] = useState(PAGE_SIZE);
     const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
+    const [examplesPerFinding, setExamplesPerFinding] = useState<1 | 2>(2);
+    const exportMenuRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!exportMenuOpen) return;
+        const handleMouseDown = (event: MouseEvent) => {
+            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+                setExportMenuOpen(false);
+            }
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setExportMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleMouseDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handleMouseDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [exportMenuOpen]);
 
     const [identityFilter, setIdentityFilter] = useState<string>('all');
     const [seenIdentities, setSeenIdentities] = useState<Set<string>>(new Set(['User A']));
@@ -140,6 +168,35 @@ export function Inspector({
     useEffect(() => {
         setLimit(PAGE_SIZE);
     }, [runId]);
+
+    const handleExportGrouped = useCallback(
+        (format: 'json' | 'markdown') => {
+            const report = buildGroupedFindingsExport(rows, {
+                runId,
+                baseUrl: config?.base_url,
+                maxExamplesPerFinding: examplesPerFinding,
+                excludedStatuses,
+                search: search.trim() || undefined,
+                identityFilter,
+            });
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            if (format === 'json') {
+                downloadTextFile(
+                    `swazz-findings-grouped-${ts}.json`,
+                    JSON.stringify(report, null, 2),
+                    'application/json'
+                );
+            } else {
+                downloadTextFile(
+                    `swazz-findings-grouped-${ts}.md`,
+                    formatGroupedFindingsMarkdown(report),
+                    'text/markdown;charset=utf-8'
+                );
+            }
+            setExportMenuOpen(false);
+        },
+        [rows, runId, config?.base_url, examplesPerFinding, excludedStatuses, search, identityFilter]
+    );
 
     const { securityVulnerabilities, infrastructureErrors } = useMemo(() => {
         if (!findingsOnly) return { securityVulnerabilities: [], infrastructureErrors: [] };
@@ -512,16 +569,88 @@ export function Inspector({
                             </>
                         )}
                     </span>
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        title="Export results as JSON"
-                        onClick={onExport}
-                    >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        Export
-                    </button>
+                    {findingsOnly ? (
+                        <div className="findings-export-dropdown" ref={exportMenuRef}>
+                            <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                title="Export grouped findings or full log"
+                                aria-haspopup="menu"
+                                aria-expanded={exportMenuOpen}
+                                onClick={() => setExportMenuOpen((prev) => !prev)}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                Export ▾
+                            </button>
+                            {exportMenuOpen && (
+                                <div className="findings-export-menu" role="menu">
+                                    <div className="findings-export-examples-row">
+                                        <span className="findings-export-examples-label">Examples / finding:</span>
+                                        <div className="findings-export-examples-toggle">
+                                            <button
+                                                type="button"
+                                                className={`findings-export-example-btn ${examplesPerFinding === 1 ? 'active' : ''}`}
+                                                onClick={() => setExamplesPerFinding(1)}
+                                            >
+                                                1
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`findings-export-example-btn ${examplesPerFinding === 2 ? 'active' : ''}`}
+                                                onClick={() => setExamplesPerFinding(2)}
+                                            >
+                                                2
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="findings-export-item"
+                                        onClick={() => handleExportGrouped('json')}
+                                    >
+                                        <span className="findings-export-item-title">Grouped Findings (JSON)</span>
+                                        <span className="findings-export-item-desc">Compact report with {examplesPerFinding} example{examplesPerFinding > 1 ? 's' : ''}/finding</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="findings-export-item"
+                                        onClick={() => handleExportGrouped('markdown')}
+                                    >
+                                        <span className="findings-export-item-title">Grouped Findings (Markdown)</span>
+                                        <span className="findings-export-item-desc">Readable summary with {examplesPerFinding} example{examplesPerFinding > 1 ? 's' : ''}/finding</span>
+                                    </button>
+                                    <div className="findings-export-divider" />
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="findings-export-item"
+                                        onClick={() => {
+                                            setExportMenuOpen(false);
+                                            onExport();
+                                        }}
+                                    >
+                                        <span className="findings-export-item-title">Full Scan Log (JSON)</span>
+                                        <span className="findings-export-item-desc">All raw requests and responses</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            title="Export results as JSON"
+                            onClick={onExport}
+                        >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Export
+                        </button>
+                    )}
                 </div>
             </div>
 

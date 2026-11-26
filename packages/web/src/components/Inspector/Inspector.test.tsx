@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { Inspector } from './Inspector.js';
 import type { ResultSummary } from '../../hooks/useRunner.js';
+import * as findingsExport from '../../utils/findingsExport.js';
 
 // Mock react-virtuoso for stable rendering in JSDOM environment
 vi.mock('react-virtuoso', () => ({
@@ -661,6 +662,116 @@ describe('Inspector Component', () => {
 
         expect(screen.getByText('Waiting for requests')).toBeInTheDocument();
         expect(screen.getByText(/Start a fuzz test to see results appear here in real time/i)).toBeInTheDocument();
+    });
+
+    it('renders compact grouped export dropdown in findingsOnly mode and supports JSON, Markdown, and Full Log', async () => {
+        const downloadSpy = vi.spyOn(findingsExport, 'downloadTextFile').mockImplementation(() => {});
+        const onExport = vi.fn();
+
+        const findingRows: ResultSummary[] = [
+            {
+                id: 'f1',
+                timestamp: 1700000000000,
+                method: 'POST',
+                endpoint: '/api/render',
+                resolvedPath: '/api/render',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 25,
+                payloadSize: 18,
+                retries: 0,
+                payloadPreview: '{"tpl":"{{7*7}}"}',
+                responsePreview: '49',
+                responseSize: 2,
+                analyzerFindings: [{ ruleId: 'ssti', level: 'error', message: 'SSTI detected' }],
+            },
+            {
+                id: 'f2',
+                timestamp: 1700000001000,
+                method: 'POST',
+                endpoint: '/api/render',
+                resolvedPath: '/api/render',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 28,
+                payloadSize: 18,
+                retries: 0,
+                payloadPreview: '{"tpl":"${7*7}"}',
+                responsePreview: '49',
+                responseSize: 2,
+                analyzerFindings: [{ ruleId: 'ssti', level: 'error', message: 'SSTI detected' }],
+            },
+            {
+                id: 'f3',
+                timestamp: 1700000002000,
+                method: 'POST',
+                endpoint: '/api/render',
+                resolvedPath: '/api/render',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 30,
+                payloadSize: 18,
+                retries: 0,
+                payloadPreview: '{"tpl":"#{7*7}"}',
+                responsePreview: '49',
+                responseSize: 2,
+                analyzerFindings: [{ ruleId: 'ssti', level: 'error', message: 'SSTI detected' }],
+            },
+        ];
+        mockQueryResults.mockResolvedValue({ rows: findingRows, total: findingRows.length });
+
+        render(
+            <Inspector
+                runId="run-exp"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={onExport}
+                findingsOnly={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument();
+        });
+
+        // Clicking Export opens the dropdown instead of calling onExport immediately
+        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+        expect(onExport).not.toHaveBeenCalled();
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+
+        // Switch examples per finding to 1 and export Grouped Findings (JSON)
+        fireEvent.click(screen.getByRole('button', { name: '1' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: /Grouped Findings \(JSON\)/i }));
+
+        expect(downloadSpy).toHaveBeenCalledTimes(1);
+        const [jsonName, jsonContent, jsonMime] = downloadSpy.mock.calls[0];
+        expect(jsonName).toMatch(/^swazz-findings-grouped-.*\.json$/);
+        expect(jsonMime).toBe('application/json');
+        const parsed = JSON.parse(jsonContent);
+        expect(parsed.maxExamplesPerFinding).toBe(1);
+        expect(parsed.securityVulnerabilities[0].targets[0].count).toBe(3);
+        expect(parsed.securityVulnerabilities[0].targets[0].examples).toHaveLength(1);
+
+        // Re-open, switch to 2 examples, export Grouped Findings (Markdown)
+        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+        fireEvent.click(screen.getByRole('button', { name: '2' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: /Grouped Findings \(Markdown\)/i }));
+
+        expect(downloadSpy).toHaveBeenCalledTimes(2);
+        const [mdName, mdContent, mdMime] = downloadSpy.mock.calls[1];
+        expect(mdName).toMatch(/^swazz-findings-grouped-.*\.md$/);
+        expect(mdMime).toContain('text/markdown');
+        expect(mdContent).toContain('# Swazz Grouped Findings Report');
+        expect(mdContent).toContain('Example 2/2');
+
+        // Re-open and click Full Scan Log (JSON) -> calls onExport
+        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+        fireEvent.click(screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i }));
+        expect(onExport).toHaveBeenCalledTimes(1);
+
+        downloadSpy.mockRestore();
     });
 });
 
