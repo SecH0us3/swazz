@@ -15,8 +15,13 @@ import (
 
 func TestLoggerTextMode(t *testing.T) {
 	origJSON := isJSONFormat
-	defer SetJSONFormat(origJSON)
+	origNoColor := noColorFlag.Load()
+	defer func() {
+		SetJSONFormat(origJSON)
+		SetNoColor(origNoColor)
+	}()
 	SetJSONFormat(false)
+	SetNoColor(true)
 
 	// Set log level to debug to ensure all are printed
 	SetLevel(LevelDebug)
@@ -171,5 +176,68 @@ func TestCRLFWriter(t *testing.T) {
 	_, _ = w.Write([]byte("line 1\nline 2\r\nline 3\n"))
 	if buf.String() != "line 1\r\nline 2\r\nline 3\r\n" {
 		t.Errorf("expected CRLF newlines when raw terminal is true, got %q", buf.String())
+	}
+}
+
+func TestLoggerColorsAndNoColor(t *testing.T) {
+	origJSON := isJSONFormat
+	origNoColor := noColorFlag.Load()
+	origForce := forceColorFlag.Load()
+	origLevel := GetLevel()
+	origFlags := log.Flags()
+	origOutput := log.Writer()
+	defer func() {
+		SetJSONFormat(origJSON)
+		SetNoColor(origNoColor)
+		forceColorFlag.Store(origForce)
+		SetLevel(origLevel)
+		log.SetFlags(origFlags)
+		log.SetOutput(origOutput)
+	}()
+
+	SetJSONFormat(false)
+	SetLevel(LevelDebug)
+	log.SetFlags(0)
+	t.Setenv("NO_COLOR", "")
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+
+	// 1. Force colors enabled: [Adaptive] is yellow, Error is red, Warn is yellow
+	SetNoColor(false)
+	forceColorFlag.Store(true)
+
+	Info("[Adaptive] Learned required parameter(s) [csrf] on POST /login (HTTP 400)")
+	Warn("warn msg")
+	Error("error msg")
+
+	colored := buf.String()
+	if !strings.Contains(colored, ansiYellow+"[INFO] [Adaptive]") {
+		t.Errorf("expected yellow ANSI sequence for [Adaptive], got: %q", colored)
+	}
+	if !strings.Contains(colored, ansiYellow+"[WARN] warn msg") {
+		t.Errorf("expected yellow ANSI sequence for WARN, got: %q", colored)
+	}
+	if !strings.Contains(colored, ansiRed+"[ERROR] error msg") {
+		t.Errorf("expected red ANSI sequence for ERROR, got: %q", colored)
+	}
+
+	// 2. NO_COLOR env var disables all ANSI sequences
+	buf.Reset()
+	t.Setenv("NO_COLOR", "1")
+	Info("[Adaptive] Learned required parameter(s) [csrf]")
+	Error("plain error")
+	if strings.Contains(buf.String(), "\x1b[") {
+		t.Errorf("expected no ANSI codes when NO_COLOR is set, got: %q", buf.String())
+	}
+
+	// 3. Explicit SetNoColor(true) (-no-color flag) disables all ANSI sequences
+	buf.Reset()
+	t.Setenv("NO_COLOR", "")
+	SetNoColor(true)
+	Info("[Adaptive] Learned required parameter(s) [csrf]")
+	Error("plain error")
+	if strings.Contains(buf.String(), "\x1b[") {
+		t.Errorf("expected no ANSI codes when SetNoColor(true), got: %q", buf.String())
 	}
 }
