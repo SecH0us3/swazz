@@ -742,7 +742,12 @@ describe('Inspector Component', () => {
         expect(screen.getByRole('menu')).toBeInTheDocument();
 
         // Switch examples per finding to 1 and export Grouped Findings (JSON)
-        fireEvent.click(screen.getByRole('button', { name: '1' }));
+        const btn1 = screen.getByRole('button', { name: '1' });
+        const btn2 = screen.getByRole('button', { name: '2' });
+        expect(btn2).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(btn1);
+        expect(btn1).toHaveAttribute('aria-pressed', 'true');
+        expect(btn2).toHaveAttribute('aria-pressed', 'false');
         fireEvent.click(screen.getByRole('menuitem', { name: /Grouped Findings \(JSON\)/i }));
 
         expect(downloadSpy).toHaveBeenCalledTimes(1);
@@ -772,6 +777,30 @@ describe('Inspector Component', () => {
         expect(onExport).toHaveBeenCalledTimes(1);
 
         downloadSpy.mockRestore();
+    });
+
+    it('disables grouped export items when there are no findings while keeping Full Scan Log enabled', async () => {
+        mockQueryResults.mockResolvedValue({ rows: [], total: 0 });
+        render(
+            <Inspector
+                runId="run-empty"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
+        expect(screen.getByRole('menuitem', { name: /Grouped Findings \(JSON\)/i })).toBeDisabled();
+        expect(screen.getByRole('menuitem', { name: /Grouped Findings \(Markdown\)/i })).toBeDisabled();
+        expect(screen.getByRole('menuitem', { name: /Full Scan Log \(JSON\)/i })).toBeEnabled();
     });
 });
 

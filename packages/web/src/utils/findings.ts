@@ -132,3 +132,62 @@ export function matchesFinding(
 ): boolean {
     return target.id ? f.id === target.id : f.ruleId === target.ruleId;
 }
+
+export interface InfrastructureErrorClassification {
+    groupKey: string;
+    title: string;
+    color: string;
+    displayStatus: number;
+    subtypeTitle?: string;
+}
+
+/**
+ * Classifies a non-security error response into the exact infrastructure group
+ * shown in the Findings Inspector UI. Returns null for non-error responses.
+ */
+export function classifyInfrastructureError(row: {
+    method: string;
+    endpoint: string;
+    status: number;
+    error?: string;
+    responsePreview?: string;
+}): InfrastructureErrorClassification | null {
+    const isMcpErr =
+        row.method === 'CALL' ||
+        row.method === 'MCP' ||
+        Boolean(row.endpoint && row.endpoint.startsWith('mcp://tool/'));
+    const isErrorStatus = row.status >= 400 || (row.status === 0 && Boolean(row.error)) || isMcpErr;
+    if (!isErrorStatus) return null;
+
+    const displayStatus = isMcpErr ? (row.status === 200 ? 400 : row.status) : row.status;
+    let title = `HTTP ${displayStatus} Error`;
+    let groupKey = `status_${displayStatus}`;
+    let color = displayStatus >= 500 ? 'var(--color-error)' : 'var(--color-warning)';
+    let subtypeTitle: string | undefined;
+
+    if (row.status === 0) {
+        title = 'Network Timeout / Error';
+        groupKey = 'status_0';
+        color = 'var(--color-error)';
+    } else {
+        const subType = extractErrorSubtype(row.responsePreview);
+        if (subType) {
+            subtypeTitle = subType.title;
+            if (subType.key.startsWith('mcp_')) {
+                title = subType.title;
+                groupKey = subType.key;
+            } else {
+                title = `${displayStatus} - ${subType.title}`;
+                groupKey = `status_${displayStatus}_${subType.key}`;
+            }
+        }
+    }
+
+    return {
+        groupKey,
+        title,
+        color,
+        displayStatus,
+        ...(subtypeTitle ? { subtypeTitle } : {}),
+    };
+}

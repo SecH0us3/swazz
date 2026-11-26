@@ -9,8 +9,8 @@ import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding, SwazzConfig, WAFPatchReport } from '../../types.js';
-import { extractErrorSubtype, getCleanDedupeKey } from '../../utils/errors.js';
-import { categorizeFinding } from '../../utils/findings.js';
+import { getCleanDedupeKey } from '../../utils/errors.js';
+import { categorizeFinding, classifyInfrastructureError } from '../../utils/findings.js';
 import {
     buildGroupedFindingsExport,
     downloadTextFile,
@@ -169,35 +169,6 @@ export function Inspector({
         setLimit(PAGE_SIZE);
     }, [runId]);
 
-    const handleExportGrouped = useCallback(
-        (format: 'json' | 'markdown') => {
-            const report = buildGroupedFindingsExport(rows, {
-                runId,
-                baseUrl: config?.base_url,
-                maxExamplesPerFinding: examplesPerFinding,
-                excludedStatuses,
-                search: search.trim() || undefined,
-                identityFilter,
-            });
-            const ts = new Date().toISOString().replace(/[:.]/g, '-');
-            if (format === 'json') {
-                downloadTextFile(
-                    `swazz-findings-grouped-${ts}.json`,
-                    JSON.stringify(report, null, 2),
-                    'application/json'
-                );
-            } else {
-                downloadTextFile(
-                    `swazz-findings-grouped-${ts}.md`,
-                    formatGroupedFindingsMarkdown(report),
-                    'text/markdown;charset=utf-8'
-                );
-            }
-            setExportMenuOpen(false);
-        },
-        [rows, runId, config?.base_url, examplesPerFinding, excludedStatuses, search, identityFilter]
-    );
-
     const { securityVulnerabilities, infrastructureErrors } = useMemo(() => {
         if (!findingsOnly) return { securityVulnerabilities: [], infrastructureErrors: [] };
 
@@ -249,38 +220,23 @@ export function Inspector({
             }
 
             if (!placed) {
-                const isMcpErr = row.method === 'CALL' || row.method === 'MCP' || (row.endpoint && row.endpoint.startsWith('mcp://tool/'));
-                const isErrorStatus = row.status >= 400 || 
-                                     (row.status === 0 && row.error) ||
-                                     isMcpErr;
-                if (isErrorStatus) {
-                    const displayStatus = isMcpErr ? (row.status === 200 ? 400 : row.status) : row.status;
-                    let categoryTitle = `HTTP ${displayStatus} Error`;
-                    let groupKey = `status_${displayStatus}`;
-                    let color = displayStatus >= 500 ? 'var(--color-error)' : 'var(--color-warning)';
-
-                    if (row.status === 0) {
-                        categoryTitle = 'Network Timeout / Error';
-                        groupKey = 'status_0';
-                        color = 'var(--color-error)';
-                    } else {
-                        const subType = extractErrorSubtype(row.responsePreview);
-                        if (subType) {
-                            if (subType.key.startsWith('mcp_')) {
-                                categoryTitle = subType.title;
-                                groupKey = subType.key;
-                            } else {
-                                categoryTitle = `${displayStatus} - ${subType.title}`;
-                                groupKey = `status_${displayStatus}_${subType.key}`;
-                            }
-                        }
+                const classified = classifyInfrastructureError(row);
+                if (classified) {
+                    if (!infraGroups[classified.groupKey]) {
+                        infraGroups[classified.groupKey] = {
+                            title: classified.title,
+                            color: classified.color,
+                            items: [],
+                            seenMap: new Map(),
+                        };
                     }
-
-                    if (!infraGroups[groupKey]) {
-                        infraGroups[groupKey] = { title: categoryTitle, color, items: [], seenMap: new Map() };
-                    }
-                    const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error || row.responsePreview);
-                    const existing = infraGroups[groupKey].seenMap.get(dedupeKey);
+                    const dedupeKey = getCleanDedupeKey(
+                        row.method,
+                        row.endpoint,
+                        classified.displayStatus,
+                        row.error || row.responsePreview
+                    );
+                    const existing = infraGroups[classified.groupKey].seenMap.get(dedupeKey);
                     if (existing) {
                         existing.count += 1;
                         if (row.triage && row.triage !== 'none' && (!existing.result.triage || existing.result.triage === 'none')) {
@@ -288,8 +244,8 @@ export function Inspector({
                         }
                     } else {
                         const newItem = { result: row, count: 1 };
-                        infraGroups[groupKey].seenMap.set(dedupeKey, newItem);
-                        infraGroups[groupKey].items.push(newItem);
+                        infraGroups[classified.groupKey].seenMap.set(dedupeKey, newItem);
+                        infraGroups[classified.groupKey].items.push(newItem);
                     }
                 }
             }
@@ -361,6 +317,36 @@ export function Inspector({
         searchDebounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
         return () => { searchDebounceRef.current && clearTimeout(searchDebounceRef.current); };
     }, [search]);
+
+    const handleExportGrouped = useCallback(
+        (format: 'json' | 'markdown') => {
+            const report = buildGroupedFindingsExport(rows, {
+                runId,
+                baseUrl: config?.base_url,
+                maxExamplesPerFinding: examplesPerFinding,
+                excludedStatuses,
+                search: debouncedSearch.trim() || undefined,
+                identityFilter,
+                totalAvailableRows: total,
+            });
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            if (format === 'json') {
+                downloadTextFile(
+                    `swazz-findings-grouped-${ts}.json`,
+                    JSON.stringify(report, null, 2),
+                    'application/json'
+                );
+            } else {
+                downloadTextFile(
+                    `swazz-findings-grouped-${ts}.md`,
+                    formatGroupedFindingsMarkdown(report),
+                    'text/markdown;charset=utf-8'
+                );
+            }
+            setExportMenuOpen(false);
+        },
+        [rows, runId, config?.base_url, examplesPerFinding, excludedStatuses, debouncedSearch, identityFilter, total]
+    );
 
     // Reload results from IDB when any filter/run changes or liveCount ticks
     const reloadRef = useRef(0);
@@ -591,6 +577,7 @@ export function Inspector({
                                         <div className="findings-export-examples-toggle">
                                             <button
                                                 type="button"
+                                                aria-pressed={examplesPerFinding === 1}
                                                 className={`findings-export-example-btn ${examplesPerFinding === 1 ? 'active' : ''}`}
                                                 onClick={() => setExamplesPerFinding(1)}
                                             >
@@ -598,6 +585,7 @@ export function Inspector({
                                             </button>
                                             <button
                                                 type="button"
+                                                aria-pressed={examplesPerFinding === 2}
                                                 className={`findings-export-example-btn ${examplesPerFinding === 2 ? 'active' : ''}`}
                                                 onClick={() => setExamplesPerFinding(2)}
                                             >
@@ -608,6 +596,7 @@ export function Inspector({
                                     <button
                                         type="button"
                                         role="menuitem"
+                                        disabled={filteredFindingsCount === 0}
                                         className="findings-export-item"
                                         onClick={() => handleExportGrouped('json')}
                                     >
@@ -617,6 +606,7 @@ export function Inspector({
                                     <button
                                         type="button"
                                         role="menuitem"
+                                        disabled={filteredFindingsCount === 0}
                                         className="findings-export-item"
                                         onClick={() => handleExportGrouped('markdown')}
                                     >

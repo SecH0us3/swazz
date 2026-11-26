@@ -12024,6 +12024,15 @@ kbd {
     background: var(--bg-hover);
 }
 
+.findings-export-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.findings-export-item:disabled:hover {
+    background: transparent;
+}
+
 .findings-export-item-title {
     font-size: 12px;
     font-weight: 500;
