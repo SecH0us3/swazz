@@ -208,7 +208,7 @@ function isSwazzDashboardHost(host) {
     if (swazzUrl) {
         try {
             const parsed = new URL(swazzUrl);
-            if (parsed.host && stripPort(lowerHost) === stripPort(parsed.host)) {
+            if (parsed.host && lowerHost === parsed.host.toLowerCase()) {
                 return true;
             }
         } catch (e) {}

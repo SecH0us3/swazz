@@ -509,4 +509,22 @@ describe('Full-page navigation and form POST capture via webRequest', () => {
         expect(background.getDroppedOutOfScope()).toBe(0);
         expect(background.getDroppedHosts()).toEqual({});
     });
+
+    it('matches exact host:port for swazzUrl so other local ports are still tracked as ignored', () => {
+        background.setTargetDomains(['example.invalid']);
+        background.setSwazzUrl('http://localhost:5173');
+
+        background.processCapturedRequest(
+            { url: 'http://localhost:5173/api/runs', method: 'GET', headers: {}, body: '' },
+            { id: 1, url: 'http://localhost:5173/' }
+        );
+        background.processCapturedRequest(
+            { url: 'http://localhost:8788/users', method: 'GET', headers: {}, body: '' },
+            { id: 2, url: 'http://127.0.0.1:8788/welcome' }
+        );
+
+        const dropped = background.getDroppedHosts();
+        expect(dropped['localhost:5173']).toBeUndefined();
+        expect(dropped['localhost:8788']).toBe(1);
+    });
 });
