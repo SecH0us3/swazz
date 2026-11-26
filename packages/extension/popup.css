@@ -1109,3 +1109,229 @@ body.sidepanel #link-open-sidepanel {
     color: var(--text-primary);
     border-color: var(--text-muted);
 }
+
+/* Reorganized Compact Layout Styles */
+.btn-icon-header {
+    background: transparent;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 4px 7px;
+    transition: var(--transition-fast);
+}
+
+.btn-icon-header:hover,
+.btn-icon-header.open {
+    background: rgba(168, 85, 247, 0.14);
+    color: var(--text-primary);
+    border-color: var(--border-active);
+}
+
+.track-site-row {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    gap: 8px;
+}
+
+.track-site-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.inline-controls-row {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-default);
+    gap: 10px;
+}
+
+.inline-record-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.connection-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.connection-project-row,
+.connection-scope-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.connection-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    width: 46px;
+    flex-shrink: 0;
+}
+
+.inline-project-select {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg-darkest);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: var(--font-sans);
+    outline: none;
+}
+
+.inline-project-select:focus {
+    border-color: var(--accent);
+}
+
+.btn-icon-sm {
+    padding: 4px 6px;
+    line-height: 1;
+}
+
+.domain-chips-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.domain-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    background: rgba(168, 85, 247, 0.12);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: var(--text-primary);
+    border-radius: 12px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+}
+
+.domain-chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.domain-chip-remove {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 10px;
+    line-height: 1;
+    padding: 0 2px;
+}
+
+.domain-chip-remove:hover {
+    color: var(--color-error);
+}
+
+.view-tabs-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px solid var(--border-default);
+    padding-bottom: 2px;
+}
+
+.view-tabs-bar .view-tabs {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.badge-params {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(168, 85, 247, 0.14);
+    color: var(--accent-light);
+    border: 1px solid rgba(168, 85, 247, 0.28);
+    flex-shrink: 0;
+}
+
+.item-host-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    padding-left: 24px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kv-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.22);
+    padding: 4px 6px;
+    border-radius: 4px;
+    max-height: 96px;
+    overflow-y: auto;
+}
+
+.kv-row {
+    display: flex;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.4;
+}
+
+.kv-key {
+    color: var(--accent-light);
+    flex-shrink: 0;
+}
+
+.kv-val {
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
+.sync-options-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 2px 4px 2px;
+}
+
+.sync-option-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.sync-option-label input[type="checkbox"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+    width: 13px;
+    height: 13px;
+}

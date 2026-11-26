@@ -31,6 +31,7 @@ let droppedOutOfScope = 0;
 let droppedNoScope = 0;
 let lastDroppedHost = "";
 let droppedHosts = {};
+let swazzUrl = DEFAULT_STATE.swazzUrl;
 
 // Map from requestId -> { key, timestamp } for response correlation (B2)
 const pendingRequests = new Map();
@@ -130,7 +131,8 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             'droppedOutOfScope',
             'droppedNoScope',
             'lastDroppedHost',
-            'droppedHosts'
+            'droppedHosts',
+            'swazzUrl'
         ], (state) => {
             if (state) {
                 recording = !!state.recording;
@@ -140,6 +142,7 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
                 droppedNoScope = state.droppedNoScope || 0;
                 lastDroppedHost = state.lastDroppedHost || "";
                 droppedHosts = state.droppedHosts || {};
+                swazzUrl = state.swazzUrl || DEFAULT_STATE.swazzUrl;
             }
             isHydrated = true;
             updateBadge();
@@ -167,6 +170,9 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
         if (changes.targetDomains) {
             targetDomains = changes.targetDomains.newValue || [];
         }
+        if (changes.swazzUrl) {
+            swazzUrl = changes.swazzUrl.newValue || DEFAULT_STATE.swazzUrl;
+        }
         // Our own flush stamps captureWriteToken with the value we last wrote;
         // anything else is an edit from the popup and must be adopted.
         const stampedByUs = changes.captureWriteToken &&
@@ -190,6 +196,24 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
             droppedHosts = changes.droppedHosts.newValue || {};
         }
     });
+}
+
+function isSwazzDashboardHost(host) {
+    if (!host) return false;
+    const lowerHost = String(host).trim().toLowerCase();
+    if (lowerHost === 'localhost:5173') return true;
+    if (typeof isAuthOriginAllowed === 'function' && isAuthOriginAllowed('https://' + lowerHost)) {
+        return true;
+    }
+    if (swazzUrl) {
+        try {
+            const parsed = new URL(swazzUrl);
+            if (parsed.host && stripPort(lowerHost) === stripPort(parsed.host)) {
+                return true;
+            }
+        } catch (e) {}
+    }
+    return false;
 }
 
 function processCapturedRequest(reqData, senderTab, sender) {
@@ -228,6 +252,11 @@ function processCapturedRequest(reqData, senderTab, sender) {
             return;
         }
     } else if (!isDomainTargeted(host, targetDomains)) {
+        // Do not pollute Ignored / warning banner with traffic from the Swazz
+        // Dashboard itself (e.g. scan polling on swazz.secmy.app or localhost:5173).
+        if (isSwazzDashboardHost(host)) {
+            return;
+        }
         droppedOutOfScope++;
         lastDroppedHost = host;
         noteDroppedHost(host);
@@ -248,8 +277,8 @@ function processCapturedRequest(reqData, senderTab, sender) {
     const path = isWebMcp ? reqData.url : (parsedUrl.pathname || '/');
     const normalized = isWebMcp ? reqData.url : normalizePath(path);
 
-    // Key is Method + Normalized Path (for grouping)
-    const key = `${method}:${normalized}`;
+    // Key is Method + Host + Normalized Path (so different sites with /login never collide)
+    const key = isWebMcp ? `${method}:${normalized}` : `${method}:${host}${normalized}`;
 
     // Exclude common noise assets
     if (!isWebMcp) {
@@ -263,6 +292,7 @@ function processCapturedRequest(reqData, senderTab, sender) {
         existing = {
             key,
             method,
+            host: isWebMcp ? '' : host,
             path: normalized,
             exampleUrl: reqData.url,
             headers: reqData.headers || {},
@@ -579,6 +609,20 @@ function handleRuntimeMessage(message, sender, sendResponse) {
     }
 }
 
+function handleTabRemoved(tabId) {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
+    chrome.storage.local.get(['crawlState'], (res) => {
+        if (res && res.crawlState && res.crawlState.crawling && res.crawlState.tabId === tabId) {
+            const nextCrawlState = Object.assign({}, res.crawlState, { crawling: false });
+            chrome.storage.local.set({ crawlState: nextCrawlState });
+        }
+    });
+}
+
+if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.onRemoved) {
+    chrome.tabs.onRemoved.addListener(handleTabRemoved);
+}
+
 // Listen for messages from Content Script or Popup
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener(handleRuntimeMessage);
@@ -590,6 +634,7 @@ if (typeof module !== 'undefined' && module.exports) {
         processCapturedRequest,
         processCapturedResponse,
         handleRuntimeMessage,
+        handleTabRemoved,
         extractWebRequestBody,
         handleWebRequestBeforeRequest,
         handleWebRequestSendHeaders,
@@ -601,6 +646,7 @@ if (typeof module !== 'undefined' && module.exports) {
         setRecording: (val) => { recording = val; },
         getTargetDomains: () => targetDomains,
         setTargetDomains: (val) => { targetDomains = val; },
+        setSwazzUrl: (val) => { swazzUrl = val || DEFAULT_STATE.swazzUrl; },
         getDroppedOutOfScope: () => droppedOutOfScope,
         getDroppedNoScope: () => droppedNoScope,
         getDroppedHosts: () => droppedHosts,
@@ -614,6 +660,7 @@ if (typeof module !== 'undefined' && module.exports) {
             droppedNoScope = 0;
             lastDroppedHost = "";
             droppedHosts = {};
+            swazzUrl = DEFAULT_STATE.swazzUrl;
             pendingRequests.clear();
             countedRequests.clear();
             wrHopMap.clear();

@@ -124,20 +124,20 @@ describe('SwazzHar module', () => {
             expect(parsed).toBeDefined();
 
             // Assert methods survive
-            expect(parsed['GET:/api/users/{id}']).toBeDefined();
-            expect(parsed['GET:/api/users/{id}'].method).toBe('GET');
-            expect(parsed['POST:/api/products']).toBeDefined();
-            expect(parsed['POST:/api/products'].method).toBe('POST');
-            expect(parsed['PUT:/api/items/{id}']).toBeDefined();
-            expect(parsed['PUT:/api/items/{id}'].method).toBe('PUT');
+            expect(parsed['GET:api.example.com/api/users/{id}']).toBeDefined();
+            expect(parsed['GET:api.example.com/api/users/{id}'].method).toBe('GET');
+            expect(parsed['POST:api.example.com/api/products']).toBeDefined();
+            expect(parsed['POST:api.example.com/api/products'].method).toBe('POST');
+            expect(parsed['PUT:api.example.com/api/items/{id}']).toBeDefined();
+            expect(parsed['PUT:api.example.com/api/items/{id}'].method).toBe('PUT');
 
             // Assert normalized paths survive
-            expect(parsed['GET:/api/users/{id}'].path).toBe('/api/users/{id}');
-            expect(parsed['POST:/api/products'].path).toBe('/api/products');
-            expect(parsed['PUT:/api/items/{id}'].path).toBe('/api/items/{id}');
+            expect(parsed['GET:api.example.com/api/users/{id}'].path).toBe('/api/users/{id}');
+            expect(parsed['POST:api.example.com/api/products'].path).toBe('/api/products');
+            expect(parsed['PUT:api.example.com/api/items/{id}'].path).toBe('/api/items/{id}');
 
             // Assert query variations survive
-            const parsedGet = parsed['GET:/api/users/{id}'];
+            const parsedGet = parsed['GET:api.example.com/api/users/{id}'];
             expect(parsedGet.queryVariations).toHaveLength(2);
             expect(parsedGet.queryVariations).toContain('?sort=asc');
             expect(parsedGet.queryVariations).toContain('?sort=desc&limit=10');
@@ -147,12 +147,12 @@ describe('SwazzHar module', () => {
             expect(parsedGet.queryKeys).toContain('limit');
 
             // Assert body variations survive
-            const parsedPost = parsed['POST:/api/products'];
+            const parsedPost = parsed['POST:api.example.com/api/products'];
             expect(parsedPost.bodyVariations).toHaveLength(2);
             expect(parsedPost.bodyVariations).toContain('{"name":"Widget","price":9.99}');
             expect(parsedPost.bodyVariations).toContain('{"name":"Gadget","price":19.99}');
 
-            const parsedPut = parsed['PUT:/api/items/{id}'];
+            const parsedPut = parsed['PUT:api.example.com/api/items/{id}'];
             expect(parsedPut.queryVariations).toHaveLength(2);
             expect(parsedPut.bodyVariations).toHaveLength(2);
 
@@ -226,8 +226,8 @@ describe('SwazzHar module', () => {
             };
 
             const parsed = SwazzHar.parseHarIntoRequests(foreign);
-            expect(parsed['GET:/api/foreign']).toBeDefined();
-            expect(parsed['GET:/api/foreign'].statuses).toEqual({ '200': 1, '500': 1 });
+            expect(parsed['GET:api.test/api/foreign']).toBeDefined();
+            expect(parsed['GET:api.test/api/foreign'].statuses).toEqual({ '200': 1, '500': 1 });
         });
 
         it('fan-out produces correct number of entries across query x body variations', () => {
@@ -451,7 +451,7 @@ describe('request counts survive a round trip', () => {
         const back = SwazzHar.parseHarIntoRequests(SwazzHar.buildHarPayload(src));
         // Two entries are emitted for the two query variations; the endpoint was
         // still hit 100 times.
-        expect(back['GET:/api/a'].count).toBe(100);
+        expect(back['GET:h/api/a'].count).toBe(100);
     });
 
     it('counts entries for a HAR from another tool, which carries no stamp', () => {
@@ -465,6 +465,6 @@ describe('request counts survive a round trip', () => {
                 }))
             }
         };
-        expect(SwazzHar.parseHarIntoRequests(foreign)['GET:/api/b'].count).toBe(3);
+        expect(SwazzHar.parseHarIntoRequests(foreign)['GET:h/api/b'].count).toBe(3);
     });
 });
