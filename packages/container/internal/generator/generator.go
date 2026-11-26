@@ -165,6 +165,9 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		if is(payloads.CatBoundaryUUIDs) && len(payloads.BoundaryUUIDs) > max {
 			max = len(payloads.BoundaryUUIDs)
 		}
+		if is(payloads.CatBoundaryFileUpload) && 3 > max {
+			max = 3
+		}
 		return max
 
 	case swagger.ProfileMalicious:
@@ -206,6 +209,9 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		}
 		if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > bodyCount {
 			bodyCount = len(payloads.MaliciousTypeConfusion)
+		}
+		if is(payloads.CatMaliciousFileUpload) && len(payloads.MaliciousFileUploads) > bodyCount {
+			bodyCount = len(payloads.MaliciousFileUploads)
 		}
 
 		secHeaderCount := 0
@@ -472,6 +478,9 @@ func (g *Generator) countBodyIterations() int {
 	}
 	if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > bodyCount {
 		bodyCount = len(payloads.MaliciousTypeConfusion)
+	}
+	if is(payloads.CatMaliciousFileUpload) && len(payloads.MaliciousFileUploads) > bodyCount {
+		bodyCount = len(payloads.MaliciousFileUploads)
 	}
 	return bodyCount
 }

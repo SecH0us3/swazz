@@ -94,6 +94,24 @@ func TestFileUploadAnalyzer(t *testing.T) {
 		if len(generic5xx) != 0 {
 			t.Fatalf("expected 0 findings on 5xx without parser signature, got %d", len(generic5xx))
 		}
+
+		falseSig5xx := a.Analyze(&AnalysisInput{
+			SentPayload:  map[string]any{"file": uf},
+			StatusCode:   500,
+			ResponseBody: []byte(`{"error":"pupil. dilation check failed"}`),
+		})
+		if len(falseSig5xx) != 0 {
+			t.Fatalf("expected 0 findings on non-PIL substring 'pupil.', got %d", len(falseSig5xx))
+		}
+
+		pilImg5xx := a.Analyze(&AnalysisInput{
+			SentPayload:  map[string]any{"file": uf},
+			StatusCode:   500,
+			ResponseBody: []byte(`PIL.Image.DecompressionBombError: Image size exceeds limit`),
+		})
+		if len(pilImg5xx) != 1 || pilImg5xx[0].RuleID != "swazz/file-parser-error" {
+			t.Fatalf("expected 1 swazz/file-parser-error finding for PIL.Image, got %+v", pilImg5xx)
+		}
 	})
 
 	t.Run("flags 5xx parser crash signatures", func(t *testing.T) {

@@ -119,7 +119,7 @@ func ParseSpec(raw json.RawMessage, opts ...ParserOption) (*ParseResult, error) 
 			endpointHint := strings.ToUpper(method) + " " + path
 
 			// Extract request body schema
-			bodyResult := extractRequestSchema(operation, fullSpec, endpointHint, o.maxNodes, o.maxDepth)
+			bodyResult := extractRequestSchema(operation, allParams, fullSpec, endpointHint, o.maxNodes, o.maxDepth)
 
 			var schema SchemaProperty
 			if bodyResult != nil {
@@ -241,7 +241,7 @@ type bodyResult struct {
 }
 
 // extractRequestSchema extracts the request body schema from an operation.
-func extractRequestSchema(operation map[string]any, spec map[string]any, endpointHint string, maxNodes, maxDepth int) *bodyResult {
+func extractRequestSchema(operation map[string]any, allParams []any, spec map[string]any, endpointHint string, maxNodes, maxDepth int) *bodyResult {
 	// OpenAPI 3.x: requestBody → content → <mime> → schema
 	if rb, ok := operation["requestBody"].(map[string]any); ok {
 		if content, ok := rb["content"].(map[string]any); ok {
@@ -322,8 +322,7 @@ func extractRequestSchema(operation map[string]any, spec map[string]any, endpoin
 	}
 
 	// Swagger 2.0: parameters with in: "body"
-	if params, ok := operation["parameters"].([]any); ok {
-		for _, p := range params {
+	for _, p := range allParams {
 			if pm, ok := p.(map[string]any); ok {
 				if pm["in"] == "body" {
 					if s, ok := pm["schema"]; ok {
@@ -347,17 +346,16 @@ func extractRequestSchema(operation map[string]any, spec map[string]any, endpoin
 							example:     example,
 						}
 					}
-				}
 			}
 		}
 	}
 
 	// Swagger 2.0: parameters with in: "formData" (supports type: "file" -> multipart/form-data)
-	if params, ok := operation["parameters"].([]any); ok {
+	if len(allParams) > 0 {
 		props := make(map[string]*SchemaProperty)
 		var required []string
 		hasFile := false
-		for _, p := range params {
+		for _, p := range allParams {
 			pm, ok := p.(map[string]any)
 			if !ok || pm["in"] != "formData" {
 				continue

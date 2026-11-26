@@ -693,4 +693,21 @@ func TestStringGen_FileUploadProfiles(t *testing.T) {
 			assert.LessOrEqual(t, uf.Size, 1024)
 		}
 	})
+
+	t.Run("MinIterationsNeeded and BodyIterations include upload-only categories", func(t *testing.T) {
+		malSettings := swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
+			},
+		}
+		assert.Equal(t, len(payloads.MaliciousFileUploads), MinIterationsNeeded(swagger.ProfileMalicious, malSettings))
+		assert.Equal(t, len(payloads.MaliciousFileUploads), New(nil, swagger.ProfileMalicious, malSettings).BodyIterations())
+
+		bndSettings := swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileBoundary: {payloads.CatBoundaryFileUpload},
+			},
+		}
+		assert.Equal(t, 3, MinIterationsNeeded(swagger.ProfileBoundary, bndSettings))
+	})
 }

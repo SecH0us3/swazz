@@ -570,4 +570,28 @@ func TestParseSwagger2_FormDataFileUpload(t *testing.T) {
 		assert.Equal(t, "multipart/form-data", r.Endpoints[0].ContentType)
 		assert.Equal(t, "multipart/form-data", r.Endpoints[1].ContentType)
 	})
+
+	t.Run("path-level formData file parameter is preserved", func(t *testing.T) {
+		pathLevelSpec := `{
+			"swagger": "2.0",
+			"info": {"title": "Path Upload API", "version": "1.0"},
+			"paths": {
+				"/items/{id}/upload": {
+					"parameters": [
+						{"name": "id", "in": "path", "type": "string", "required": true},
+						{"name": "file", "in": "formData", "type": "file", "required": true}
+					],
+					"post": {
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(pathLevelSpec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 1)
+		assert.Equal(t, "multipart/form-data", r.Endpoints[0].ContentType)
+		require.Contains(t, r.Endpoints[0].Schema.Properties, "file")
+		assert.Equal(t, "binary", r.Endpoints[0].Schema.Properties["file"].Format)
+	})
 }

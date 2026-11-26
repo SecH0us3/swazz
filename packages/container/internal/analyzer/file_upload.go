@@ -8,6 +8,7 @@ package analyzer
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 
 	"swazz-engine/internal/swagger"
@@ -27,7 +28,8 @@ var parserErrorSignatures = [][]byte{
 	[]byte("libvips"),
 	[]byte("unidentifiedimageerror"),
 	[]byte("decompressionbomb"),
-	[]byte("pil."),
+	[]byte("pil.image"),
+	[]byte("pil.unidentified"),
 	[]byte("image: unknown format"),
 	[]byte("zip: not a valid zip file"),
 	[]byte("badzipfile"),
@@ -65,6 +67,17 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	uploads := collectUploadFiles(input.SentPayload, "", nil)
 	if len(uploads) == 0 {
 		return nil
+	}
+	if len(uploads) > 1 {
+		sort.Slice(uploads, func(i, j int) bool {
+			if uploads[i].field != uploads[j].field {
+				return uploads[i].field < uploads[j].field
+			}
+			if uploads[i].file.Filename != uploads[j].file.Filename {
+				return uploads[i].file.Filename < uploads[j].file.Filename
+			}
+			return uploads[i].file.ProbeKind < uploads[j].file.ProbeKind
+		})
 	}
 
 	var findings []swagger.AnalysisFinding
