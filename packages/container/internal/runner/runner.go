@@ -205,6 +205,8 @@ type Runner struct {
 	grpcClients sync.Map // map[string]*swazzGrpc.Client
 	// detectedUploadCategories holds per-run in-memory smart probing results (not persisted across checkpoints).
 	detectedUploadCategories sync.Map // map[string][]payloads.FileCategory
+	uploadFollowUpSeen       sync.Map // map[string]struct{}
+	uploadFollowUpCount      atomic.Int32
 
 	proxyOnce   sync.Once
 	proxyClient atomic.Pointer[http.Client] // see proxiedClient

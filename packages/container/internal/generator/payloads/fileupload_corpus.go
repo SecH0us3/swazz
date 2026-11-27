@@ -555,3 +555,10 @@ func PrioritizedMaliciousUploads(preferred []FileCategory, maxBytes int) []swagg
 	}
 	return out
 }
+
+// OOBSVGFile returns an SVG probe referencing an out-of-band callback URL so background
+// SVG/image renderers (librsvg, ImageMagick, headless browsers) reveal blind SSRF.
+func OOBSVGFile(oobURL string) swagger.UploadFile {
+	svg := `<svg xmlns="http://www.w3.org/2000/svg"><image href="` + oobURL + `" width="1" height="1"/></svg>`
+	return newUploadFile("swazz-oob.svg", "image/svg+xml", "svg_oob_probe", []byte(svg))
+}

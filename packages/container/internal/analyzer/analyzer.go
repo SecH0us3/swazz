@@ -16,21 +16,22 @@ import (
 
 // AnalysisInput represents the input payload and response metadata used for body analysis.
 type AnalysisInput struct {
-	SentPayload     any
-	ResponseBody    []byte
-	ResponseHeaders http.Header
-	Duration        int64
-	Profile         swagger.FuzzingProfile
-	Endpoint        string
-	Method          string
-	StatusCode      int
-	FileUploadSent  bool
-	ResponseSize    int64
-	BaselineSize    int64
-	SizeMultiplier  float64
-	BaselineTimeMs  int64
-	TimeThresholdMs int
-	Settings        swagger.Settings
+	SentPayload       any
+	ResponseBody      []byte
+	ResponseHeaders   http.Header
+	Duration          int64
+	Profile           swagger.FuzzingProfile
+	Endpoint          string
+	Method            string
+	StatusCode        int
+	FileUploadSent    bool
+	FollowUpSourceURL string
+	ResponseSize      int64
+	BaselineSize      int64
+	SizeMultiplier    float64
+	BaselineTimeMs    int64
+	TimeThresholdMs   int
+	Settings          swagger.Settings
 
 	// Views derived from the fields above, computed on first use and shared by every analyzer
 	// of one Analyze call. An input belongs to one response and one goroutine at a time; use

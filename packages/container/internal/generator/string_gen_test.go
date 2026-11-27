@@ -701,6 +701,27 @@ func TestStringGen_FileUploadProfiles(t *testing.T) {
 		assert.Equal(t, "application/zip", first.ContentType)
 	})
 
+	t.Run("Generate emits OOB SVG probe with registered token when OOB is configured", func(t *testing.T) {
+		store := oob.NewStore()
+		gm := New(nil, swagger.ProfileMalicious, swagger.Settings{
+			OOBServerURL: "https://oob.example.com",
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload, payloads.CatOOBInteraction},
+			},
+		})
+		gm.Endpoint = "POST /avatar"
+		gm.OOBStore = store
+
+		v := gm.Generate("avatar", &swagger.SchemaProperty{Type: "string", Format: "binary"})
+		uf, ok := v.(swagger.UploadFile)
+		require.True(t, ok)
+		assert.Equal(t, "svg_oob_probe", uf.ProbeKind)
+		assert.Contains(t, string(uf.Data), "https://oob.example.com/")
+		tokens := gm.TakeOOBTokens()
+		require.Len(t, tokens, 1)
+		assert.Equal(t, 1, store.Size())
+	})
+
 	t.Run("GenerateArrayItem handles binary/file and caps boundary array file size", func(t *testing.T) {
 		g := New(nil, swagger.ProfileBoundary, swagger.Settings{
 			MaxPayloadSizeBytes: 2 * 1024 * 1024,

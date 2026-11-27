@@ -685,6 +685,9 @@ func (r *Runner) sendRequest(
 			})
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
 			analyzer.ReleaseInput(input)
+			if fileUploadSent && profile == swagger.ProfileMalicious && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				r.maybeVerifyUploadedFile(ctx, clientToUse, baseURL, originalPath, method, mergedHeaders, cookies, payload, profile, resp.Header, respBody, result)
+			}
 			if (logger.IsDebugEnabled() || r.config.Settings.Debug) && len(result.AnalyzerFindings) > 0 {
 				r.logDebug("Analyzer: Found findings for %s %s: %v", method, originalPath, result.AnalyzerFindings)
 			}
