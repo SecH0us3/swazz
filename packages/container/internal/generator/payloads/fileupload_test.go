@@ -40,12 +40,24 @@ func TestUploadFile_JSONOmitsRawData(t *testing.T) {
 }
 
 func TestMaliciousAndBoundaryFileUploads(t *testing.T) {
-	assert.Len(t, MaliciousFileUploads, 11)
-	foundXSSSVG := false
+	assert.Len(t, MaliciousFileUploads, 16)
+	seenKinds := make(map[string]bool)
 	for _, uf := range MaliciousFileUploads {
-		if uf.Filename == "swazz-xss.svg" {
-			assert.Equal(t, "svg_upload_probe", uf.ProbeKind)
-			foundXSSSVG = true
+		seenKinds[uf.ProbeKind] = true
+		if uf.ProbeKind == "gif_polyglot_probe" {
+			cfg, err := gif.DecodeConfig(bytes.NewReader(uf.Data))
+			require.NoError(t, err)
+			assert.Equal(t, 1, cfg.Width)
+			assert.Equal(t, 1, cfg.Height)
+		}
+		if uf.ProbeKind == "png_metadata_canary" {
+			cfg, err := png.DecodeConfig(bytes.NewReader(uf.Data))
+			require.NoError(t, err)
+			assert.Equal(t, 1, cfg.Width)
+			assert.Equal(t, 1, cfg.Height)
+		}
+		if uf.ProbeKind == "eicar_av_probe" {
+			assert.Equal(t, 68, len(uf.Data))
 		}
 		assert.NotEmpty(t, uf.Filename)
 		assert.NotEmpty(t, uf.ContentType)
@@ -53,7 +65,12 @@ func TestMaliciousAndBoundaryFileUploads(t *testing.T) {
 		assert.Equal(t, len(uf.Data), uf.Size)
 		assert.Less(t, len(uf.Data), 1024, "probes must stay small and non-destructive")
 	}
-	assert.True(t, foundXSSSVG, "expected swazz-xss.svg in MaliciousFileUploads")
+	for _, want := range []string{
+		"svg_upload_probe", "eicar_av_probe", "null_byte_filename",
+		"rtl_override_filename", "gif_polyglot_probe", "png_metadata_canary",
+	} {
+		assert.True(t, seenKinds[want], "expected %s in MaliciousFileUploads", want)
+	}
 
 	bSmall := BoundaryFileUploads(512)
 	require.Len(t, bSmall, 3)

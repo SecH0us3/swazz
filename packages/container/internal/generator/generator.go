@@ -304,8 +304,8 @@ func (g *Generator) buildObjectWithDepth(schema *swagger.SchemaProperty, depth i
 			continue
 		}
 
-		// 5% chance to omit REQUIRED fields in MALICIOUS profile
-		if isRequired && g.profile == swagger.ProfileMalicious && rand.Float64() < 0.05 { // #nosec G404 -- non-security randomness for fuzzer
+		// 5% chance to omit REQUIRED fields in MALICIOUS profile when multiple properties exist
+		if isRequired && len(schema.Properties) > 1 && g.profile == swagger.ProfileMalicious && rand.Float64() < 0.05 { // #nosec G404 -- non-security randomness for fuzzer
 			continue
 		}
 

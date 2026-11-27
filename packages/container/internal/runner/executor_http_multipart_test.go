@@ -64,7 +64,13 @@ func TestExecuteSingleRequest_MultipartFileUploadAndAnalysis(t *testing.T) {
 	defer r.Close()
 	r.analyzer = analyzer.NewRegistry(nil)
 
-	probe := payloads.MaliciousFileUploads[0] // mime_mismatch_png
+	probe := swagger.UploadFile{
+		Filename:    "swazz-probe.png",
+		ContentType: "image/png",
+		ProbeKind:   "mime_mismatch_png",
+		Size:        len("swazz-not-a-valid-png-payload\n"),
+		Data:        []byte("swazz-not-a-valid-png-payload\n"),
+	}
 	res := r.executeGeneratedRequest(
 		t.Context(),
 		srv.URL, "/upload", "/upload", "POST",
@@ -189,7 +195,13 @@ func TestExecuteSingleRequest_RawBinaryAndNonMultipartContentTypes(t *testing.T)
 		defer r.Close()
 		r.analyzer = analyzer.NewRegistry(nil)
 
-		probe := payloads.MaliciousFileUploads[0] // mime_mismatch_png (CT: image/png)
+		probe := swagger.UploadFile{
+			Filename:    "swazz-probe.png",
+			ContentType: "image/png",
+			ProbeKind:   "mime_mismatch_png",
+			Size:        len("swazz-not-a-valid-png-payload\n"),
+			Data:        []byte("swazz-not-a-valid-png-payload\n"),
+		}
 		res := r.executeGeneratedRequest(
 			t.Context(),
 			srv.URL, "/raw-upload", "/raw-upload", "POST",

@@ -144,7 +144,8 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 					bytes.Contains(lowerResp, []byte(`onload="alert('swazz-svg-xss')"`))
 				reflectedXSS := hasXSSMarker &&
 					isRenderableSVGOrHTMLResponse(input.ResponseHeaders, lowerResp) &&
-					!isAttachmentDisposition(input.ResponseHeaders)
+					!isAttachmentDisposition(input.ResponseHeaders) &&
+					!hasInertSVGCSP(input.ResponseHeaders)
 				if isFollowUp && !reflectedXSS {
 					continue
 				}
@@ -177,6 +178,99 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
 					OWASPCategory:    []string{"A06:2025 Insecure Design"},
 					CWEIDs:           []string{"CWE-434"},
+				})
+			case kind == "eicar_av_probe":
+				if isFollowUp {
+					if len(hit.file.Data) == 0 || !bytes.Contains(input.ResponseBody, hit.file.Data) {
+						continue
+					}
+				}
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:           "swazz/unvalidated-file-upload",
+					Level:            "warning",
+					Message:          fmt.Sprintf("Server accepted EICAR antivirus test probe (%q, %s) with HTTP %d%s.", hit.file.Filename, hit.file.ContentType, input.StatusCode, followUpSuffix),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, input.StatusCode, fileUploadRemediation),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A06:2025 Insecure Design"},
+					CWEIDs:           []string{"CWE-434"},
+				})
+			case kind == "null_byte_filename":
+				lowerResp := input.lowerBody()
+				reflected := bytes.Contains(lowerResp, []byte("swazz-probe.php%00.png")) ||
+					bytes.Contains(lowerResp, []byte("swazz-probe.php\x00")) ||
+					bytes.Contains(lowerResp, []byte(`swazz-probe.php\u0000`))
+				if isFollowUp && !reflected {
+					continue
+				}
+				level := "warning"
+				cwe := []string{"CWE-434"}
+				if reflected {
+					level = "error"
+					cwe = []string{"CWE-434", "CWE-22"}
+				}
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:           "swazz/unvalidated-file-upload",
+					Level:            level,
+					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d%s.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode, followUpSuffix),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Reflected: %t | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, reflected, input.StatusCode, fileUploadRemediation),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A06:2025 Insecure Design"},
+					CWEIDs:           cwe,
+				})
+			case kind == "rtl_override_filename":
+				lowerResp := input.lowerBody()
+				reflected := bytes.Contains(lowerResp, []byte("\u202e")) ||
+					bytes.Contains(lowerResp, []byte("%e2%80%ae")) ||
+					bytes.Contains(lowerResp, []byte(`\u202e`))
+				if isFollowUp && !reflected {
+					continue
+				}
+				level := "warning"
+				if reflected {
+					level = "error"
+				}
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:           "swazz/unvalidated-file-upload",
+					Level:            level,
+					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d%s.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode, followUpSuffix),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Reflected: %t | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, reflected, input.StatusCode, fileUploadRemediation),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A06:2025 Insecure Design"},
+					CWEIDs:           []string{"CWE-434"},
+				})
+			case kind == "gif_polyglot_probe":
+				if !isFollowUp || !bytes.Contains(input.ResponseBody, []byte("swazz-polyglot-canary")) {
+					continue
+				}
+				renderable := isRenderableSVGOrHTMLResponse(input.ResponseHeaders, input.lowerBody())
+				if (hasNoSniffHeader(input.ResponseHeaders) || isAttachmentDisposition(input.ResponseHeaders)) && !renderable {
+					continue
+				}
+				level := "warning"
+				if renderable {
+					level = "error"
+				}
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:           "swazz/unvalidated-file-upload",
+					Level:            level,
+					Message:          fmt.Sprintf("Server served un-reencoded GIF polyglot probe (%q) without X-Content-Type-Options: nosniff or safe MIME%s.", hit.file.Filename, followUpSuffix),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, input.StatusCode, fileUploadRemediation),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A06:2025 Insecure Design"},
+					CWEIDs:           []string{"CWE-434", "CWE-436"},
+				})
+			case kind == "png_metadata_canary":
+				if !isFollowUp || !bytes.Contains(input.ResponseBody, []byte("swazz-exif-canary")) {
+					continue
+				}
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:           "swazz/unvalidated-file-upload",
+					Level:            "warning",
+					Message:          fmt.Sprintf("Server preserved embedded PNG tEXt/EXIF metadata (%q) without stripping%s.", hit.file.Filename, followUpSuffix),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, input.StatusCode, fileUploadRemediation),
+					OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
+					OWASPCategory:    []string{"A01:2025 Broken Access Control"},
+					CWEIDs:           []string{"CWE-200"},
 				})
 			}
 		}
@@ -212,6 +306,47 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	}
 
 	return findings
+}
+
+func hasNoSniffHeader(headers http.Header) bool {
+	if headers == nil {
+		return false
+	}
+	for _, val := range headers.Values("X-Content-Type-Options") {
+		for _, tok := range strings.Split(val, ",") {
+			if strings.EqualFold(strings.TrimSpace(tok), "nosniff") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasInertSVGCSP(headers http.Header) bool {
+	if headers == nil {
+		return false
+	}
+	csp := strings.ToLower(strings.Join(headers.Values("Content-Security-Policy"), ";"))
+	if csp == "" {
+		return false
+	}
+	hasScriptSrc := false
+	for _, dir := range strings.Split(csp, ";") {
+		d := strings.TrimSpace(dir)
+		if d == "" {
+			continue
+		}
+		if (d == "sandbox" || strings.HasPrefix(d, "sandbox ")) && !strings.Contains(d, "allow-scripts") {
+			return true
+		}
+		if strings.HasPrefix(d, "script-src") {
+			hasScriptSrc = true
+			if strings.Contains(d, "'none'") {
+				return true
+			}
+		}
+	}
+	return !hasScriptSrc && strings.Contains(csp, "default-src") && strings.Contains(csp, "'none'")
 }
 
 func isAttachmentDisposition(headers http.Header) bool {

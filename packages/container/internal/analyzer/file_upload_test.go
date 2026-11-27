@@ -53,6 +53,12 @@ func TestFileUploadAnalyzer(t *testing.T) {
 				StatusCode:     200,
 				FileUploadSent: true,
 			})
+			if uf.ProbeKind == "gif_polyglot_probe" || uf.ProbeKind == "png_metadata_canary" {
+				if len(findings) != 0 {
+					t.Fatalf("probe %s: expected 0 findings on direct 2xx, got %d", uf.ProbeKind, len(findings))
+				}
+				continue
+			}
 			if len(findings) != 1 {
 				t.Fatalf("probe %s: expected 1 finding, got %d", uf.ProbeKind, len(findings))
 			}
@@ -60,7 +66,9 @@ func TestFileUploadAnalyzer(t *testing.T) {
 				t.Fatalf("probe %s: unexpected rule %s", uf.ProbeKind, findings[0].RuleID)
 			}
 			wantLevel := "error"
-			if uf.ProbeKind == "double_ext_filename" || uf.ProbeKind == "svg_upload_probe" || uf.ProbeKind == "traversal_filename" {
+			switch uf.ProbeKind {
+			case "double_ext_filename", "svg_upload_probe", "traversal_filename",
+				"eicar_av_probe", "null_byte_filename", "rtl_override_filename":
 				wantLevel = "warning"
 			}
 			if findings[0].Level != wantLevel {
@@ -150,7 +158,7 @@ func TestFileUploadAnalyzer(t *testing.T) {
 	})
 
 	t.Run("handles pointer and nil UploadFile in 2xx and ignores non-parser 5xx", func(t *testing.T) {
-		uf := payloads.MaliciousFileUploads[0]
+		uf := swagger.UploadFile{Filename: "swazz-probe.png", ContentType: "image/png", ProbeKind: "mime_mismatch_png", Data: []byte("not-png")}
 		var nilUF *swagger.UploadFile
 		findings := a.Analyze(&AnalysisInput{
 			SentPayload:    map[string]any{"ptr": &uf, "nilPtr": nilUF},
@@ -296,6 +304,30 @@ func TestFileUploadAnalyzer(t *testing.T) {
 		if len(attachment) != 1 || attachment[0].Level != "warning" || len(attachment[0].CWEIDs) != 1 {
 			t.Fatalf("expected warning + CWE-434 when Content-Disposition is attachment, got %+v", attachment)
 		}
+
+		for _, csp := range []string{"sandbox", "script-src 'none'", "default-src 'none'"} {
+			inertCSP := a.Analyze(&AnalysisInput{
+				SentPayload:     map[string]any{"file": svgProbe},
+				StatusCode:      200,
+				ResponseBody:    svgProbe.Data,
+				ResponseHeaders: http.Header{"Content-Type": []string{"image/svg+xml"}, "Content-Security-Policy": []string{csp}},
+				FileUploadSent:  true,
+			})
+			if len(inertCSP) != 1 || inertCSP[0].Level != "warning" || len(inertCSP[0].CWEIDs) != 1 {
+				t.Fatalf("CSP %q: expected warning + CWE-434, got %+v", csp, inertCSP)
+			}
+		}
+
+		unsafeCSP := a.Analyze(&AnalysisInput{
+			SentPayload:     map[string]any{"file": svgProbe},
+			StatusCode:      200,
+			ResponseBody:    svgProbe.Data,
+			ResponseHeaders: http.Header{"Content-Type": []string{"image/svg+xml"}, "Content-Security-Policy": []string{"sandbox allow-scripts"}},
+			FileUploadSent:  true,
+		})
+		if len(unsafeCSP) != 1 || unsafeCSP[0].Level != "error" || len(unsafeCSP[0].CWEIDs) != 2 || unsafeCSP[0].CWEIDs[1] != "CWE-79" {
+			t.Fatalf("expected error + CWE-79 for sandbox allow-scripts, got %+v", unsafeCSP)
+		}
 	})
 
 	t.Run("second-order follow-up analysis detects stored SVG XSS, lazy 5xx crash, and raw stored bytes", func(t *testing.T) {
@@ -382,6 +414,123 @@ func TestFileUploadAnalyzer(t *testing.T) {
 		doubleExt := swagger.UploadFile{Filename: "swazz-probe.php.png", ContentType: "image/png", ProbeKind: "double_ext_filename"}
 		if res := a.Analyze(&AnalysisInput{SentPayload: map[string]any{"file": doubleExt}, StatusCode: 200, FileUploadSent: true, FollowUpSourceURL: "GET /files/42"}); len(res) != 0 {
 			t.Fatalf("expected 0 follow-up findings for double_ext_filename, got %+v", res)
+		}
+	})
+
+	t.Run("evaluates polyglot GIF, PNG EXIF canary, EICAR AV, null-byte and RTL probes", func(t *testing.T) {
+		gifPoly := swagger.UploadFile{Filename: "swazz-polyglot.gif", ContentType: "image/gif", ProbeKind: "gif_polyglot_probe", Data: []byte("GIF89a<!--swazz-polyglot-canary-->")}
+		// Un-reencoded without nosniff -> warning + CWE-436
+		resNoSniff := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": gifPoly},
+			StatusCode:        200,
+			ResponseBody:      gifPoly.Data,
+			ResponseHeaders:   http.Header{"Content-Type": []string{"image/gif"}},
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /cdn/polyglot.gif",
+		})
+		if len(resNoSniff) != 1 || resNoSniff[0].Level != "warning" || len(resNoSniff[0].CWEIDs) != 2 || resNoSniff[0].CWEIDs[1] != "CWE-436" {
+			t.Fatalf("expected warning + CWE-436 without nosniff, got %+v", resNoSniff)
+		}
+		// Un-reencoded with text/html -> error
+		resHTML := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": gifPoly},
+			StatusCode:        200,
+			ResponseBody:      gifPoly.Data,
+			ResponseHeaders:   http.Header{"Content-Type": []string{"text/html"}, "X-Content-Type-Options": []string{"nosniff"}},
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /cdn/polyglot.gif",
+		})
+		if len(resHTML) != 1 || resHTML[0].Level != "error" {
+			t.Fatalf("expected error for renderable text/html polyglot, got %+v", resHTML)
+		}
+		// Un-reencoded WITH nosniff + image/gif -> 0 findings
+		if resSafe := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": gifPoly},
+			StatusCode:        200,
+			ResponseBody:      gifPoly.Data,
+			ResponseHeaders:   http.Header{"Content-Type": []string{"image/gif"}, "X-Content-Type-Options": []string{"nosniff"}},
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /cdn/polyglot.gif",
+		}); len(resSafe) != 0 {
+			t.Fatalf("expected 0 findings with image/gif + nosniff, got %+v", resSafe)
+		}
+		// Re-encoded (canary stripped) -> 0 findings
+		if resReencoded := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": gifPoly},
+			StatusCode:        200,
+			ResponseBody:      []byte("GIF89a"),
+			ResponseHeaders:   http.Header{"Content-Type": []string{"image/gif"}},
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /cdn/polyglot.gif",
+		}); len(resReencoded) != 0 {
+			t.Fatalf("expected 0 findings when GIF was re-encoded, got %+v", resReencoded)
+		}
+
+		// PNG metadata canary
+		pngMeta := swagger.UploadFile{Filename: "swazz-exif-canary.png", ContentType: "image/png", ProbeKind: "png_metadata_canary"}
+		resMeta := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": pngMeta},
+			StatusCode:        200,
+			ResponseBody:      []byte("PNG...swazz-exif-canary..."),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /cdn/exif.png",
+		})
+		if len(resMeta) != 1 || len(resMeta[0].CWEIDs) != 1 || resMeta[0].CWEIDs[0] != "CWE-200" {
+			t.Fatalf("expected warning + CWE-200 for unstripped EXIF canary, got %+v", resMeta)
+		}
+		if resStripped := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": pngMeta},
+			StatusCode:        200,
+			ResponseBody:      []byte("PNG-clean"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /cdn/exif.png",
+		}); len(resStripped) != 0 {
+			t.Fatalf("expected 0 findings when metadata stripped, got %+v", resStripped)
+		}
+
+		// EICAR follow-up
+		eicar := swagger.UploadFile{Filename: "swazz-eicar.txt", ContentType: "text/plain", ProbeKind: "eicar_av_probe", Data: []byte("EICAR-TEST")}
+		if resEicar := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": eicar},
+			StatusCode:        200,
+			ResponseBody:      []byte("EICAR-TEST"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/eicar",
+		}); len(resEicar) != 1 || resEicar[0].Level != "warning" {
+			t.Fatalf("expected warning when EICAR served back on follow-up, got %+v", resEicar)
+		}
+		if resQuarantined := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": eicar},
+			StatusCode:        200,
+			ResponseBody:      []byte("quarantined"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/eicar",
+		}); len(resQuarantined) != 0 {
+			t.Fatalf("expected 0 findings when EICAR quarantined, got %+v", resQuarantined)
+		}
+
+		// Null-byte and RTL filename reflection
+		nullProbe := swagger.UploadFile{Filename: "swazz-probe.php%00.png", ContentType: "image/png", ProbeKind: "null_byte_filename"}
+		resNull := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": nullProbe},
+			StatusCode:        200,
+			ResponseBody:      []byte(`{"name":"swazz-probe.php%00.png"}`),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/1",
+		})
+		if len(resNull) != 1 || resNull[0].Level != "error" || len(resNull[0].CWEIDs) != 2 || resNull[0].CWEIDs[1] != "CWE-22" {
+			t.Fatalf("expected error + CWE-22 for reflected null-byte filename, got %+v", resNull)
+		}
+		rtlProbe := swagger.UploadFile{Filename: "swazz-probe-\u202Egnp.txt", ContentType: "text/plain", ProbeKind: "rtl_override_filename"}
+		resRTL := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": rtlProbe},
+			StatusCode:        200,
+			ResponseBody:      []byte("saved swazz-probe-\u202Egnp.txt"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/1",
+		})
+		if len(resRTL) != 1 || resRTL[0].Level != "error" {
+			t.Fatalf("expected error for reflected RTL filename, got %+v", resRTL)
 		}
 	})
 }

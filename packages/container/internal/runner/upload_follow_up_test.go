@@ -27,11 +27,16 @@ func TestUploadFollowUpHelpers_SameOriginAndExtraction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Same-origin relative and absolute URLs are allowed
-	u1, ok := sameOriginURL(baseParsed, "/files", "/files/42")
+	u1, ok := sameOriginURL(baseParsed, nil, "/files", "/files/42")
 	require.True(t, ok)
 	assert.Equal(t, "https://api.example.com/files/42", u1)
 
-	u2, ok := sameOriginURL(baseParsed, "/files", "https://api.example.com/thumbs/42?size=sm")
+	reqURL, _ := url.Parse("https://api.example.com/v1/files/")
+	uRel, ok := sameOriginURL(baseParsed, reqURL, "/files", "123")
+	require.True(t, ok)
+	assert.Equal(t, "https://api.example.com/v1/files/123", uRel)
+
+	u2, ok := sameOriginURL(baseParsed, nil, "/files", "https://api.example.com/thumbs/42?size=sm")
 	require.True(t, ok)
 	assert.Equal(t, "https://api.example.com/thumbs/42?size=sm", u2)
 
@@ -48,7 +53,7 @@ func TestUploadFollowUpHelpers_SameOriginAndExtraction(t *testing.T) {
 		"file:///etc/passwd",
 		"javascript:alert(1)",
 	} {
-		_, allowed := sameOriginURL(baseParsed, "/files", bad)
+		_, allowed := sameOriginURL(baseParsed, nil, "/files", bad)
 		assert.False(t, allowed, "expected %q to be rejected", bad)
 	}
 
@@ -88,7 +93,7 @@ func TestUploadFollowUpHelpers_SameOriginAndExtraction(t *testing.T) {
 	defer rHelper.Close()
 	rHelper.initAutoChain()
 
-	collected := rHelper.collectUploadFollowUpURLs(baseParsed, "/uploads", http.MethodPost, nil, map[string]any{"uploadId": "u-77"})
+	collected := rHelper.collectUploadFollowUpURLs(baseParsed, nil, "/uploads", http.MethodPost, nil, map[string]any{"uploadId": "u-77"})
 	require.LessOrEqual(t, len(collected), maxFollowUpsPerUpload)
 	hasQueryFollowUp := false
 	for _, u := range collected {
@@ -98,7 +103,8 @@ func TestUploadFollowUpHelpers_SameOriginAndExtraction(t *testing.T) {
 	}
 	assert.True(t, hasQueryFollowUp, "expected LocQuery follow-up URL, got %v", collected)
 
-	// Dedup prevents fetching the same URL+probeKind twice.
+	// Dedup prevents fetching the same URL+filename+probeKind twice, while distinct filenames
+	// sharing the same probeKind (swazz-probe.svg vs swazz-xss.svg) at the same fixed URL are both checked.
 	var hitCount atomic.Int32
 	dedupSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		hitCount.Add(1)
@@ -109,16 +115,26 @@ func TestUploadFollowUpHelpers_SameOriginAndExtraction(t *testing.T) {
 	defer dedupR.Close()
 	for range 3 {
 		dedupR.maybeVerifyUploadedFile(
-			t.Context(), dedupR.client, dedupSrv.URL, "/files", http.MethodPost,
+			t.Context(), dedupR.client, dedupSrv.URL, nil, "/files", http.MethodPost,
 			nil, nil,
-			map[string]any{"file": swagger.UploadFile{Filename: "x.svg", ProbeKind: "svg_upload_probe"}},
+			map[string]any{"file": swagger.UploadFile{Filename: "swazz-probe.svg", ProbeKind: "svg_upload_probe"}},
 			swagger.ProfileMalicious,
-			http.Header{"Location": []string{"/files/1"}},
+			http.Header{"Location": []string{"/me/avatar"}},
 			nil,
 			&swagger.FuzzResult{Status: http.StatusCreated},
 		)
 	}
-	assert.Equal(t, int32(1), hitCount.Load(), "identical follow-up URL+probeKind should be deduplicated")
+	assert.Equal(t, int32(1), hitCount.Load(), "identical follow-up URL+filename+probeKind should be deduplicated")
+	dedupR.maybeVerifyUploadedFile(
+		t.Context(), dedupR.client, dedupSrv.URL, nil, "/files", http.MethodPost,
+		nil, nil,
+		map[string]any{"file": swagger.UploadFile{Filename: "swazz-xss.svg", ProbeKind: "svg_upload_probe"}},
+		swagger.ProfileMalicious,
+		http.Header{"Location": []string{"/me/avatar"}},
+		nil,
+		&swagger.FuzzResult{Status: http.StatusCreated},
+	)
+	assert.Equal(t, int32(2), hitCount.Load(), "distinct filename swazz-xss.svg at same fixed URL must not be deduplicated")
 
 	// Finding merge upgrades matching RuleID and appends new RuleIDs
 	existing := []swagger.AnalysisFinding{{RuleID: "swazz/unvalidated-file-upload", Level: "warning"}}
@@ -279,7 +295,7 @@ func TestRunner_SecondOrderUploadVerificationEndToEnd(t *testing.T) {
 	// Redirect from same-origin follow-up to cross-origin URL must be blocked.
 	redirectRes := &swagger.FuzzResult{Status: http.StatusCreated}
 	r.maybeVerifyUploadedFile(
-		t.Context(), r.client, srv.URL, "/files", http.MethodPost,
+		t.Context(), r.client, srv.URL, nil, "/files", http.MethodPost,
 		nil, nil,
 		map[string]any{"file": swagger.UploadFile{Filename: "swazz-xss.svg", ContentType: "image/svg+xml", ProbeKind: "svg_upload_probe"}},
 		swagger.ProfileMalicious,
@@ -289,4 +305,98 @@ func TestRunner_SecondOrderUploadVerificationEndToEnd(t *testing.T) {
 	)
 	assert.Equal(t, int32(1), redirectHits.Load(), "expected follow-up to hit /files/redirect-ssrf")
 	assert.Equal(t, int32(0), foreignHits.Load(), "cross-origin redirect from follow-up must be blocked")
+}
+
+func TestRunner_SecondOrderPolyglotAndMetadataCanaries(t *testing.T) {
+	var gifProbe, pngMetaProbe swagger.UploadFile
+	for _, uf := range payloads.MaliciousFileUploads {
+		switch uf.ProbeKind {
+		case "gif_polyglot_probe":
+			gifProbe = uf
+		case "png_metadata_canary":
+			pngMetaProbe = uf
+		}
+	}
+	require.NotEmpty(t, gifProbe.Data)
+	require.NotEmpty(t, pngMetaProbe.Data)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/upload":
+			mr, err := r.MultipartReader()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			var uploadedName string
+			for {
+				part, err := mr.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				_, _ = io.ReadAll(part)
+				if part.FormName() == "file" {
+					uploadedName = part.FileName()
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			if strings.Contains(uploadedName, "polyglot") {
+				_ = json.NewEncoder(w).Encode(map[string]any{"url": "/cdn/polyglot.gif"})
+			} else {
+				_ = json.NewEncoder(w).Encode(map[string]any{"url": "/cdn/exif.png"})
+			}
+		case r.Method == http.MethodGet && r.URL.Path == "/cdn/polyglot.gif":
+			// Intentionally omit X-Content-Type-Options: nosniff and serve un-reencoded polyglot bytes
+			w.Header().Set("Content-Type", "image/gif")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(gifProbe.Data)
+		case r.Method == http.MethodGet && r.URL.Path == "/cdn/exif.png":
+			// Serve PNG bytes with unstripped tEXt metadata
+			w.Header().Set("Content-Type", "image/png")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(pngMetaProbe.Data)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	wafOff := false
+	r := New(&swagger.Config{
+		BaseURL:  srv.URL,
+		Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{AnalyzeResponseBody: true, EnableWAFCheck: &wafOff, TimeoutMs: 3000},
+	}, nil)
+	defer r.Close()
+
+	resGif := &swagger.FuzzResult{Status: http.StatusCreated}
+	r.maybeVerifyUploadedFile(
+		t.Context(), r.client, srv.URL, nil, "/upload", http.MethodPost,
+		nil, nil,
+		map[string]any{"file": gifProbe},
+		swagger.ProfileMalicious,
+		nil,
+		map[string]any{"url": "/cdn/polyglot.gif"},
+		resGif,
+	)
+	require.Len(t, resGif.AnalyzerFindings, 1)
+	assert.Contains(t, resGif.AnalyzerFindings[0].CWEIDs, "CWE-436")
+
+	resExif := &swagger.FuzzResult{Status: http.StatusCreated}
+	r.maybeVerifyUploadedFile(
+		t.Context(), r.client, srv.URL, nil, "/upload", http.MethodPost,
+		nil, nil,
+		map[string]any{"file": pngMetaProbe},
+		swagger.ProfileMalicious,
+		nil,
+		map[string]any{"url": "/cdn/exif.png"},
+		resExif,
+	)
+	require.Len(t, resExif.AnalyzerFindings, 1)
+	assert.Contains(t, resExif.AnalyzerFindings[0].CWEIDs, "CWE-200")
 }
