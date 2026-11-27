@@ -85,6 +85,17 @@ cd packages/container
 go run . start --config swazz.config.json
 ```
 
+Common `start` flags:
+- **`--config <path>`**: Path to `swazz.config.json` (default `swazz.config.json`).
+- **`--sarif` / `--json` / `--html` / `--junit` / `--markdown <path>`**: Export scan results to the chosen report format.
+- **`--fail-on-severity <level>`**: Exit with code `2` if findings meet the threshold (`error`, `warning`, `note`, or `none`).
+- **`--log-level <level>`** / **`--debug`** / **`--quiet` (`-q`)** / **`--progress-on-change`**: Control log verbosity and progress output.
+- **`--no-color`**: Disable ANSI color codes in CLI text logs (also respects `NO_COLOR`).
+- **`--no-auto-chain`**: Disable automatic request chaining DAG and live ID pooling (overrides `settings.enable_auto_chaining`).
+- **`--allow-private-ips`** / **`--trusted-proxy <ip:port>`**: Override private IP restrictions or trust a local intercepting proxy.
+- **`--disable-telemetry`**: Disable anonymous global scan count telemetry.
+- **`--waf-patch <vendor>`** / **`--waf-patch-output <path>`**: Synthesize virtual patch rules for `cloudflare`, `aws`, `gcp`, `azure`, `modsecurity`, `nginx`, `haproxy`, `caddy`, `k8s`, or `all`.
+
 ### Headless Browser Crawler (`swazz spider`) 🕷️ {#spider}
 
 Autonomous target discovery for modern Single Page Applications (SPAs: React, Vue, Angular). It launches a local Chrome/Chromium instance, injects authentication cookies, navigates dynamic UI elements, intercepts background HTTP requests, and exports them as an OpenAPI v3 specification or HAR file.
@@ -149,6 +160,8 @@ Unknown keys are ignored, so a misspelled key silently falls back to its default
   - **`profiles`**: Which payload generators to run: `RANDOM`, `BOUNDARY`, `MALICIOUS`.
   - **`concurrency`**: Number of parallel requests to send.
   - **`chaining_rules`**: Values to extract from one response and reuse in later requests (see [Request Chaining](#request-chaining)).
+  - **`enable_auto_chaining`**: (Boolean) Enables automatic 3-tier producer→consumer DAG chaining and typed ID pooling (see [Automatic Request Chaining](#auto-chaining)). Default is `true`.
+  - **`enable_semantic_mutation`**: (Boolean) Enables semantic format wrappers during payload generation. Default is `true`.
   - **`analyze_response_body`**: (Boolean) If `true`, enables response body and response header parsing. Swazz will automatically inspect:
     - **Reflected XSS**: raw script and tag reflections.
     - **SQL Injection**: database error signature leaks.
@@ -166,7 +179,7 @@ Unknown keys are ignored, so a misspelled key silently falls back to its default
   - **`time_anomaly_threshold_ms`**: (Integer) Threshold in milliseconds for detecting response time anomalies. Default is `4000`.
   - **`oob_server_url`**: (String) Out-of-band interaction server URL for detecting SSRF / out-of-band vulnerability trigger interactions. Default is `""`. When callbacks go to the coordinator (the default for dashboard scans), one that arrives after the scan has ended is still added to that scan's findings as `swazz/oob-interaction`, for up to 7 days; the 2,000 most recent unanswered tokens of a scan are kept. Reports, exports and webhooks produced when the scan ended do not include it.
   - **`waf_check_enabled`**: (Boolean) If `true`, runs pre-scan domain WAF fingerprinting via `waf.secmy.app` before initiating fuzzing. The detected WAF type, confidence score, and bypass techniques are saved in the scan record and displayed in report summaries. Default is `true` (opt-out).
-  - **`waf_endpoint`**: (String) Custom endpoint URL for the WAF analysis service. Defaults to `https://waf.secmy.app`.
+  - **`waf_check_endpoint`**: (String) Custom endpoint URL for the WAF analysis service. Defaults to `https://waf.secmy.app`.
   - **`debug`**: (Boolean) Enables debug logging output. Default is `false`.
 
 ## Supported API formats {#spec-formats}

@@ -117,7 +117,7 @@ Swazz includes an embedded log viewer in the administration settings panel of th
 
 ### Querying and Filtering Logs
 Once authenticated, the Admin Logs panel allows you to interactively monitor system health:
-- **Refresh**: Manually fetch the latest logs cached in the rolling KV buffer.
+- **Refresh**: Manually fetch the latest logs buffered in the in-memory ring buffer.
 - **Search**: Perform a case-insensitive text search across log messages.
 - **Module Filter**: Narrow down logs to specific components (e.g. `Coordinator`, `container`).
 - **Level Filter**: Filter by severity level (`All Levels`, `Info`, `Warn`, `Error`, `Debug`).

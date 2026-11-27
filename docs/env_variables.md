@@ -66,9 +66,18 @@ These environment variables are read by the fuzzer agent engine (`packages/conta
 | **`NO_COLOR`** | Disables all ANSI color escape sequences in CLI text logs (equivalent to `-no-color`). | Any non-empty value |
 | **`FORCE_COLOR`** / **`CLICOLOR_FORCE`** | Forces ANSI color output in CLI text logs even when stderr is not a TTY (unless `NO_COLOR`, `-no-color`, or `SWAZZ_LOG_FORMAT=json` is set). | Any non-empty value |
 | **`SWAZZ_UPLOAD_CORPUS_DIR`** | Optional local directory of additional file-upload `valid/` and `probes/` test files merged at runtime without recompiling `swazz-engine` (symlinks skipped). | `/path/to/upload_corpus` |
+| **`SWAZZ_COORDINATOR`** / **`SWAZZ_COORDINATOR_URL`** | WebSocket URL of the Swazz Coordinator for `run-agent` (equivalent to `--coordinator`). | `wss://swazz.secmy.app/api/runners/connect` |
+| **`SWAZZ_TOKEN`** / **`SWAZZ_RUNNER_TOKEN`** | Runner authentication token for `run-agent` (equivalent to `--token`). | *Secret token* |
+| **`SWAZZ_TOKEN_FILE`** | Path to a file containing the runner authentication token (equivalent to `--token-file`). | `/run/secrets/swazz_token` |
+| **`SWAZZ_RUNNER_NAME`** | Custom display name for the connected runner agent. | `prod-runner-01` |
+| **`SWAZZ_RECYCLE_WHEN_IDLE`** | Exit the runner agent cleanly after completing a scan so container orchestrators (`--restart unless-stopped`) recycle into a fresh process. | `true` / unset |
+| **`SWAZZ_DISABLE_TELEMETRY`** | Disable anonymous global scan counter telemetry (equivalent to `--disable-telemetry`). | `true` / unset |
+| **`SWAZZ_TELEMETRY_URL`** | Override endpoint URL for anonymous scan counter telemetry. | `https://...` |
+| **`SWAZZ_PPROF_ADDR`** | Bind address for the Go `net/http/pprof` profiling server when diagnostics are needed. | `127.0.0.1:6060` |
+| **`SWAZZ_LICENSE_KEY`** / **`SWAZZ_LICENSE_PUBKEY`** | Commercial license key and optional public key override for enterprise CLI/runner features. | *License string* |
 | **`SWAZZ_DEV`** | Bypass local URL/SSRF blocks (enables scanning `localhost`). | `1` (Bypasses check), `0` (Enforced default) |
 | **`CLOUDFLARE_APPLICATION_ID`** | Optional Cloudflare Access client ID header injection. | *Header string* |
-| **`GOOGLE_API_KEY`** | Google AI Studio API key for Gemini models via Pre-Scan LLM Batching. *(Optional if Cloudflare AI Gateway Provider Keys / BYOK is used)*. | `AIzaSy...` |
+| **`GOOGLE_API_KEY`** / **`GEMINI_API_KEY`** | Google AI Studio / Gemini API key for Pre-Scan LLM Batching and agent dispatch. *(Optional if Cloudflare AI Gateway Provider Keys / BYOK is used)*. | `AIzaSy...` |
 | **`OPENAI_API_KEY`** | OpenAI API key for pre-scan schema analysis. *(Optional if Cloudflare AI Gateway Provider Keys / BYOK is used)*. | `sk-...` |
 
 ---
