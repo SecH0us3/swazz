@@ -127,7 +127,7 @@ var MaliciousCategories = []Category{
 	{ID: CatMaliciousSSRF, Label: "SSRF & Cloud Metadata", Description: "AWS IMDS, GCP metadata, Azure compute, Kubernetes SA tokens", Items: MaliciousSSRF},
 	{ID: CatMaliciousMassAssignment, Label: "Mass Assignment", Description: "Privilege escalation and attribute tampering (role: admin, is_admin: true)", Items: MaliciousMassAssignment},
 	{ID: CatMaliciousGraphQL, Label: "GraphQL Abuse", Description: "Introspection, field suggestions, and query depth batching DoS", Items: MaliciousGraphQL},
-	{ID: CatMaliciousFileUpload, Label: "File Upload Validation", Description: "Non-destructive MIME/magic-bytes mismatch, truncated headers, traversal & double-extension filenames, SVG upload probes", Items: toAny(MaliciousFileUploads)},
+	{ID: CatMaliciousFileUpload, Label: "File Upload Validation", Description: "Non-destructive MIME/magic-bytes mismatch, truncated headers, traversal & double-extension filenames, SVG upload probes (EICAR probe is opt-in via enable_eicar_probe / --enable-eicar)", Items: toAny(MaliciousFileUploads)},
 }
 
 // RandomCategories lists all random categories.

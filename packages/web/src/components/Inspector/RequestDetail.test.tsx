@@ -851,7 +851,7 @@ describe('RequestDetail Component', () => {
         // Live Replay & PoC Export tab generates multipart curl -F + Step 2 GET
         fireEvent.click(screen.getByRole('tab', { name: /Live Replay & PoC Export/i }));
         const pocPre = document.querySelector('.poc-code-pre')?.textContent || '';
-        expect(pocPre).toContain('-F "file=@$PROBE_FILE_1;filename=swazz.svg;type=image/svg+xml"');
-        expect(pocPre).toContain('curl -i "https://api.example.com/files/swazz.svg"');
+        expect(pocPre).toContain(`-F 'file=@'"$PROBE_FILE_1"';filename=swazz.svg;type=image/svg+xml'`);
+        expect(pocPre).toContain(`curl -i 'https://api.example.com/files/swazz.svg'`);
     });
 });

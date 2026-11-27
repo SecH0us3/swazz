@@ -15,8 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"swazz-engine/internal/config"
+	"sync"
 	"testing"
 	"time"
 
@@ -537,4 +537,83 @@ func TestRunCLIErr_NoAutoChainFlagOverridesConfig(t *testing.T) {
 	mu.Unlock()
 	require.NotEmpty(t, withoutFlag)
 	assert.Equal(t, "POST /api/orders", withoutFlag[0], "expected default DAG order to schedule POST before DELETE, got %v", withoutFlag)
+}
+
+func TestRunCLIErr_EnableEICARFlag(t *testing.T) {
+	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
+
+	var mu sync.Mutex
+	var filenames []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if mr, err := r.MultipartReader(); err == nil {
+			for {
+				part, perr := mr.NextPart()
+				if perr != nil {
+					break
+				}
+				if fn := part.FileName(); fn != "" {
+					mu.Lock()
+					filenames = append(filenames, fn)
+					mu.Unlock()
+				}
+				_ = part.Close()
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	cfgPath := filepath.Join(t.TempDir(), "config_eicar.json")
+	cfgJSON := fmt.Sprintf(`{
+		"base_url": "%s",
+		"endpoint_definitions": [
+			{
+				"path": "/api/upload",
+				"method": "POST",
+				"contentType": "multipart/form-data",
+				"schema": {
+					"type": "object",
+					"required": ["file"],
+					"properties": {
+						"file": {"type": "string", "format": "binary"}
+					}
+				}
+			}
+		],
+		"settings": {
+			"iterations_per_profile": 20,
+			"concurrency": 1,
+			"timeout_ms": 2000,
+			"profiles": ["MALICIOUS"],
+			"payload_categories": {"MALICIOUS": ["malicious_file_upload"]},
+			"enable_auto_chaining": false,
+			"waf_check_enabled": false
+		}
+	}`, ts.URL)
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfgJSON), 0600))
+
+	require.NoError(t, runCLIErr([]string{
+		"-config", cfgPath,
+		"-quiet",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	}))
+	mu.Lock()
+	withoutFlag := append([]string(nil), filenames...)
+	filenames = nil
+	mu.Unlock()
+	require.NotEmpty(t, withoutFlag)
+	assert.NotContains(t, withoutFlag, "swazz-eicar.txt")
+
+	require.NoError(t, runCLIErr([]string{
+		"-config", cfgPath,
+		"-enable-eicar",
+		"-quiet",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	}))
+	mu.Lock()
+	withFlag := append([]string(nil), filenames...)
+	mu.Unlock()
+	assert.Contains(t, withFlag, "swazz-eicar.txt")
 }

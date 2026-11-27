@@ -78,7 +78,7 @@ export function ruleKind(ruleId?: string): RuleKind {
   if (tokens.has('xss')) return 'xss';
   if (tokens.has('ssrf') || tokens.has('oob')) return 'ssrf';
   if (tokens.has('cors')) return 'cors';
-  if (tokens.has('upload') || tokens.has('parser')) return 'file_upload';
+  if (tokens.has('upload') || (tokens.has('file') && tokens.has('parser'))) return 'file_upload';
   return 'other';
 }
 

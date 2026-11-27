@@ -61,19 +61,19 @@ function generateUploadCurl(options: PocRequestOptions, upload: ExtractedUploadP
   const cleanHeaders = upload.isRawBinary ? (options.headers || {}) : stripContentTypeForMultipart(options.headers);
   const setupLines: string[] = [];
   const tempVars: string[] = [];
-  const curlLines: string[] = [`curl -X ${options.method.toUpperCase()} "${options.url}"`];
+  const curlLines: string[] = [`curl -X ${options.method.toUpperCase()} ${shellSingleQuote(options.url)}`];
 
   for (const [key, value] of Object.entries(cleanHeaders)) {
-    curlLines.push(`-H "${key}: ${value.replace(/"/g, '\\"')}"`);
+    curlLines.push(`-H ${shellSingleQuote(`${key}: ${value}`)}`);
   }
 
   upload.files.forEach((part, idx) => {
     const syn = synthesizeProbeContent(part.file);
     if (syn.kind === 'placeholder') {
       if (upload.isRawBinary) {
-        curlLines.push(`--data-binary "@${part.file.filename}"`);
+        curlLines.push(`--data-binary ${shellSingleQuote(`@${part.file.filename}`)}`);
       } else {
-        curlLines.push(`-F "${part.field}=@${part.file.filename};filename=${part.file.filename};type=${part.file.contentType}"`);
+        curlLines.push(`-F ${shellSingleQuote(`${part.field}=@${part.file.filename};filename=${part.file.filename};type=${part.file.contentType}`)}`);
       }
       return;
     }
@@ -83,7 +83,7 @@ function generateUploadCurl(options: PocRequestOptions, upload: ExtractedUploadP
     if (upload.isRawBinary) {
       curlLines.push(`--data-binary "@$${varName}"`);
     } else {
-      curlLines.push(`-F "${part.field}=@$${varName};filename=${part.file.filename};type=${part.file.contentType}"`);
+      curlLines.push(`-F ${shellSingleQuote(`${part.field}=@`)}"$${varName}"${shellSingleQuote(`;filename=${part.file.filename};type=${part.file.contentType}`)}`);
     }
   });
 
@@ -100,9 +100,9 @@ function generateUploadCurl(options: PocRequestOptions, upload: ExtractedUploadP
 
   if (options.followUpUrl) {
     const followHeaders = headersForFollowUpGet(options.headers);
-    const getLines = [`curl -i "${options.followUpUrl}"`];
+    const getLines = [`curl -i ${shellSingleQuote(options.followUpUrl)}`];
     for (const [key, value] of Object.entries(followHeaders)) {
-      getLines.push(`-H "${key}: ${value.replace(/"/g, '\\"')}"`);
+      getLines.push(`-H ${shellSingleQuote(`${key}: ${value}`)}`);
     }
     parts.push('', '# Step 2: Second-order follow-up verification', getLines.join(' \\\n  '));
   }
@@ -135,9 +135,9 @@ export function generateCurl(options: PocRequestOptions): string {
   if (!options.followUpUrl) return step1;
 
   const followHeaders = headersForFollowUpGet(options.headers);
-  const getLines = [`curl -i "${options.followUpUrl}"`];
+  const getLines = [`curl -i ${shellSingleQuote(options.followUpUrl)}`];
   for (const [key, value] of Object.entries(followHeaders)) {
-    getLines.push(`-H "${key}: ${value.replace(/"/g, '\\"')}"`);
+    getLines.push(`-H ${shellSingleQuote(`${key}: ${value}`)}`);
   }
   return `${step1}\n\n# Step 2: Second-order follow-up verification\n${getLines.join(' \\\n  ')}`;
 }

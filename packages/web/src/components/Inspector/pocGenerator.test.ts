@@ -70,10 +70,10 @@ describe('PoC Exploit Generators', () => {
 
     const curl = generateCurl(uploadOpts);
     expect(curl).toContain('base64 -d');
-    expect(curl).toContain('-F "file=@$PROBE_FILE_1;filename=swazz-polyglot.gif;type=image/gif"');
+    expect(curl).toContain(`-F 'file=@'"$PROBE_FILE_1"';filename=swazz-polyglot.gif;type=image/gif'`);
     expect(curl).toContain("-F 'album=avatars'");
     expect(curl).not.toContain('Content-Type: multipart/form-data');
-    expect(curl).toContain('curl -i "https://api.example.com/cdn/swazz-polyglot.gif"');
+    expect(curl).toContain(`curl -i 'https://api.example.com/cdn/swazz-polyglot.gif'`);
 
     const py = generatePython(uploadOpts);
     expect(py).toContain('import base64');
@@ -104,6 +104,29 @@ describe('PoC Exploit Generators', () => {
       },
     };
     const curl = generateCurl(rawOpts);
-    expect(curl).toContain('--data-binary "@custom-corp.bin"');
+    expect(curl).toContain(`--data-binary '@custom-corp.bin'`);
+  });
+
+  it('single-quotes followUpUrl and upload filenames so shell vars/backticks cannot expand', () => {
+    const evilOpts = {
+      method: 'POST',
+      url: 'https://api.example.com/upload',
+      headers: { Authorization: 'Bearer $SECRET' },
+      body: {
+        file: {
+          filename: "$HOME`id`'a.png",
+          contentType: 'image/png',
+          probeKind: 'custom_upload_image',
+        },
+      },
+      followUpUrl: "http://t.local/f/$AWS_SECRET_ACCESS_KEY`id`'x.svg",
+    };
+
+    const curl = generateCurl(evilOpts);
+    expect(curl).not.toContain('"$AWS_SECRET_ACCESS_KEY');
+    expect(curl).not.toContain('"http://t.local');
+    expect(curl).toContain(`curl -i 'http://t.local/f/$AWS_SECRET_ACCESS_KEY\`id\`'\\''x.svg'`);
+    expect(curl).toContain(`'file=@$HOME\`id\`'\\''a.png;filename=$HOME\`id\`'\\''a.png;type=image/png'`);
+    expect(curl).toContain(`-H 'Authorization: Bearer $SECRET'`);
   });
 });

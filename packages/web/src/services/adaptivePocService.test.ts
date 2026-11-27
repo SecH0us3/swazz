@@ -240,6 +240,8 @@ describe('adaptivePocService', () => {
 
   it('generates multipart + follow-up verification script for file upload findings', () => {
     expect(ruleKind('swazz/unvalidated-file-upload')).toBe('file_upload');
+    expect(ruleKind('swazz/file-parser-error')).toBe('file_upload');
+    expect(ruleKind('swazz/xml-parser-error')).toBe('other');
     const result = generateAlgorithmicAdaptivePoc({
       method: 'POST',
       url: 'https://api.example.com/upload',
@@ -256,8 +258,8 @@ describe('adaptivePocService', () => {
     });
 
     expect(result.code).toContain('swazz/unvalidated-file-upload');
-    expect(result.code).toContain('-F "file=@$PROBE_FILE_1;filename=swazz.svg;type=image/svg+xml"');
-    expect(result.code).toContain('curl -i "https://api.example.com/files/swazz.svg"');
+    expect(result.code).toContain(`-F 'file=@'"$PROBE_FILE_1"';filename=swazz.svg;type=image/svg+xml'`);
+    expect(result.code).toContain(`curl -i 'https://api.example.com/files/swazz.svg'`);
   });
 
   it('uses Chrome AI when available on-device', async () => {
