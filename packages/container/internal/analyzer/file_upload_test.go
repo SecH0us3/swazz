@@ -618,6 +618,93 @@ func TestFileUploadAnalyzer(t *testing.T) {
 			t.Fatalf("expected CWE-212 for preserved PNG tEXt metadata, got %+v", resPNGMeta)
 		}
 	})
+
+	t.Run("null_byte_filename distinguishes truncation from sanitization and URL encoding", func(t *testing.T) {
+		nullProbe := swagger.UploadFile{Filename: "swazz-probe.php%00.png", ContentType: "image/png", ProbeKind: "null_byte_filename"}
+		cases := []struct {
+			name         string
+			body         string
+			wantPostLvl  string
+			wantPostCWEs int
+			wantFollowUp int
+		}{
+			{
+				name:         "verbatim echo",
+				body:         `{"originalName":"swazz-probe.php%00.png"}`,
+				wantPostLvl:  "warning",
+				wantPostCWEs: 1,
+				wantFollowUp: 0,
+			},
+			{
+				name:         "url-encoded percent",
+				body:         `{"url":"/files/swazz-probe.php%2500.png"}`,
+				wantPostLvl:  "warning",
+				wantPostCWEs: 1,
+				wantFollowUp: 0,
+			},
+			{
+				name:         "sanitized stripped percent",
+				body:         `{"name":"swazz-probe.php00.png"}`,
+				wantPostLvl:  "warning",
+				wantPostCWEs: 1,
+				wantFollowUp: 0,
+			},
+			{
+				name:         "sanitized underscore",
+				body:         `{"name":"swazz-probe.php_00.png"}`,
+				wantPostLvl:  "warning",
+				wantPostCWEs: 1,
+				wantFollowUp: 0,
+			},
+			{
+				name:         "json escaped null byte",
+				body:         `{"name":"swazz-probe.php\u0000.png"}`,
+				wantPostLvl:  "warning",
+				wantPostCWEs: 1,
+				wantFollowUp: 0,
+			},
+			{
+				name:         "real truncation quote terminator",
+				body:         `{"name":"swazz-probe.php"}`,
+				wantPostLvl:  "error",
+				wantPostCWEs: 2,
+				wantFollowUp: 1,
+			},
+			{
+				name:         "real truncation query terminator",
+				body:         `{"url":"/files/swazz-probe.php?dl=1"}`,
+				wantPostLvl:  "error",
+				wantPostCWEs: 2,
+				wantFollowUp: 1,
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				postRes := a.Analyze(&AnalysisInput{
+					SentPayload:    map[string]any{"file": nullProbe},
+					StatusCode:     201,
+					ResponseBody:   []byte(tc.body),
+					FileUploadSent: true,
+				})
+				if len(postRes) != 1 || postRes[0].Level != tc.wantPostLvl || len(postRes[0].CWEIDs) != tc.wantPostCWEs {
+					t.Fatalf("POST mismatch for %s: got %+v", tc.name, postRes)
+				}
+				followRes := a.Analyze(&AnalysisInput{
+					SentPayload:       map[string]any{"file": nullProbe},
+					StatusCode:        200,
+					ResponseBody:      []byte(tc.body),
+					FileUploadSent:    true,
+					FollowUpSourceURL: "GET /files/1",
+				})
+				if len(followRes) != tc.wantFollowUp {
+					t.Fatalf("follow-up mismatch for %s: expected %d findings, got %+v", tc.name, tc.wantFollowUp, followRes)
+				}
+				if tc.wantFollowUp == 1 && (followRes[0].Level != "error" || len(followRes[0].CWEIDs) != 2 || followRes[0].CWEIDs[1] != "CWE-22") {
+					t.Fatalf("expected error + CWE-22 on follow-up for %s, got %+v", tc.name, followRes)
+				}
+			})
+		}
+	})
 }
 
 func containsSubstring(s, sub string) bool {

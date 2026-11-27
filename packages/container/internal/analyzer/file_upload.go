@@ -336,15 +336,24 @@ func hasTruncatedNullByteFilename(lowerResp []byte) bool {
 			return false
 		}
 		after := lowerResp[i+idx+len(needle):]
-		if !bytes.HasPrefix(after, []byte("%00")) &&
-			!bytes.HasPrefix(after, []byte{0}) &&
-			!bytes.HasPrefix(after, []byte(`\u0000`)) &&
-			!bytes.HasPrefix(after, []byte(".png")) {
+		if len(after) == 0 {
+			return true
+		}
+		if !bytes.HasPrefix(after, []byte(`\u0000`)) && isNullByteFilenameTerminator(after[0]) {
 			return true
 		}
 		i += idx + len(needle)
 	}
 	return false
+}
+
+func isNullByteFilenameTerminator(b byte) bool {
+	switch b {
+	case '"', '\'', '<', '>', ' ', '\t', '\r', '\n', '&', '?', '#', ',', '\\', '/', ';', ')', ']', '}':
+		return true
+	default:
+		return false
+	}
 }
 
 func hasRTLOverrideFilename(lower []byte) bool {
