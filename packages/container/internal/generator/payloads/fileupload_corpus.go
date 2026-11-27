@@ -131,14 +131,35 @@ func reloadUploadCorpus(extraDir string) error {
 		return err
 	}
 
-	// "../" cannot be stored on disk, so traversal_filename is synthesized alongside embedded probes.
-	traversalFile := newUploadFile("../../swazz-probe.txt", "text/plain", "traversal_filename", []byte("swazz-filename-probe\n"))
-	probes = append(probes, CorpusEntry{
-		File:         traversalFile,
-		Category:     FileCatText,
-		DeclaredMIME: "text/plain",
-		DetectedMIME: "text/plain",
-	})
+	// Programmatic probes whose filenames or contents cannot be stored literally on disk
+	// (e.g. "../", "%00", U+202E RTL override, or EICAR test string that triggers host AV).
+	programmatic := []CorpusEntry{
+		{
+			File:         newUploadFile("../../swazz-probe.txt", "text/plain", "traversal_filename", []byte("swazz-filename-probe\n")),
+			Category:     FileCatText,
+			DeclaredMIME: "text/plain",
+			DetectedMIME: "text/plain",
+		},
+		{
+			File:         newUploadFile("swazz-eicar.txt", "text/plain", "eicar_av_probe", eicarTestBytes()),
+			Category:     FileCatText,
+			DeclaredMIME: "text/plain",
+			DetectedMIME: "text/plain",
+		},
+		{
+			File:         newUploadFile("swazz-probe.php%00.png", "image/png", "null_byte_filename", minimalValidPNG),
+			Category:     FileCatImage,
+			DeclaredMIME: "image/png",
+			DetectedMIME: "image/png",
+		},
+		{
+			File:         newUploadFile("swazz-probe-\u202Egnp.txt", "text/plain", "rtl_override_filename", []byte("swazz-rtl-filename-probe\n")),
+			Category:     FileCatText,
+			DeclaredMIME: "text/plain",
+			DetectedMIME: "text/plain",
+		},
+	}
+	probes = append(probes, programmatic...)
 
 	// Install embedded corpus unconditionally before inspecting external directory.
 	installCorpus(valid, probes)
@@ -265,6 +286,10 @@ func classifyCorpusFile(filename string, data []byte, isValidDir bool, meta *upl
 		probeKind = "svg_upload_probe"
 	case hasDangerousDoubleExt(filename):
 		probeKind = "double_ext_filename"
+	case ext == ".gif" && strings.Contains(strings.ToLower(filename), "polyglot"):
+		probeKind = "gif_polyglot_probe"
+	case ext == ".png" && strings.Contains(strings.ToLower(filename), "exif-canary"):
+		probeKind = "png_metadata_canary"
 	case strings.Contains(strings.ToLower(filename), "truncated"):
 		probeKind = "truncated_" + normExt
 	case mismatch:
@@ -561,4 +586,12 @@ func PrioritizedMaliciousUploads(preferred []FileCategory, maxBytes int) []swagg
 func OOBSVGFile(oobURL string) swagger.UploadFile {
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><image href="` + oobURL + `" width="1" height="1"/></svg>`
 	return newUploadFile("swazz-oob.svg", "image/svg+xml", "svg_oob_probe", []byte(svg))
+}
+
+// eicarTestBytes assembles the standard 68-byte EICAR AV test string in memory
+// so no raw EICAR file is stored in the repository.
+func eicarTestBytes() []byte {
+	part1 := `X5O!P%@AP[4\PZX54(P^)7CC)7}`
+	part2 := `$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*`
+	return []byte(part1 + part2)
 }

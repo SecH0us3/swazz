@@ -54,7 +54,9 @@ var uploadIDFieldNames = map[string]bool{
 func (r *Runner) maybeVerifyUploadedFile(
 	ctx context.Context,
 	client *http.Client,
-	baseURL, originalPath, method string,
+	baseURL string,
+	reqURL *url.URL,
+	originalPath, method string,
 	mergedHeaders map[string]string,
 	cookies map[string]string,
 	payload any,
@@ -69,8 +71,8 @@ func (r *Runner) maybeVerifyUploadedFile(
 	if r.uploadFollowUpCount.Load() >= maxUploadFollowUpsPerRun {
 		return
 	}
-	probeKinds := collectVerifiableProbeKinds(payload)
-	if len(probeKinds) == 0 {
+	probeKeys := collectVerifiableProbeKeys(payload)
+	if len(probeKeys) == 0 {
 		return
 	}
 	baseParsed, err := url.Parse(strings.TrimRight(baseURL, "/"))
@@ -78,7 +80,7 @@ func (r *Runner) maybeVerifyUploadedFile(
 		return
 	}
 
-	candidates := r.collectUploadFollowUpURLs(baseParsed, originalPath, method, respHeaders, respBody)
+	candidates := r.collectUploadFollowUpURLs(baseParsed, reqURL, originalPath, method, respHeaders, respBody)
 	if len(candidates) == 0 {
 		return
 	}
@@ -91,7 +93,7 @@ func (r *Runner) maybeVerifyUploadedFile(
 		timeoutMs = 10000
 	}
 
-	kindKey := strings.Join(probeKinds, ",")
+	kindKey := strings.Join(probeKeys, ",")
 	fa := &analyzer.FileUploadAnalyzer{}
 
 	for _, targetURL := range candidates {
@@ -197,7 +199,7 @@ func (r *Runner) fetchUploadFollowUp(
 }
 
 func (r *Runner) collectUploadFollowUpURLs(
-	baseParsed *url.URL,
+	baseParsed, reqURL *url.URL,
 	originalPath, method string,
 	respHeaders http.Header,
 	respBody any,
@@ -208,7 +210,7 @@ func (r *Runner) collectUploadFollowUpURLs(
 		if len(out) >= maxFollowUpsPerUpload {
 			return
 		}
-		resolved, ok := sameOriginURL(baseParsed, originalPath, raw)
+		resolved, ok := sameOriginURL(baseParsed, reqURL, originalPath, raw)
 		if !ok || seen[resolved] {
 			return
 		}
@@ -227,7 +229,7 @@ func (r *Runner) collectUploadFollowUpURLs(
 	return out
 }
 
-func sameOriginURL(baseParsed *url.URL, uploadPath, rawCandidate string) (string, bool) {
+func sameOriginURL(baseParsed, reqURL *url.URL, uploadPath, rawCandidate string) (string, bool) {
 	trimmed := strings.TrimSpace(rawCandidate)
 	if trimmed == "" {
 		return "", false
@@ -253,7 +255,14 @@ func sameOriginURL(baseParsed *url.URL, uploadPath, rawCandidate string) (string
 		}
 		resolved = ref
 	} else {
-		resolved = baseParsed.ResolveReference(ref)
+		resolveAgainst := baseParsed
+		if reqURL != nil && reqURL.Scheme != "" && reqURL.Host != "" {
+			resolveAgainst = reqURL
+		}
+		resolved = resolveAgainst.ResolveReference(ref)
+		if !strings.EqualFold(resolved.Scheme, baseParsed.Scheme) || !strings.EqualFold(resolved.Host, baseParsed.Host) {
+			return "", false
+		}
 	}
 	if resolved.Path == "" || resolved.Path == "/" {
 		return "", false
@@ -438,21 +447,25 @@ func collectIDFieldsFromMap(m map[string]any, depth int, add func(string)) {
 	}
 }
 
-func collectVerifiableProbeKinds(v any) []string {
-	var kinds []string
+func collectVerifiableProbeKeys(v any) []string {
+	var keys []string
 	seen := make(map[string]bool)
 	var walk func(any)
 	walk = func(cur any) {
 		switch tv := cur.(type) {
 		case swagger.UploadFile:
-			if isVerifiableProbeKind(tv.ProbeKind) && !seen[tv.ProbeKind] {
-				seen[tv.ProbeKind] = true
-				kinds = append(kinds, tv.ProbeKind)
+			k := tv.Filename + ":" + tv.ProbeKind
+			if isVerifiableProbeKind(tv.ProbeKind) && !seen[k] {
+				seen[k] = true
+				keys = append(keys, k)
 			}
 		case *swagger.UploadFile:
-			if tv != nil && isVerifiableProbeKind(tv.ProbeKind) && !seen[tv.ProbeKind] {
-				seen[tv.ProbeKind] = true
-				kinds = append(kinds, tv.ProbeKind)
+			if tv != nil {
+				k := tv.Filename + ":" + tv.ProbeKind
+				if isVerifiableProbeKind(tv.ProbeKind) && !seen[k] {
+					seen[k] = true
+					keys = append(keys, k)
+				}
 			}
 		case map[string]any:
 			for _, item := range tv {
@@ -465,14 +478,21 @@ func collectVerifiableProbeKinds(v any) []string {
 		}
 	}
 	walk(v)
-	sort.Strings(kinds)
-	return kinds
+	sort.Strings(keys)
+	return keys
 }
 
 func isVerifiableProbeKind(kind string) bool {
 	return kind == "svg_upload_probe" ||
+		// svg_oob_probe has no synchronous analyzer finding, but a follow-up GET triggers lazy
+		// server-side SVG rendering so background OOB SSRF callbacks fire.
 		kind == "svg_oob_probe" ||
 		kind == "traversal_filename" ||
+		kind == "eicar_av_probe" ||
+		kind == "null_byte_filename" ||
+		kind == "rtl_override_filename" ||
+		kind == "gif_polyglot_probe" ||
+		kind == "png_metadata_canary" ||
 		strings.HasPrefix(kind, "mime_mismatch_") ||
 		strings.HasPrefix(kind, "truncated_")
 }
@@ -483,7 +503,7 @@ func mergeFollowUpFindings(existing, followUp []swagger.AnalysisFinding) []swagg
 	for _, f := range followUp {
 		replaced := false
 		for i := range out {
-			if out[i].RuleID == f.RuleID && out[i].Level != "error" {
+			if out[i].RuleID == f.RuleID && out[i].Level != "error" && sameEvidenceProbe(out[i].Evidence, f.Evidence) {
 				out[i] = f
 				replaced = true
 				break
@@ -494,4 +514,28 @@ func mergeFollowUpFindings(existing, followUp []swagger.AnalysisFinding) []swagg
 		}
 	}
 	return out
+}
+
+func sameEvidenceProbe(a, b string) bool {
+	fa, fb := extractEvidenceTag(a, "Filename: "), extractEvidenceTag(b, "Filename: ")
+	pa, pb := extractEvidenceTag(a, "ProbeKind: "), extractEvidenceTag(b, "ProbeKind: ")
+	if fa != "" && fb != "" && fa != fb {
+		return false
+	}
+	if pa != "" && pb != "" && pa != pb {
+		return false
+	}
+	return true
+}
+
+func extractEvidenceTag(evidence, prefix string) string {
+	idx := strings.Index(evidence, prefix)
+	if idx < 0 {
+		return ""
+	}
+	rest := evidence[idx+len(prefix):]
+	if sep := strings.Index(rest, " | "); sep >= 0 {
+		return rest[:sep]
+	}
+	return rest
 }
