@@ -165,7 +165,10 @@ func (g *Generator) generateFileUpload(propName string, inArray bool, acceptedMI
 			if inArray && maxAllowed > 1024 {
 				maxAllowed = 1024
 			}
-			probes := payloads.PrioritizedMaliciousUploads(cats, maxAllowed)
+			probes := payloads.FilterUploadProbes(
+				payloads.PrioritizedMaliciousUploads(cats, maxAllowed),
+				g.settings.EnableEICARProbe,
+			)
 			if g.isCategoryEnabled(payloads.CatOOBInteraction) && (g.oobServerURL != "" || g.OOBStore != nil) {
 				oobProbe := payloads.OOBSVGFile("{{OOB_URL}}")
 				if len(cats) > 0 && cats[0] == payloads.FileCatImage {

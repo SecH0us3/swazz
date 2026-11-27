@@ -70,6 +70,7 @@ func runCLIErr(args []string) error {
 	wafPatchVendor := flags.String("waf-patch", "", "Generate WAF virtual patch rules for vendor (e.g. cloudflare, aws, all)")
 	wafPatchOutput := flags.String("waf-patch-output", "", "Path to save generated WAF virtual patch rules")
 	noAutoChain := flags.Bool("no-auto-chain", false, "Disable automatic request chaining DAG and live ID pooling (overrides settings.enable_auto_chaining)")
+	enableEICAR := flags.Bool("enable-eicar", false, "Enable EICAR antivirus test probe during file upload fuzzing (triggers AV/EDR alerts on targets)")
 
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -169,6 +170,10 @@ func runCLIErr(args []string) error {
 	if *noAutoChain {
 		f := false
 		cliCfg.Settings.EnableAutoChaining = &f
+	}
+
+	if *enableEICAR {
+		cliCfg.Settings.EnableEICARProbe = true
 	}
 
 	runCfg, err := config.BuildRunnerConfig(&cliCfg)

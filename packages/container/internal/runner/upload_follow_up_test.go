@@ -399,4 +399,32 @@ func TestRunner_SecondOrderPolyglotAndMetadataCanaries(t *testing.T) {
 	)
 	require.Len(t, resExif.AnalyzerFindings, 1)
 	assert.Contains(t, resExif.AnalyzerFindings[0].CWEIDs, "CWE-212")
+	assert.Equal(t, "/cdn/exif.png", resExif.AnalyzerFindings[0].FollowUpURL)
+	assert.Equal(t, http.StatusOK, resExif.AnalyzerFindings[0].FollowUpStatus)
+
+	// Disabling EnableUploadFollowUp suppresses follow-up GET requests.
+	disabled := false
+	rDisabled := New(&swagger.Config{
+		BaseURL:  srv.URL,
+		Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{
+			AnalyzeResponseBody:  true,
+			EnableWAFCheck:       &wafOff,
+			EnableUploadFollowUp: &disabled,
+			TimeoutMs:            3000,
+		},
+	}, nil)
+	defer rDisabled.Close()
+
+	resDisabled := &swagger.FuzzResult{Status: http.StatusCreated}
+	rDisabled.maybeVerifyUploadedFile(
+		t.Context(), rDisabled.client, srv.URL, nil, "/upload", http.MethodPost,
+		nil, nil,
+		map[string]any{"file": gifProbe},
+		swagger.ProfileMalicious,
+		nil,
+		map[string]any{"url": "/cdn/polyglot.gif"},
+		resDisabled,
+	)
+	assert.Empty(t, resDisabled.AnalyzerFindings)
 }

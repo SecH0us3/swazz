@@ -46,3 +46,20 @@ func TestAutoChainingEnabledDefaultAndOverride(t *testing.T) {
 		t.Fatal("expected AutoChainingEnabled() to return true when explicitly true")
 	}
 }
+
+func TestUploadFollowUpEnabledDefaultAndOverride(t *testing.T) {
+	var s Settings
+	if !s.UploadFollowUpEnabled() {
+		t.Fatal("expected UploadFollowUpEnabled() to default to true when nil")
+	}
+	f := false
+	s.EnableUploadFollowUp = &f
+	if s.UploadFollowUpEnabled() {
+		t.Fatal("expected UploadFollowUpEnabled() to return false when explicitly false")
+	}
+	tr := true
+	s.EnableUploadFollowUp = &tr
+	if !s.UploadFollowUpEnabled() {
+		t.Fatal("expected UploadFollowUpEnabled() to return true when explicitly true")
+	}
+}

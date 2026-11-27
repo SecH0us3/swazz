@@ -5,6 +5,7 @@
 
 import { aiDeadline, openChromeAISessionWithin, type AiFallbackReason } from './chromeAiService.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from '../components/Inspector/pocGenerator.js';
+import { extractUploadParts } from '../components/Inspector/uploadPocUtils.js';
 
 export type PocLanguage = 'curl' | 'python' | 'typescript' | 'go';
 
@@ -13,6 +14,7 @@ export interface AdaptivePocInput {
   url: string;
   headers?: Record<string, string>;
   body?: any;
+  followUpUrl?: string;
   language: PocLanguage;
   ruleId?: string;
   message?: string;
@@ -64,7 +66,7 @@ export const SQL_ERROR_SIGNATURES = [
   'ora-01756',
 ];
 
-export type RuleKind = 'sql' | 'xss' | 'ssrf' | 'cors' | 'other';
+export type RuleKind = 'sql' | 'xss' | 'ssrf' | 'cors' | 'file_upload' | 'other';
 
 /**
  * Maps a finding's rule ID (e.g. `swazz/sql-error-leak`, `swazz/time-based-sqli`) to the class of
@@ -76,6 +78,7 @@ export function ruleKind(ruleId?: string): RuleKind {
   if (tokens.has('xss')) return 'xss';
   if (tokens.has('ssrf') || tokens.has('oob')) return 'ssrf';
   if (tokens.has('cors')) return 'cors';
+  if (tokens.has('upload') || (tokens.has('file') && tokens.has('parser'))) return 'file_upload';
   return 'other';
 }
 
@@ -87,6 +90,31 @@ export function generateAlgorithmicAdaptivePoc(input: AdaptivePocInput): Adaptiv
   const rule = (input.ruleId || 'Security Finding').trim();
   const kind = ruleKind(input.ruleId);
   const lang = input.language;
+  const uploadParts = extractUploadParts(input.body);
+
+  if (uploadParts || input.followUpUrl) {
+    const reqOpts = {
+      method: input.method,
+      url: input.url,
+      headers: input.headers,
+      body: input.body,
+      followUpUrl: input.followUpUrl,
+    };
+    const baseCode =
+      lang === 'curl' ? generateCurl(reqOpts) :
+      lang === 'python' ? generatePython(reqOpts) :
+      lang === 'typescript' ? generateTypeScript(reqOpts) :
+      generateGo(reqOpts);
+    const commentPrefix = lang === 'python' || lang === 'curl' ? '#' : '//';
+    const header = `${commentPrefix} Automated Security Regression Test for ${rule}\n${commentPrefix} Verifies upload validation${input.followUpUrl ? ' and second-order follow-up GET behavior' : ''}.\n\n`;
+    return {
+      code: `${header}${baseCode}`.trim(),
+      model: 'algorithmic-rules (local)',
+      simulated: true,
+      explanation: `Deterministic security verification script asserting remediation of ${rule}.`,
+    };
+  }
+
   const isObject = typeof input.body === 'object' && input.body !== null;
   const bodyFormatted = isObject ? JSON.stringify(input.body, null, 2) : input.body;
 

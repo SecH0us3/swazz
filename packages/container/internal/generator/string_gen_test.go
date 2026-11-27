@@ -627,20 +627,37 @@ func TestStringGen_FileUploadProfiles(t *testing.T) {
 		assert.Equal(t, "valid_pdf", docFile.ProbeKind)
 	})
 
-	t.Run("malicious profile cycles non-destructive upload probes", func(t *testing.T) {
+	t.Run("malicious profile cycles non-destructive upload probes (EICAR opt-in)", func(t *testing.T) {
 		g := New(nil, swagger.ProfileMalicious, swagger.Settings{
 			PayloadCategories: map[swagger.FuzzingProfile][]string{
 				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
 			},
 		})
+		expectedDefault := payloads.MaliciousUploadCount(false)
 		seen := make(map[string]bool)
-		for range len(payloads.MaliciousFileUploads) {
+		for range expectedDefault {
 			v := g.Generate("file", &swagger.SchemaProperty{Type: "string", Format: "binary"})
 			uf, ok := v.(swagger.UploadFile)
 			require.True(t, ok)
+			assert.NotEqual(t, "eicar_av_probe", uf.ProbeKind)
 			seen[uf.Filename] = true
 		}
-		assert.Len(t, seen, len(payloads.MaliciousFileUploads))
+		assert.Len(t, seen, expectedDefault)
+
+		gEicar := New(nil, swagger.ProfileMalicious, swagger.Settings{
+			EnableEICARProbe: true,
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
+			},
+		})
+		seenEicar := make(map[string]bool)
+		for range payloads.MaliciousUploadCount(true) {
+			v := gEicar.Generate("file", &swagger.SchemaProperty{Type: "string", Format: "binary"})
+			uf, ok := v.(swagger.UploadFile)
+			require.True(t, ok)
+			seenEicar[uf.ProbeKind] = true
+		}
+		assert.True(t, seenEicar["eicar_av_probe"])
 	})
 
 	t.Run("boundary profile emits boundary file upload probes", func(t *testing.T) {
@@ -743,8 +760,15 @@ func TestStringGen_FileUploadProfiles(t *testing.T) {
 				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
 			},
 		}
-		assert.Equal(t, len(payloads.MaliciousFileUploads), MinIterationsNeeded(swagger.ProfileMalicious, malSettings))
-		assert.Equal(t, len(payloads.MaliciousFileUploads), New(nil, swagger.ProfileMalicious, malSettings).BodyIterations())
+		assert.Equal(t, payloads.MaliciousUploadCount(false), MinIterationsNeeded(swagger.ProfileMalicious, malSettings))
+		assert.Equal(t, payloads.MaliciousUploadCount(false), New(nil, swagger.ProfileMalicious, malSettings).BodyIterations())
+		malEicarSettings := swagger.Settings{
+			EnableEICARProbe: true,
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
+			},
+		}
+		assert.Equal(t, len(payloads.MaliciousFileUploads), MinIterationsNeeded(swagger.ProfileMalicious, malEicarSettings))
 
 		bndSettings := swagger.Settings{
 			PayloadCategories: map[swagger.FuzzingProfile][]string{

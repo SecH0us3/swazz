@@ -581,6 +581,37 @@ func PrioritizedMaliciousUploads(preferred []FileCategory, maxBytes int) []swagg
 	return out
 }
 
+// FilterUploadProbes returns probes filtered by opt-in flags (currently EICAR).
+func FilterUploadProbes(probes []swagger.UploadFile, includeEICAR bool) []swagger.UploadFile {
+	if includeEICAR {
+		return probes
+	}
+	out := make([]swagger.UploadFile, 0, len(probes))
+	for _, p := range probes {
+		if p.ProbeKind == "eicar_av_probe" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// MaliciousUploadCount returns the number of active malicious upload probes.
+func MaliciousUploadCount(includeEICAR bool) int {
+	corpusMu.RLock()
+	defer corpusMu.RUnlock()
+	if includeEICAR {
+		return len(MaliciousFileUploads)
+	}
+	count := 0
+	for _, p := range MaliciousFileUploads {
+		if p.ProbeKind != "eicar_av_probe" {
+			count++
+		}
+	}
+	return count
+}
+
 // OOBSVGFile returns an SVG probe referencing an out-of-band callback URL so background
 // SVG/image renderers (librsvg, ImageMagick, headless browsers) reveal blind SSRF.
 func OOBSVGFile(oobURL string) swagger.UploadFile {

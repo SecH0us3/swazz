@@ -49,6 +49,8 @@ export interface AnalysisFinding {
     level: 'error' | 'warning' | 'note';
     message: string;
     evidence?: string;
+    followUpUrl?: string;
+    followUpStatus?: number;
     owaspCategory?: string[];
     owaspApiCategory?: string[];
     cweIds?: string[];
@@ -104,6 +106,8 @@ export interface SwazzSettings {
     enable_mcp_method_fuzzing?: boolean;
     enable_differential_analysis?: boolean;
     enable_security_headers_analysis?: boolean;
+    enable_eicar_probe?: boolean;
+    enable_upload_follow_up?: boolean;
     use_llm_prepass?: boolean;
     waf_check_enabled?: boolean;
     enable_smart_triage?: boolean;
@@ -170,6 +174,8 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     enable_mcp_method_fuzzing: true,
     enable_differential_analysis: false,
     enable_security_headers_analysis: false,
+    enable_eicar_probe: false,
+    enable_upload_follow_up: true,
     use_llm_prepass: false,
     waf_check_enabled: true,
     ai_gateway_url: '',

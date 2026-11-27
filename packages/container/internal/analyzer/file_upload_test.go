@@ -614,8 +614,8 @@ func TestFileUploadAnalyzer(t *testing.T) {
 			FileUploadSent:    true,
 			FollowUpSourceURL: "GET /files/swazz-exif-canary.png",
 		})
-		if len(resPNGMeta) != 1 || resPNGMeta[0].CWEIDs[0] != "CWE-212" {
-			t.Fatalf("expected CWE-212 for preserved PNG tEXt metadata, got %+v", resPNGMeta)
+		if len(resPNGMeta) != 1 || resPNGMeta[0].CWEIDs[0] != "CWE-212" || resPNGMeta[0].FollowUpURL != "/files/swazz-exif-canary.png" || resPNGMeta[0].FollowUpStatus != 200 {
+			t.Fatalf("expected CWE-212 + structured FollowUpURL/Status for preserved PNG tEXt metadata, got %+v", resPNGMeta)
 		}
 	})
 

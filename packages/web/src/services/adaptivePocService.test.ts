@@ -238,6 +238,30 @@ describe('adaptivePocService', () => {
     expect(result.code).toContain('swazz/sqli');
   });
 
+  it('generates multipart + follow-up verification script for file upload findings', () => {
+    expect(ruleKind('swazz/unvalidated-file-upload')).toBe('file_upload');
+    expect(ruleKind('swazz/file-parser-error')).toBe('file_upload');
+    expect(ruleKind('swazz/xml-parser-error')).toBe('other');
+    const result = generateAlgorithmicAdaptivePoc({
+      method: 'POST',
+      url: 'https://api.example.com/upload',
+      body: {
+        file: {
+          filename: 'swazz.svg',
+          contentType: 'image/svg+xml',
+          probeKind: 'svg_upload_probe',
+        },
+      },
+      followUpUrl: 'https://api.example.com/files/swazz.svg',
+      language: 'curl',
+      ruleId: 'swazz/unvalidated-file-upload',
+    });
+
+    expect(result.code).toContain('swazz/unvalidated-file-upload');
+    expect(result.code).toContain(`-F 'file=@'"$PROBE_FILE_1"';filename=swazz.svg;type=image/svg+xml'`);
+    expect(result.code).toContain(`curl -i 'https://api.example.com/files/swazz.svg'`);
+  });
+
   it('uses Chrome AI when available on-device', async () => {
     const mockSession = {
       prompt: vi.fn().mockResolvedValue(`\`\`\`python

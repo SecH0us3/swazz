@@ -9,6 +9,7 @@ import { DocsLink } from '../Shared/DocsLink.js';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, parseQueryParamList, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
+import { extractUploadParts, extractFollowUpInfo, extractFindingFollowUp } from './uploadPocUtils.js';
 import { generateAdaptivePoc, codeFromReply, type AdaptivePocResult } from '../../services/adaptivePocService.js';
 import { aiFallbackNote } from '../../services/chromeAiService.js';
 import { tokenizeCode } from '../../utils/syntaxHighlight.js';
@@ -342,12 +343,14 @@ export function RequestDetail({
         setGeneratingAdaptive(true);
         setAdaptivePartial('');
         const firstFinding = result.analyzerFindings?.[0];
+        const followUp = extractFollowUpInfo(result.analyzerFindings, baseUrl);
 
         generateAdaptivePoc({
             method: result.method,
             url: initialUrl,
             headers: result.requestHeaders,
             body: hasBody ? result.payload : undefined,
+            followUpUrl: followUp?.url,
             language: pocLang,
             ruleId: firstFinding?.ruleId,
             message: firstFinding?.message,
@@ -387,11 +390,13 @@ export function RequestDetail({
     }, [mainTab, pocMode, pocLang, result.id, initialUrl, hasBody]);
 
     const getActivePocCode = (): string => {
+        const followUp = extractFollowUpInfo(result.analyzerFindings, baseUrl);
         const reqOpts = {
             method: result.method,
             url: initialUrl,
             headers: result.requestHeaders,
             body: hasBody ? result.payload : undefined,
+            followUpUrl: followUp?.url,
         };
         if (pocMode === 'adaptive') {
             return adaptiveCache[pocLang]?.code || codeFromReply(adaptivePartial, true);
@@ -667,7 +672,9 @@ export function RequestDetail({
 
                 {hasFindings && mainTab === 'findings' && (
                     <div className="analyzer-findings-alerts">
-                        {result.analyzerFindings?.map((finding, idx) => (
+                        {result.analyzerFindings?.map((finding, idx) => {
+                            const followUpInfo = extractFindingFollowUp(finding, baseUrl);
+                            return (
                             <div key={idx} className={`alert-banner alert-${finding.level}`}>
                                 <div className="alert-banner-header">
                                     <span className={`alert-badge badge-${finding.level}`}>
@@ -686,6 +693,15 @@ export function RequestDetail({
                                     ))}
                                 </div>
                                 <div className="alert-banner-message">{finding.message}</div>
+                                {followUpInfo && (
+                                    <div className="upload-followup-row">
+                                        <span className="upload-followup-badge">Second-Order Follow-Up</span>
+                                        <code className="upload-followup-url">GET {followUpInfo.url}</code>
+                                        {followUpInfo.status !== undefined && (
+                                            <span className="upload-followup-status">HTTP {followUpInfo.status}</span>
+                                        )}
+                                    </div>
+                                )}
                                 {finding.evidence && (
                                     <div className="alert-banner-evidence">
                                         {finding.evidence}
@@ -782,7 +798,8 @@ export function RequestDetail({
                                     </div>
                                 )}
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
 
@@ -939,6 +956,31 @@ export function RequestDetail({
                                         {highlightOobPayload(sentUri, result.id)}
                                     </div>
                                 </div>
+
+                                {(() => {
+                                    const uploadParts = extractUploadParts(parsedFuzzedBody ?? result.payload);
+                                    if (!uploadParts) return null;
+                                    return (
+                                        <div className="upload-probe-card">
+                                            <div className="upload-probe-card-title">
+                                                Uploaded File Probe ({uploadParts.isRawBinary ? 'raw binary' : 'multipart/form-data'})
+                                            </div>
+                                            <div className="upload-probe-list">
+                                                {uploadParts.files.map((item, idx) => (
+                                                    <div key={`${item.field}-${idx}`} className="upload-probe-item">
+                                                        <span className="upload-probe-field">{item.field}</span>
+                                                        <code className="upload-probe-filename">{item.file.filename}</code>
+                                                        <span className="upload-probe-meta">{item.file.contentType}</span>
+                                                        {typeof item.file.size === 'number' && (
+                                                            <span className="upload-probe-meta">{item.file.size} B</span>
+                                                        )}
+                                                        <span className="upload-probe-kind">{item.file.probeKind}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                                 {(() => {
                                     const queryParamsList = parseQueryParamList(result.requestUri);

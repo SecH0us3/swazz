@@ -241,6 +241,8 @@ describe('useConfig', () => {
             expect(() => validateConfig({ settings: { oob_server_url: 123 } })).toThrow('settings.oob_server_url must be a string');
             expect(() => validateConfig({ settings: { enable_auto_chaining: 'false' } })).toThrow('settings.enable_auto_chaining must be a boolean');
             expect(() => validateConfig({ settings: { enable_semantic_mutation: 'true' } })).toThrow('settings.enable_semantic_mutation must be a boolean');
+            expect(() => validateConfig({ settings: { enable_eicar_probe: 'true' } })).toThrow('settings.enable_eicar_probe must be a boolean');
+            expect(() => validateConfig({ settings: { enable_upload_follow_up: 'false' } })).toThrow('settings.enable_upload_follow_up must be a boolean');
         });
 
         it('should throw when security properties are incorrect', () => {
