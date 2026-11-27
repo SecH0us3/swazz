@@ -475,8 +475,8 @@ func TestFileUploadAnalyzer(t *testing.T) {
 			FileUploadSent:    true,
 			FollowUpSourceURL: "GET /cdn/exif.png",
 		})
-		if len(resMeta) != 1 || len(resMeta[0].CWEIDs) != 1 || resMeta[0].CWEIDs[0] != "CWE-200" {
-			t.Fatalf("expected warning + CWE-200 for unstripped EXIF canary, got %+v", resMeta)
+		if len(resMeta) != 1 || len(resMeta[0].CWEIDs) != 1 || resMeta[0].CWEIDs[0] != "CWE-212" {
+			t.Fatalf("expected warning + CWE-212 for unstripped PNG tEXt metadata canary, got %+v", resMeta)
 		}
 		if resStripped := a.Analyze(&AnalysisInput{
 			SentPayload:       map[string]any{"file": pngMeta},
@@ -509,28 +509,113 @@ func TestFileUploadAnalyzer(t *testing.T) {
 			t.Fatalf("expected 0 findings when EICAR quarantined, got %+v", resQuarantined)
 		}
 
-		// Null-byte and RTL filename reflection
+		// Null-byte and RTL filename reflection vs truncation / dangerous echo
 		nullProbe := swagger.UploadFile{Filename: "swazz-probe.php%00.png", ContentType: "image/png", ProbeKind: "null_byte_filename"}
-		resNull := a.Analyze(&AnalysisInput{
+		// Direct POST JSON echo must stay warning (CWE-434), not escalate to error/CWE-22
+		resNullPostEcho := a.Analyze(&AnalysisInput{
+			SentPayload:    map[string]any{"file": nullProbe},
+			StatusCode:     200,
+			ResponseBody:   []byte(`{"name":"swazz-probe.php%00.png"}`),
+			FileUploadSent: true,
+		})
+		if len(resNullPostEcho) != 1 || resNullPostEcho[0].Level != "warning" || len(resNullPostEcho[0].CWEIDs) != 1 || resNullPostEcho[0].CWEIDs[0] != "CWE-434" {
+			t.Fatalf("expected warning + CWE-434 for direct POST JSON echo of null-byte filename, got %+v", resNullPostEcho)
+		}
+		// Follow-up GET with verbatim JSON echo must produce 0 findings
+		resNullFollowUpEcho := a.Analyze(&AnalysisInput{
 			SentPayload:       map[string]any{"file": nullProbe},
 			StatusCode:        200,
 			ResponseBody:      []byte(`{"name":"swazz-probe.php%00.png"}`),
 			FileUploadSent:    true,
 			FollowUpSourceURL: "GET /files/1",
 		})
-		if len(resNull) != 1 || resNull[0].Level != "error" || len(resNull[0].CWEIDs) != 2 || resNull[0].CWEIDs[1] != "CWE-22" {
-			t.Fatalf("expected error + CWE-22 for reflected null-byte filename, got %+v", resNull)
+		if len(resNullFollowUpEcho) != 0 {
+			t.Fatalf("expected 0 findings for follow-up JSON echo of null-byte filename, got %+v", resNullFollowUpEcho)
 		}
-		rtlProbe := swagger.UploadFile{Filename: "swazz-probe-\u202Egnp.txt", ContentType: "text/plain", ProbeKind: "rtl_override_filename"}
-		resRTL := a.Analyze(&AnalysisInput{
-			SentPayload:       map[string]any{"file": rtlProbe},
+		// Follow-up GET with truncated filename must escalate to error + CWE-22
+		resNullTruncated := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": nullProbe},
 			StatusCode:        200,
-			ResponseBody:      []byte("saved swazz-probe-\u202Egnp.txt"),
+			ResponseBody:      []byte(`{"path":"/uploads/swazz-probe.php"}`),
 			FileUploadSent:    true,
 			FollowUpSourceURL: "GET /files/1",
 		})
-		if len(resRTL) != 1 || resRTL[0].Level != "error" {
-			t.Fatalf("expected error for reflected RTL filename, got %+v", resRTL)
+		if len(resNullTruncated) != 1 || resNullTruncated[0].Level != "error" || len(resNullTruncated[0].CWEIDs) != 2 || resNullTruncated[0].CWEIDs[1] != "CWE-22" {
+			t.Fatalf("expected error + CWE-22 for truncated null-byte filename, got %+v", resNullTruncated)
+		}
+
+		rtlProbe := swagger.UploadFile{Filename: "swazz-probe-\u202Egnp.txt", ContentType: "text/plain", ProbeKind: "rtl_override_filename"}
+		// Direct POST JSON echo must stay warning + CWE-451
+		resRTLPostEcho := a.Analyze(&AnalysisInput{
+			SentPayload:    map[string]any{"file": rtlProbe},
+			StatusCode:     200,
+			ResponseBody:   []byte(`{"name":"swazz-probe-\u202Egnp.txt"}`),
+			FileUploadSent: true,
+		})
+		if len(resRTLPostEcho) != 1 || resRTLPostEcho[0].Level != "warning" || len(resRTLPostEcho[0].CWEIDs) != 1 || resRTLPostEcho[0].CWEIDs[0] != "CWE-451" {
+			t.Fatalf("expected warning + CWE-451 for direct POST JSON echo of RTL filename, got %+v", resRTLPostEcho)
+		}
+		// Follow-up GET with JSON echo must produce 0 findings
+		resRTLFollowUpJSON := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": rtlProbe},
+			StatusCode:        200,
+			ResponseBody:      []byte(`{"name":"swazz-probe-\u202Egnp.txt"}`),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/1",
+		})
+		if len(resRTLFollowUpJSON) != 0 {
+			t.Fatalf("expected 0 findings for follow-up JSON echo of RTL filename, got %+v", resRTLFollowUpJSON)
+		}
+		// Follow-up GET with Content-Disposition RTL filename must escalate to error + CWE-451
+		resRTLDisp := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": rtlProbe},
+			StatusCode:        200,
+			ResponseHeaders:   http.Header{"Content-Disposition": []string{`attachment; filename="swazz-probe-\u202Egnp.txt"`}},
+			ResponseBody:      []byte("hello"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/1",
+		})
+		if len(resRTLDisp) != 1 || resRTLDisp[0].Level != "error" || resRTLDisp[0].CWEIDs[0] != "CWE-451" {
+			t.Fatalf("expected error + CWE-451 for RTL filename in Content-Disposition, got %+v", resRTLDisp)
+		}
+		// Follow-up GET with renderable HTML RTL filename must escalate to error + CWE-451
+		resRTLHTML := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": rtlProbe},
+			StatusCode:        200,
+			ResponseHeaders:   http.Header{"Content-Type": []string{"text/html"}},
+			ResponseBody:      []byte("<html><body>saved swazz-probe-\u202Egnp.txt</body></html>"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/1",
+		})
+		if len(resRTLHTML) != 1 || resRTLHTML[0].Level != "error" || resRTLHTML[0].CWEIDs[0] != "CWE-451" {
+			t.Fatalf("expected error + CWE-451 for RTL filename in HTML response, got %+v", resRTLHTML)
+		}
+
+		// CSP negative test: default-src 'self'; object-src 'none' must NOT count as inert SVG CSP
+		svgProbe := swagger.UploadFile{Filename: "swazz.svg", ContentType: "image/svg+xml", ProbeKind: "svg_upload_probe"}
+		resSVGNonInertCSP := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": svgProbe},
+			StatusCode:        200,
+			ResponseHeaders:   http.Header{"Content-Type": []string{"image/svg+xml"}, "Content-Security-Policy": []string{"default-src 'self'; object-src 'none'"}},
+			ResponseBody:      []byte("<svg><script>alert('swazz-svg-xss')</script></svg>"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/swazz.svg",
+		})
+		if len(resSVGNonInertCSP) != 1 || resSVGNonInertCSP[0].Level != "error" {
+			t.Fatalf("expected error for SVG with default-src 'self'; object-src 'none', got %+v", resSVGNonInertCSP)
+		}
+
+		// PNG tEXt metadata canary must report CWE-212
+		pngMetaProbe := swagger.UploadFile{Filename: "swazz-exif-canary.png", ContentType: "image/png", ProbeKind: "png_metadata_canary"}
+		resPNGMeta := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": pngMetaProbe},
+			StatusCode:        200,
+			ResponseBody:      []byte("\x89PNG...swazz-exif-canary"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/swazz-exif-canary.png",
+		})
+		if len(resPNGMeta) != 1 || resPNGMeta[0].CWEIDs[0] != "CWE-212" {
+			t.Fatalf("expected CWE-212 for preserved PNG tEXt metadata, got %+v", resPNGMeta)
 		}
 	})
 }

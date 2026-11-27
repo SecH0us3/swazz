@@ -196,15 +196,13 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				})
 			case kind == "null_byte_filename":
 				lowerResp := input.lowerBody()
-				reflected := bytes.Contains(lowerResp, []byte("swazz-probe.php%00.png")) ||
-					bytes.Contains(lowerResp, []byte("swazz-probe.php\x00")) ||
-					bytes.Contains(lowerResp, []byte(`swazz-probe.php\u0000`))
-				if isFollowUp && !reflected {
+				truncated := hasTruncatedNullByteFilename(lowerResp)
+				if isFollowUp && !truncated {
 					continue
 				}
 				level := "warning"
 				cwe := []string{"CWE-434"}
-				if reflected {
+				if truncated {
 					level = "error"
 					cwe = []string{"CWE-434", "CWE-22"}
 				}
@@ -212,31 +210,38 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            level,
 					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d%s.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode, followUpSuffix),
-					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Reflected: %t | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, reflected, input.StatusCode, fileUploadRemediation),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Truncated: %t | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, truncated, input.StatusCode, fileUploadRemediation),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
 					OWASPCategory:    []string{"A06:2025 Insecure Design"},
 					CWEIDs:           cwe,
 				})
 			case kind == "rtl_override_filename":
 				lowerResp := input.lowerBody()
-				reflected := bytes.Contains(lowerResp, []byte("\u202e")) ||
-					bytes.Contains(lowerResp, []byte("%e2%80%ae")) ||
-					bytes.Contains(lowerResp, []byte(`\u202e`))
-				if isFollowUp && !reflected {
+				inDisposition := false
+				if input.ResponseHeaders != nil {
+					for _, disp := range input.ResponseHeaders.Values("Content-Disposition") {
+						if hasRTLOverrideFilename([]byte(strings.ToLower(disp))) {
+							inDisposition = true
+							break
+						}
+					}
+				}
+				dangerousEcho := inDisposition || (isRenderableSVGOrHTMLResponse(input.ResponseHeaders, lowerResp) && hasRTLOverrideFilename(lowerResp))
+				if isFollowUp && !dangerousEcho {
 					continue
 				}
 				level := "warning"
-				if reflected {
+				if isFollowUp && dangerousEcho {
 					level = "error"
 				}
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            level,
 					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d%s.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode, followUpSuffix),
-					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Reflected: %t | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, reflected, input.StatusCode, fileUploadRemediation),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | DangerousEcho: %t | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, dangerousEcho, input.StatusCode, fileUploadRemediation),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
 					OWASPCategory:    []string{"A06:2025 Insecure Design"},
-					CWEIDs:           []string{"CWE-434"},
+					CWEIDs:           []string{"CWE-451"},
 				})
 			case kind == "gif_polyglot_probe":
 				if !isFollowUp || !bytes.Contains(input.ResponseBody, []byte("swazz-polyglot-canary")) {
@@ -266,11 +271,11 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            "warning",
-					Message:          fmt.Sprintf("Server preserved embedded PNG tEXt/EXIF metadata (%q) without stripping%s.", hit.file.Filename, followUpSuffix),
+					Message:          fmt.Sprintf("Server preserved embedded PNG tEXt metadata chunk (%q) without stripping%s.", hit.file.Filename, followUpSuffix),
 					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, input.StatusCode, fileUploadRemediation),
-					OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
-					OWASPCategory:    []string{"A01:2025 Broken Access Control"},
-					CWEIDs:           []string{"CWE-200"},
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A06:2025 Insecure Design"},
+					CWEIDs:           []string{"CWE-212"},
 				})
 			}
 		}
@@ -322,6 +327,32 @@ func hasNoSniffHeader(headers http.Header) bool {
 	return false
 }
 
+func hasTruncatedNullByteFilename(lowerResp []byte) bool {
+	const prefix = "swazz-probe.php"
+	needle := []byte(prefix)
+	for i := 0; i <= len(lowerResp)-len(needle); {
+		idx := bytes.Index(lowerResp[i:], needle)
+		if idx < 0 {
+			return false
+		}
+		after := lowerResp[i+idx+len(needle):]
+		if !bytes.HasPrefix(after, []byte("%00")) &&
+			!bytes.HasPrefix(after, []byte{0}) &&
+			!bytes.HasPrefix(after, []byte(`\u0000`)) &&
+			!bytes.HasPrefix(after, []byte(".png")) {
+			return true
+		}
+		i += idx + len(needle)
+	}
+	return false
+}
+
+func hasRTLOverrideFilename(lower []byte) bool {
+	return bytes.Contains(lower, []byte("swazz-probe-\u202egnp.txt")) ||
+		bytes.Contains(lower, []byte("swazz-probe-%e2%80%aegnp.txt")) ||
+		bytes.Contains(lower, []byte(`swazz-probe-\u202egnp.txt`))
+}
+
 func hasInertSVGCSP(headers http.Header) bool {
 	if headers == nil {
 		return false
@@ -331,6 +362,7 @@ func hasInertSVGCSP(headers http.Header) bool {
 		return false
 	}
 	hasScriptSrc := false
+	defaultSrcNone := false
 	for _, dir := range strings.Split(csp, ";") {
 		d := strings.TrimSpace(dir)
 		if d == "" {
@@ -345,8 +377,11 @@ func hasInertSVGCSP(headers http.Header) bool {
 				return true
 			}
 		}
+		if strings.HasPrefix(d, "default-src") && strings.Contains(d, "'none'") {
+			defaultSrcNone = true
+		}
 	}
-	return !hasScriptSrc && strings.Contains(csp, "default-src") && strings.Contains(csp, "'none'")
+	return !hasScriptSrc && defaultSrcNone
 }
 
 func isAttachmentDisposition(headers http.Header) bool {

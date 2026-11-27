@@ -398,5 +398,5 @@ func TestRunner_SecondOrderPolyglotAndMetadataCanaries(t *testing.T) {
 		resExif,
 	)
 	require.Len(t, resExif.AnalyzerFindings, 1)
-	assert.Contains(t, resExif.AnalyzerFindings[0].CWEIDs, "CWE-200")
+	assert.Contains(t, resExif.AnalyzerFindings[0].CWEIDs, "CWE-212")
 }

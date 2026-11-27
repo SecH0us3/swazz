@@ -304,8 +304,9 @@ func (g *Generator) buildObjectWithDepth(schema *swagger.SchemaProperty, depth i
 			continue
 		}
 
-		// 5% chance to omit REQUIRED fields in MALICIOUS profile when multiple properties exist
-		if isRequired && len(schema.Properties) > 1 && g.profile == swagger.ProfileMalicious && rand.Float64() < 0.05 { // #nosec G404 -- non-security randomness for fuzzer
+		isSoleFileUpload := len(schema.Properties) == 1 && (propSchema.Format == "binary" || propSchema.Format == "byte" || propSchema.Type == "file")
+		// 5% chance to omit REQUIRED fields in MALICIOUS profile (except sole file upload fields)
+		if isRequired && !isSoleFileUpload && g.profile == swagger.ProfileMalicious && rand.Float64() < 0.05 { // #nosec G404 -- non-security randomness for fuzzer
 			continue
 		}
 

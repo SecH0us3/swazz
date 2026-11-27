@@ -26,7 +26,7 @@ When you drop a file into `valid/` or `probes/` and rebuild `swazz-engine`, it i
    - `.svg` → `svg_upload_probe`
    - Dangerous double extensions (`.php.png`, `.jsp.jpg`, `.exe.pdf`, etc.) → `double_ext_filename`
    - Filenames containing `polyglot` → `gif_polyglot_probe` (valid 1×1 GIF89a + canary tail to check re-encoding / `nosniff` on follow-up `GET`)
-   - Filenames containing `exif-canary` → `png_metadata_canary` (valid 1×1 PNG with `tEXt` chunk to check metadata stripping on follow-up `GET`)
+   - Filenames containing `exif-canary` → `png_metadata_canary` (valid 1×1 PNG with `tEXt` metadata chunk to check metadata stripping on follow-up `GET`)
    - Filenames containing `truncated` → `truncated_<ext>`
    - Magic-byte mismatch → `mime_mismatch_<ext>`
    - Any other valid/custom probe → `custom_upload_<category>`
