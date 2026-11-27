@@ -110,7 +110,7 @@ func (r *Runner) maybeProbeUploadCategories(ctx context.Context, ep swagger.Endp
 		if r.stopped() || ctx.Err() != nil {
 			return
 		}
-		probeBody := replaceUploadFilesInBody(built.requestBody(), entry.File)
+		probeBody := buildCanaryProbeBody(&ep.Schema, built.requestBody(), entry.File)
 		if probeBody == nil {
 			continue
 		}
@@ -136,23 +136,39 @@ func (r *Runner) maybeProbeUploadCategories(ctx context.Context, ep swagger.Endp
 	}
 }
 
-func replaceUploadFilesInBody(v any, replacement swagger.UploadFile) any {
-	switch tv := v.(type) {
-	case swagger.UploadFile, *swagger.UploadFile:
-		return replacement
-	case map[string]any:
-		out := make(map[string]any, len(tv))
-		for k, item := range tv {
-			out[k] = replaceUploadFilesInBody(item, replacement)
-		}
-		return out
-	case []any:
-		out := make([]any, len(tv))
-		for i, item := range tv {
-			out[i] = replaceUploadFilesInBody(item, replacement)
-		}
-		return out
-	default:
-		return v
+func buildCanaryProbeBody(schema *swagger.SchemaProperty, baselineBody any, canary swagger.UploadFile) any {
+	if schema == nil {
+		return baselineBody
 	}
+	if isFileUploadSchema(schema) {
+		return canary
+	}
+	if schema.Type == "array" && isFileUploadSchema(schema.Items) {
+		return []any{canary}
+	}
+	if schema.Type == "object" || len(schema.Properties) > 0 {
+		var out map[string]any
+		if m, ok := baselineBody.(map[string]any); ok && m != nil {
+			out = make(map[string]any, len(m)+len(schema.Properties))
+			for k, v := range m {
+				out[k] = v
+			}
+		} else {
+			out = make(map[string]any, len(schema.Properties))
+		}
+		for k, prop := range schema.Properties {
+			if prop == nil {
+				continue
+			}
+			if isFileUploadSchema(prop) {
+				out[k] = canary
+			} else if prop.Type == "array" && isFileUploadSchema(prop.Items) {
+				out[k] = []any{canary}
+			} else if hasFileUploadField(prop) {
+				out[k] = buildCanaryProbeBody(prop, out[k], canary)
+			}
+		}
+		return out
+	}
+	return baselineBody
 }

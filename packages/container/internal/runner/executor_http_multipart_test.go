@@ -492,9 +492,59 @@ func TestUploadProbeAndPayloadBoundsHelpers(t *testing.T) {
 	r := New(&swagger.Config{BaseURL: "http://127.0.0.1", Settings: swagger.Settings{TimeoutMs: 1000}}, nil)
 	defer r.Close()
 	safeGen := r.newGenerator(swagger.ProfileRandom, "POST /cmt")
+	_, directIsString := safeGen.Generate("avatar", cmtEp.Schema.Properties["avatar"]).(string)
+	assert.True(t, directIsString, "JSON contentMediaType field must generate a string, not UploadFile")
 	builtJSON := buildFromSchema(cmtEp, safeGen)
-	_, isString := builtJSON.body["avatar"].(string)
-	assert.True(t, isString, "JSON contentMediaType field must remain a string, not UploadFile")
+	if avatarVal, exists := builtJSON.body["avatar"]; exists {
+		_, isUF := avatarVal.(swagger.UploadFile)
+		assert.False(t, isUF, "JSON contentMediaType field must never become UploadFile")
+	}
+
+	// maybeProbeUploadCategories succeeds even when baseline body omitted the file field or set it to nil.
+	probeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		mr, err := req.MultipartReader()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			_, _ = io.ReadAll(part)
+			if part.FormName() == "file" && strings.HasPrefix(part.Header.Get("Content-Type"), "image/") {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusUnsupportedMediaType)
+	}))
+	defer probeSrv.Close()
+
+	pr := New(&swagger.Config{
+		BaseURL:  probeSrv.URL,
+		Security: swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{TimeoutMs: 2000},
+	}, nil)
+	defer pr.Close()
+	epEmptyBaseline := swagger.EndpointConfig{
+		Method:      "POST",
+		Path:        "/upload",
+		ContentType: "multipart/form-data",
+		Schema: swagger.SchemaProperty{
+			Type:       "object",
+			Properties: map[string]*swagger.SchemaProperty{"file": {Type: "string", Format: "binary"}},
+		},
+	}
+	pr.maybeProbeUploadCategories(t.Context(), epEmptyBaseline, "POST /upload", "/upload", generatedPayload{body: map[string]any{"file": nil}}, http.StatusOK)
+	cats, ok := pr.detectedUploadCategories.Load("POST /upload")
+	require.True(t, ok, "expected smart probing to work even when baseline has file: nil")
+	assert.Equal(t, []payloads.FileCategory{payloads.FileCatImage}, cats)
 
 	// maybeProbeUploadCategories skips probing on 401/403/404/405 baseline status
 	r.maybeProbeUploadCategories(t.Context(), swagger.EndpointConfig{

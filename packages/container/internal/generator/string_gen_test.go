@@ -691,7 +691,11 @@ func TestStringGen_FileUploadProfiles(t *testing.T) {
 		}).(swagger.UploadFile)
 		assert.Equal(t, "valid_zip", ufZip.ProbeKind)
 
-		gm := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+		gm := New(nil, swagger.ProfileMalicious, swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
+			},
+		})
 		gm.SetPreferredUploadCategories([]payloads.FileCategory{payloads.FileCatArchive})
 		first := gm.Generate("file", &swagger.SchemaProperty{Type: "string", Format: "binary"}).(swagger.UploadFile)
 		assert.Equal(t, "application/zip", first.ContentType)
