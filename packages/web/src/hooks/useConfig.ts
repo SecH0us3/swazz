@@ -96,6 +96,12 @@ export function validateConfig(config: any): void {
         if (s.enable_semantic_mutation !== undefined && typeof s.enable_semantic_mutation !== 'boolean') {
             throw new Error('settings.enable_semantic_mutation must be a boolean');
         }
+        if (s.enable_eicar_probe !== undefined && typeof s.enable_eicar_probe !== 'boolean') {
+            throw new Error('settings.enable_eicar_probe must be a boolean');
+        }
+        if (s.enable_upload_follow_up !== undefined && typeof s.enable_upload_follow_up !== 'boolean') {
+            throw new Error('settings.enable_upload_follow_up must be a boolean');
+        }
     }
     if (config.endpoints !== undefined && !Array.isArray(config.endpoints)) {
         throw new Error('endpoints must be an array');

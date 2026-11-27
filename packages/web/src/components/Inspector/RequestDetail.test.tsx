@@ -796,4 +796,62 @@ describe('RequestDetail Component', () => {
 
         expect(screen.getByText('(truncated — full URL not stored)')).toBeTruthy();
     });
+
+    it('renders Uploaded File Probe card, Follow-Up badge (structured + legacy), and multipart curl -F PoC', () => {
+        const uploadResult: any = {
+            ...mockResult,
+            method: 'POST',
+            resolvedPath: '/upload',
+            payload: {
+                file: {
+                    filename: 'swazz.svg',
+                    contentType: 'image/svg+xml',
+                    probeKind: 'svg_upload_probe',
+                    size: 120,
+                },
+            },
+            analyzerFindings: [
+                {
+                    ruleId: 'swazz/unvalidated-file-upload',
+                    level: 'error',
+                    message: 'Stored SVG XSS',
+                    followUpUrl: '/files/swazz.svg',
+                    followUpStatus: 200,
+                },
+                {
+                    ruleId: 'swazz/unvalidated-file-upload',
+                    level: 'warning',
+                    message: 'Legacy evidence follow-up',
+                    evidence: 'FollowUp: GET /legacy/swazz-exif.png | Status: 200',
+                },
+            ],
+        };
+
+        render(
+            <RequestDetail
+                result={uploadResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        // Uploaded File Probe card in request view
+        expect(screen.getByText(/Uploaded File Probe \(multipart\/form-data\)/i)).toBeTruthy();
+        expect(screen.getByText('swazz.svg')).toBeTruthy();
+        expect(screen.getByText('svg_upload_probe')).toBeTruthy();
+
+        // Alerts & Findings tab shows both structured and legacy Follow-Up rows
+        fireEvent.click(screen.getByRole('tab', { name: /Alerts & Findings/i }));
+        expect(screen.getByText('GET https://api.example.com/files/swazz.svg')).toBeTruthy();
+        expect(screen.getByText('GET https://api.example.com/legacy/swazz-exif.png')).toBeTruthy();
+
+        // Live Replay & PoC Export tab generates multipart curl -F + Step 2 GET
+        fireEvent.click(screen.getByRole('tab', { name: /Live Replay & PoC Export/i }));
+        const pocPre = document.querySelector('.poc-code-pre')?.textContent || '';
+        expect(pocPre).toContain('-F "file=@$PROBE_FILE_1;filename=swazz.svg;type=image/svg+xml"');
+        expect(pocPre).toContain('curl -i "https://api.example.com/files/swazz.svg"');
+    });
 });

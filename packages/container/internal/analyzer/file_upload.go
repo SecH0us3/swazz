@@ -310,6 +310,14 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 		}
 	}
 
+	if isFollowUp && len(findings) > 0 {
+		followURL := strings.TrimPrefix(input.FollowUpSourceURL, "GET ")
+		for i := range findings {
+			findings[i].FollowUpURL = followURL
+			findings[i].FollowUpStatus = input.StatusCode
+		}
+	}
+
 	return findings
 }
 

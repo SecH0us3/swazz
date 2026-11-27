@@ -68,6 +68,13 @@ func (r *Runner) maybeVerifyUploadedFile(
 	if client == nil || result == nil || ctx.Err() != nil || r.stopped() {
 		return
 	}
+	r.configMu.RLock()
+	timeoutMs := r.config.Settings.TimeoutMs
+	settings := r.config.Settings
+	r.configMu.RUnlock()
+	if !settings.UploadFollowUpEnabled() {
+		return
+	}
 	if r.uploadFollowUpCount.Load() >= maxUploadFollowUpsPerRun {
 		return
 	}
@@ -85,10 +92,6 @@ func (r *Runner) maybeVerifyUploadedFile(
 		return
 	}
 
-	r.configMu.RLock()
-	timeoutMs := r.config.Settings.TimeoutMs
-	settings := r.config.Settings
-	r.configMu.RUnlock()
 	if timeoutMs <= 0 {
 		timeoutMs = 10000
 	}

@@ -214,8 +214,10 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > bodyCount {
 			bodyCount = len(payloads.MaliciousTypeConfusion)
 		}
-		if is(payloads.CatMaliciousFileUpload) && len(payloads.MaliciousFileUploads) > bodyCount {
-			bodyCount = len(payloads.MaliciousFileUploads)
+		if is(payloads.CatMaliciousFileUpload) {
+			if n := payloads.MaliciousUploadCount(settings.EnableEICARProbe); n > bodyCount {
+				bodyCount = n
+			}
 		}
 
 		secHeaderCount := 0
@@ -492,8 +494,10 @@ func (g *Generator) countBodyIterations() int {
 	if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > bodyCount {
 		bodyCount = len(payloads.MaliciousTypeConfusion)
 	}
-	if is(payloads.CatMaliciousFileUpload) && len(payloads.MaliciousFileUploads) > bodyCount {
-		bodyCount = len(payloads.MaliciousFileUploads)
+	if is(payloads.CatMaliciousFileUpload) {
+		if n := payloads.MaliciousUploadCount(g.settings.EnableEICARProbe); n > bodyCount {
+			bodyCount = n
+		}
 	}
 	return bodyCount
 }

@@ -190,4 +190,21 @@ describe('AnomaliesTab', () => {
         render(<AnomaliesTab />);
         expect(screen.getByText(/No authentication credentials are marked/i)).toBeTruthy();
     });
+
+    it('renders File Upload Validation toggles with safe defaults and updates settings', () => {
+        render(<AnomaliesTab />);
+
+        const followUpCheckbox = screen.getByLabelText(/Second-Order Upload Follow-Up/i) as HTMLInputElement;
+        const eicarCheckbox = screen.getByLabelText(/Enable EICAR Antivirus Probe/i) as HTMLInputElement;
+
+        expect(followUpCheckbox.checked).toBe(true);
+        expect(eicarCheckbox.checked).toBe(false);
+        expect(screen.getByText('Triggers AV/EDR alerts')).toBeTruthy();
+
+        fireEvent.click(followUpCheckbox);
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ enable_upload_follow_up: false });
+
+        fireEvent.click(eicarCheckbox);
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ enable_eicar_probe: true });
+    });
 });

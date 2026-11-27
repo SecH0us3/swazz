@@ -284,6 +284,44 @@ export function AnomaliesTab() {
                     )}
                 </div>
 
+                {/* File Upload Validation */}
+                <div className="upload-settings-section">
+                    <div className="upload-settings-heading">File Upload Validation</div>
+                    <div className="upload-settings-item">
+                        <label className="premium-checkbox-label">
+                            <input
+                                type="checkbox"
+                                className="premium-checkbox"
+                                checked={config.settings.enable_upload_follow_up ?? true}
+                                onChange={() => updateSettings({
+                                    enable_upload_follow_up: !(config.settings.enable_upload_follow_up ?? true)
+                                })}
+                            />
+                            <strong className="upload-settings-label">Second-Order Upload Follow-Up (GET)</strong>
+                        </label>
+                        <span className="upload-settings-hint">
+                            Follow same-origin upload URLs with a GET request to verify stored SVG XSS, un-reencoded GIF polyglots, unstripped PNG tEXt metadata, and truncated or RTL filenames.
+                        </span>
+                    </div>
+                    <div className="upload-settings-item">
+                        <label className="premium-checkbox-label">
+                            <input
+                                type="checkbox"
+                                className="premium-checkbox"
+                                checked={config.settings.enable_eicar_probe ?? false}
+                                onChange={() => updateSettings({
+                                    enable_eicar_probe: !(config.settings.enable_eicar_probe ?? false)
+                                })}
+                            />
+                            <strong className="upload-settings-label">Enable EICAR Antivirus Probe</strong>
+                            <span className="upload-settings-warn-badge">Triggers AV/EDR alerts</span>
+                        </label>
+                        <span className="upload-settings-hint">
+                            Opt-in: uploads the benign 68-byte EICAR test string (swazz-eicar.txt) to check whether target servers scan uploads. Disabled by default because it triggers Defender, CrowdStrike, and ClamAV alerts on target hosts.
+                        </span>
+                    </div>
+                </div>
+
                 {/* Ignored status codes */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
                     <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Ignored HTTP Status Codes</label>

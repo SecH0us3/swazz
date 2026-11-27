@@ -12060,3 +12060,134 @@ kbd {
     margin: 4px 0;
     background: var(--border-default);
 }
+
+.upload-followup-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 12px;
+}
+
+.upload-followup-badge {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--accent-light);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.upload-followup-url {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.upload-followup-status {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+}
+
+.upload-probe-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+}
+
+.upload-probe-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.upload-probe-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.upload-probe-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.upload-probe-field {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.upload-probe-filename {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+.upload-probe-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.upload-probe-kind {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: rgba(124, 58, 237, 0.16);
+    color: var(--accent-light);
+}
+
+.upload-settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 16px;
+}
+
+.upload-settings-heading {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.upload-settings-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.upload-settings-label {
+    font-size: 13px;
+}
+
+.upload-settings-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 24px;
+    line-height: 1.4;
+}
+
+.upload-settings-warn-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: rgba(245, 158, 11, 0.16);
+    color: var(--color-warning);
+}

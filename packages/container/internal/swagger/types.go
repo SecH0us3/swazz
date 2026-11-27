@@ -338,6 +338,17 @@ type Settings struct {
 	EnableDifferentialAnalysis    *bool                       `json:"enable_differential_analysis,omitempty"`
 	EnableSecurityHeadersAnalysis *bool                       `json:"enable_security_headers_analysis,omitempty"`
 	EnableAutoChaining            *bool                       `json:"enable_auto_chaining,omitempty"`
+	EnableEICARProbe              bool                        `json:"enable_eicar_probe,omitempty"`
+	EnableUploadFollowUp          *bool                       `json:"enable_upload_follow_up,omitempty"`
+}
+
+// UploadFollowUpEnabled returns true if second-order same-origin GET verification for
+// uploaded probes is enabled. Defaults to true when nil to match the frontend default.
+func (s Settings) UploadFollowUpEnabled() bool {
+	if s.EnableUploadFollowUp == nil {
+		return true
+	}
+	return *s.EnableUploadFollowUp
 }
 
 // AutoChainingEnabled returns true if automatic producer->consumer DAG chaining is enabled.
@@ -480,6 +491,8 @@ type AnalysisFinding struct {
 	Level            string   `json:"level"` // "error", "warning", "note"
 	Message          string   `json:"message"`
 	Evidence         string   `json:"evidence,omitempty"`
+	FollowUpURL      string   `json:"followUpUrl,omitempty"`
+	FollowUpStatus   int      `json:"followUpStatus,omitempty"`
 	OWASPCategory    []string `json:"owaspCategory,omitempty"`
 	OWASPAPICategory []string `json:"owaspApiCategory,omitempty"`
 	CWEIDs           []string `json:"cweIds,omitempty"`
