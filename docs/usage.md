@@ -92,6 +92,7 @@ Common `start` flags:
 - **`--log-level <level>`** / **`--debug`** / **`--quiet` (`-q`)** / **`--progress-on-change`**: Control log verbosity and progress output.
 - **`--no-color`**: Disable ANSI color codes in CLI text logs (also respects `NO_COLOR`).
 - **`--no-auto-chain`**: Disable automatic request chaining DAG and live ID pooling (overrides `settings.enable_auto_chaining`).
+- **`--enable-eicar`**: Enable the opt-in EICAR antivirus test probe during file upload fuzzing (overrides `settings.enable_eicar_probe`; triggers standard AV/EDR alerts on scanned targets).
 - **`--allow-private-ips`** / **`--trusted-proxy <ip:port>`**: Override private IP restrictions or trust a local intercepting proxy.
 - **`--disable-telemetry`**: Disable anonymous global scan count telemetry.
 - **`--waf-patch <vendor>`** / **`--waf-patch-output <path>`**: Synthesize virtual patch rules for `cloudflare`, `aws`, `gcp`, `azure`, `modsecurity`, `nginx`, `haproxy`, `caddy`, `k8s`, or `all`.
@@ -172,6 +173,8 @@ Unknown keys are ignored, so a misspelled key silently falls back to its default
     Default is `true`.
   - **`enable_differential_analysis`**: (Boolean) If `true`, enables deep AST structural fingerprint comparison, dynamic entity creation harvesting, and cross-identity replay chains to detect BOLA/IDOR and Schema Drift / Privilege Escalation vulnerabilities. Default is `false`.
   - **`enable_security_headers_analysis`**: (Boolean) If `true`, enables passive HTTP security header analysis (HSTS, Content-Security-Policy, X-Content-Type-Options, X-Frame-Options, Server version leakage). Default is `false` to avoid repetitive header noise and focus scan output on critical API vulnerabilities.
+  - **`enable_upload_follow_up`**: (Boolean) Enables same-origin follow-up `GET` verification for verifiable file-upload probes (stored SVG XSS, GIF polyglot, PNG `tEXt`, truncated/RTL filenames). Default is `true`.
+  - **`enable_eicar_probe`**: (Boolean) Opt-in toggle for the 68-byte EICAR antivirus test probe (`swazz-eicar.txt`). Default is `false` because it triggers AV/EDR alerts on scanned targets.
   - **`response_size_anomaly_multiplier`**: (Float) The ratio multiplier above baseline response size required to trigger a `swazz/response-size-anomaly` warning (e.g., `5.0` for 5x larger than baseline). Default is `5.0`.
   - **`iterations_per_profile`**: (Integer) Number of fuzzing iterations to run per profile.
   - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.
@@ -390,7 +393,7 @@ Swazz automatically detects and fuzzes file upload endpoints — both `multipart
 | `svg_upload_probe` | Benign SVG with XSS marker + optional <code v-pre>{{OOB_URL}}</code> blind SSRF | `error` (`CWE-434`, `CWE-79`) if served as renderable HTML/SVG without `Content-Disposition: attachment` and without inert CSP (`sandbox`, `script-src 'none'`, or `default-src 'none'`). |
 | `gif_polyglot_probe` | Valid 1×1 `GIF89a` with HTML comment canary (`swazz-polyglot.gif`) | `error` (`CWE-434`) on follow-up `GET` if canary bytes survive re-encoding without `X-Content-Type-Options: nosniff` or `attachment`. |
 | `png_metadata_canary` | Valid 1×1 PNG with `tEXt` metadata chunk (`swazz-exif-canary.png`) | `warning` (`CWE-212`) on follow-up `GET` if the `tEXt` chunk is preserved unstripped. |
-| `eicar_av_probe` | Programmatic in-memory EICAR test string (`swazz-eicar.txt`) | `warning` (`CWE-434`) when accepted or served back. **Note:** triggers standard AV/EDR alerts on scanned targets. |
+| `eicar_av_probe` | Programmatic in-memory EICAR test string (`swazz-eicar.txt`, **opt-in**) | `warning` (`CWE-434`) when accepted or served back. Disabled by default; enable via `settings.enable_eicar_probe: true`, **Project Settings → Anomalies**, or `--enable-eicar`. **Note:** triggers standard AV/EDR alerts on scanned targets. |
 | `null_byte_filename` | Programmatic `swazz-probe.php%00.png` filename | `warning` (`CWE-434`) on direct `2xx`; escalates to `error` (`CWE-434`, `CWE-22`) only when a filename terminator confirms truncation to `.php` (sanitized/URL-encoded names stay non-fatal). |
 | `rtl_override_filename` | Programmatic `swazz-probe-\u202Egnp.txt` filename | `warning` (`CWE-451`) on direct `2xx`; escalates to `error` (`CWE-451`) on follow-up `GET` only when echoed in `Content-Disposition` or renderable HTML/SVG. |
 | `double_ext_filename`, `mime_mismatch_*`, `truncated_*` | Double extensions, magic-byte mismatches, truncated headers | `swazz/unvalidated-file-upload` (`warning`) on `2xx`, or `swazz/file-parser-error` (`error`) on `5xx` with parser crash signatures. |
@@ -421,6 +424,16 @@ sequenceDiagram
         Runner->>Runner: Merge & escalate findings by Filename + ProbeKind
     end
 ```
+
+### Safe Controls & Inspector PoC Export
+
+- **Project Settings → Anomalies → File Upload Validation**:
+  - **Second-Order Upload Follow-Up (`GET`)** (`settings.enable_upload_follow_up`, default `true`): Controls same-origin `GET` verification of uploaded probes.
+  - **Enable EICAR Antivirus Probe** (`settings.enable_eicar_probe`, default `false`, opt-in; CLI `--enable-eicar`): Disabled by default so scans do not trigger unexpected Defender, CrowdStrike, or ClamAV alerts on target hosts.
+- **Inspector & PoC Export**:
+  - **Uploaded File Probe Card**: Displays field name, filename, declared MIME type, byte size, and `probeKind` for multipart and raw binary upload requests.
+  - **Second-Order Follow-Up Badge**: Finding banners surface structured `followUpUrl` and `followUpStatus` (with `Evidence` fallback for older scans).
+  - **Self-Contained Upload & 2-Step PoC**: **Live Replay & PoC Export** synthesizes exact reproducible probe bytes by `probeKind` (or `@filename` placeholders for custom corpus files) for `curl -F` / `--data-binary`, Python `files=`, TypeScript `FormData`, and Go `multipart.NewWriter`, appending Step 2 (`GET <followUpUrl>`) automatically when present.
 
 ## SSRF Protection & Private IP Filtering 🛡️
 
