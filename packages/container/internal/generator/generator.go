@@ -343,7 +343,7 @@ func (g *Generator) GenerateArrayItem(propertyName string, schema *swagger.Schem
 	if schema == nil {
 		return nil
 	}
-	if (schema.Type == "string" && (strings.ToLower(schema.Format) == "binary" || len(schema.AcceptedMediaTypes) > 0)) || schema.Type == "file" {
+	if (schema.Type == "string" && strings.ToLower(schema.Format) == "binary") || schema.Type == "file" {
 		return g.generateFileUpload(propertyName, true, schema.AcceptedMediaTypes)
 	}
 	if schema.Type == "string" {

@@ -18,7 +18,7 @@ func isFileUploadSchema(s *swagger.SchemaProperty) bool {
 	if s == nil {
 		return false
 	}
-	return (s.Type == "string" && (strings.EqualFold(s.Format, "binary") || len(s.AcceptedMediaTypes) > 0)) || s.Type == "file"
+	return (s.Type == "string" && strings.EqualFold(s.Format, "binary")) || s.Type == "file"
 }
 
 func hasFileUploadField(s *swagger.SchemaProperty) bool {
@@ -80,7 +80,10 @@ func (r *Runner) applyDetectedUploadCategories(epKey string, gens ...*generator.
 	}
 }
 
-func (r *Runner) maybeProbeUploadCategories(ctx context.Context, ep swagger.EndpointConfig, epKey, resolvedPath string, built generatedPayload) {
+func (r *Runner) maybeProbeUploadCategories(ctx context.Context, ep swagger.EndpointConfig, epKey, resolvedPath string, built generatedPayload, baselineStatus int) {
+	if baselineStatus == 0 || baselineStatus == 401 || baselineStatus == 403 || baselineStatus == 404 || baselineStatus == 405 {
+		return
+	}
 	if isNoBodyMethod(ep.Method) || !hasFileUploadField(&ep.Schema) || hasStaticUploadHints(ep) {
 		return
 	}

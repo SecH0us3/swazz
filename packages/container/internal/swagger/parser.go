@@ -334,9 +334,14 @@ func extractRequestSchema(operation map[string]any, allParams []any, spec map[st
 								}
 							}
 						}
-						if ct != "application/json" && ct != "application/x-www-form-urlencoded" &&
-							ct != "multipart/form-data" && ct != "application/octet-stream" && ct != "*/*" {
+						if isBinaryUploadMIME(ct) {
 							resolved.AcceptedMediaTypes = appendUniqueMediaTypes(resolved.AcceptedMediaTypes, ct)
+							if resolved.Type == "string" && resolved.Format == "" {
+								resolved.Format = "binary"
+							}
+						}
+						if strings.Contains(strings.ToLower(ct), "multipart/form-data") {
+							promoteBinaryMediaTypeProps(&resolved)
 						}
 						return &bodyResult{
 							schema:      resolved,
@@ -583,7 +588,7 @@ func parseMediaTypeList(raw string) []string {
 		return nil
 	}
 	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
+	var out []string
 	for _, part := range parts {
 		trimmed := strings.TrimSpace(part)
 		if trimmed != "" {
@@ -594,7 +599,7 @@ func parseMediaTypeList(raw string) []string {
 }
 
 func appendUniqueMediaTypes(existing []string, items ...string) []string {
-	seen := make(map[string]bool, len(existing)+len(items))
+	seen := make(map[string]bool)
 	for _, e := range existing {
 		seen[strings.ToLower(e)] = true
 	}
@@ -607,6 +612,43 @@ func appendUniqueMediaTypes(existing []string, items ...string) []string {
 		existing = append(existing, strings.TrimSpace(item))
 	}
 	return existing
+}
+
+func isBinaryUploadMIME(mimeType string) bool {
+	m := strings.ToLower(strings.TrimSpace(mimeType))
+	if semi := strings.IndexByte(m, ';'); semi > 0 {
+		m = strings.TrimSpace(m[:semi])
+	}
+	if m == "" || m == "*/*" || m == "application/json" || m == "application/xml" ||
+		m == "application/x-www-form-urlencoded" || m == "multipart/form-data" ||
+		strings.HasPrefix(m, "text/") || strings.HasSuffix(m, "+json") || strings.HasSuffix(m, "+xml") {
+		return false
+	}
+	return true
+}
+
+func hasBinaryUploadMIME(list []string) bool {
+	for _, item := range list {
+		if isBinaryUploadMIME(item) {
+			return true
+		}
+	}
+	return false
+}
+
+func promoteBinaryMediaTypeProps(s *SchemaProperty) {
+	if s == nil {
+		return
+	}
+	if s.Type == "string" && s.Format == "" && hasBinaryUploadMIME(s.AcceptedMediaTypes) {
+		s.Format = "binary"
+	}
+	if s.Items != nil {
+		promoteBinaryMediaTypeProps(s.Items)
+	}
+	for _, prop := range s.Properties {
+		promoteBinaryMediaTypeProps(prop)
+	}
 }
 
 var preferredSuccessCodes = []string{"200", "201", "202", "2XX", "2xx"}

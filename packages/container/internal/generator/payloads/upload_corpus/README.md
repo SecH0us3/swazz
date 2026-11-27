@@ -4,10 +4,10 @@ This directory is embedded into the `swazz-engine` binary at compile time via `/
 
 ## Directory Layout
 
-- `valid/` — minimal, valid canary files used for `RANDOM` baseline requests and runtime type probing (`png`, `txt`, `pdf`, `zip`).
+- `valid/` — minimal, valid canary files used for `RANDOM` baseline requests and runtime type probing (`png`, `jpg`, `gif`, `pdf`, `zip`, `txt`).
 - `probes/` — validation probes used during `MALICIOUS` fuzzing.
 
-> **Safety rule:** Keep all files committed here tiny and non-destructive. Never commit zip bombs, decompression bombs, or forged-dimension pixel-flood images.
+> **Safety rule:** Keep all files committed here tiny and non-destructive. Never commit zip bombs, decompression bombs, or forged-dimension pixel-flood images. Symlinks in `SWAZZ_UPLOAD_CORPUS_DIR` are skipped for safety.
 
 ## Automatic Classification (No Manifest Required)
 

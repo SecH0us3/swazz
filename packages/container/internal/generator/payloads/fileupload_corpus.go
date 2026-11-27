@@ -20,6 +20,7 @@ import (
 	"sync"
 	"unicode"
 
+	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
@@ -97,39 +98,12 @@ var (
 )
 
 func init() {
-	_ = ReloadUploadCorpus(os.Getenv("SWAZZ_UPLOAD_CORPUS_DIR"))
+	if err := reloadUploadCorpus(os.Getenv("SWAZZ_UPLOAD_CORPUS_DIR")); err != nil {
+		logger.Warn("upload_corpus init warning: %v", err)
+	}
 }
 
-// ReloadUploadCorpus reloads the compile-time embedded upload_corpus and, when extraDir is
-// non-empty and exists, merges files from that runtime directory using the same auto-classification rules.
-func ReloadUploadCorpus(extraDir string) error {
-	valid, probes, err := loadCorpusFromFS(embeddedUploadCorpus, "upload_corpus")
-	if err != nil {
-		return err
-	}
-
-	// "../" cannot be stored on disk, so traversal_filename is synthesized alongside embedded probes.
-	traversalFile := newUploadFile("../../swazz-probe.txt", "text/plain", "traversal_filename", []byte("swazz-filename-probe\n"))
-	probes = append(probes, CorpusEntry{
-		File:         traversalFile,
-		Category:     FileCatText,
-		DeclaredMIME: "text/plain",
-		DetectedMIME: "text/plain",
-	})
-
-	if extraDir = strings.TrimSpace(extraDir); extraDir != "" {
-		cleanDir := filepath.Clean(extraDir)
-		extFS := os.DirFS(cleanDir) // #nosec G703 -- SWAZZ_UPLOAD_CORPUS_DIR is an operator-configured corpus directory
-		if info, statErr := fs.Stat(extFS, "."); statErr == nil && info.IsDir() {
-			extValid, extProbes, extErr := loadCorpusFromFS(extFS, ".")
-			if extErr != nil {
-				return extErr
-			}
-			valid = append(valid, extValid...)
-			probes = append(probes, extProbes...)
-		}
-	}
-
+func installCorpus(valid, probes []CorpusEntry) {
 	rawProbes := make([]swagger.UploadFile, len(probes))
 	for i, p := range probes {
 		rawProbes[i] = cloneUploadFile(p.File)
@@ -146,6 +120,43 @@ func ReloadUploadCorpus(extraDir string) error {
 		}
 	}
 	corpusMu.Unlock()
+}
+
+// reloadUploadCorpus loads the compile-time embedded upload_corpus first (unconditionally),
+// and when extraDir is non-empty and exists, merges regular files from that runtime directory.
+// Errors in extraDir warn and skip offending entries without discarding the embedded corpus.
+func reloadUploadCorpus(extraDir string) error {
+	valid, probes, err := loadCorpusFromFS(embeddedUploadCorpus, "upload_corpus", false)
+	if err != nil {
+		return err
+	}
+
+	// "../" cannot be stored on disk, so traversal_filename is synthesized alongside embedded probes.
+	traversalFile := newUploadFile("../../swazz-probe.txt", "text/plain", "traversal_filename", []byte("swazz-filename-probe\n"))
+	probes = append(probes, CorpusEntry{
+		File:         traversalFile,
+		Category:     FileCatText,
+		DeclaredMIME: "text/plain",
+		DetectedMIME: "text/plain",
+	})
+
+	// Install embedded corpus unconditionally before inspecting external directory.
+	installCorpus(valid, probes)
+
+	if extraDir = strings.TrimSpace(extraDir); extraDir != "" {
+		cleanDir := filepath.Clean(extraDir)
+		extFS := os.DirFS(cleanDir) // #nosec G703 -- SWAZZ_UPLOAD_CORPUS_DIR is an operator-configured corpus directory
+		if info, statErr := fs.Stat(extFS, "."); statErr == nil && info.IsDir() {
+			extValid, extProbes, extErr := loadCorpusFromFS(extFS, ".", true)
+			if extErr != nil {
+				logger.Warn("upload_corpus: skipping SWAZZ_UPLOAD_CORPUS_DIR %q: %v", cleanDir, extErr)
+				return nil
+			}
+			valid = append(valid, extValid...)
+			probes = append(probes, extProbes...)
+			installCorpus(valid, probes)
+		}
+	}
 	return nil
 }
 
@@ -153,13 +164,23 @@ func cloneUploadFile(uf swagger.UploadFile) swagger.UploadFile {
 	return newUploadFile(uf.Filename, uf.ContentType, uf.ProbeKind, uf.Data)
 }
 
-func loadCorpusFromFS(fsys fs.FS, root string) (valid, probes []CorpusEntry, err error) {
+func loadCorpusFromFS(fsys fs.FS, root string, bestEffort bool) (valid, probes []CorpusEntry, err error) {
 	var paths []string
 	walkErr := fs.WalkDir(fsys, root, func(p string, d fs.DirEntry, wErr error) error {
 		if wErr != nil {
+			if bestEffort {
+				logger.Warn("upload_corpus: skipping %q: %v", p, wErr)
+				return nil
+			}
 			return wErr
 		}
 		if d.IsDir() {
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 || !d.Type().IsRegular() {
+			if bestEffort {
+				logger.Warn("upload_corpus: skipping non-regular/symlink entry %q", p)
+			}
 			return nil
 		}
 		base := path.Base(p)
@@ -176,11 +197,21 @@ func loadCorpusFromFS(fsys fs.FS, root string) (valid, probes []CorpusEntry, err
 
 	for _, p := range paths {
 		info, statErr := fs.Stat(fsys, p)
-		if statErr != nil || info.Size() > maxCorpusFileBytes {
+		if statErr != nil {
+			if bestEffort {
+				logger.Warn("upload_corpus: stat failed for %q: %v", p, statErr)
+			}
+			continue
+		}
+		if info.Size() > maxCorpusFileBytes {
 			continue
 		}
 		data, readErr := fs.ReadFile(fsys, p)
 		if readErr != nil {
+			if bestEffort {
+				logger.Warn("upload_corpus: read failed for %q: %v", p, readErr)
+				continue
+			}
 			return nil, nil, readErr
 		}
 

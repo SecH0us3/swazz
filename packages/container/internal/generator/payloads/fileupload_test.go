@@ -116,9 +116,9 @@ func TestUploadCorpus_EmbeddedAndRuntimeReload(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "probes", "override.bin.meta.json"), []byte(`{"filename":"renamed.png","contentType":"image/png","probeKind":"mime_mismatch_png","category":"image"}`), 0o600))
 
 	t.Cleanup(func() {
-		_ = ReloadUploadCorpus("")
+		_ = reloadUploadCorpus("")
 	})
-	require.NoError(t, ReloadUploadCorpus(tmpDir))
+	require.NoError(t, reloadUploadCorpus(tmpDir))
 
 	foundWebp := false
 	foundOverride := false
@@ -135,17 +135,36 @@ func TestUploadCorpus_EmbeddedAndRuntimeReload(t *testing.T) {
 
 	// maxBytes filter drops oversized probes.
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "probes", "large.txt"), bytes.Repeat([]byte("X"), 4096), 0o600))
-	require.NoError(t, ReloadUploadCorpus(tmpDir))
+	require.NoError(t, reloadUploadCorpus(tmpDir))
 	capped := PrioritizedMaliciousUploads(nil, 512)
 	for _, uf := range capped {
 		assert.LessOrEqual(t, len(uf.Data), 512)
 	}
 
 	// Edge cases: non-existent extraDir, malformed .meta.json, OOXML ZIP magic, wildcard MIME, token boundaries, FileCatBinary fallback.
-	assert.NoError(t, ReloadUploadCorpus(filepath.Join(tmpDir, "does-not-exist")))
+	assert.NoError(t, reloadUploadCorpus(filepath.Join(tmpDir, "does-not-exist")))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "probes", "badmeta.png.meta.json"), []byte(`{broken-json`), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "probes", "badmeta.png"), []byte("not-png"), 0o600))
-	assert.NoError(t, ReloadUploadCorpus(tmpDir))
+	assert.NoError(t, reloadUploadCorpus(tmpDir))
+
+	// Symlinks (broken and valid) and unreadable files in extraDir must be skipped without wiping embedded corpus.
+	errDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(errDir, "probes"), 0o750))
+	secretTarget := filepath.Join(t.TempDir(), "secret.txt")
+	require.NoError(t, os.WriteFile(secretTarget, []byte("secret"), 0o600))
+	_ = os.Symlink(filepath.Join(errDir, "missing-target.png"), filepath.Join(errDir, "probes", "broken-link.png"))
+	_ = os.Symlink(secretTarget, filepath.Join(errDir, "probes", "secret-link.png"))
+	if os.Geteuid() != 0 {
+		unreadable := filepath.Join(errDir, "probes", "unreadable.png")
+		require.NoError(t, os.WriteFile(unreadable, []byte("locked"), 0o000))
+	}
+	require.NoError(t, reloadUploadCorpus(errDir))
+	assert.GreaterOrEqual(t, len(MaliciousFileUploads), 11, "embedded probes must remain intact when extraDir has errors/symlinks")
+	for _, uf := range MaliciousFileUploads {
+		assert.NotEqual(t, "secret-link.png", uf.Filename)
+		assert.NotEqual(t, "broken-link.png", uf.Filename)
+		assert.NotEqual(t, "unreadable.png", uf.Filename)
+	}
 
 	ooxml := classifyCorpusFile("report.docx", []byte{'P', 'K', 0x03, 0x04, 0x14, 0x00}, false, nil)
 	assert.False(t, ooxml.Mismatch, "OOXML .docx with ZIP magic bytes should not be flagged as mismatch")

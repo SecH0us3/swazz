@@ -649,7 +649,73 @@ func TestParseSwagger2_FormDataFileUpload(t *testing.T) {
 		}
 		assert.Equal(t, []string{"image/png", "image/jpeg"}, avatarEp.Schema.Properties["file"].AcceptedMediaTypes)
 		assert.Equal(t, []string{"application/zip"}, avatarEp.Schema.Properties["archive"].AcceptedMediaTypes)
+		assert.Equal(t, "binary", avatarEp.Schema.Properties["archive"].Format)
 		assert.Equal(t, "image/png", rawEp.ContentType)
 		assert.Equal(t, []string{"image/png"}, rawEp.Schema.AcceptedMediaTypes)
+	})
+
+	t.Run("does not promote JSON contentMediaType or text multipart encoding to binary", func(t *testing.T) {
+		spec := `{
+			"openapi": "3.1.0",
+			"info": {"title": "Mixed Media API", "version": "1.0"},
+			"paths": {
+				"/json-b64": {
+					"post": {
+						"requestBody": {
+							"content": {
+								"application/json": {
+									"schema": {
+										"type": "object",
+										"properties": {
+											"avatar": {"type": "string", "contentEncoding": "base64", "contentMediaType": "image/png"},
+											"rawCmt": {"type": "string", "contentMediaType": "application/pdf"}
+										}
+									}
+								}
+							}
+						},
+						"responses": {"200": {"description": "ok"}}
+					}
+				},
+				"/mp-meta": {
+					"post": {
+						"requestBody": {
+							"content": {
+								"multipart/form-data": {
+									"schema": {
+										"type": "object",
+										"properties": {
+											"meta": {"type": "string"},
+											"notes": {"type": "string"}
+										}
+									},
+									"encoding": {
+										"meta": {"contentType": "application/json"},
+										"notes": {"contentType": "text/plain"}
+									}
+								}
+							}
+						},
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(spec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 2)
+
+		var jsonEp, mpEp EndpointConfig
+		for _, ep := range r.Endpoints {
+			if ep.Path == "/json-b64" {
+				jsonEp = ep
+			} else if ep.Path == "/mp-meta" {
+				mpEp = ep
+			}
+		}
+		assert.Empty(t, jsonEp.Schema.Properties["avatar"].Format)
+		assert.Empty(t, jsonEp.Schema.Properties["rawCmt"].Format)
+		assert.Empty(t, mpEp.Schema.Properties["meta"].Format)
+		assert.Empty(t, mpEp.Schema.Properties["notes"].Format)
 	})
 }

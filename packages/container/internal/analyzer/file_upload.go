@@ -8,6 +8,7 @@ package analyzer
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -120,8 +121,9 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				})
 			case kind == "svg_upload_probe":
 				lowerResp := input.lowerBody()
-				reflectedXSS := bytes.Contains(lowerResp, []byte("swazz-svg-xss")) &&
-					(bytes.Contains(lowerResp, []byte("<script")) || bytes.Contains(lowerResp, []byte("onload=")))
+				hasXSSMarker := bytes.Contains(lowerResp, []byte("<script>alert('swazz-svg-xss')")) ||
+					bytes.Contains(lowerResp, []byte(`onload="alert('swazz-svg-xss')"`))
+				reflectedXSS := hasXSSMarker && isRenderableSVGOrHTMLResponse(input.ResponseHeaders, lowerResp)
 				level := "warning"
 				owasp := []string{"A06:2025 Insecure Design"}
 				cwe := []string{"CWE-434"}
@@ -183,4 +185,17 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	}
 
 	return findings
+}
+
+func isRenderableSVGOrHTMLResponse(headers http.Header, lowerBody []byte) bool {
+	ct := strings.ToLower(strings.TrimSpace(headers.Get("Content-Type")))
+	if semi := strings.IndexByte(ct, ';'); semi > 0 {
+		ct = strings.TrimSpace(ct[:semi])
+	}
+	if ct != "" {
+		return ct == "text/html" || ct == "image/svg+xml" || ct == "application/xhtml+xml" ||
+			ct == "application/xml" || ct == "text/xml"
+	}
+	trimmed := bytes.TrimSpace(lowerBody)
+	return bytes.HasPrefix(trimmed, []byte("<svg")) || bytes.HasPrefix(trimmed, []byte("<!doctype html")) || bytes.HasPrefix(trimmed, []byte("<html"))
 }

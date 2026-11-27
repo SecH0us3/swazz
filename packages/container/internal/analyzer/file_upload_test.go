@@ -6,6 +6,7 @@
 package analyzer
 
 import (
+	"net/http"
 	"testing"
 
 	"swazz-engine/internal/generator/payloads"
@@ -244,31 +245,45 @@ func TestFileUploadAnalyzer(t *testing.T) {
 		}
 	})
 
-	t.Run("upgrades svg_upload_probe to error + CWE-79 only when unsanitized XSS is reflected", func(t *testing.T) {
+	t.Run("upgrades svg_upload_probe to error + CWE-79 only when unsanitized XSS is reflected in renderable response", func(t *testing.T) {
 		svgProbe := swagger.UploadFile{
 			Filename:    "swazz-xss.svg",
 			ContentType: "image/svg+xml",
 			ProbeKind:   "svg_upload_probe",
 			Data:        []byte(`<svg xmlns="http://www.w3.org/2000/svg" onload="alert('swazz-svg-xss')"><script>alert('swazz-svg-xss')</script></svg>`),
 		}
+		svgHeaders := http.Header{"Content-Type": []string{"image/svg+xml"}}
 		unsanitized := a.Analyze(&AnalysisInput{
-			SentPayload:    map[string]any{"file": svgProbe},
-			StatusCode:     200,
-			ResponseBody:   svgProbe.Data,
-			FileUploadSent: true,
+			SentPayload:     map[string]any{"file": svgProbe},
+			StatusCode:      200,
+			ResponseBody:    svgProbe.Data,
+			ResponseHeaders: svgHeaders,
+			FileUploadSent:  true,
 		})
 		if len(unsanitized) != 1 || unsanitized[0].Level != "error" || len(unsanitized[0].CWEIDs) != 2 || unsanitized[0].CWEIDs[1] != "CWE-79" {
 			t.Fatalf("expected error + CWE-79 for reflected SVG XSS, got %+v", unsanitized)
 		}
 
+		jsonEcho := a.Analyze(&AnalysisInput{
+			SentPayload:     map[string]any{"file": svgProbe},
+			StatusCode:      200,
+			ResponseBody:    svgProbe.Data,
+			ResponseHeaders: http.Header{"Content-Type": []string{"application/json"}},
+			FileUploadSent:  true,
+		})
+		if len(jsonEcho) != 1 || jsonEcho[0].Level != "warning" || len(jsonEcho[0].CWEIDs) != 1 || jsonEcho[0].CWEIDs[0] != "CWE-434" {
+			t.Fatalf("expected warning + CWE-434 for JSON echo, got %+v", jsonEcho)
+		}
+
 		sanitized := a.Analyze(&AnalysisInput{
-			SentPayload:    map[string]any{"file": svgProbe},
-			StatusCode:     200,
-			ResponseBody:   []byte(`<svg xmlns="http://www.w3.org/2000/svg"><text>swazz-svg-xss</text></svg>`),
-			FileUploadSent: true,
+			SentPayload:     map[string]any{"file": svgProbe},
+			StatusCode:      200,
+			ResponseBody:    []byte(`<html><body><script>app()</script><p>swazz-svg-xss</p></body></html>`),
+			ResponseHeaders: http.Header{"Content-Type": []string{"text/html"}},
+			FileUploadSent:  true,
 		})
 		if len(sanitized) != 1 || sanitized[0].Level != "warning" || len(sanitized[0].CWEIDs) != 1 || sanitized[0].CWEIDs[0] != "CWE-434" {
-			t.Fatalf("expected warning + CWE-434 for sanitized SVG, got %+v", sanitized)
+			t.Fatalf("expected warning + CWE-434 for sanitized HTML page, got %+v", sanitized)
 		}
 	})
 }

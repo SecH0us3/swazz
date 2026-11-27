@@ -476,14 +476,37 @@ func TestUploadProbeAndPayloadBoundsHelpers(t *testing.T) {
 	}
 	assert.True(t, hasFields(&rawEp))
 
-	// contentMediaType without format:binary is recognized as file upload
+	// contentMediaType without format:binary is NOT a file upload on its own (e.g. JSON base64 strings)
 	cmtEp := swagger.EndpointConfig{
-		Method: "POST",
-		Path:   "/cmt",
-		Schema: swagger.SchemaProperty{Type: "string", AcceptedMediaTypes: []string{"application/zip"}},
+		Method:      "POST",
+		Path:        "/cmt",
+		ContentType: "application/json",
+		Schema: swagger.SchemaProperty{
+			Type: "object",
+			Properties: map[string]*swagger.SchemaProperty{
+				"avatar": {Type: "string", AcceptedMediaTypes: []string{"image/png"}},
+			},
+		},
 	}
-	assert.True(t, isFileUploadSchema(&cmtEp.Schema))
-	assert.True(t, hasStaticUploadHints(cmtEp))
+	assert.False(t, hasFileUploadField(&cmtEp.Schema))
+	r := New(&swagger.Config{BaseURL: "http://127.0.0.1", Settings: swagger.Settings{TimeoutMs: 1000}}, nil)
+	defer r.Close()
+	safeGen := r.newGenerator(swagger.ProfileRandom, "POST /cmt")
+	builtJSON := buildFromSchema(cmtEp, safeGen)
+	_, isString := builtJSON.body["avatar"].(string)
+	assert.True(t, isString, "JSON contentMediaType field must remain a string, not UploadFile")
+
+	// maybeProbeUploadCategories skips probing on 401/403/404/405 baseline status
+	r.maybeProbeUploadCategories(t.Context(), swagger.EndpointConfig{
+		Method: "POST",
+		Path:   "/auth-upload",
+		Schema: swagger.SchemaProperty{
+			Type:       "object",
+			Properties: map[string]*swagger.SchemaProperty{"file": {Type: "string", Format: "binary"}},
+		},
+	}, "POST /auth-upload", "/auth-upload", generatedPayload{body: map[string]any{"file": payloads.ValidPNGFile()}}, http.StatusUnauthorized)
+	_, probed := r.detectedUploadCategories.Load("POST /auth-upload")
+	assert.False(t, probed)
 
 	// payloadFits accounts for rawBody UploadFile.Data bytes
 	small := generatedPayload{rawBody: swagger.UploadFile{Filename: "a.bin", Data: make([]byte, 32)}}

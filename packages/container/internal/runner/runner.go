@@ -202,7 +202,8 @@ type Runner struct {
 	mcpMutex       sync.Mutex
 	mcpRateLimiter *mcp.RateLimiter
 
-	grpcClients              sync.Map // map[string]*swazzGrpc.Client
+	grpcClients sync.Map // map[string]*swazzGrpc.Client
+	// detectedUploadCategories holds per-run in-memory smart probing results (not persisted across checkpoints).
 	detectedUploadCategories sync.Map // map[string][]payloads.FileCategory
 
 	proxyOnce   sync.Once
@@ -574,7 +575,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 					ep.ContentType, built.oobTokens, built.pinned,
 				)
 
-				r.maybeProbeUploadCategories(ctx, ep, epKey, resolvedPath, built)
+				r.maybeProbeUploadCategories(ctx, ep, epKey, resolvedPath, built, result.Status)
 
 				r.logDebug("Baseline run: method=%s path=%s status=%d size=%d err=%v",
 					ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
