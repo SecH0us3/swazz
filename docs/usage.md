@@ -85,6 +85,17 @@ cd packages/container
 go run . start --config swazz.config.json
 ```
 
+Common `start` flags:
+- **`--config <path>`**: Path to `swazz.config.json` (default `swazz.config.json`).
+- **`--sarif` / `--json` / `--html` / `--junit` / `--markdown <path>`**: Export scan results to the chosen report format.
+- **`--fail-on-severity <level>`**: Exit with code `2` if findings meet the threshold (`error`, `warning`, `note`, or `none`).
+- **`--log-level <level>`** / **`--debug`** / **`--quiet` (`-q`)** / **`--progress-on-change`**: Control log verbosity and progress output.
+- **`--no-color`**: Disable ANSI color codes in CLI text logs (also respects `NO_COLOR`).
+- **`--no-auto-chain`**: Disable automatic request chaining DAG and live ID pooling (overrides `settings.enable_auto_chaining`).
+- **`--allow-private-ips`** / **`--trusted-proxy <ip:port>`**: Override private IP restrictions or trust a local intercepting proxy.
+- **`--disable-telemetry`**: Disable anonymous global scan count telemetry.
+- **`--waf-patch <vendor>`** / **`--waf-patch-output <path>`**: Synthesize virtual patch rules for `cloudflare`, `aws`, `gcp`, `azure`, `modsecurity`, `nginx`, `haproxy`, `caddy`, `k8s`, or `all`.
+
 ### Headless Browser Crawler (`swazz spider`) 🕷️ {#spider}
 
 Autonomous target discovery for modern Single Page Applications (SPAs: React, Vue, Angular). It launches a local Chrome/Chromium instance, injects authentication cookies, navigates dynamic UI elements, intercepts background HTTP requests, and exports them as an OpenAPI v3 specification or HAR file.
@@ -149,6 +160,8 @@ Unknown keys are ignored, so a misspelled key silently falls back to its default
   - **`profiles`**: Which payload generators to run: `RANDOM`, `BOUNDARY`, `MALICIOUS`.
   - **`concurrency`**: Number of parallel requests to send.
   - **`chaining_rules`**: Values to extract from one response and reuse in later requests (see [Request Chaining](#request-chaining)).
+  - **`enable_auto_chaining`**: (Boolean) Enables automatic 3-tier producer→consumer DAG chaining and typed ID pooling (see [Automatic Request Chaining](#auto-chaining)). Default is `true`.
+  - **`enable_semantic_mutation`**: (Boolean) Enables semantic format wrappers during payload generation. Default is `true`.
   - **`analyze_response_body`**: (Boolean) If `true`, enables response body and response header parsing. Swazz will automatically inspect:
     - **Reflected XSS**: raw script and tag reflections.
     - **SQL Injection**: database error signature leaks.
@@ -166,7 +179,7 @@ Unknown keys are ignored, so a misspelled key silently falls back to its default
   - **`time_anomaly_threshold_ms`**: (Integer) Threshold in milliseconds for detecting response time anomalies. Default is `4000`.
   - **`oob_server_url`**: (String) Out-of-band interaction server URL for detecting SSRF / out-of-band vulnerability trigger interactions. Default is `""`. When callbacks go to the coordinator (the default for dashboard scans), one that arrives after the scan has ended is still added to that scan's findings as `swazz/oob-interaction`, for up to 7 days; the 2,000 most recent unanswered tokens of a scan are kept. Reports, exports and webhooks produced when the scan ended do not include it.
   - **`waf_check_enabled`**: (Boolean) If `true`, runs pre-scan domain WAF fingerprinting via `waf.secmy.app` before initiating fuzzing. The detected WAF type, confidence score, and bypass techniques are saved in the scan record and displayed in report summaries. Default is `true` (opt-out).
-  - **`waf_endpoint`**: (String) Custom endpoint URL for the WAF analysis service. Defaults to `https://waf.secmy.app`.
+  - **`waf_check_endpoint`**: (String) Custom endpoint URL for the WAF analysis service. Defaults to `https://waf.secmy.app`.
   - **`debug`**: (Boolean) Enables debug logging output. Default is `false`.
 
 ## Supported API formats {#spec-formats}
@@ -204,6 +217,25 @@ Swazz can extract a value from one response and inject it into later requests �
 ```
 
 `extract_type` is `json` (dot path into the body), `header` (header name) or `regex` (first capture group, or the whole match). The extracted value is available as <code v-pre>{{AUTH_TOKEN}}</code> in headers, paths and bodies (see [Template Substitution](#template-substitution-variables)).
+
+### Automatic Request Chaining (DAG & Typed State Pool) {#auto-chaining}
+
+Beyond manual `chaining_rules`, Swazz automatically builds a **3-tier producer → consumer DAG** across your API specification so dependent endpoints (`GET /orgs/{orgId}/projects/{projectId}`, `PATCH`, `DELETE`) receive real, live IDs instead of synthetic UUIDs:
+
+1. **Manual rules**: `chaining_rules` and `params_mapping` (protected against overwriting explicit <code v-pre>{{var}}</code> templates).
+2. **OpenAPI 3 `Links`**: Extracts link parameters from `POST`/`PUT` `2xx` responses (including query parameters on bodyless `GET`/`HEAD`/`OPTIONS` endpoints).
+3. **REST Path & Schema Heuristics**: Infers parent-child resource relationships and harvests IDs/tokens from response JSON bodies and `Location` headers into a **bounded FIFO typed state pool** (`MaxEntriesPerKey = 32`, `MaxValueLen = 256`) with parent-child tuple pinning and automatic eviction on consecutive `404`/`410` misses.
+
+- **Wave-Ordered Execution**: Baseline requests run in topological waves (`Wave 0 → Wave 1 → ...`), followed by a child-first `DELETE` teardown wave (using sacrificial entries when available so seeded parent resources stay alive during fuzzing) and trailing `mcp://` endpoints.
+- **Configuration**: Enabled by default (`settings.enable_auto_chaining: true`). Toggle **Automatic Request Chaining (DAG)** in **Project Settings → Chaining** or **Project Settings → Performance**, or pass `-no-auto-chain` to the CLI to disable it for a run.
+
+### Adaptive Required Parameter Learning {#adaptive-required-params}
+
+During a scan, Swazz's `RequiredParamTracker` automatically learns which optional-looking or undocumented parameters the target server actually enforces as required:
+
+- **3-Tier Detection**: Inspects `400`/`422` responses across structured JSON validation errors (FastAPI/Pydantic, Zod/Joi, DRF/Laravel/Rails, Spring), plain-text/HTML error messages (e.g. `Missing parameter 'csrf'`), and behavioral `400`/`422` confirmation cross-checked against omitted fields.
+- **Smart Population**: Once learned, the parameter is no longer omitted during fuzzing and is populated in priority order (`Example` → `Dictionaries` → observed non-400 baseline value → safe schema default), while still retaining ~15% value-level mutation so vulnerabilities inside that field are still tested.
+- **Visibility**: Learned parameters emit `[Adaptive]` log events streamed to both CLI stderr and the Web UI **Runner Logs** viewer.
 
 ## Authentication Sequences & Variable Evaluation 🔐 {#auth-sequence}
 
@@ -323,7 +355,7 @@ Swazz supports importing `.har` (HTTP Archive) files directly. This enables **Ze
      }
      ```
 3. **Advanced HAR Configuration**:
-   - **Type & Schema Inference**: Since HAR files only capture raw request/response data, Swazz's engine automatically analyzes the structure of each captured query parameter and JSON request body to reconstruct an active schema representation. Values are typed as `string`, `integer`, `boolean`, `array`, or `object`, enabling the generator to intelligently mutate payloads.
+   - **Type & Schema Inference**: Since HAR files only capture raw request/response data, Swazz's engine automatically analyzes the structure of each captured query parameter, JSON request body, and HTML form payload (`application/x-www-form-urlencoded` and `multipart/form-data` from `postData.params` or `postData.text`) to reconstruct an active schema representation. Values are typed as `string`, `integer`, `boolean`, `array`, or `object`, enabling the generator to intelligently mutate payloads.
    - **HAR Domain Regex Filter**: Browser logs often capture noisy requests to analytics trackers, CDNs, or third-party assets. You can filter these out by setting `har_domain_filter` to a regular expression (matching the hosts you want to include).
      - **Web UI**: Enter your regex in the **HAR Domain Filter** field.
      - **JSON Config**: Add the setting:
@@ -333,6 +365,62 @@ Swazz supports importing `.har` (HTTP Archive) files directly. This enables **Ze
        }
        ```
    - **Authentication & Concurrency Integration**: Swazz's concurrent runner pool manages stateful authorization checks during replay fuzzing. If you define an `auth_sequence` in your configuration, Swazz's concurrent worker pool will automatically overwrite any outdated credentials/tokens captured inside the HAR file with fresh ones, preventing HTTP workers from failing due to session expiration.
+
+## File Upload Validation & Second-Order Verification {#file-upload-validation}
+
+Swazz automatically detects and fuzzes file upload endpoints — both `multipart/form-data` and raw binary (`format: binary` in OpenAPI 3.x or `type: file` in Swagger 2.0) — using **non-destructive validation probes** and **second-order follow-up `GET` verification**.
+
+### Endpoint Detection & Baseline Probing
+
+- Extracts OpenAPI `encoding` and `contentMediaType` hints to target accepted media categories.
+- When an upload field does not declare explicit MIME constraints, Swazz sends minimal valid canary files (`png`, `jpg`, `gif`, `pdf`, `zip`, `txt`) during `RANDOM` baseline requests to infer accepted types.
+- Single-field file upload schemas are protected from the generator's 5% required-field omission rule (`isSoleFileUpload`) so upload probes are always delivered.
+
+### Embedded Corpus & `SWAZZ_UPLOAD_CORPUS_DIR`
+
+- **Compile-Time Corpus**: Embedded via `//go:embed upload_corpus` from `packages/container/internal/generator/payloads/upload_corpus/{valid,probes}`.
+- **Runtime Override**: Set `SWAZZ_UPLOAD_CORPUS_DIR=/path/to/corpus` to load extra local probes without recompiling (symlinks are skipped for safety).
+- **Auto-Classification & Sidecars**: Files are classified automatically by extension and magic bytes (`http.DetectContentType` + format headers), with optional `<filename>.meta.json` sidecar overrides (`filename`, `contentType`, `probeKind`, `category`).
+- **Safety Rule**: Swazz **never** ships or generates zip bombs, decompression bombs, forged-dimension pixel-flood images, or Zip-Slip path-traversal archives.
+
+### Validation Probes & Rules
+
+| ProbeKind / Rule | Payload / Behavior | Verification & Severity |
+| :--- | :--- | :--- |
+| `svg_upload_probe` | Benign SVG with XSS marker + optional <code v-pre>{{OOB_URL}}</code> blind SSRF | `error` (`CWE-434`, `CWE-79`) if served as renderable HTML/SVG without `Content-Disposition: attachment` and without inert CSP (`sandbox`, `script-src 'none'`, or `default-src 'none'`). |
+| `gif_polyglot_probe` | Valid 1×1 `GIF89a` with HTML comment canary (`swazz-polyglot.gif`) | `error` (`CWE-434`) on follow-up `GET` if canary bytes survive re-encoding without `X-Content-Type-Options: nosniff` or `attachment`. |
+| `png_metadata_canary` | Valid 1×1 PNG with `tEXt` metadata chunk (`swazz-exif-canary.png`) | `warning` (`CWE-212`) on follow-up `GET` if the `tEXt` chunk is preserved unstripped. |
+| `eicar_av_probe` | Programmatic in-memory EICAR test string (`swazz-eicar.txt`) | `warning` (`CWE-434`) when accepted or served back. **Note:** triggers standard AV/EDR alerts on scanned targets. |
+| `null_byte_filename` | Programmatic `swazz-probe.php%00.png` filename | `warning` (`CWE-434`) on direct `2xx`; escalates to `error` (`CWE-434`, `CWE-22`) only when a filename terminator confirms truncation to `.php` (sanitized/URL-encoded names stay non-fatal). |
+| `rtl_override_filename` | Programmatic `swazz-probe-\u202Egnp.txt` filename | `warning` (`CWE-451`) on direct `2xx`; escalates to `error` (`CWE-451`) on follow-up `GET` only when echoed in `Content-Disposition` or renderable HTML/SVG. |
+| `double_ext_filename`, `mime_mismatch_*`, `truncated_*` | Double extensions, magic-byte mismatches, truncated headers | `swazz/unvalidated-file-upload` (`warning`) on `2xx`, or `swazz/file-parser-error` (`error`) on `5xx` with parser crash signatures. |
+
+### Second-Order Follow-Up Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Corpus as "Corpus Loader"
+    participant Gen as "Generator"
+    participant Runner as "Scan Runner"
+    participant Target as "Target API"
+    participant Analyzer as "FileUploadAnalyzer"
+
+    Corpus->>Gen: Embedded + SWAZZ_UPLOAD_CORPUS_DIR + In-Memory Probes
+    Gen->>Runner: Multipart or Raw Binary Payload
+    Runner->>Target: POST /upload (probe)
+    Target-->>Runner: HTTP Response (status, headers, body)
+    Runner->>Analyzer: Analyze direct POST response
+
+    opt HTTP 2xx and verifiable ProbeKind
+        Runner->>Runner: Resolve Location (RFC 9110) or body URL (same-origin + dedup)
+        Runner->>Target: Follow-up GET (stored file)
+        Target-->>Runner: HTTP Response (headers + stored bytes)
+        Runner->>Analyzer: Analyze follow-up GET (FollowUpSourceURL)
+        Analyzer-->>Runner: Confirmed second-order findings
+        Runner->>Runner: Merge & escalate findings by Filename + ProbeKind
+    end
+```
 
 ## SSRF Protection & Private IP Filtering 🛡️
 

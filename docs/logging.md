@@ -74,6 +74,11 @@ SWAZZ_LOG_FORMAT=json
 - **Output Structure**: It marshals log messages to a `JSONLog` struct and prints the stringified JSON. The default module name for container backend logs is `"container"`.
 - **Level Filtering**: Log output can be filtered by setting the log level via `SetLevelByName` (e.g. `debug`, `info`, `warn`, `error`).
 
+### CLI ANSI Colors, `NO_COLOR` & `[Adaptive]` Logs
+- **Semantic CLI Colors**: In `text` format, the Go logger applies semantic ANSI SGR colors automatically when running on a TTY, GitHub Actions (`GITHUB_ACTIONS=true`), GitLab CI (`GITLAB_CI=true`), or when `FORCE_COLOR` / `CLICOLOR_FORCE` is set (e.g. yellow for `[Adaptive]` and `WARN`, red for `ERROR` and alerts, magenta for `[BOLA]`/`[Auth]`/`[AutoChain]`/`[OOB]`).
+- **Disabling Colors**: All ANSI escape sequences are suppressed when `NO_COLOR` is set, `-no-color` is passed on the CLI, `TERM=dumb`, or `SWAZZ_LOG_FORMAT=json`.
+- **Web UI Runner Logs**: The Web Dashboard `RunnerLogsViewer` strips any raw ANSI sequences and applies semantic CSS classes — including highlighted `[Adaptive]` parameter-learning entries broadcast by the runner.
+
 ---
 
 ## 4. Cloudflare Logpush Configuration
@@ -112,7 +117,7 @@ Swazz includes an embedded log viewer in the administration settings panel of th
 
 ### Querying and Filtering Logs
 Once authenticated, the Admin Logs panel allows you to interactively monitor system health:
-- **Refresh**: Manually fetch the latest logs cached in the rolling KV buffer.
+- **Refresh**: Manually fetch the latest logs buffered in the in-memory ring buffer.
 - **Search**: Perform a case-insensitive text search across log messages.
 - **Module Filter**: Narrow down logs to specific components (e.g. `Coordinator`, `container`).
 - **Level Filter**: Filter by severity level (`All Levels`, `Info`, `Warn`, `Error`, `Debug`).

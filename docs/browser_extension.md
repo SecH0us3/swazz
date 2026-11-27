@@ -19,24 +19,30 @@ The extension lives in `packages/extension/`. For local development, load that f
 
 ## Record traffic
 
-1. Open the extension popup.
+1. Open the extension popup (or Side Panel).
 2. Under **Connection & Scope Settings**, set **Target Domains** — a comma-separated list of hosts
-   you are allowed to test (e.g. `localhost:8080, api.dev`). Click the suggested active-tab host to
-   add it in one click.
+   you are allowed to test (e.g. `localhost:8080, api.dev`). Click the suggested active-tab host or
+   the one-click **Track this site** button to add the active domain and start recording immediately.
    > Scope is the trust boundary: nothing outside these domains is ever recorded. With an empty
-   > scope, recording captures nothing and the popup warns you.
+   > scope, recording captures nothing and the popup warns you. Traffic to your configured Swazz
+   > Dashboard origin is automatically ignored so dashboard polling never pollutes captured endpoints.
 3. Flip **Traffic Recording** on and use your application normally. `fetch`, `XMLHttpRequest`,
-   `sendBeacon`, form submissions and top-level navigations are all captured.
-4. Captured endpoints appear grouped by method and normalized path (numeric IDs, UUIDs and ULIDs
-   collapse to `{id}`, `{uuid}`, `{ulid}` so `/users/1` and `/users/2` are one endpoint), each with
-   the response statuses seen and a coverage hint telling you when an endpoint needs more input
-   variations to fuzz well.
+   `sendBeacon`, full-page HTML form `POST` submissions (via `chrome.webRequest` with redirect hop
+   correlation, including `302` chains), and top-level navigations are all captured. Form-urlencoded
+   bodies emit standard HAR 1.2 `postData.params` alongside `postData.text`.
+4. Captured endpoints are **host-scoped** and grouped by method and normalized path (numeric IDs,
+   UUIDs and ULIDs collapse to `{id}`, `{uuid}`, `{ulid}` so `/users/1` and `/users/2` are one
+   endpoint), each with the response statuses seen and a coverage hint telling you when an endpoint
+   needs more input variations to fuzz well.
 
 ### Page Crawler
 
-**🕷 Crawl Tab** walks links and submits forms on the active tab automatically, so you can populate
+**🕷 Crawl Tab** walks links and inspects forms on the active tab automatically, so you can populate
 endpoints without clicking through the app by hand. Recording must be on. File inputs are fed a
-mock PNG instead of opening a native file dialog.
+mock PNG instead of opening a native file dialog, form submit buttons are skipped during button-click
+discovery, repeat crawls cleanly reset element markers, and closing the crawled tab resets `crawlState`
+automatically. If a tab was opened before an extension reload, the popup automatically injects the
+content script via `chrome.scripting.executeScript`.
 
 ## Get the traffic into Swazz
 
@@ -45,9 +51,10 @@ There are two paths, and they are interchangeable:
 ### Sync directly
 
 With a token and project selected, **🚀 Sync to Swazz Dashboard** parses the captured traffic and
-merges the endpoints into that project's configuration, optionally carrying over your active session
-cookies. The token is auto-synced when you have the dashboard open in a tab — you rarely need to
-paste it.
+merges the endpoints (or replaces existing project endpoints when **Replace existing project endpoints**
+is checked) into that project's configuration, updating `base_url` and optionally carrying over your
+active session cookies. Open dashboard tabs live-reload the updated configuration automatically. The
+token is auto-synced when you have the dashboard open in a tab — you rarely need to paste it.
 
 ### Export a HAR
 

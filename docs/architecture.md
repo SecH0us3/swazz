@@ -13,8 +13,10 @@ The project is structured into workspaces:
 ### 1. `packages/container` (Backend Engine)
 Written in Go, this is the core of Swazz. It handles all heavy lifting, multi-threading, and networking.
 - `main.go`: The main entrypoint. Handles commands for both CLI (`start`) and API (`serve`).
-- `internal/generator/`: Contains logic for analyzing OpenAPI specs and generating smart payloads (e.g., UUIDs, strings, large boundaries). Static payloads are kept in `internal/generator/payloads/`.
-- `internal/runner/`: The concurrent execution engine. Manages rate limits, parallel execution, and HTTP clients.
+- `internal/autochain/`: Builds the 3-tier producer→consumer DAG and manages the bounded FIFO typed state pool for automatic request chaining.
+- `internal/analyzer/`: Response security analyzers (`FileUploadAnalyzer`, XSS, SQLi, SSRF, SSTI, Prototype Pollution, etc.).
+- `internal/generator/`: Contains logic for analyzing OpenAPI specs and generating smart payloads (e.g., UUIDs, strings, large boundaries). Static payloads and the embedded `upload_corpus/` are kept in `internal/generator/payloads/`.
+- `internal/runner/`: The concurrent execution engine. Manages rate limits, parallel execution, adaptive required-parameter learning (`RequiredParamTracker`), second-order upload follow-up verification, and HTTP clients.
 - `internal/output/`: Analyzes HTTP responses and outputs them into specific formats (SARIF, JSON).
 - `api/`: Gin HTTP handlers that power the Web Dashboard's backend.
 
@@ -29,10 +31,13 @@ The Cloudflare Worker and Durable Object coordinator the dashboard talks to. It 
 
 ## Smart Fuzzing Workflow
 
-1. **Parse**: The engine loads the OpenAPI JSON/YAML spec.
-2. **Generate**: For each endpoint and parameter, the Generator creates standard requests and boundary/malicious requests based on the types (String, Int, UUID array, etc.).
-3. **Execute**: The Runner executes these requests concurrently against the target API.
-4. **Analyze**: The response analyzer checks for unexpected status codes (e.g., 500 Internal Server Error) or data leaks, reporting them back via the CLI or live via SSE to the React Dashboard.
+1. **Parse**: The engine loads the OpenAPI JSON/YAML, HAR, GraphQL, Postman, gRPC, or WebSocket specification.
+2. **Plan & Chain**: `internal/autochain` builds a wave-ordered producer→consumer DAG (manual rules, OpenAPI 3 `Links`, REST heuristics) and initializes a bounded typed state pool.
+3. **Generate**: For each endpoint and parameter, the Generator creates standard requests, file-upload probes, and boundary/malicious requests based on schema types.
+4. **Execute & Adapt**: The Runner executes waves concurrently, learns server-enforced required parameters from `400`/`422` feedback (`RequiredParamTracker`), and dispatches same-origin follow-up `GET` requests for verifiable upload probes.
+5. **Analyze**: Response analyzers inspect both direct responses and follow-up `GET` responses for crashes, data leaks, stored XSS, polyglot survival, or unstripped metadata, reporting findings via CLI or live SSE to the React Dashboard.
+
+See [Usage & Configuration](./usage.md#request-chaining) for configuration details on Auto-Chaining, Adaptive Required Parameter Learning, and File Upload Validation.
 
 ## OpenAPI Safety Limits & OOM Protection
 
