@@ -113,6 +113,9 @@ func (ctx *resolverCtx) resolve(schema any) SchemaProperty {
 		Type:   getStringField(m, "type"),
 		Format: getStringField(m, "format"),
 	}
+	if mediaType := getStringField(m, "contentMediaType"); mediaType != "" {
+		result.AcceptedMediaTypes = []string{mediaType}
+	}
 
 	// Enum
 	if enumRaw, ok := m["enum"].([]any); ok {

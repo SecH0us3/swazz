@@ -30,6 +30,7 @@ import (
 // generatedPayload is the result of a single payload-building attempt.
 type generatedPayload struct {
 	body        map[string]any
+	rawBody     any
 	queryParams map[string]any
 	headers     map[string]string
 	pathParams  map[string]string
@@ -37,6 +38,16 @@ type generatedPayload struct {
 	// them: executeGeneratedRequest logs the request for each without searching it.
 	oobTokens []string
 	pinned    []autochain.PinnedBinding
+}
+
+func (p generatedPayload) requestBody() any {
+	if p.rawBody != nil {
+		return p.rawBody
+	}
+	if p.body != nil {
+		return p.body
+	}
+	return nil
 }
 
 func buildPathParams(ep swagger.EndpointConfig, gen *generator.Generator) map[string]string {
@@ -91,7 +102,9 @@ func buildFuzzPayload(
 	bodyGen := selectGen(gen, safeGen, isSecHeaderIter)
 
 	if isBody {
-		if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
+		if isFileUploadSchema(&ep.Schema) {
+			out.rawBody = bodyGen.Generate("file", &ep.Schema)
+		} else if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
 			if isRandom && rand.Float64() < 0.15 { // #nosec G404
 				out.body = map[string]any{}
 			} else {
@@ -166,7 +179,9 @@ func buildFromSchema(ep swagger.EndpointConfig, safeGen *generator.Generator) ge
 	isBody := !isNoBodyMethod(ep.Method)
 
 	if isBody {
-		if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
+		if isFileUploadSchema(&ep.Schema) {
+			out.rawBody = safeGen.Generate("file", &ep.Schema)
+		} else if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
 			out.body = safeGen.BuildObject(&ep.Schema)
 		}
 		if len(ep.QueryParams) > 0 {

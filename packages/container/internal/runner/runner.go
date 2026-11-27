@@ -202,7 +202,8 @@ type Runner struct {
 	mcpMutex       sync.Mutex
 	mcpRateLimiter *mcp.RateLimiter
 
-	grpcClients sync.Map // map[string]*swazzGrpc.Client
+	grpcClients              sync.Map // map[string]*swazzGrpc.Client
+	detectedUploadCategories sync.Map // map[string][]payloads.FileCategory
 
 	proxyOnce   sync.Once
 	proxyClient atomic.Pointer[http.Client] // see proxiedClient
@@ -467,6 +468,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			epStr := endpoint.Method + " " + endpoint.Path
 			gen := r.newGenerator(profile, epStr)
 			safeGen := r.newGenerator(swagger.ProfileRandom, epStr)
+			r.applyDetectedUploadCategories(epStr, gen, safeGen)
 
 			iterToSkip := 0
 			if resuming {
@@ -565,12 +567,14 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 					ctx,
 					r.config.BaseURL, resolvedPath, ep.Path, ep.Method,
 					r.config.GlobalHeaders, r.config.Cookies,
-					built.body,
+					built.requestBody(),
 					swagger.FuzzingProfile("BASELINE"),
 					built.queryParams,
 					built.headers,
 					ep.ContentType, built.oobTokens, built.pinned,
 				)
+
+				r.maybeProbeUploadCategories(ctx, ep, epKey, resolvedPath, built)
 
 				r.logDebug("Baseline run: method=%s path=%s status=%d size=%d err=%v",
 					ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)

@@ -37,28 +37,37 @@ func newUploadFile(filename, contentType, probeKind string, data []byte) swagger
 	}
 }
 
-// ValidPNGFile returns a minimal, valid 1x1 PNG canary file.
+// ValidPNGFile returns a minimal, valid 1x1 PNG canary file from the embedded corpus.
 func ValidPNGFile() swagger.UploadFile {
+	corpusMu.RLock()
+	for _, e := range validCorpus {
+		if e.File.ProbeKind == "valid_png" {
+			cp := cloneUploadFile(e.File)
+			corpusMu.RUnlock()
+			return cp
+		}
+	}
+	corpusMu.RUnlock()
 	return newUploadFile("swazz-canary.png", "image/png", "valid_png", minimalValidPNG)
 }
 
-// ValidTextFile returns a minimal, valid plain-text canary file.
+// ValidTextFile returns a minimal, valid plain-text canary file from the embedded corpus.
 func ValidTextFile() swagger.UploadFile {
+	corpusMu.RLock()
+	for _, e := range validCorpus {
+		if e.File.ProbeKind == "valid_text" {
+			cp := cloneUploadFile(e.File)
+			corpusMu.RUnlock()
+			return cp
+		}
+	}
+	corpusMu.RUnlock()
 	return newUploadFile("swazz-canary.txt", "text/plain", "valid_text", []byte("swazz-upload-canary\n"))
 }
 
-// MaliciousFileUploads holds safe, non-destructive validation probes for file upload endpoints.
+// MaliciousFileUploads holds safe, non-destructive validation probes loaded from upload_corpus/.
 // None of these payloads are zip bombs or decompression bombs with forged huge dimensions.
-var MaliciousFileUploads = []swagger.UploadFile{
-	newUploadFile("swazz-probe.png", "image/png", "mime_mismatch_png", []byte("swazz-not-a-valid-png-payload\n")),
-	newUploadFile("swazz-probe.jpg", "image/jpeg", "mime_mismatch_jpeg", []byte("swazz-not-a-valid-jpeg-payload\n")),
-	newUploadFile("swazz-probe.pdf", "application/pdf", "mime_mismatch_pdf", []byte("swazz-not-a-valid-pdf-payload\n")),
-	newUploadFile("swazz-truncated.png", "image/png", "truncated_png", []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00}),
-	newUploadFile("swazz-truncated.zip", "application/zip", "truncated_zip", []byte{'P', 'K', 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00}),
-	newUploadFile("../../swazz-probe.txt", "text/plain", "traversal_filename", []byte("swazz-filename-probe\n")),
-	newUploadFile("swazz-probe.php.png", "image/png", "double_ext_filename", minimalValidPNG),
-	newUploadFile("swazz-probe.svg", "image/svg+xml", "svg_upload_probe", []byte(`<svg xmlns="http://www.w3.org/2000/svg"><text>swazz-svg-probe</text></svg>`)),
-}
+var MaliciousFileUploads []swagger.UploadFile
 
 // BoundaryFileUploads returns non-destructive boundary probes (empty file, 255-char filename,
 // and an uncompressed ASCII size-limit probe capped to at most 1 MiB and maxBytes).

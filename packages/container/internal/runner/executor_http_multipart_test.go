@@ -342,3 +342,152 @@ func TestExecuteSingleRequest_RawBinaryAndNonMultipartContentTypes(t *testing.T)
 		assert.JSONEq(t, `{"public":true,"tag":"avatar"}`, gotMeta)
 	})
 }
+
+func TestRunner_SmartUploadTypeProbingAndRawBinaryEndToEnd(t *testing.T) {
+	var seenProbeCTs []string
+	var rawBodies [][]byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/upload" {
+			mr, err := r.MultipartReader()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			for {
+				part, err := mr.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				data, _ := io.ReadAll(part)
+				ct := part.Header.Get("Content-Type")
+				seenProbeCTs = append(seenProbeCTs, ct)
+				if !strings.HasPrefix(ct, "image/") {
+					w.WriteHeader(http.StatusUnsupportedMediaType)
+					_, _ = w.Write([]byte(`{"error":"only images accepted"}`))
+					return
+				}
+				if strings.Contains(part.FileName(), "truncated") && len(data) < 20 {
+					w.WriteHeader(http.StatusInternalServerError)
+					_, _ = w.Write([]byte(`PIL.UnidentifiedImageError: cannot identify image file`))
+					return
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"uploaded":true}`))
+			return
+		}
+		if r.URL.Path == "/raw" {
+			b, _ := io.ReadAll(r.Body)
+			rawBodies = append(rawBodies, b)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	spec := `{
+		"openapi": "3.0.0",
+		"info": {"title": "Upload E2E", "version": "1.0"},
+		"paths": {
+			"/upload": {
+				"post": {
+					"requestBody": {
+						"content": {
+							"multipart/form-data": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"file": {"type": "string", "format": "binary"}
+									}
+								}
+							}
+						}
+					},
+					"responses": {"200": {"description": "ok"}}
+				}
+			},
+			"/raw": {
+				"post": {
+					"requestBody": {
+						"content": {
+							"image/png": {
+								"schema": {"type": "string", "format": "binary"}
+							}
+						}
+					},
+					"responses": {"200": {"description": "ok"}}
+				}
+			}
+		}
+	}`
+	parsed, err := swagger.ParseRawSpec([]byte(spec))
+	require.NoError(t, err)
+
+	cfg := &swagger.Config{
+		BaseURL:   srv.URL,
+		Endpoints: parsed.Endpoints,
+		Security:  swagger.SecurityConfig{AllowPrivateIPs: true},
+		Settings: swagger.Settings{
+			AnalyzeResponseBody:  true,
+			Concurrency:          1,
+			TimeoutMs:            5000,
+			IterationsPerProfile: 8,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileMalicious},
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
+			},
+		},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+	require.NoError(t, r.Start(t.Context()))
+
+	// Smart upload probing should detect [image] on POST /upload.
+	rawCats, ok := r.detectedUploadCategories.Load("POST /upload")
+	require.True(t, ok, "expected smart probing to detect image category on POST /upload")
+	assert.Equal(t, []payloads.FileCategory{payloads.FileCatImage}, rawCats)
+	assert.NotEmpty(t, rawBodies, "expected POST /raw binary endpoint to run end-to-end")
+
+	foundUploadVuln := false
+	for _, res := range r.Results() {
+		for _, f := range res.AnalyzerFindings {
+			if f.RuleID == "swazz/unvalidated-file-upload" || f.RuleID == "swazz/file-parser-error" {
+				foundUploadVuln = true
+			}
+		}
+	}
+	assert.True(t, foundUploadVuln, "expected end-to-end upload findings from Runner.Start")
+	assert.NotEmpty(t, seenProbeCTs)
+}
+
+func TestUploadProbeAndPayloadBoundsHelpers(t *testing.T) {
+	// Standalone raw binary schema hasFields == true
+	rawEp := swagger.EndpointConfig{
+		Method: "POST",
+		Path:   "/raw",
+		Schema: swagger.SchemaProperty{Type: "string", Format: "binary"},
+	}
+	assert.True(t, hasFields(&rawEp))
+
+	// contentMediaType without format:binary is recognized as file upload
+	cmtEp := swagger.EndpointConfig{
+		Method: "POST",
+		Path:   "/cmt",
+		Schema: swagger.SchemaProperty{Type: "string", AcceptedMediaTypes: []string{"application/zip"}},
+	}
+	assert.True(t, isFileUploadSchema(&cmtEp.Schema))
+	assert.True(t, hasStaticUploadHints(cmtEp))
+
+	// payloadFits accounts for rawBody UploadFile.Data bytes
+	small := generatedPayload{rawBody: swagger.UploadFile{Filename: "a.bin", Data: make([]byte, 32)}}
+	assert.True(t, payloadFits(small, 512))
+	large := generatedPayload{rawBody: swagger.UploadFile{Filename: "big.bin", Data: make([]byte, 2048)}}
+	assert.False(t, payloadFits(large, 512))
+}

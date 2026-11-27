@@ -189,7 +189,7 @@ func (r *Runner) mintFromProducerDepth(ctx context.Context, prodIdx, depth int) 
 		ctx,
 		r.config.BaseURL, resolvedPath, prodEP.Path, prodEP.Method,
 		r.config.GlobalHeaders, r.config.Cookies,
-		built.body, swagger.FuzzingProfile("BASELINE"),
+		built.requestBody(), swagger.FuzzingProfile("BASELINE"),
 		built.queryParams, built.headers, prodEP.ContentType,
 		built.oobTokens, built.pinned,
 	)

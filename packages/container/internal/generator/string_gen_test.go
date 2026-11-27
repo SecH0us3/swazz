@@ -624,7 +624,7 @@ func TestStringGen_FileUploadProfiles(t *testing.T) {
 		docVal := g.Generate("document", &swagger.SchemaProperty{Type: "file"})
 		docFile, ok := docVal.(swagger.UploadFile)
 		require.True(t, ok)
-		assert.Equal(t, "valid_text", docFile.ProbeKind)
+		assert.Equal(t, "valid_pdf", docFile.ProbeKind)
 	})
 
 	t.Run("malicious profile cycles non-destructive upload probes", func(t *testing.T) {
@@ -638,7 +638,7 @@ func TestStringGen_FileUploadProfiles(t *testing.T) {
 			v := g.Generate("file", &swagger.SchemaProperty{Type: "string", Format: "binary"})
 			uf, ok := v.(swagger.UploadFile)
 			require.True(t, ok)
-			seen[uf.ProbeKind] = true
+			seen[uf.Filename] = true
 		}
 		assert.Len(t, seen, len(payloads.MaliciousFileUploads))
 	})
@@ -676,7 +676,25 @@ func TestStringGen_FileUploadProfiles(t *testing.T) {
 			},
 		})
 		ufB := gb.Generate("doc", &swagger.SchemaProperty{Type: "file"}).(swagger.UploadFile)
-		assert.Equal(t, "valid_text", ufB.ProbeKind)
+		assert.Equal(t, "valid_pdf", ufB.ProbeKind)
+
+		ufGeneric := gb.Generate("attachment", &swagger.SchemaProperty{Type: "file"}).(swagger.UploadFile)
+		assert.Equal(t, "valid_text", ufGeneric.ProbeKind)
+	})
+
+	t.Run("Generate respects AcceptedMediaTypes and SetPreferredUploadCategories", func(t *testing.T) {
+		gr := New(nil, swagger.ProfileRandom, swagger.Settings{})
+		ufZip := gr.Generate("file", &swagger.SchemaProperty{
+			Type:               "string",
+			Format:             "binary",
+			AcceptedMediaTypes: []string{"application/zip"},
+		}).(swagger.UploadFile)
+		assert.Equal(t, "valid_zip", ufZip.ProbeKind)
+
+		gm := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+		gm.SetPreferredUploadCategories([]payloads.FileCategory{payloads.FileCatArchive})
+		first := gm.Generate("file", &swagger.SchemaProperty{Type: "string", Format: "binary"}).(swagger.UploadFile)
+		assert.Equal(t, "application/zip", first.ContentType)
 	})
 
 	t.Run("GenerateArrayItem handles binary/file and caps boundary array file size", func(t *testing.T) {

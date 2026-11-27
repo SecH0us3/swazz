@@ -262,10 +262,15 @@ func extractRequestSchema(operation map[string]any, allParams []any, spec map[st
 				}
 			}
 
-			// Fallback to any key with schema
+			// Fallback to any key with schema (deterministic order)
 			if foundKey == "" {
-				for key, v := range content {
-					if m, ok := v.(map[string]any); ok {
+				keys := make([]string, 0, len(content))
+				for key := range content {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					if m, ok := content[key].(map[string]any); ok {
 						if _, hasSchema := m["schema"]; hasSchema {
 							foundKey = key
 							break
@@ -310,8 +315,31 @@ func extractRequestSchema(operation map[string]any, allParams []any, spec map[st
 								}
 							}
 						}
+						resolved := resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth)
+						if encMap, ok := m["encoding"].(map[string]any); ok && resolved.Properties != nil {
+							for propName, rawEnc := range encMap {
+								encObj, ok := rawEnc.(map[string]any)
+								if !ok {
+									continue
+								}
+								ctList := parseMediaTypeList(getStringField(encObj, "contentType"))
+								if len(ctList) == 0 {
+									continue
+								}
+								if prop, exists := resolved.Properties[propName]; exists && prop != nil {
+									prop.AcceptedMediaTypes = appendUniqueMediaTypes(prop.AcceptedMediaTypes, ctList...)
+									if prop.Type == "array" && prop.Items != nil {
+										prop.Items.AcceptedMediaTypes = appendUniqueMediaTypes(prop.Items.AcceptedMediaTypes, ctList...)
+									}
+								}
+							}
+						}
+						if ct != "application/json" && ct != "application/x-www-form-urlencoded" &&
+							ct != "multipart/form-data" && ct != "application/octet-stream" && ct != "*/*" {
+							resolved.AcceptedMediaTypes = appendUniqueMediaTypes(resolved.AcceptedMediaTypes, ct)
+						}
 						return &bodyResult{
-							schema:      resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth),
+							schema:      resolved,
 							contentType: ct,
 							example:     example,
 						}
@@ -548,6 +576,37 @@ func getStringField(m map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+func parseMediaTypeList(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+func appendUniqueMediaTypes(existing []string, items ...string) []string {
+	seen := make(map[string]bool, len(existing)+len(items))
+	for _, e := range existing {
+		seen[strings.ToLower(e)] = true
+	}
+	for _, item := range items {
+		k := strings.ToLower(strings.TrimSpace(item))
+		if k == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		existing = append(existing, strings.TrimSpace(item))
+	}
+	return existing
 }
 
 var preferredSuccessCodes = []string{"200", "201", "202", "2XX", "2xx"}

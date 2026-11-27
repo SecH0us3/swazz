@@ -85,9 +85,8 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	if input.StatusCode >= 200 && input.StatusCode < 300 {
 		for _, hit := range uploads {
 			kind := hit.file.ProbeKind
-			switch kind {
-			case "mime_mismatch_png", "mime_mismatch_jpeg", "mime_mismatch_pdf",
-				"truncated_png", "truncated_zip":
+			switch {
+			case strings.HasPrefix(kind, "mime_mismatch_") || strings.HasPrefix(kind, "truncated_"):
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            "error",
@@ -97,12 +96,13 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 					OWASPCategory:    []string{"A06:2025 Insecure Design"},
 					CWEIDs:           []string{"CWE-434"},
 				})
-			case "traversal_filename":
+			case kind == "traversal_filename":
 				lowerResp := input.lowerBody()
 				reflected := bytes.Contains(lowerResp, []byte("../../swazz-probe.txt")) ||
 					bytes.Contains(lowerResp, []byte(`..\/..\/swazz-probe.txt`)) ||
 					bytes.Contains(lowerResp, []byte("..%2f..%2fswazz-probe.txt")) ||
-					bytes.Contains(lowerResp, []byte(`..\..\swazz-probe.txt`))
+					bytes.Contains(lowerResp, []byte(`..\..\swazz-probe.txt`)) ||
+					bytes.Contains(lowerResp, []byte(`..\\..\\swazz-probe.txt`))
 				level := "warning"
 				cwe := []string{"CWE-434"}
 				if reflected {
@@ -118,7 +118,28 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 					OWASPCategory:    []string{"A06:2025 Insecure Design"},
 					CWEIDs:           cwe,
 				})
-			case "double_ext_filename", "svg_upload_probe":
+			case kind == "svg_upload_probe":
+				lowerResp := input.lowerBody()
+				reflectedXSS := bytes.Contains(lowerResp, []byte("swazz-svg-xss")) &&
+					(bytes.Contains(lowerResp, []byte("<script")) || bytes.Contains(lowerResp, []byte("onload=")))
+				level := "warning"
+				owasp := []string{"A06:2025 Insecure Design"}
+				cwe := []string{"CWE-434"}
+				if reflectedXSS {
+					level = "error"
+					owasp = []string{"A06:2025 Insecure Design", "A05:2025 Injection"}
+					cwe = []string{"CWE-434", "CWE-79"}
+				}
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:           "swazz/unvalidated-file-upload",
+					Level:            level,
+					Message:          fmt.Sprintf("Server accepted potentially unsafe %s upload (%q, %s) with HTTP %d.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode),
+					Evidence:         fmt.Sprintf("Field: %s | Filename: %s | ContentType: %s | ProbeKind: %s | ReflectedXSS: %t | Status: %d | %s", hit.field, hit.file.Filename, hit.file.ContentType, kind, reflectedXSS, input.StatusCode, fileUploadRemediation),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    owasp,
+					CWEIDs:           cwe,
+				})
+			case kind == "double_ext_filename":
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            "warning",

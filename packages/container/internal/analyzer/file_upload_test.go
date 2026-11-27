@@ -198,8 +198,8 @@ func TestFileUploadAnalyzer(t *testing.T) {
 	})
 
 	t.Run("flags 5xx parser crash signatures including multi-file summary", func(t *testing.T) {
-		uf1 := payloads.MaliciousFileUploads[3] // truncated_png
-		uf2 := payloads.MaliciousFileUploads[4] // truncated_zip
+		uf1 := swagger.UploadFile{Filename: "swazz-truncated.png", ContentType: "image/png", ProbeKind: "truncated_png"}
+		uf2 := swagger.UploadFile{Filename: "swazz-truncated.zip", ContentType: "application/zip", ProbeKind: "truncated_zip"}
 		findings := a.Analyze(&AnalysisInput{
 			SentPayload:    map[string]any{"avatar": &uf1, "archive": uf2},
 			StatusCode:     500,
@@ -214,6 +214,61 @@ func TestFileUploadAnalyzer(t *testing.T) {
 		}
 		if !containsSubstring(findings[0].Evidence, "archive:truncated_zip") || !containsSubstring(findings[0].Evidence, "avatar:truncated_png") {
 			t.Fatalf("expected multi-file summary in evidence, got %s", findings[0].Evidence)
+		}
+	})
+
+	t.Run("handles dynamic corpus probe kinds without false positives on benign custom uploads", func(t *testing.T) {
+		dynMismatch := swagger.UploadFile{Filename: "bad.webp", ContentType: "image/webp", ProbeKind: "mime_mismatch_webp"}
+		res1 := a.Analyze(&AnalysisInput{SentPayload: map[string]any{"file": dynMismatch}, StatusCode: 200, FileUploadSent: true})
+		if len(res1) != 1 || res1[0].RuleID != "swazz/unvalidated-file-upload" {
+			t.Fatalf("expected unvalidated-file-upload for mime_mismatch_webp, got %+v", res1)
+		}
+
+		dynCustom := swagger.UploadFile{Filename: "sample.png", ContentType: "image/png", ProbeKind: "custom_upload_image"}
+		res2 := a.Analyze(&AnalysisInput{SentPayload: map[string]any{"file": dynCustom}, StatusCode: 200, FileUploadSent: true})
+		if len(res2) != 0 {
+			t.Fatalf("expected 0 findings on 200 for benign custom_upload_image, got %d", len(res2))
+		}
+	})
+
+	t.Run("handles top-level raw UploadFile and backslash traversal reflection", func(t *testing.T) {
+		rawProbe := swagger.UploadFile{Filename: "../../swazz-probe.txt", ContentType: "text/plain", ProbeKind: "traversal_filename"}
+		res := a.Analyze(&AnalysisInput{
+			SentPayload:    rawProbe,
+			StatusCode:     200,
+			ResponseBody:   []byte(`saved to ..\..\swazz-probe.txt`),
+			FileUploadSent: true,
+		})
+		if len(res) != 1 || res[0].Level != "error" || len(res[0].CWEIDs) != 2 || res[0].CWEIDs[1] != "CWE-22" {
+			t.Fatalf("expected error + CWE-22 for backslash traversal reflection, got %+v", res)
+		}
+	})
+
+	t.Run("upgrades svg_upload_probe to error + CWE-79 only when unsanitized XSS is reflected", func(t *testing.T) {
+		svgProbe := swagger.UploadFile{
+			Filename:    "swazz-xss.svg",
+			ContentType: "image/svg+xml",
+			ProbeKind:   "svg_upload_probe",
+			Data:        []byte(`<svg xmlns="http://www.w3.org/2000/svg" onload="alert('swazz-svg-xss')"><script>alert('swazz-svg-xss')</script></svg>`),
+		}
+		unsanitized := a.Analyze(&AnalysisInput{
+			SentPayload:    map[string]any{"file": svgProbe},
+			StatusCode:     200,
+			ResponseBody:   svgProbe.Data,
+			FileUploadSent: true,
+		})
+		if len(unsanitized) != 1 || unsanitized[0].Level != "error" || len(unsanitized[0].CWEIDs) != 2 || unsanitized[0].CWEIDs[1] != "CWE-79" {
+			t.Fatalf("expected error + CWE-79 for reflected SVG XSS, got %+v", unsanitized)
+		}
+
+		sanitized := a.Analyze(&AnalysisInput{
+			SentPayload:    map[string]any{"file": svgProbe},
+			StatusCode:     200,
+			ResponseBody:   []byte(`<svg xmlns="http://www.w3.org/2000/svg"><text>swazz-svg-xss</text></svg>`),
+			FileUploadSent: true,
+		})
+		if len(sanitized) != 1 || sanitized[0].Level != "warning" || len(sanitized[0].CWEIDs) != 1 || sanitized[0].CWEIDs[0] != "CWE-434" {
+			t.Fatalf("expected warning + CWE-434 for sanitized SVG, got %+v", sanitized)
 		}
 	})
 }

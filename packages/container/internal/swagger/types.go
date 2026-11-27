@@ -50,12 +50,13 @@ const (
 
 // SchemaProperty mirrors a JSON Schema property definition.
 type SchemaProperty struct {
-	Type       string                     `json:"type,omitempty"`
-	Format     string                     `json:"format,omitempty"`
-	Enum       []any                      `json:"enum,omitempty"`
-	Properties map[string]*SchemaProperty `json:"properties,omitempty"`
-	Items      *SchemaProperty            `json:"items,omitempty"`
-	Required   []string                   `json:"required,omitempty"`
+	Type               string                     `json:"type,omitempty"`
+	Format             string                     `json:"format,omitempty"`
+	Enum               []any                      `json:"enum,omitempty"`
+	AcceptedMediaTypes []string                   `json:"acceptedMediaTypes,omitempty"`
+	Properties         map[string]*SchemaProperty `json:"properties,omitempty"`
+	Items              *SchemaProperty            `json:"items,omitempty"`
+	Required           []string                   `json:"required,omitempty"`
 }
 
 // UploadFile represents a synthesized file part for multipart/form-data fuzzing.

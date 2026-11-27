@@ -594,4 +594,62 @@ func TestParseSwagger2_FormDataFileUpload(t *testing.T) {
 		require.Contains(t, r.Endpoints[0].Schema.Properties, "file")
 		assert.Equal(t, "binary", r.Endpoints[0].Schema.Properties["file"].Format)
 	})
+
+	t.Run("extracts OpenAPI 3.0 encoding.contentType, 3.1 contentMediaType, and raw binary MIME", func(t *testing.T) {
+		oasSpec := `{
+			"openapi": "3.1.0",
+			"info": {"title": "Typed Upload API", "version": "1.0"},
+			"paths": {
+				"/avatar": {
+					"post": {
+						"requestBody": {
+							"content": {
+								"multipart/form-data": {
+									"schema": {
+										"type": "object",
+										"properties": {
+											"file": {"type": "string", "format": "binary"},
+											"archive": {"type": "string", "contentMediaType": "application/zip"}
+										}
+									},
+									"encoding": {
+										"file": {"contentType": "image/png, image/jpeg"}
+									}
+								}
+							}
+						},
+						"responses": {"200": {"description": "ok"}}
+					}
+				},
+				"/raw-image": {
+					"post": {
+						"requestBody": {
+							"content": {
+								"image/png": {
+									"schema": {"type": "string", "format": "binary"}
+								}
+							}
+						},
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(oasSpec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 2)
+
+		var avatarEp, rawEp EndpointConfig
+		for _, ep := range r.Endpoints {
+			if ep.Path == "/avatar" {
+				avatarEp = ep
+			} else if ep.Path == "/raw-image" {
+				rawEp = ep
+			}
+		}
+		assert.Equal(t, []string{"image/png", "image/jpeg"}, avatarEp.Schema.Properties["file"].AcceptedMediaTypes)
+		assert.Equal(t, []string{"application/zip"}, avatarEp.Schema.Properties["archive"].AcceptedMediaTypes)
+		assert.Equal(t, "image/png", rawEp.ContentType)
+		assert.Equal(t, []string{"image/png"}, rawEp.Schema.AcceptedMediaTypes)
+	})
 }
