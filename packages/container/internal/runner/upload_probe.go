@@ -149,12 +149,12 @@ func buildCanaryProbeBody(schema *swagger.SchemaProperty, baselineBody any, cana
 	if schema.Type == "object" || len(schema.Properties) > 0 {
 		var out map[string]any
 		if m, ok := baselineBody.(map[string]any); ok && m != nil {
-			out = make(map[string]any, len(m)+len(schema.Properties))
+			out = make(map[string]any)
 			for k, v := range m {
 				out[k] = v
 			}
 		} else {
-			out = make(map[string]any, len(schema.Properties))
+			out = make(map[string]any)
 		}
 		for k, prop := range schema.Properties {
 			if prop == nil {

@@ -285,6 +285,104 @@ func TestFileUploadAnalyzer(t *testing.T) {
 		if len(sanitized) != 1 || sanitized[0].Level != "warning" || len(sanitized[0].CWEIDs) != 1 || sanitized[0].CWEIDs[0] != "CWE-434" {
 			t.Fatalf("expected warning + CWE-434 for sanitized HTML page, got %+v", sanitized)
 		}
+
+		attachment := a.Analyze(&AnalysisInput{
+			SentPayload:     map[string]any{"file": svgProbe},
+			StatusCode:      200,
+			ResponseBody:    svgProbe.Data,
+			ResponseHeaders: http.Header{"Content-Type": []string{"image/svg+xml"}, "Content-Disposition": []string{`attachment; filename="swazz-xss.svg"`}},
+			FileUploadSent:  true,
+		})
+		if len(attachment) != 1 || attachment[0].Level != "warning" || len(attachment[0].CWEIDs) != 1 {
+			t.Fatalf("expected warning + CWE-434 when Content-Disposition is attachment, got %+v", attachment)
+		}
+	})
+
+	t.Run("second-order follow-up analysis detects stored SVG XSS, lazy 5xx crash, and raw stored bytes", func(t *testing.T) {
+		svgProbe := swagger.UploadFile{
+			Filename:    "swazz-xss.svg",
+			ContentType: "image/svg+xml",
+			ProbeKind:   "svg_upload_probe",
+			Data:        []byte(`<svg xmlns="http://www.w3.org/2000/svg" onload="alert('swazz-svg-xss')"><script>alert('swazz-svg-xss')</script></svg>`),
+		}
+		// Inline SVG on follow-up -> error + CWE-79
+		storedXSS := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": svgProbe},
+			StatusCode:        200,
+			ResponseBody:      svgProbe.Data,
+			ResponseHeaders:   http.Header{"Content-Type": []string{"image/svg+xml"}},
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/42",
+		})
+		if len(storedXSS) != 1 || storedXSS[0].Level != "error" || len(storedXSS[0].CWEIDs) != 2 || storedXSS[0].CWEIDs[1] != "CWE-79" {
+			t.Fatalf("expected stored SVG XSS error + CWE-79, got %+v", storedXSS)
+		}
+
+		// Attachment SVG on follow-up -> suppressed (no duplicate warning)
+		attachmentFollowUp := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": svgProbe},
+			StatusCode:        200,
+			ResponseBody:      svgProbe.Data,
+			ResponseHeaders:   http.Header{"Content-Type": []string{"image/svg+xml"}, "Content-Disposition": []string{"attachment"}},
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/42",
+		})
+		if len(attachmentFollowUp) != 0 {
+			t.Fatalf("expected 0 follow-up findings for attachment SVG, got %+v", attachmentFollowUp)
+		}
+
+		// Lazy 5xx parser crash on follow-up
+		truncProbe := swagger.UploadFile{Filename: "swazz-truncated.png", ContentType: "image/png", ProbeKind: "truncated_png", Data: []byte{0x89, 0x50}}
+		lazyCrash := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": truncProbe},
+			StatusCode:        500,
+			ResponseBody:      []byte(`PIL.UnidentifiedImageError: cannot identify image file`),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /thumbs/42",
+		})
+		if len(lazyCrash) != 1 || lazyCrash[0].RuleID != "swazz/file-parser-error" {
+			t.Fatalf("expected swazz/file-parser-error on lazy 5xx follow-up, got %+v", lazyCrash)
+		}
+
+		// Stored raw mismatch bytes on follow-up
+		mismatchProbe := swagger.UploadFile{Filename: "swazz-probe.png", ContentType: "image/png", ProbeKind: "mime_mismatch_png", Data: []byte("swazz-not-a-valid-png-payload\n")}
+		storedRaw := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": mismatchProbe},
+			StatusCode:        200,
+			ResponseBody:      []byte("swazz-not-a-valid-png-payload\n"),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/42",
+		})
+		if len(storedRaw) != 1 || storedRaw[0].RuleID != "swazz/unvalidated-file-upload" {
+			t.Fatalf("expected stored mismatch finding on follow-up, got %+v", storedRaw)
+		}
+
+		// Follow-up traversal_filename: reflected -> error + CWE-22, unreflected -> suppressed; double_ext_filename -> suppressed
+		travProbe := swagger.UploadFile{Filename: "../../swazz-probe.txt", ContentType: "text/plain", ProbeKind: "traversal_filename", Data: []byte("probe")}
+		travReflected := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": travProbe},
+			StatusCode:        200,
+			ResponseBody:      []byte(`{"path":"../../swazz-probe.txt"}`),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/42",
+		})
+		if len(travReflected) != 1 || travReflected[0].Level != "error" || len(travReflected[0].CWEIDs) != 2 || travReflected[0].CWEIDs[1] != "CWE-22" {
+			t.Fatalf("expected error + CWE-22 for reflected traversal on follow-up, got %+v", travReflected)
+		}
+		travClean := a.Analyze(&AnalysisInput{
+			SentPayload:       map[string]any{"file": travProbe},
+			StatusCode:        200,
+			ResponseBody:      []byte(`{"path":"sanitized.txt"}`),
+			FileUploadSent:    true,
+			FollowUpSourceURL: "GET /files/42",
+		})
+		if len(travClean) != 0 {
+			t.Fatalf("expected 0 follow-up findings for unreflected traversal, got %+v", travClean)
+		}
+		doubleExt := swagger.UploadFile{Filename: "swazz-probe.php.png", ContentType: "image/png", ProbeKind: "double_ext_filename"}
+		if res := a.Analyze(&AnalysisInput{SentPayload: map[string]any{"file": doubleExt}, StatusCode: 200, FileUploadSent: true, FollowUpSourceURL: "GET /files/42"}); len(res) != 0 {
+			t.Fatalf("expected 0 follow-up findings for double_ext_filename, got %+v", res)
+		}
 	})
 }
 

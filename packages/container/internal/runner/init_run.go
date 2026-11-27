@@ -90,6 +90,8 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	r.sstiStore.Clear()
 	r.userLogRepeats.reset()
 	r.workerPanicked.Store(false)
+	r.uploadFollowUpSeen = sync.Map{}
+	r.uploadFollowUpCount.Store(0)
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	r.lifecycle.cancel = cancel

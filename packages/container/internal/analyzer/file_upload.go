@@ -82,17 +82,33 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	}
 
 	var findings []swagger.AnalysisFinding
+	isFollowUp := input.FollowUpSourceURL != ""
+	followUpSuffix := ""
+	followUpPrefix := ""
+	if isFollowUp {
+		followUpSuffix = fmt.Sprintf(" (confirmed on follow-up %s)", input.FollowUpSourceURL)
+		followUpPrefix = fmt.Sprintf("FollowUp: %s | ", input.FollowUpSourceURL)
+	}
 
 	if input.StatusCode >= 200 && input.StatusCode < 300 {
 		for _, hit := range uploads {
 			kind := hit.file.ProbeKind
 			switch {
 			case strings.HasPrefix(kind, "mime_mismatch_") || strings.HasPrefix(kind, "truncated_"):
+				if isFollowUp {
+					if strings.HasPrefix(kind, "truncated_") {
+						continue
+					}
+					trimmedProbe := bytes.TrimSpace(hit.file.Data)
+					if len(trimmedProbe) == 0 || !bytes.Contains(input.ResponseBody, trimmedProbe) {
+						continue
+					}
+				}
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            "error",
-					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode),
-					Evidence:         fmt.Sprintf("Field: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Status: %d | %s", hit.field, hit.file.Filename, hit.file.ContentType, kind, input.StatusCode, fileUploadRemediation),
+					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d%s.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode, followUpSuffix),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, input.StatusCode, fileUploadRemediation),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
 					OWASPCategory:    []string{"A06:2025 Insecure Design"},
 					CWEIDs:           []string{"CWE-434"},
@@ -104,6 +120,9 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 					bytes.Contains(lowerResp, []byte("..%2f..%2fswazz-probe.txt")) ||
 					bytes.Contains(lowerResp, []byte(`..\..\swazz-probe.txt`)) ||
 					bytes.Contains(lowerResp, []byte(`..\\..\\swazz-probe.txt`))
+				if isFollowUp && !reflected {
+					continue
+				}
 				level := "warning"
 				cwe := []string{"CWE-434"}
 				if reflected {
@@ -113,8 +132,8 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            level,
-					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode),
-					Evidence:         fmt.Sprintf("Field: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Reflected: %t | Status: %d | %s", hit.field, hit.file.Filename, hit.file.ContentType, kind, reflected, input.StatusCode, fileUploadRemediation),
+					Message:          fmt.Sprintf("Server accepted %s upload probe (%q, %s) with HTTP %d%s.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode, followUpSuffix),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | Reflected: %t | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, reflected, input.StatusCode, fileUploadRemediation),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
 					OWASPCategory:    []string{"A06:2025 Insecure Design"},
 					CWEIDs:           cwe,
@@ -123,7 +142,12 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				lowerResp := input.lowerBody()
 				hasXSSMarker := bytes.Contains(lowerResp, []byte("<script>alert('swazz-svg-xss')")) ||
 					bytes.Contains(lowerResp, []byte(`onload="alert('swazz-svg-xss')"`))
-				reflectedXSS := hasXSSMarker && isRenderableSVGOrHTMLResponse(input.ResponseHeaders, lowerResp)
+				reflectedXSS := hasXSSMarker &&
+					isRenderableSVGOrHTMLResponse(input.ResponseHeaders, lowerResp) &&
+					!isAttachmentDisposition(input.ResponseHeaders)
+				if isFollowUp && !reflectedXSS {
+					continue
+				}
 				level := "warning"
 				owasp := []string{"A06:2025 Insecure Design"}
 				cwe := []string{"CWE-434"}
@@ -135,13 +159,16 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            level,
-					Message:          fmt.Sprintf("Server accepted potentially unsafe %s upload (%q, %s) with HTTP %d.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode),
-					Evidence:         fmt.Sprintf("Field: %s | Filename: %s | ContentType: %s | ProbeKind: %s | ReflectedXSS: %t | Status: %d | %s", hit.field, hit.file.Filename, hit.file.ContentType, kind, reflectedXSS, input.StatusCode, fileUploadRemediation),
+					Message:          fmt.Sprintf("Server accepted potentially unsafe %s upload (%q, %s) with HTTP %d%s.", kind, hit.file.Filename, hit.file.ContentType, input.StatusCode, followUpSuffix),
+					Evidence:         fmt.Sprintf("%sField: %s | Filename: %s | ContentType: %s | ProbeKind: %s | ReflectedXSS: %t | Status: %d | %s", followUpPrefix, hit.field, hit.file.Filename, hit.file.ContentType, kind, reflectedXSS, input.StatusCode, fileUploadRemediation),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
 					OWASPCategory:    owasp,
 					CWEIDs:           cwe,
 				})
 			case kind == "double_ext_filename":
+				if isFollowUp {
+					continue
+				}
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/unvalidated-file-upload",
 					Level:            "warning",
@@ -160,7 +187,7 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 		for _, sig := range parserErrorSignatures {
 			if bytes.Contains(lower, sig) {
 				first := uploads[0]
-				msg := fmt.Sprintf("File parser crashed or leaked internal error (%q) with HTTP %d on %s probe.", string(sig), input.StatusCode, first.file.ProbeKind)
+				msg := fmt.Sprintf("File parser crashed or leaked internal error (%q) with HTTP %d on %s probe%s.", string(sig), input.StatusCode, first.file.ProbeKind, followUpSuffix)
 				uploadsSummary := ""
 				if len(uploads) > 1 {
 					parts := make([]string, len(uploads))
@@ -168,13 +195,13 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 						parts[i] = fmt.Sprintf("%s:%s", u.field, u.file.ProbeKind)
 					}
 					uploadsSummary = fmt.Sprintf(" | Uploads: %s", strings.Join(parts, ", "))
-					msg = fmt.Sprintf("File parser crashed or leaked internal error (%q) with HTTP %d across %d upload probes.", string(sig), input.StatusCode, len(uploads))
+					msg = fmt.Sprintf("File parser crashed or leaked internal error (%q) with HTTP %d across %d upload probes%s.", string(sig), input.StatusCode, len(uploads), followUpSuffix)
 				}
 				findings = append(findings, swagger.AnalysisFinding{
 					RuleID:           "swazz/file-parser-error",
 					Level:            "error",
 					Message:          msg,
-					Evidence:         fmt.Sprintf("MatchedSignature: %s | Field: %s | Filename: %s | ProbeKind: %s%s | Status: %d | %s", strings.TrimSpace(string(sig)), first.field, first.file.Filename, first.file.ProbeKind, uploadsSummary, input.StatusCode, fileUploadRemediation),
+					Evidence:         fmt.Sprintf("%sMatchedSignature: %s | Field: %s | Filename: %s | ProbeKind: %s%s | Status: %d | %s", followUpPrefix, strings.TrimSpace(string(sig)), first.field, first.file.Filename, first.file.ProbeKind, uploadsSummary, input.StatusCode, fileUploadRemediation),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
 					OWASPCategory:    []string{"A10:2025 Mishandling of Exceptional Conditions"},
 					CWEIDs:           []string{"CWE-20", "CWE-755", "CWE-209"},
@@ -187,14 +214,24 @@ func (a *FileUploadAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	return findings
 }
 
-func isRenderableSVGOrHTMLResponse(headers http.Header, lowerBody []byte) bool {
-	ct := strings.ToLower(strings.TrimSpace(headers.Get("Content-Type")))
-	if semi := strings.IndexByte(ct, ';'); semi > 0 {
-		ct = strings.TrimSpace(ct[:semi])
+func isAttachmentDisposition(headers http.Header) bool {
+	if headers == nil {
+		return false
 	}
-	if ct != "" {
-		return ct == "text/html" || ct == "image/svg+xml" || ct == "application/xhtml+xml" ||
-			ct == "application/xml" || ct == "text/xml"
+	disp := strings.ToLower(strings.TrimSpace(headers.Get("Content-Disposition")))
+	return strings.HasPrefix(disp, "attachment") || strings.Contains(disp, "; attachment")
+}
+
+func isRenderableSVGOrHTMLResponse(headers http.Header, lowerBody []byte) bool {
+	if headers != nil {
+		ct := strings.ToLower(strings.TrimSpace(headers.Get("Content-Type")))
+		if semi := strings.IndexByte(ct, ';'); semi > 0 {
+			ct = strings.TrimSpace(ct[:semi])
+		}
+		if ct != "" {
+			return ct == "text/html" || ct == "image/svg+xml" || ct == "application/xhtml+xml" ||
+				ct == "application/xml" || ct == "text/xml"
+		}
 	}
 	trimmed := bytes.TrimSpace(lowerBody)
 	return bytes.HasPrefix(trimmed, []byte("<svg")) || bytes.HasPrefix(trimmed, []byte("<!doctype html")) || bytes.HasPrefix(trimmed, []byte("<html"))
