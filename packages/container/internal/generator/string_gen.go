@@ -143,6 +143,43 @@ func (g *Generator) getActiveMaliciousStrings() ([]any, bool) {
 	return all, hasAny
 }
 
+func (g *Generator) generateFileUpload(propName string, inArray bool, acceptedMIME []string) swagger.UploadFile {
+	cats := payloads.InferFileCategories(acceptedMIME, propName, g.Endpoint)
+	if len(cats) == 0 {
+		g.mu.Lock()
+		cats = append([]payloads.FileCategory(nil), g.preferredUploadCategories...)
+		g.mu.Unlock()
+	}
+
+	validCanary := func() swagger.UploadFile {
+		if len(cats) > 0 {
+			return payloads.ValidCanaryForHints(acceptedMIME, cats)
+		}
+		return payloads.ValidTextFile()
+	}
+
+	switch g.profile {
+	case swagger.ProfileMalicious:
+		if g.isCategoryEnabled(payloads.CatMaliciousFileUpload) {
+			maxAllowed := max(g.settings.PayloadSizeCap()-payloads.MinEnvelopeBytes, 1024)
+			if inArray && maxAllowed > 1024 {
+				maxAllowed = 1024
+			}
+			probes := payloads.PrioritizedMaliciousUploads(cats, maxAllowed)
+			return seqPick(&g.mu, probes, &g.mFileIdx)
+		}
+	case swagger.ProfileBoundary:
+		if g.isCategoryEnabled(payloads.CatBoundaryFileUpload) {
+			maxAllowed := max(g.settings.PayloadSizeCap()-payloads.MinEnvelopeBytes, 1024)
+			if inArray && maxAllowed > 1024 {
+				maxAllowed = 1024 // 1KB per item in arrays to prevent OOM
+			}
+			return seqPick(&g.mu, payloads.BoundaryFileUploads(maxAllowed), &g.bFileIdx)
+		}
+	}
+	return validCanary()
+}
+
 func (g *Generator) generateDate() any {
 	switch g.profile {
 	case swagger.ProfileBoundary:

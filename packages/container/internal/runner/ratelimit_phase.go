@@ -42,10 +42,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		r.overlayBindings(epIdx, &built, nil)
 		resolvedPath := fillPathParamsFromMap(endpoint.Path, built.pathParams)
 
-		var payload any
-		if built.body != nil {
-			payload = built.body
-		}
+		payload := built.requestBody()
 		queryParams := built.queryParams
 		generatedHeaders := built.headers
 

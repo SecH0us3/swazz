@@ -50,12 +50,23 @@ const (
 
 // SchemaProperty mirrors a JSON Schema property definition.
 type SchemaProperty struct {
-	Type       string                     `json:"type,omitempty"`
-	Format     string                     `json:"format,omitempty"`
-	Enum       []any                      `json:"enum,omitempty"`
-	Properties map[string]*SchemaProperty `json:"properties,omitempty"`
-	Items      *SchemaProperty            `json:"items,omitempty"`
-	Required   []string                   `json:"required,omitempty"`
+	Type               string                     `json:"type,omitempty"`
+	Format             string                     `json:"format,omitempty"`
+	Enum               []any                      `json:"enum,omitempty"`
+	AcceptedMediaTypes []string                   `json:"acceptedMediaTypes,omitempty"`
+	Properties         map[string]*SchemaProperty `json:"properties,omitempty"`
+	Items              *SchemaProperty            `json:"items,omitempty"`
+	Required           []string                   `json:"required,omitempty"`
+}
+
+// UploadFile represents a synthesized file part for multipart/form-data fuzzing.
+// Data is excluded from JSON serialization so scan logs and UI previews stay compact.
+type UploadFile struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"contentType"`
+	ProbeKind   string `json:"probeKind"`
+	Size        int    `json:"size"`
+	Data        []byte `json:"-"`
 }
 
 // UnmarshalJSON accepts both spellings of JSON Schema's "type": a single string

@@ -610,3 +610,126 @@ func (g *Generator) randomizeAndRegisterSSTI(s string) string {
 	}
 	return newS
 }
+
+func TestStringGen_FileUploadProfiles(t *testing.T) {
+	t.Parallel()
+
+	t.Run("random profile returns valid PNG for image fields and valid text otherwise", func(t *testing.T) {
+		g := New(nil, swagger.ProfileRandom, swagger.Settings{})
+		imgVal := g.Generate("avatar_image", &swagger.SchemaProperty{Type: "string", Format: "binary"})
+		imgFile, ok := imgVal.(swagger.UploadFile)
+		require.True(t, ok)
+		assert.Equal(t, "valid_png", imgFile.ProbeKind)
+
+		docVal := g.Generate("document", &swagger.SchemaProperty{Type: "file"})
+		docFile, ok := docVal.(swagger.UploadFile)
+		require.True(t, ok)
+		assert.Equal(t, "valid_pdf", docFile.ProbeKind)
+	})
+
+	t.Run("malicious profile cycles non-destructive upload probes", func(t *testing.T) {
+		g := New(nil, swagger.ProfileMalicious, swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
+			},
+		})
+		seen := make(map[string]bool)
+		for range len(payloads.MaliciousFileUploads) {
+			v := g.Generate("file", &swagger.SchemaProperty{Type: "string", Format: "binary"})
+			uf, ok := v.(swagger.UploadFile)
+			require.True(t, ok)
+			seen[uf.Filename] = true
+		}
+		assert.Len(t, seen, len(payloads.MaliciousFileUploads))
+	})
+
+	t.Run("boundary profile emits boundary file upload probes", func(t *testing.T) {
+		g := New(nil, swagger.ProfileBoundary, swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileBoundary: {payloads.CatBoundaryFileUpload},
+			},
+		})
+		seen := make(map[string]bool)
+		for range 3 {
+			v := g.Generate("file", &swagger.SchemaProperty{Type: "string", Format: "binary"})
+			uf, ok := v.(swagger.UploadFile)
+			require.True(t, ok)
+			seen[uf.ProbeKind] = true
+		}
+		assert.True(t, seen["empty_file"])
+		assert.True(t, seen["long_filename"])
+		assert.True(t, seen["oversized_uncompressed"])
+	})
+
+	t.Run("disabled file upload categories fall back to valid canary", func(t *testing.T) {
+		gm := New(nil, swagger.ProfileMalicious, swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousSQLi},
+			},
+		})
+		uf := gm.Generate("avatar", &swagger.SchemaProperty{Type: "string", Format: "binary"}).(swagger.UploadFile)
+		assert.Equal(t, "valid_png", uf.ProbeKind)
+
+		gb := New(nil, swagger.ProfileBoundary, swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileBoundary: {payloads.CatBoundaryStrings},
+			},
+		})
+		ufB := gb.Generate("doc", &swagger.SchemaProperty{Type: "file"}).(swagger.UploadFile)
+		assert.Equal(t, "valid_pdf", ufB.ProbeKind)
+
+		ufGeneric := gb.Generate("attachment", &swagger.SchemaProperty{Type: "file"}).(swagger.UploadFile)
+		assert.Equal(t, "valid_text", ufGeneric.ProbeKind)
+	})
+
+	t.Run("Generate respects AcceptedMediaTypes and SetPreferredUploadCategories", func(t *testing.T) {
+		gr := New(nil, swagger.ProfileRandom, swagger.Settings{})
+		ufZip := gr.Generate("file", &swagger.SchemaProperty{
+			Type:               "string",
+			Format:             "binary",
+			AcceptedMediaTypes: []string{"application/zip"},
+		}).(swagger.UploadFile)
+		assert.Equal(t, "valid_zip", ufZip.ProbeKind)
+
+		gm := New(nil, swagger.ProfileMalicious, swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
+			},
+		})
+		gm.SetPreferredUploadCategories([]payloads.FileCategory{payloads.FileCatArchive})
+		first := gm.Generate("file", &swagger.SchemaProperty{Type: "string", Format: "binary"}).(swagger.UploadFile)
+		assert.Equal(t, "application/zip", first.ContentType)
+	})
+
+	t.Run("GenerateArrayItem handles binary/file and caps boundary array file size", func(t *testing.T) {
+		g := New(nil, swagger.ProfileBoundary, swagger.Settings{
+			MaxPayloadSizeBytes: 2 * 1024 * 1024,
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileBoundary: {payloads.CatBoundaryFileUpload},
+			},
+		})
+		for range 3 {
+			v := g.GenerateArrayItem("files", &swagger.SchemaProperty{Type: "string", Format: "binary"})
+			uf, ok := v.(swagger.UploadFile)
+			require.True(t, ok)
+			assert.LessOrEqual(t, uf.Size, 1024)
+		}
+	})
+
+	t.Run("MinIterationsNeeded and BodyIterations include upload-only categories", func(t *testing.T) {
+		malSettings := swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileMalicious: {payloads.CatMaliciousFileUpload},
+			},
+		}
+		assert.Equal(t, len(payloads.MaliciousFileUploads), MinIterationsNeeded(swagger.ProfileMalicious, malSettings))
+		assert.Equal(t, len(payloads.MaliciousFileUploads), New(nil, swagger.ProfileMalicious, malSettings).BodyIterations())
+
+		bndSettings := swagger.Settings{
+			PayloadCategories: map[swagger.FuzzingProfile][]string{
+				swagger.ProfileBoundary: {payloads.CatBoundaryFileUpload},
+			},
+		}
+		assert.Equal(t, 3, MinIterationsNeeded(swagger.ProfileBoundary, bndSettings))
+	})
+}

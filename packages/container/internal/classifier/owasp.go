@@ -23,7 +23,7 @@ func OWASPCategories(ruleID string) []string {
 		}
 	case "swazz/sensitive-data-leak", "swazz/mcp-secret-leak", "swazz/mcp-resource-leak":
 		return []string{"A01:2025 Broken Access Control"}
-	case "swazz/no-rate-limit", "swazz/rate-limit-active", "swazz/response-size-anomaly":
+	case "swazz/no-rate-limit", "swazz/rate-limit-active", "swazz/response-size-anomaly", "swazz/unvalidated-file-upload":
 		return []string{"A06:2025 Insecure Design"}
 	case "swazz/oob-interaction":
 		return []string{"A08:2025 Software or Data Integrity Failures"}
@@ -38,7 +38,7 @@ func OWASPCategories(ruleID string) []string {
 		return []string{"A05:2025 Injection"}
 	case "swazz/stack-trace-leak", "swazz/null-pointer-exception", "swazz/sql-error-leak",
 		"swazz/timeout", "swazz/network-error", "swazz/mcp-server-crash",
-		"swazz/mcp-tool-exception",
+		"swazz/mcp-tool-exception", "swazz/file-parser-error",
 		"swazz/grpc-server-crash", "swazz/grpc-internal-error",
 		"swazz/grpc-unknown-error", "swazz/grpc-data-loss":
 		return []string{"A10:2025 Mishandling of Exceptional Conditions"}

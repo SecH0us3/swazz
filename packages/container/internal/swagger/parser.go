@@ -119,7 +119,7 @@ func ParseSpec(raw json.RawMessage, opts ...ParserOption) (*ParseResult, error) 
 			endpointHint := strings.ToUpper(method) + " " + path
 
 			// Extract request body schema
-			bodyResult := extractRequestSchema(operation, fullSpec, endpointHint, o.maxNodes, o.maxDepth)
+			bodyResult := extractRequestSchema(operation, allParams, fullSpec, endpointHint, o.maxNodes, o.maxDepth)
 
 			var schema SchemaProperty
 			if bodyResult != nil {
@@ -241,7 +241,7 @@ type bodyResult struct {
 }
 
 // extractRequestSchema extracts the request body schema from an operation.
-func extractRequestSchema(operation map[string]any, spec map[string]any, endpointHint string, maxNodes, maxDepth int) *bodyResult {
+func extractRequestSchema(operation map[string]any, allParams []any, spec map[string]any, endpointHint string, maxNodes, maxDepth int) *bodyResult {
 	// OpenAPI 3.x: requestBody → content → <mime> → schema
 	if rb, ok := operation["requestBody"].(map[string]any); ok {
 		if content, ok := rb["content"].(map[string]any); ok {
@@ -262,10 +262,15 @@ func extractRequestSchema(operation map[string]any, spec map[string]any, endpoin
 				}
 			}
 
-			// Fallback to any key with schema
+			// Fallback to any key with schema (deterministic order)
 			if foundKey == "" {
-				for key, v := range content {
-					if m, ok := v.(map[string]any); ok {
+				keys := make([]string, 0, len(content))
+				for key := range content {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					if m, ok := content[key].(map[string]any); ok {
 						if _, hasSchema := m["schema"]; hasSchema {
 							foundKey = key
 							break
@@ -310,8 +315,36 @@ func extractRequestSchema(operation map[string]any, spec map[string]any, endpoin
 								}
 							}
 						}
+						resolved := resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth)
+						if encMap, ok := m["encoding"].(map[string]any); ok && resolved.Properties != nil {
+							for propName, rawEnc := range encMap {
+								encObj, ok := rawEnc.(map[string]any)
+								if !ok {
+									continue
+								}
+								ctList := parseMediaTypeList(getStringField(encObj, "contentType"))
+								if len(ctList) == 0 {
+									continue
+								}
+								if prop, exists := resolved.Properties[propName]; exists && prop != nil {
+									prop.AcceptedMediaTypes = appendUniqueMediaTypes(prop.AcceptedMediaTypes, ctList...)
+									if prop.Type == "array" && prop.Items != nil {
+										prop.Items.AcceptedMediaTypes = appendUniqueMediaTypes(prop.Items.AcceptedMediaTypes, ctList...)
+									}
+								}
+							}
+						}
+						if isBinaryUploadMIME(ct) {
+							resolved.AcceptedMediaTypes = appendUniqueMediaTypes(resolved.AcceptedMediaTypes, ct)
+							if resolved.Type == "string" && resolved.Format == "" {
+								resolved.Format = "binary"
+							}
+						}
+						if strings.Contains(strings.ToLower(ct), "multipart/form-data") {
+							promoteBinaryMediaTypeProps(&resolved)
+						}
 						return &bodyResult{
-							schema:      resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth),
+							schema:      resolved,
 							contentType: ct,
 							example:     example,
 						}
@@ -322,37 +355,95 @@ func extractRequestSchema(operation map[string]any, spec map[string]any, endpoin
 	}
 
 	// Swagger 2.0: parameters with in: "body"
-	if params, ok := operation["parameters"].([]any); ok {
-		for _, p := range params {
-			if pm, ok := p.(map[string]any); ok {
-				if pm["in"] == "body" {
-					if s, ok := pm["schema"]; ok {
-						var example any
-						if ex, ok := pm["example"]; ok {
-							example = ex
-						} else if xex, ok := pm["x-examples"]; ok {
-							example = xex
-						} else {
-							if sm, ok := s.(map[string]any); ok {
-								if ex, ok := sm["example"]; ok {
-									example = ex
-								} else if df, ok := sm["default"]; ok {
-									example = df
-								}
+	for _, p := range allParams {
+		if pm, ok := p.(map[string]any); ok {
+			if pm["in"] == "body" {
+				if s, ok := pm["schema"]; ok {
+					var example any
+					if ex, ok := pm["example"]; ok {
+						example = ex
+					} else if xex, ok := pm["x-examples"]; ok {
+						example = xex
+					} else {
+						if sm, ok := s.(map[string]any); ok {
+							if ex, ok := sm["example"]; ok {
+								example = ex
+							} else if df, ok := sm["default"]; ok {
+								example = df
 							}
 						}
-						return &bodyResult{
-							schema:      resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth),
-							contentType: "application/json",
-							example:     example,
-						}
+					}
+					return &bodyResult{
+						schema:      resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth),
+						contentType: "application/json",
+						example:     example,
 					}
 				}
 			}
 		}
 	}
 
+	// Swagger 2.0: parameters with in: "formData" (supports type: "file" -> multipart/form-data)
+	if len(allParams) > 0 {
+		props := make(map[string]*SchemaProperty)
+		var required []string
+		hasFile := false
+		for _, p := range allParams {
+			pm, ok := p.(map[string]any)
+			if !ok || pm["in"] != "formData" {
+				continue
+			}
+			name, _ := pm["name"].(string)
+			if name == "" {
+				continue
+			}
+			typ := getStringField(pm, "type")
+			format := getStringField(pm, "format")
+			if typ == "file" {
+				typ = "string"
+				format = "binary"
+				hasFile = true
+			} else if typ == "" {
+				typ = "string"
+			}
+			props[name] = &SchemaProperty{
+				Type:   typ,
+				Format: format,
+			}
+			if req, ok := pm["required"].(bool); ok && req {
+				required = append(required, name)
+			}
+		}
+		if len(props) > 0 {
+			ct := "application/x-www-form-urlencoded"
+			if hasFile || hasConsumes(operation, "multipart/form-data") || hasConsumes(spec, "multipart/form-data") {
+				ct = "multipart/form-data"
+			}
+			return &bodyResult{
+				schema: SchemaProperty{
+					Type:       "object",
+					Properties: props,
+					Required:   required,
+				},
+				contentType: ct,
+			}
+		}
+	}
+
 	return nil
+}
+
+func hasConsumes(obj map[string]any, target string) bool {
+	consumes, ok := obj["consumes"].([]any)
+	if !ok {
+		return false
+	}
+	for _, c := range consumes {
+		if s, ok := c.(string); ok && strings.EqualFold(s, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // mergeParams merges path-level and operation-level parameters.
@@ -377,7 +468,7 @@ func extractParamsSchema(params []any) *SchemaProperty {
 			continue
 		}
 		in, _ := pm["in"].(string)
-		if in == "body" || in == "header" || in == "path" {
+		if in == "body" || in == "formData" || in == "header" || in == "path" {
 			continue
 		}
 		name, _ := pm["name"].(string)
@@ -490,6 +581,74 @@ func getStringField(m map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+func parseMediaTypeList(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	var out []string
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+func appendUniqueMediaTypes(existing []string, items ...string) []string {
+	seen := make(map[string]bool)
+	for _, e := range existing {
+		seen[strings.ToLower(e)] = true
+	}
+	for _, item := range items {
+		k := strings.ToLower(strings.TrimSpace(item))
+		if k == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		existing = append(existing, strings.TrimSpace(item))
+	}
+	return existing
+}
+
+func isBinaryUploadMIME(mimeType string) bool {
+	m := strings.ToLower(strings.TrimSpace(mimeType))
+	if semi := strings.IndexByte(m, ';'); semi > 0 {
+		m = strings.TrimSpace(m[:semi])
+	}
+	if m == "" || m == "*/*" || m == "application/json" || m == "application/xml" ||
+		m == "application/x-www-form-urlencoded" || m == "multipart/form-data" ||
+		strings.HasPrefix(m, "text/") || strings.HasSuffix(m, "+json") || strings.HasSuffix(m, "+xml") {
+		return false
+	}
+	return true
+}
+
+func hasBinaryUploadMIME(list []string) bool {
+	for _, item := range list {
+		if isBinaryUploadMIME(item) {
+			return true
+		}
+	}
+	return false
+}
+
+func promoteBinaryMediaTypeProps(s *SchemaProperty) {
+	if s == nil {
+		return
+	}
+	if s.Type == "string" && s.Format == "" && hasBinaryUploadMIME(s.AcceptedMediaTypes) {
+		s.Format = "binary"
+	}
+	if s.Items != nil {
+		promoteBinaryMediaTypeProps(s.Items)
+	}
+	for _, prop := range s.Properties {
+		promoteBinaryMediaTypeProps(prop)
+	}
 }
 
 var preferredSuccessCodes = []string{"200", "201", "202", "2XX", "2xx"}

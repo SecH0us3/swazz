@@ -82,7 +82,7 @@ func (g *Generator) generateBoolean() any {
 	return rand.Float64() < 0.5 // #nosec G404 -- non-security randomness for fuzzer
 }
 
-func (g *Generator) generateByProfile(typ, format, propName string) any {
+func (g *Generator) generateByProfile(typ, format, propName string, acceptedMIME []string) any {
 	// MALICIOUS: Type confusion check
 	if g.profile == swagger.ProfileMalicious && g.isCategoryEnabled(payloads.CatMaliciousTypeConfusion) {
 		if rand.Float64() < 0.05 { // #nosec G404 -- non-security randomness for fuzzer
@@ -92,7 +92,10 @@ func (g *Generator) generateByProfile(typ, format, propName string) any {
 
 	formatLower := strings.ToLower(format)
 
-	// Handle format-specific date-time/uuid before generic string
+	// Handle format-specific date-time/uuid/binary before generic string
+	if (typ == "string" && formatLower == "binary") || typ == "file" {
+		return g.generateFileUpload(propName, false, acceptedMIME)
+	}
 	if typ == "string" {
 		if formatLower == "date-time" {
 			return g.generateDate()

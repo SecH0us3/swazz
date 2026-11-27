@@ -298,6 +298,21 @@ func EvaluateOWASPAPI(ctx *ClassificationContext) []ClassificationMatch {
 			Reason:     "XML External Entity parsed and processed by backend parser",
 			CWE:        "CWE-611",
 		})
+	} else if ruleID == "swazz/unvalidated-file-upload" || ruleID == "swazz/file-parser-error" {
+		cwe := "CWE-434"
+		reason := "Server accepted unvalidated file upload probe without magic-byte or filename verification"
+		if ruleID == "swazz/file-parser-error" {
+			cwe = "CWE-755"
+			reason = "File parser crashed or leaked internal error on malformed/truncated upload probe"
+		}
+		matches = append(matches, ClassificationMatch{
+			Category:   "API8:2023 Security Misconfiguration",
+			Standard:   "OWASP_API_2023",
+			Weight:     0.9,
+			Confidence: "HIGH",
+			Reason:     reason,
+			CWE:        cwe,
+		})
 	} else if strings.HasPrefix(ruleID, "swazz/mcp-") || strings.HasPrefix(ruleID, "swazz/ws-") ||
 		strings.HasPrefix(ruleID, "swazz/grpc-") {
 		matches = append(matches, ClassificationMatch{

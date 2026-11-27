@@ -107,7 +107,7 @@ func (r *Runner) fuzzEndpoint(
 		}
 		wg.Add(1)
 
-		it, p, qp, gh, pp, ot, pn := i, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens, built.pinned
+		it, p, bodyMap, qp, gh, pp, ot, pn := i, built.requestBody(), built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens, built.pinned
 		r.goWorker(func() {
 			defer r.limiter.Release()
 			defer wg.Done()
@@ -120,7 +120,7 @@ func (r *Runner) fuzzEndpoint(
 				p, profile, qp, gh,
 				endpoint.ContentType, ot, pn,
 			)
-			r.observeRequiredParams(endpoint, p, qp, result.Status, result.ResponseBody)
+			r.observeRequiredParams(endpoint, bodyMap, qp, result.Status, result.ResponseBody)
 
 			if len(result.AnalyzerFindings) > 0 {
 				for fi := range result.AnalyzerFindings {
@@ -187,8 +187,9 @@ type payloadField struct {
 }
 
 func payloadFields(p generatedPayload) [3]payloadField {
+	body := p.requestBody()
 	return [3]payloadField{
-		{key: "body", present: p.body != nil, val: p.body},
+		{key: "body", present: body != nil, val: body},
 		{key: "pathParams", present: p.pathParams != nil, val: p.pathParams},
 		{key: "queryParams", present: p.queryParams != nil, val: p.queryParams},
 	}
@@ -304,6 +305,15 @@ func encodedSizeBounds(v any, limit int) (lo, hi int) {
 	switch t := v.(type) {
 	case nil:
 		return 4, 4
+	case swagger.UploadFile:
+		n := len(t.Data) + len(t.Filename) + len(t.ContentType) + 64
+		return n, n + 128
+	case *swagger.UploadFile:
+		if t == nil {
+			return 4, 4
+		}
+		n := len(t.Data) + len(t.Filename) + len(t.ContentType) + 64
+		return n, n + 128
 	case bool:
 		return 4, 5
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:

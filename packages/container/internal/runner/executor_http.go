@@ -12,9 +12,12 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"mime/multipart"
 	"net/http"
 	"net/http/httputil"
+	"net/textproto"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -276,12 +279,13 @@ func (r *Runner) sendRequest(
 
 		var bodyReader io.Reader
 		var reqBody []byte
+		fileUploadSent := false
 		if isBody && payload != nil {
 			if strings.Contains(effectiveCT, "x-www-form-urlencoded") {
 				if m, ok := payload.(map[string]any); ok {
 					vals := url.Values{}
 					for k, v := range m {
-						vals.Set(k, toString(v))
+						vals.Set(k, formFieldValue(v))
 					}
 					reqBody = []byte(vals.Encode())
 					bodyReader = bytes.NewReader(reqBody)
@@ -296,7 +300,106 @@ func (r *Runner) sendRequest(
 				}
 			}
 
+			if bodyReader == nil && strings.Contains(effectiveCT, "multipart/form-data") {
+				if m, ok := payload.(map[string]any); ok {
+					var mpBuf bytes.Buffer
+					mw := multipart.NewWriter(&mpBuf)
+					keys := make([]string, 0, len(m))
+					for k := range m {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					mpOk := true
+					mpFilesWritten := 0
+					for _, k := range keys {
+						v := m[k]
+						switch tv := v.(type) {
+						case swagger.UploadFile:
+							if err := writeMultipartFile(mw, k, tv); err != nil {
+								mpOk = false
+							} else {
+								mpFilesWritten++
+							}
+						case *swagger.UploadFile:
+							if tv != nil {
+								if err := writeMultipartFile(mw, k, *tv); err != nil {
+									mpOk = false
+								} else {
+									mpFilesWritten++
+								}
+							}
+						case []any:
+							for _, item := range tv {
+								switch uf := item.(type) {
+								case swagger.UploadFile:
+									if err := writeMultipartFile(mw, k, uf); err != nil {
+										mpOk = false
+									} else {
+										mpFilesWritten++
+									}
+								case *swagger.UploadFile:
+									if uf != nil {
+										if err := writeMultipartFile(mw, k, *uf); err != nil {
+											mpOk = false
+										} else {
+											mpFilesWritten++
+										}
+									}
+								default:
+									if err := mw.WriteField(k, multipartFieldValue(item)); err != nil {
+										mpOk = false
+									}
+								}
+							}
+						default:
+							if err := mw.WriteField(k, multipartFieldValue(v)); err != nil {
+								mpOk = false
+							}
+						}
+					}
+					if err := mw.Close(); err == nil && mpOk {
+						reqBody = mpBuf.Bytes()
+						bodyReader = bytes.NewReader(reqBody)
+						// Ensure Content-Type includes the exact multipart boundary.
+						setContentTypeHeader(mergedHeaders, mw.FormDataContentType())
+						fileUploadSent = mpFilesWritten > 0
+					}
+				}
+			}
+
+			if bodyReader == nil && !strings.Contains(effectiveCT, "multipart/form-data") {
+				var rawUF *swagger.UploadFile
+				switch tv := payload.(type) {
+				case swagger.UploadFile:
+					rawUF = &tv
+				case *swagger.UploadFile:
+					rawUF = tv
+				}
+				if rawUF != nil {
+					reqBody = rawUF.Data
+					bodyReader = bytes.NewReader(reqBody)
+					fileUploadSent = true
+					// Intentionally override application/octet-stream with the probe's Content-Type
+					// so raw binary upload endpoints are tested for MIME/magic-byte validation.
+					ct := strings.TrimSpace(rawUF.ContentType)
+					if ct == "" {
+						if effectiveCT != "" && !strings.Contains(strings.ToLower(effectiveCT), "json") {
+							ct = effectiveCT
+						} else {
+							ct = "application/octet-stream"
+						}
+					}
+					setContentTypeHeader(mergedHeaders, ct)
+				}
+			}
+
 			if bodyReader == nil {
+				for hk, hv := range mergedHeaders {
+					if strings.EqualFold(hk, "content-type") && strings.Contains(strings.ToLower(hv), "multipart/form-data") {
+						setContentTypeHeader(mergedHeaders, "application/json")
+						break
+					}
+				}
 				reqBody, _ = json.Marshal(payload)
 				bodyReader = bytes.NewReader(reqBody)
 			}
@@ -571,6 +674,8 @@ func (r *Runner) sendRequest(
 				Profile:         profile,
 				Endpoint:        originalPath,
 				Method:          method,
+				StatusCode:      resp.StatusCode,
+				FileUploadSent:  fileUploadSent,
 				ResponseSize:    responseSize,
 				BaselineSize:    baselineSize,
 				SizeMultiplier:  multiplier,
@@ -632,4 +737,66 @@ func oobUUIDsInRequest(rawURL string, headers map[string]string, body []byte) []
 		}
 	}
 	return matches
+}
+
+var multipartQuoteEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\r", "", "\n", "")
+var headerCRLFSanitizer = strings.NewReplacer("\r", "", "\n", "")
+
+func setContentTypeHeader(headers map[string]string, ct string) {
+	for hk := range headers {
+		if strings.EqualFold(hk, "content-type") && hk != "Content-Type" {
+			delete(headers, hk)
+		}
+	}
+	headers["Content-Type"] = headerCRLFSanitizer.Replace(ct)
+}
+
+func multipartFieldValue(v any) string {
+	switch tv := v.(type) {
+	case map[string]any, []any:
+		if encoded, err := json.Marshal(tv); err == nil {
+			return string(encoded)
+		}
+	}
+	return toString(v)
+}
+
+func formFieldValue(v any) string {
+	switch tv := v.(type) {
+	case swagger.UploadFile:
+		if tv.Filename != "" {
+			return tv.Filename
+		}
+		return "upload.bin"
+	case *swagger.UploadFile:
+		if tv != nil {
+			if tv.Filename != "" {
+				return tv.Filename
+			}
+			return "upload.bin"
+		}
+		return ""
+	}
+	return toString(v)
+}
+
+func writeMultipartFile(mw *multipart.Writer, field string, uf swagger.UploadFile) error {
+	h := make(textproto.MIMEHeader)
+	safeField := multipartQuoteEscaper.Replace(field)
+	safeName := multipartQuoteEscaper.Replace(uf.Filename)
+	if safeName == "" {
+		safeName = "upload.bin"
+	}
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, safeField, safeName))
+	ct := strings.TrimSpace(uf.ContentType)
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	h.Set("Content-Type", multipartQuoteEscaper.Replace(ct))
+	part, err := mw.CreatePart(h)
+	if err != nil {
+		return err
+	}
+	_, err = part.Write(uf.Data)
+	return err
 }

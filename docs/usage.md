@@ -676,6 +676,7 @@ When a WAF is identified and the fuzzing run uncovers confirmed vulnerability by
   - NoSQL Injection (`swazz/nosql-injection`)
   - XML External Entity (`swazz/xxe-leak`)
   - Server-Side Template Injection (`swazz/ssti-leak`)
+  - File Upload Validation (`swazz/unvalidated-file-upload`, `swazz/file-parser-error`) — `multipart/form-data` and raw binary fuzzing for `format: binary` / Swagger 2.0 `type: file` endpoints using non-destructive probes loaded from `packages/container/internal/generator/payloads/upload_corpus/` (plus optional `SWAZZ_UPLOAD_CORPUS_DIR` runtime directory) with automatic MIME/magic-byte classification, OpenAPI `encoding`/`contentMediaType` extraction, and baseline canary type probing (no DoS/zip bombs).
   - CRLF / Header Injection (`swazz/header-injection`)
   - GraphQL Injection (`swazz/graphql-*`)
   - Prototype Pollution (`swazz/prototype-pollution`)

@@ -489,3 +489,233 @@ func TestDerefMap_RefResolutionAndMissingTarget(t *testing.T) {
 		t.Fatalf("expected nil for missing $#ref target, got %+v", missing)
 	}
 }
+
+func TestParseSwagger2_FormDataFileUpload(t *testing.T) {
+	spec := `{
+		"swagger": "2.0",
+		"info": {"title": "Upload API", "version": "1.0"},
+		"paths": {
+			"/upload": {
+				"post": {
+					"consumes": ["multipart/form-data"],
+					"parameters": [
+						{"name": "avatar", "in": "formData", "type": "file", "required": true},
+						{"name": "caption", "in": "formData", "type": "string"}
+					],
+					"responses": {"200": {"description": "ok"}}
+				}
+			}
+		}
+	}`
+	res, err := ParseRawSpec([]byte(spec))
+	require.NoError(t, err)
+	require.Len(t, res.Endpoints, 1)
+
+	ep := res.Endpoints[0]
+	assert.Equal(t, "multipart/form-data", ep.ContentType)
+	assert.Nil(t, ep.QueryParams, "formData parameters must not leak into QueryParams")
+	require.NotNil(t, ep.Schema)
+	assert.Equal(t, "object", ep.Schema.Type)
+	require.Contains(t, ep.Schema.Properties, "avatar")
+	assert.Equal(t, "string", ep.Schema.Properties["avatar"].Type)
+	assert.Equal(t, "binary", ep.Schema.Properties["avatar"].Format)
+	assert.Contains(t, ep.Schema.Required, "avatar")
+	require.Contains(t, ep.Schema.Properties, "caption")
+	assert.Equal(t, "string", ep.Schema.Properties["caption"].Type)
+
+	t.Run("formData without file defaults to x-www-form-urlencoded", func(t *testing.T) {
+		urlEncSpec := `{
+			"swagger": "2.0",
+			"info": {"title": "Form API", "version": "1.0"},
+			"paths": {
+				"/submit": {
+					"post": {
+						"parameters": [
+							{"name": "user", "in": "formData", "type": "string", "required": true}
+						],
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(urlEncSpec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 1)
+		assert.Equal(t, "application/x-www-form-urlencoded", r.Endpoints[0].ContentType)
+	})
+
+	t.Run("formData file without consumes and top-level consumes multipart", func(t *testing.T) {
+		noConsumesSpec := `{
+			"swagger": "2.0",
+			"info": {"title": "File API", "version": "1.0"},
+			"consumes": ["multipart/form-data"],
+			"paths": {
+				"/up1": {
+					"post": {
+						"parameters": [{"name": "doc", "in": "formData", "type": "file"}],
+						"responses": {"200": {"description": "ok"}}
+					}
+				},
+				"/up2": {
+					"post": {
+						"parameters": [{"name": "meta", "in": "formData", "type": "string"}],
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(noConsumesSpec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 2)
+		assert.Equal(t, "multipart/form-data", r.Endpoints[0].ContentType)
+		assert.Equal(t, "multipart/form-data", r.Endpoints[1].ContentType)
+	})
+
+	t.Run("path-level formData file parameter is preserved", func(t *testing.T) {
+		pathLevelSpec := `{
+			"swagger": "2.0",
+			"info": {"title": "Path Upload API", "version": "1.0"},
+			"paths": {
+				"/items/{id}/upload": {
+					"parameters": [
+						{"name": "id", "in": "path", "type": "string", "required": true},
+						{"name": "file", "in": "formData", "type": "file", "required": true}
+					],
+					"post": {
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(pathLevelSpec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 1)
+		assert.Equal(t, "multipart/form-data", r.Endpoints[0].ContentType)
+		require.Contains(t, r.Endpoints[0].Schema.Properties, "file")
+		assert.Equal(t, "binary", r.Endpoints[0].Schema.Properties["file"].Format)
+	})
+
+	t.Run("extracts OpenAPI 3.0 encoding.contentType, 3.1 contentMediaType, and raw binary MIME", func(t *testing.T) {
+		oasSpec := `{
+			"openapi": "3.1.0",
+			"info": {"title": "Typed Upload API", "version": "1.0"},
+			"paths": {
+				"/avatar": {
+					"post": {
+						"requestBody": {
+							"content": {
+								"multipart/form-data": {
+									"schema": {
+										"type": "object",
+										"properties": {
+											"file": {"type": "string", "format": "binary"},
+											"archive": {"type": "string", "contentMediaType": "application/zip"}
+										}
+									},
+									"encoding": {
+										"file": {"contentType": "image/png, image/jpeg"}
+									}
+								}
+							}
+						},
+						"responses": {"200": {"description": "ok"}}
+					}
+				},
+				"/raw-image": {
+					"post": {
+						"requestBody": {
+							"content": {
+								"image/png": {
+									"schema": {"type": "string", "format": "binary"}
+								}
+							}
+						},
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(oasSpec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 2)
+
+		var avatarEp, rawEp EndpointConfig
+		for _, ep := range r.Endpoints {
+			if ep.Path == "/avatar" {
+				avatarEp = ep
+			} else if ep.Path == "/raw-image" {
+				rawEp = ep
+			}
+		}
+		assert.Equal(t, []string{"image/png", "image/jpeg"}, avatarEp.Schema.Properties["file"].AcceptedMediaTypes)
+		assert.Equal(t, []string{"application/zip"}, avatarEp.Schema.Properties["archive"].AcceptedMediaTypes)
+		assert.Equal(t, "binary", avatarEp.Schema.Properties["archive"].Format)
+		assert.Equal(t, "image/png", rawEp.ContentType)
+		assert.Equal(t, []string{"image/png"}, rawEp.Schema.AcceptedMediaTypes)
+	})
+
+	t.Run("does not promote JSON contentMediaType or text multipart encoding to binary", func(t *testing.T) {
+		spec := `{
+			"openapi": "3.1.0",
+			"info": {"title": "Mixed Media API", "version": "1.0"},
+			"paths": {
+				"/json-b64": {
+					"post": {
+						"requestBody": {
+							"content": {
+								"application/json": {
+									"schema": {
+										"type": "object",
+										"properties": {
+											"avatar": {"type": "string", "contentEncoding": "base64", "contentMediaType": "image/png"},
+											"rawCmt": {"type": "string", "contentMediaType": "application/pdf"}
+										}
+									}
+								}
+							}
+						},
+						"responses": {"200": {"description": "ok"}}
+					}
+				},
+				"/mp-meta": {
+					"post": {
+						"requestBody": {
+							"content": {
+								"multipart/form-data": {
+									"schema": {
+										"type": "object",
+										"properties": {
+											"meta": {"type": "string"},
+											"notes": {"type": "string"}
+										}
+									},
+									"encoding": {
+										"meta": {"contentType": "application/json"},
+										"notes": {"contentType": "text/plain"}
+									}
+								}
+							}
+						},
+						"responses": {"200": {"description": "ok"}}
+					}
+				}
+			}
+		}`
+		r, err := ParseRawSpec([]byte(spec))
+		require.NoError(t, err)
+		require.Len(t, r.Endpoints, 2)
+
+		var jsonEp, mpEp EndpointConfig
+		for _, ep := range r.Endpoints {
+			if ep.Path == "/json-b64" {
+				jsonEp = ep
+			} else if ep.Path == "/mp-meta" {
+				mpEp = ep
+			}
+		}
+		assert.Empty(t, jsonEp.Schema.Properties["avatar"].Format)
+		assert.Empty(t, jsonEp.Schema.Properties["rawCmt"].Format)
+		assert.Empty(t, mpEp.Schema.Properties["meta"].Format)
+		assert.Empty(t, mpEp.Schema.Properties["notes"].Format)
+	})
+}

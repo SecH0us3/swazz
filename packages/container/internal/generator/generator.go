@@ -27,10 +27,10 @@ type Generator struct {
 	activeCategories map[string]bool
 
 	// Sequential counters: BOUNDARY
-	bStrIdx, bIntIdx, bNumIdx, bDateIdx, bArrIdx, bBoolIdx, bUUIDIdx int
+	bStrIdx, bIntIdx, bNumIdx, bDateIdx, bArrIdx, bBoolIdx, bUUIDIdx, bFileIdx int
 
 	// Sequential counters: MALICIOUS
-	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx, mUUIDIdx, oobIdx int
+	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx, mUUIDIdx, mFileIdx, oobIdx int
 
 	// Sequential counter: security header rotation
 	mu             sync.Mutex
@@ -40,6 +40,8 @@ type Generator struct {
 	cachedMaliciousStrings []any
 	// hasActiveMaliciousStrings tracks if any malicious string categories are enabled
 	hasActiveMaliciousStrings bool
+	// preferredUploadCategories prioritizes upload probes matching endpoint expectations.
+	preferredUploadCategories []payloads.FileCategory
 	// bodyIterations is BodyIterations, computed once by New (bodyIterationsSet).
 	bodyIterations    int
 	bodyIterationsSet bool
@@ -165,6 +167,11 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		if is(payloads.CatBoundaryUUIDs) && len(payloads.BoundaryUUIDs) > max {
 			max = len(payloads.BoundaryUUIDs)
 		}
+		if is(payloads.CatBoundaryFileUpload) {
+			if n := len(payloads.BoundaryFileUploads(1024)); n > max {
+				max = n
+			}
+		}
 		return max
 
 	case swagger.ProfileMalicious:
@@ -207,6 +214,9 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > bodyCount {
 			bodyCount = len(payloads.MaliciousTypeConfusion)
 		}
+		if is(payloads.CatMaliciousFileUpload) && len(payloads.MaliciousFileUploads) > bodyCount {
+			bodyCount = len(payloads.MaliciousFileUploads)
+		}
 
 		secHeaderCount := 0
 		for _, def := range payloads.SecurityHeaderPayloads {
@@ -248,7 +258,15 @@ func (g *Generator) Generate(propertyName string, schema *swagger.SchemaProperty
 	}
 
 	// 3. Profile-based generation
-	return g.generateByProfile(schema.Type, schema.Format, propertyName)
+	return g.generateByProfile(schema.Type, schema.Format, propertyName, schema.AcceptedMediaTypes)
+}
+
+// SetPreferredUploadCategories sets endpoint-level inferred/probed upload categories
+// used when a file property does not declare explicit MIME types.
+func (g *Generator) SetPreferredUploadCategories(cats []payloads.FileCategory) {
+	g.mu.Lock()
+	g.preferredUploadCategories = append([]payloads.FileCategory(nil), cats...)
+	g.mu.Unlock()
 }
 
 // BuildObject recursively builds a full object from JSON Schema.
@@ -324,6 +342,9 @@ func (g *Generator) buildObjectWithDepth(schema *swagger.SchemaProperty, depth i
 func (g *Generator) GenerateArrayItem(propertyName string, schema *swagger.SchemaProperty) any {
 	if schema == nil {
 		return nil
+	}
+	if (schema.Type == "string" && strings.ToLower(schema.Format) == "binary") || schema.Type == "file" {
+		return g.generateFileUpload(propertyName, true, schema.AcceptedMediaTypes)
 	}
 	if schema.Type == "string" {
 		formatLower := strings.ToLower(schema.Format)
@@ -469,6 +490,9 @@ func (g *Generator) countBodyIterations() int {
 	}
 	if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > bodyCount {
 		bodyCount = len(payloads.MaliciousTypeConfusion)
+	}
+	if is(payloads.CatMaliciousFileUpload) && len(payloads.MaliciousFileUploads) > bodyCount {
+		bodyCount = len(payloads.MaliciousFileUploads)
 	}
 	return bodyCount
 }

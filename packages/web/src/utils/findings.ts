@@ -114,6 +114,14 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-error)';
         title = 'Out-of-Band Interaction (SSRF)';
         key = 'oob_interaction';
+    } else if (f.ruleId === 'swazz/unvalidated-file-upload') {
+        color = 'var(--color-error)';
+        title = 'Unvalidated File Upload';
+        key = 'unvalidated_file_upload';
+    } else if (f.ruleId === 'swazz/file-parser-error') {
+        color = 'var(--color-error)';
+        title = 'File Parser Crash / Error Disclosure';
+        key = 'file_parser_error';
     } else {
         title = f.message || 'Suspicious Anomaly';
         key = `other_${slugify(f.ruleId)}`;

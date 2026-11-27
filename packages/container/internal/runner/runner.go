@@ -179,10 +179,10 @@ type Runner struct {
 	timeBaselines  *sync.Map
 	requiredParams *RequiredParamTracker
 	resultsMu      sync.Mutex
-	allResults    []*swagger.FuzzResult // see retainResult
-	retained      retainedResults
-	limiter       *ConcurrencyLimiter
-	gate          license.Gate
+	allResults     []*swagger.FuzzResult // see retainResult
+	retained       retainedResults
+	limiter        *ConcurrencyLimiter
+	gate           license.Gate
 
 	analyzer *analyzer.AnalyzerRegistry
 	// detector harvests IDs from responses during a run and replays them in its BOLA phase.
@@ -203,6 +203,8 @@ type Runner struct {
 	mcpRateLimiter *mcp.RateLimiter
 
 	grpcClients sync.Map // map[string]*swazzGrpc.Client
+	// detectedUploadCategories holds per-run in-memory smart probing results (not persisted across checkpoints).
+	detectedUploadCategories sync.Map // map[string][]payloads.FileCategory
 
 	proxyOnce   sync.Once
 	proxyClient atomic.Pointer[http.Client] // see proxiedClient
@@ -467,6 +469,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			epStr := endpoint.Method + " " + endpoint.Path
 			gen := r.newGenerator(profile, epStr)
 			safeGen := r.newGenerator(swagger.ProfileRandom, epStr)
+			r.applyDetectedUploadCategories(epStr, gen, safeGen)
 
 			iterToSkip := 0
 			if resuming {
@@ -565,12 +568,14 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 					ctx,
 					r.config.BaseURL, resolvedPath, ep.Path, ep.Method,
 					r.config.GlobalHeaders, r.config.Cookies,
-					built.body,
+					built.requestBody(),
 					swagger.FuzzingProfile("BASELINE"),
 					built.queryParams,
 					built.headers,
 					ep.ContentType, built.oobTokens, built.pinned,
 				)
+
+				r.maybeProbeUploadCategories(ctx, ep, epKey, resolvedPath, built, result.Status)
 
 				r.logDebug("Baseline run: method=%s path=%s status=%d size=%d err=%v",
 					ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)

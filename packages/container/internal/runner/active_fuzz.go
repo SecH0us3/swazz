@@ -319,7 +319,7 @@ func (r *Runner) runActiveParameterFuzzing(
 			}
 			wg.Add(1)
 
-			it, p, qp, gh, pp, ot, pn := globalIterIdx, built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens, built.pinned
+			it, p, bodyMap, qp, gh, pp, ot, pn := globalIterIdx, built.requestBody(), built.body, built.queryParams, built.headers, built.pathParams, built.oobTokens, built.pinned
 			r.goWorker(func() {
 				defer r.limiter.Release()
 				defer wg.Done()
@@ -332,7 +332,7 @@ func (r *Runner) runActiveParameterFuzzing(
 					p, profile, qp, gh,
 					endpoint.ContentType, ot, pn,
 				)
-				r.observeRequiredParams(endpoint, p, qp, result.Status, result.ResponseBody)
+				r.observeRequiredParams(endpoint, bodyMap, qp, result.Status, result.ResponseBody)
 
 				if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {
 					r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)
