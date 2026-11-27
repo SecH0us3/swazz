@@ -63,6 +63,9 @@ These environment variables are read by the fuzzer agent engine (`packages/conta
 | :--- | :--- | :--- |
 | **`SWAZZ_LOG_LEVEL`** | Verbosity threshold for fuzzer engine logging. At `debug`, a runner agent also logs one line per fuzz request. | `debug`, `info`, `warn`, `error` (Default: `info`) |
 | **`SWAZZ_LOG_FORMAT`** | Format of log messages output to stdout/stderr. | `text`, `json` (Default: `text`) |
+| **`NO_COLOR`** | Disables all ANSI color escape sequences in CLI text logs (equivalent to `-no-color`). | Any non-empty value |
+| **`FORCE_COLOR`** / **`CLICOLOR_FORCE`** | Forces ANSI color output in CLI text logs even when stderr is not a TTY (unless `NO_COLOR`, `-no-color`, or `SWAZZ_LOG_FORMAT=json` is set). | Any non-empty value |
+| **`SWAZZ_UPLOAD_CORPUS_DIR`** | Optional local directory of additional file-upload `valid/` and `probes/` test files merged at runtime without recompiling `swazz-engine` (symlinks skipped). | `/path/to/upload_corpus` |
 | **`SWAZZ_DEV`** | Bypass local URL/SSRF blocks (enables scanning `localhost`). | `1` (Bypasses check), `0` (Enforced default) |
 | **`CLOUDFLARE_APPLICATION_ID`** | Optional Cloudflare Access client ID header injection. | *Header string* |
 | **`GOOGLE_API_KEY`** | Google AI Studio API key for Gemini models via Pre-Scan LLM Batching. *(Optional if Cloudflare AI Gateway Provider Keys / BYOK is used)*. | `AIzaSy...` |
