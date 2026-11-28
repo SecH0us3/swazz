@@ -5,7 +5,7 @@
 
 import { reportKeyForScan } from '../repositories/cleanup';
 import { Env } from '../env';
-import { IScansRepository, ScansCursor } from '../repositories/scans';
+import { IScansRepository, ScansCursor, ScansListFilters } from '../repositories/scans';
 import { IRbacRepository } from '../repositories/rbac';
 import { sign, verify } from 'hono/jwt';
 import { ulid } from 'ulidx';
@@ -21,6 +21,9 @@ export interface ScansPageQuery {
   limit?: string;
   cursor?: string;
   active?: string;
+  from?: string;
+  to?: string;
+  target_url?: string;
 }
 
 export interface TriageUpdatePayload {
@@ -240,14 +243,22 @@ export class ScansService implements IScansService {
     }
 
     const limit = parseScansLimit(page.limit);
+    const hasFilterQuery = Boolean(
+      (page.from !== undefined && page.from !== '') ||
+      (page.to !== undefined && page.to !== '') ||
+      (page.target_url !== undefined && page.target_url !== '')
+    );
     if (page.active !== undefined && page.active !== '') {
-      if (page.active !== '1' || page.cursor) throw new Error('Invalid query parameter: active|400');
+      if (page.active !== '1' || page.cursor || hasFilterQuery) throw new Error('Invalid query parameter: active|400');
       const scans = await this.scansRepo.getUnfinishedScans(projectId, limit);
       await this.attachFailureReasons(scans);
       return { scans };
     }
     const before = page.cursor === undefined || page.cursor === '' ? undefined : decodeScansCursor(page.cursor);
-    const { scans, next } = await this.scansRepo.getScans(projectId, limit, before);
+    const filters = parseScansFilters(page);
+    const { scans, next } = filters
+      ? await this.scansRepo.getScans(projectId, limit, before, filters)
+      : await this.scansRepo.getScans(projectId, limit, before);
     await this.attachFailureReasons(scans);
     return next ? { scans, next_cursor: encodeScansCursor(next) } : { scans };
   }
@@ -531,6 +542,99 @@ function isStoredError(row: any): boolean {
 // The scan list is paged: the dashboard polls it every few seconds, and a project's scans pile up.
 export const DEFAULT_SCANS_PAGE = 50;
 export const MAX_SCANS_PAGE = 200;
+export const MAX_TARGET_URL_FILTER_LENGTH = 256;
+
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ISO_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/i;
+const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
+
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+}
+
+function formatSqliteUtc(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+function parseScansDateBound(raw: string | undefined, bound: 'from' | 'to'): { sql: string; ms: number } | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const invalid = new Error(`Invalid query parameter: ${bound}|400`);
+  if (raw.length > 64) throw invalid;
+
+  const dateOnly = DATE_ONLY_RE.exec(raw);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]);
+    const day = Number(dateOnly[3]);
+    if (!isValidCalendarDate(year, month, day)) throw invalid;
+    const ms = bound === 'from'
+      ? Date.UTC(year, month - 1, day, 0, 0, 0, 0)
+      : Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+    const sql = bound === 'from'
+      ? `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]} 00:00:00`
+      : `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]} 23:59:59`;
+    return { sql, ms };
+  }
+
+  const iso = ISO_DATETIME_RE.exec(raw);
+  if (!iso) throw invalid;
+
+  const year = Number(iso[1]);
+  const month = Number(iso[2]);
+  const day = Number(iso[3]);
+  const hour = Number(iso[4]);
+  const minute = Number(iso[5]);
+  const second = Number(iso[6]);
+  const fracStr = iso[7];
+  if (!isValidCalendarDate(year, month, day) || hour > 23 || minute > 59 || second > 59) throw invalid;
+
+  if (iso[9]) {
+    const tzHour = Number(iso[10]);
+    const tzMin = Number(iso[11]);
+    if (tzHour > 14 || tzMin > 59 || tzHour * 60 + tzMin > 14 * 60) throw invalid;
+  }
+
+  const ms = Date.parse(raw);
+  if (Number.isNaN(ms)) throw invalid;
+
+  // SQLite created_at has 1-second resolution (CURRENT_TIMESTAMP). For inclusive bounds,
+  // ceil sub-second lower bounds and floor sub-second upper bounds so integer-second rows
+  // outside the exact millisecond window are never accidentally included.
+  const subSecondMs = fracStr ? Number(fracStr.padEnd(3, '0')) : 0;
+  const alignedMs = bound === 'from' && subSecondMs > 0
+    ? Math.ceil(ms / 1000) * 1000
+    : Math.floor(ms / 1000) * 1000;
+  return { sql: formatSqliteUtc(alignedMs), ms };
+}
+
+function parseScansTargetUrl(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  if (CONTROL_CHARS_RE.test(raw)) throw new Error('Invalid query parameter: target_url|400');
+  const trimmed = raw.trim();
+  if (trimmed === '') return undefined;
+  if (trimmed.length > MAX_TARGET_URL_FILTER_LENGTH) throw new Error('Invalid query parameter: target_url|400');
+  return trimmed;
+}
+
+function parseScansFilters(page: ScansPageQuery): ScansListFilters | undefined {
+  const from = parseScansDateBound(page.from, 'from');
+  const to = parseScansDateBound(page.to, 'to');
+  if (from && to && from.ms > to.ms) {
+    throw new Error('Invalid query parameter: from must be on or before to|400');
+  }
+  const targetUrl = parseScansTargetUrl(page.target_url);
+  if (!from && !to && !targetUrl) return undefined;
+  return {
+    ...(from ? { from: from.sql } : {}),
+    ...(to ? { to: to.sql } : {}),
+    ...(targetUrl ? { targetUrl } : {}),
+  };
+}
 
 function parseScansLimit(raw: string | undefined): number {
   if (raw === undefined || raw === '') return DEFAULT_SCANS_PAGE;

@@ -13,10 +13,16 @@ import { applyMigrations } from '../utils/migrations';
 
 const env = rawEnv as unknown as Env;
 
-async function seedScan(projectId: string, id: string, createdAt: string, status = 'completed'): Promise<void> {
+async function seedScan(
+  projectId: string,
+  id: string,
+  createdAt: string,
+  status = 'completed',
+  targetUrl = 'http://t'
+): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO scans (id, project_id, target_url, profile, status, created_at, waf_patch_report) VALUES (?, ?, 'http://t', 'default', ?, ?, '{\"big\":true}')"
-  ).bind(id, projectId, status, createdAt).run();
+    "INSERT INTO scans (id, project_id, target_url, profile, status, created_at, waf_patch_report) VALUES (?, ?, ?, 'default', ?, ?, '{\"big\":true}')"
+  ).bind(id, projectId, targetUrl, status, createdAt).run();
 }
 
 describe('scan list', () => {
@@ -82,5 +88,73 @@ describe('scan list', () => {
     const active = await repo.getUnfinishedScans('active-p', 50);
     expect(active.map(s => s.id)).toEqual(['running', 'old-paused']);
     expect(active[0]).not.toHaveProperty('waf_patch_report');
+  });
+
+  it('filters by inclusive UTC date bounds and target_url case-insensitively with LIKE wildcard escaping', async () => {
+    await seedScan('filter-p', 'f1', '2026-11-01 00:00:00', 'completed', 'https://Api.Example.com/v1');
+    await seedScan('filter-p', 'f2', '2026-11-01 23:59:59', 'completed', 'https://staging.example.com/100%_test\\path');
+    await seedScan('filter-p', 'f3', '2026-11-02 00:00:00', 'completed', 'https://api.example.com/v2');
+    await seedScan('filter-p', 'f4', '2026-11-03 12:00:00', 'completed', 'https://other.service.io');
+    await seedScan('filter-other', 'fx', '2026-11-01 12:00:00', 'completed', 'https://api.example.com/secret');
+
+    const repo = new ScansRepository(env);
+
+    // Date range: exact day boundary (inclusive start & end)
+    const day1 = await repo.getScans('filter-p', 50, undefined, {
+      from: '2026-11-01 00:00:00',
+      to: '2026-11-01 23:59:59',
+    });
+    expect(day1.scans.map(s => s.id)).toEqual(['f2', 'f1']);
+
+    // Case-insensitive target_url substring match, isolated to filter-p (fx from filter-other excluded)
+    const byUrl = await repo.getScans('filter-p', 50, undefined, { targetUrl: 'API.EXAMPLE.COM' });
+    expect(byUrl.scans.map(s => s.id)).toEqual(['f3', 'f1']);
+
+    // Escapes %, _, and \ literally rather than matching wildcards
+    const literalWildcards = await repo.getScans('filter-p', 50, undefined, { targetUrl: '100%_test\\path' });
+    expect(literalWildcards.scans.map(s => s.id)).toEqual(['f2']);
+
+    const barePercent = await repo.getScans('filter-p', 50, undefined, { targetUrl: '%' });
+    expect(barePercent.scans.map(s => s.id)).toEqual(['f2']);
+
+    const bareUnderscore = await repo.getScans('filter-p', 50, undefined, { targetUrl: '_' });
+    expect(bareUnderscore.scans.map(s => s.id)).toEqual(['f2']);
+
+    // SQLi attempt is treated strictly as literal substring
+    const sqli = await repo.getScans('filter-p', 50, undefined, { targetUrl: "%' OR 1=1 --" });
+    expect(sqli.scans).toEqual([]);
+
+    // Combined date range + target_url + cursor pagination
+    const page1 = await repo.getScans('filter-p', 1, undefined, {
+      from: '2026-11-01 00:00:00',
+      to: '2026-11-02 23:59:59',
+      targetUrl: 'example.com',
+    });
+    expect(page1.scans.map(s => s.id)).toEqual(['f3']);
+    expect(page1.next).not.toBeNull();
+
+    const page2 = await repo.getScans('filter-p', 1, page1.next!, {
+      from: '2026-11-01 00:00:00',
+      to: '2026-11-02 23:59:59',
+      targetUrl: 'example.com',
+    });
+    expect(page2.scans.map(s => s.id)).toEqual(['f2']);
+    expect(page2.next).not.toBeNull();
+
+    const page3 = await repo.getScans('filter-p', 1, page2.next!, {
+      from: '2026-11-01 00:00:00',
+      to: '2026-11-02 23:59:59',
+      targetUrl: 'example.com',
+    });
+    expect(page3.scans.map(s => s.id)).toEqual(['f1']);
+    expect(page3.next).toBeNull();
+
+    // Filtered query still uses idx_scans_project_created without TEMP B-TREE
+    const plan = await env.DB.prepare(
+      'EXPLAIN QUERY PLAN ' + scansPageSql(true, { from: '2026-11-01 00:00:00', to: '2026-11-03 23:59:59', targetUrl: 'api' })
+    ).bind('filter-p', '2026-11-01 00:00:00', '2026-11-03 23:59:59', '%api%', '2026-11-02 00:00:00', 'f3', 2).all<any>();
+    const detail = (plan.results || []).map(r => r.detail).join('\n');
+    expect(detail).toContain('idx_scans_project_created');
+    expect(detail).not.toContain('TEMP B-TREE');
   });
 });

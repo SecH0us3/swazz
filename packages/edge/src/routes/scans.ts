@@ -65,7 +65,12 @@ export function registerScansRoutes(
 
     try {
       const result = await services.getScans(projectId || '', userId, {
-        limit: c.req.query('limit'), cursor: c.req.query('cursor'), active: c.req.query('active'),
+        limit: c.req.query('limit'),
+        cursor: c.req.query('cursor'),
+        active: c.req.query('active'),
+        from: c.req.query('from'),
+        to: c.req.query('to'),
+        target_url: c.req.query('target_url'),
       });
       return c.json(result);
     } catch (err: any) {

@@ -337,6 +337,95 @@ describe('ScansService Unit Tests', () => {
       expect(mockScansRepo.getFailureReasons).toHaveBeenCalledWith(['bad']);
       expect(res.scans).toEqual([{ id: 'ok', status: 'completed' }, { id: 'bad', status: 'failed', failure_reason: 'Runner lost' }]);
     });
+
+    it('normalizes date-only from/to bounds to full UTC day boundaries', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', { from: '2026-10-01', to: '2026-10-05' });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', DEFAULT_SCANS_PAGE, undefined, {
+        from: '2026-10-01 00:00:00',
+        to: '2026-10-05 23:59:59',
+      });
+    });
+
+    it('converts ISO-8601 timestamps with offsets and aligns sub-second boundaries to UTC', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', {
+        from: '2026-10-05T00:00:00.500+02:00',
+        to: '2026-10-05T23:59:59.999+02:00',
+        target_url: '  api.example.com  ',
+      });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', DEFAULT_SCANS_PAGE, undefined, {
+        from: '2026-10-04 22:00:01',
+        to: '2026-10-05 21:59:59',
+        targetUrl: 'api.example.com',
+      });
+    });
+
+    it('treats whitespace-only target_url as unset', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      await scansService.getScans('p1', 'u1', { target_url: '   ' });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', DEFAULT_SCANS_PAGE, undefined);
+    });
+
+    it.each([
+      '2026-02-29',
+      '2026-04-31',
+      '2026-13-01',
+      'not-a-date',
+      "2026-10-01' OR 1=1",
+      '2026-10-01T25:00:00Z',
+      '2026-10-01T10:00:00+15:00',
+      '2026-10-01 10:00:00',
+    ])('refuses invalid from date %s', async (from) => {
+      await expect(scansService.getScans('p1', 'u1', { from })).rejects.toThrow('Invalid query parameter: from|400');
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it.each(['2026-02-30', '2026-10-01T10:60:00Z', 'bad'])('refuses invalid to date %s', async (to) => {
+      await expect(scansService.getScans('p1', 'u1', { to })).rejects.toThrow('Invalid query parameter: to|400');
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it('refuses inverted date range where from > to', async () => {
+      await expect(scansService.getScans('p1', 'u1', { from: '2026-10-10', to: '2026-10-05' }))
+        .rejects.toThrow('Invalid query parameter: from must be on or before to|400');
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it('accepts a valid sub-second range within the same second without falsely returning 400', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce({ scans: [], next: null });
+      const res = await scansService.getScans('p1', 'u1', {
+        from: '2026-10-05T23:59:59.500Z',
+        to: '2026-10-05T23:59:59.999Z',
+      });
+      expect(res).toEqual({ scans: [] });
+      expect(mockScansRepo.getScans).toHaveBeenLastCalledWith('p1', DEFAULT_SCANS_PAGE, undefined, {
+        from: '2026-10-06 00:00:00',
+        to: '2026-10-05 23:59:59',
+      });
+    });
+
+    it('refuses oversized or control-char target_url filters', async () => {
+      await expect(scansService.getScans('p1', 'u1', { target_url: 'a'.repeat(257) }))
+        .rejects.toThrow('Invalid query parameter: target_url|400');
+      await expect(scansService.getScans('p1', 'u1', { target_url: 'https://api.test\x00' }))
+        .rejects.toThrow('Invalid query parameter: target_url|400');
+      expect(mockScansRepo.getScans).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { active: '1', from: '2026-10-01' },
+      { active: '1', to: '2026-10-05' },
+      { active: '1', target_url: 'api.test' },
+    ])('refuses combining active=1 with filters %o', async (page) => {
+      await expect(scansService.getScans('p1', 'u1', page)).rejects.toThrow('Invalid query parameter: active|400');
+      expect(mockScansRepo.getUnfinishedScans).not.toHaveBeenCalled();
+    });
+
+    it('checks access before validating filter parameters', async () => {
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.getScans('p1', 'u1', { from: 'not-a-date' })).rejects.toThrow('Forbidden|403');
+    });
   });
 
   describe('getScan', () => {

@@ -41,7 +41,7 @@ import { matchesFinding } from './utils/findings.js';
 import { useWebMcp } from './hooks/useWebMcp.js';
 import { scheduledFailureIssue } from './utils/scheduledFailures.js';
 import { UNKNOWN_FAILURE } from './services/runStream.js';
-import { fetchScansPage, fetchOlderScans } from './services/scansService.js';
+import { fetchScansPage, fetchOlderScans, parseServerTimestamp, serverScanToScanRun } from './services/scansService.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -356,23 +356,11 @@ export default function App() {
                 if (!active) return;
                 const localRun = runsRef.current.find((r: any) => r.id === s.id);
                 const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
-                const serverCompletedAt = s.completed_at ? new Date(s.completed_at).getTime() : 0;
 
                 const failureReason = s.status === 'failed' ? (s.failure_reason || UNKNOWN_FAILURE) : undefined;
                 const lacksReason = !!failureReason && localRun?.failureReason !== failureReason;
                 if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer) || lacksReason) {
-                    const stats = s.summary_stats ? JSON.parse(s.summary_stats) : null;
-                    const startedAt = s.created_at ? new Date(s.created_at).getTime() : Date.now();
-                    const scanRun: ScanRun = {
-                        id: s.id,
-                        startedAt,
-                        completedAt: isCompletedOnServer ? (serverCompletedAt || Date.now()) : 0,
-                        baseUrl: s.target_url || '',
-                        stats,
-                        projectId: s.project_id,
-                        triggerType: s.trigger_type || 'manual',
-                        ...(failureReason ? { failureReason } : {}),
-                    };
+                    const scanRun: ScanRun = serverScanToScanRun(s);
                     await saveRun(localRun && localRun.completedAt > 0 ? { ...localRun, failureReason } : scanRun);
                 }
             }
@@ -424,7 +412,7 @@ export default function App() {
                     const state = useAppStore.getState();
                     if (active && activeScan && !state.isRunning && activeScan.id !== state.liveRunId && !attemptedReconnections.current.has(activeScan.id)) {
                         attemptedReconnections.current.add(activeScan.id);
-                        const startedAt = activeScan.created_at ? new Date(activeScan.created_at).getTime() : Date.now();
+                        const startedAt = parseServerTimestamp(activeScan.created_at) ?? Date.now();
                         await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url, activeScan.trigger_type, activeScan.status);
                     }
                 }

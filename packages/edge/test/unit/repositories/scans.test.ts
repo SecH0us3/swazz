@@ -110,6 +110,29 @@ describe('ScansRepository Unit Tests', () => {
     expect(mockBind).toHaveBeenLastCalledWith('p-1', 51);
   });
 
+  it('getScans applies parameterized date bounds and escaped LIKE filter on target_url', async () => {
+    mockAll.mockResolvedValue({ results: [] });
+
+    const repo = new ScansRepository(mockEnv);
+    await repo.getScans(
+      'p-1',
+      20,
+      { createdAt: '2026-10-03 00:00:00', id: 's-9' },
+      { from: '2026-10-01 00:00:00', to: '2026-10-05 23:59:59', targetUrl: 'API_%\\v1' }
+    );
+    const sql = mockPrepare.mock.calls.at(-1)[0];
+    expect(sql).toContain("WHERE project_id = ? AND created_at >= ? AND created_at <= ? AND LOWER(target_url) LIKE ? ESCAPE '\\' AND (created_at, id) < (?, ?)");
+    expect(mockBind).toHaveBeenLastCalledWith(
+      'p-1',
+      '2026-10-01 00:00:00',
+      '2026-10-05 23:59:59',
+      '%api\\_\\%\\\\v1%',
+      '2026-10-03 00:00:00',
+      's-9',
+      21
+    );
+  });
+
   it('getScan returns details by scanId', async () => {
     const scan = { id: 's-1', status: 'queued' };
     mockAll.mockResolvedValue(scan);
