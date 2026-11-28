@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -33,10 +34,51 @@ import (
 )
 
 func runCLI(args []string) {
-	if err := runCLIErr(args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	err := runCLIErr(args)
+	if err == nil {
+		return
 	}
+	code := cliExitCode(err)
+	if code == 2 && logger.IsColorEnabled() {
+		fmt.Fprintf(os.Stderr, "\n\033[1;31m%v\033[0m\n", err)
+	} else {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	os.Exit(code)
+}
+
+// severityThresholdError reports that findings met the --fail-on-severity
+// threshold. runCLI maps it to exit code 2, which takes precedence over any
+// other error joined with it.
+type severityThresholdError struct{ threshold string }
+
+func (e *severityThresholdError) Error() string {
+	return fmt.Sprintf("[CI/CD] Findings at or above '%s' severity detected. Exiting with code 2.", e.threshold)
+}
+
+// cliExitCode returns 2 when err carries a severityThresholdError, else 1.
+func cliExitCode(err error) int {
+	var sev *severityThresholdError
+	if errors.As(err, &sev) {
+		return 2
+	}
+	return 1
+}
+
+// deniedExportsError lists the report exports skipped for lack of the
+// report_exports license feature.
+func deniedExportsError(names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = "'" + n + "'"
+	}
+	if len(names) == 1 {
+		return fmt.Errorf("report export %s requires a paid plan (feature: %s)", quoted[0], license.FeatureReportExports)
+	}
+	return fmt.Errorf("report exports %s require a paid plan (feature: %s)", strings.Join(quoted, ", "), license.FeatureReportExports)
 }
 
 // stringList is a flag that may be given more than once; every value is kept.
@@ -363,17 +405,19 @@ func runCLIErr(args []string) error {
 
 	printSummary(findings, &stats)
 
-	requireExport := func(name string) error {
+	// A paid export requested without the report_exports feature is skipped,
+	// not returned early: the free --json report must still be written and
+	// --fail-on-severity still evaluated. The refusal fails the run at the end.
+	var deniedExports []string
+	allowExport := func(name string) bool {
 		if gate.Has(license.FeatureReportExports) {
-			return nil
+			return true
 		}
-		return fmt.Errorf("report export '%s' requires a paid plan (feature: %s)", name, license.FeatureReportExports)
+		deniedExports = append(deniedExports, name)
+		return false
 	}
 
-	if *sarifOut != "" {
-		if err := requireExport("sarif"); err != nil {
-			return err
-		}
+	if *sarifOut != "" && allowExport("sarif") {
 		report := output.ToSARIF(findings, "0.1.0", runCfg.BaseURL)
 		if err := config.WriteJSON(*sarifOut, report); err != nil {
 			log.Printf("Failed to save SARIF: %v", err)
@@ -389,10 +433,7 @@ func runCLIErr(args []string) error {
 			logger.Info("Saved JSON to %s", *jsonOut)
 		}
 	}
-	if *htmlOut != "" {
-		if err := requireExport("html"); err != nil {
-			return err
-		}
+	if *htmlOut != "" && allowExport("html") {
 		html := output.ToHTML(findings, &stats)
 		cleanHTML := filepath.Clean(*htmlOut)
 		if err := os.WriteFile(cleanHTML, []byte(html), 0600); err != nil { // #nosec G306,G703 -- report file output
@@ -401,10 +442,7 @@ func runCLIErr(args []string) error {
 			logger.Info("Saved HTML to %s", *htmlOut)
 		}
 	}
-	if *junitOut != "" {
-		if err := requireExport("junit"); err != nil {
-			return err
-		}
+	if *junitOut != "" && allowExport("junit") {
 		junitData := output.ToJUnit(findings, &stats)
 		cleanJUnit := filepath.Clean(*junitOut)
 		if err := os.WriteFile(cleanJUnit, junitData, 0600); err != nil { // #nosec G306,G703 -- report file output
@@ -413,10 +451,7 @@ func runCLIErr(args []string) error {
 			logger.Info("Saved JUnit XML to %s", *junitOut)
 		}
 	}
-	if *markdownOut != "" {
-		if err := requireExport("markdown"); err != nil {
-			return err
-		}
+	if *markdownOut != "" && allowExport("markdown") {
 		mdData := output.ToMarkdown(findings, &stats, Version)
 		cleanMD := filepath.Clean(*markdownOut)
 		if err := os.WriteFile(cleanMD, mdData, 0600); err != nil { // #nosec G306,G703 -- report file output
@@ -425,10 +460,7 @@ func runCLIErr(args []string) error {
 			logger.Info("Saved Markdown to %s", *markdownOut)
 		}
 	}
-	if *wafPatchVendor != "" {
-		if err := requireExport("waf-patch"); err != nil {
-			return err
-		}
+	if *wafPatchVendor != "" && allowExport("waf-patch") {
 		items := classifier.ToAuditResultItems(findings)
 		if len(items) == 0 {
 			logger.Info("no WAF-patchable findings in this scan")
@@ -479,9 +511,9 @@ func runCLIErr(args []string) error {
 		}
 	}
 
+	exportErr := deniedExportsError(deniedExports)
 	if classifier.FindingsExceedThreshold(findings, *failOnSeverity) {
-		fmt.Fprintf(os.Stderr, "\n\033[1;31m[CI/CD] Findings at or above '%s' severity detected. Exiting with code 2.\033[0m\n", *failOnSeverity)
-		os.Exit(2)
+		return errors.Join(exportErr, &severityThresholdError{threshold: *failOnSeverity})
 	}
-	return nil
+	return exportErr
 }

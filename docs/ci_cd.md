@@ -23,6 +23,7 @@ Before wiring Swazz into a pipeline you need:
 1. **A reachable target API** — either a staging environment, an ephemeral preview deployment, or a locally spun-up test server within the same CI job.
 2. **A `swazz.config.json`** — committed to your repository (or generated at runtime). See [Usage & Configuration](./usage.md) for the full schema.
 3. **The `swazz-engine` binary** — built from source (Go 1.26+) or pulled from a [GitHub Release](https://github.com/SecH0us3/swazz/releases).
+4. **A license key with the `report_exports` feature for SARIF** — store it as a `SWAZZ_LICENSE_KEY` secret and pass it to the scan step's environment. Without it `--sarif` is not written and the step exits `1` (or `2` when `--fail-on-severity` is met); `--json` reports and `--fail-on-severity` work without a license.
 
 ---
 
@@ -84,6 +85,9 @@ jobs:
         # --fail-on-severity causes an exit code 2.
         continue-on-error: true
         working-directory: packages/container
+        env:
+          # SARIF export requires the report_exports license feature.
+          SWAZZ_LICENSE_KEY: ${{ secrets.SWAZZ_LICENSE_KEY }}
         run: |
           ./swazz-engine start \
             --config ../../swazz.config.json \

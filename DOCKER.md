@@ -30,10 +30,10 @@ If you prefer to run the runner agent in a standalone container or on your host,
 
 ```bash
 # Pull the CLI / Runner container, pinned to an immutable commit SHA tag
-docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
+docker pull ghcr.io/sech0us3/swazz-cli:sha-<short-sha>
 
 # Run the fuzzer agent on the host network, connecting to the compose coordinator:
-docker run --rm -it ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> run-agent \
+docker run --rm -it ghcr.io/sech0us3/swazz-cli:sha-<short-sha> run-agent \
   --coordinator ws://localhost:8081/api/runners/connect \
   --token "$SWAZZ_RUNNER_TOKEN" \
   --dangerous-no-container

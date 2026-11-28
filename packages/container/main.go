@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Swazz Authors
+// This file is part of Swazz
+// Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
+// See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
+
 package main
 
 import (
@@ -231,7 +236,7 @@ func printHelp() {
 	fmt.Println("  swazz-engine wizard               Interactive setup to generate swazz.config.json")
 	fmt.Println("  swazz-engine discover [options]   Discover API services running in a Kubernetes cluster")
 	fmt.Println("  swazz-engine generate-keys        Generate asymmetric keypair for runner signing authentication")
-	fmt.Println("  swazz-engine license              Display Business Source License 1.1 (BSL 1.1) terms")
+	fmt.Println("  swazz-engine license              Show license status (Community or SWAZZ_LICENSE_KEY tier, expiry, features)")
 	fmt.Println("  swazz-engine version              Print the engine version (also --version, -v)")
 	fmt.Println()
 	fmt.Println("Options for 'run-agent':")
