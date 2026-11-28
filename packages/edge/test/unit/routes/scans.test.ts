@@ -114,6 +114,20 @@ describe('Scans Routes Unit Tests', () => {
       expect(mockServices.getScans).toHaveBeenCalledWith('p123', 'user_123', { limit: '10', cursor: 'abc' });
     });
 
+    it('passes date range and target_url filter parameters on', async () => {
+      (mockServices.getScans as any).mockResolvedValue({ scans: [] });
+      const res = await app.request('/api/scans?project_id=p123&from=2026-10-01&to=2026-10-05&target_url=api.example.com');
+      expect(res.status).toBe(200);
+      expect(mockServices.getScans).toHaveBeenCalledWith('p123', 'user_123', {
+        limit: undefined,
+        cursor: undefined,
+        active: undefined,
+        from: '2026-10-01',
+        to: '2026-10-05',
+        target_url: 'api.example.com',
+      });
+    });
+
     it('returns error', async () => {
       (mockServices.getScans as any).mockRejectedValue(new Error('fail|400'));
       const res = await app.request('/api/scans?project_id=p123');

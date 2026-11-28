@@ -3839,13 +3839,19 @@
       },
       "get": {
         "summary": "List scans",
-        "description": "Lists scans, optionally filtered by project ID.",
+        "description": "Lists project scans newest first with cursor pagination, optional unfinished-only mode, inclusive UTC date range bounds, and case-insensitive Target Base URL substring filtering.",
         "responses": {
           "200": {
-            "description": "Array of scans"
+            "description": "Paged array of scans with optional next_cursor"
+          },
+          "400": {
+            "description": "Missing project_id or invalid query parameter"
           },
           "401": {
             "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           }
         },
         "tags": [
@@ -3860,9 +3866,70 @@
           {
             "name": "project_id",
             "in": "query",
-            "required": false,
+            "required": true,
+            "description": "Project ID whose scans to list",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (default 50, capped at 200)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque cursor returned as next_cursor from the previous page (cannot be combined with active=1)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "description": "Set to 1 to return only unfinished scans (cannot be combined with cursor, from, to, or target_url)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive lower bound for created_at (YYYY-MM-DD UTC day start or ISO-8601 timestamp with offset/Z)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive upper bound for created_at (YYYY-MM-DD UTC day end or ISO-8601 timestamp with offset/Z)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target_url",
+            "in": "query",
+            "required": false,
+            "description": "ASCII case-insensitive substring matched against target_url (max 256 characters)",
+            "schema": {
+              "type": "string",
+              "maxLength": 256
             }
           }
         ]

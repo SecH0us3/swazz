@@ -19,6 +19,29 @@ export interface ScansCursor {
   id: string;
 }
 
+// Optional filters for a project's scan list.
+export interface ScansListFilters {
+  /** Inclusive UTC lower bound in SQLite datetime format ("YYYY-MM-DD HH:MM:SS"). */
+  from?: string;
+  /** Inclusive UTC upper bound in SQLite datetime format ("YYYY-MM-DD HH:MM:SS"). */
+  to?: string;
+  /** Case-insensitive substring matched against target_url. */
+  targetUrl?: string;
+}
+
+/** Escapes SQLite LIKE metacharacters (\, %, _) for use with ESCAPE '\'. */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * Folds ASCII uppercase letters (A-Z) to lowercase (a-z), matching SQLite LOWER() semantics so
+ * non-ASCII characters (e.g. Ä) are not folded on the query side while left untouched by SQLite.
+ */
+export function toAsciiLowerCase(value: string): string {
+  return value.replace(/[A-Z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 32));
+}
+
 // The scan list leaves out what only one scan's page needs and can be large (the WAF patch report,
 // the resume checkpoint).
 const SCAN_LIST_COLUMNS = 'id, project_id, target_url, profile, status, summary_stats, report_url, is_encrypted, ' +
@@ -30,10 +53,13 @@ export const ACTIVE_SCAN_STATUSES = ['queued', 'dispatched', 'running', 'paused'
 // The scan list query, newest first. The row-value comparison lets SQLite seek the
 // (project_id, created_at, id) index to the cursor; the equivalent OR form makes it walk the index
 // from the newest row and filter, so a deep page would cost as much as OFFSET paging.
-export function scansPageSql(withCursor: boolean): string {
-  return `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE project_id = ?` +
-    (withCursor ? ' AND (created_at, id) < (?, ?)' : '') +
-    ' ORDER BY created_at DESC, id DESC LIMIT ?';
+export function scansPageSql(withCursor: boolean, filters?: ScansListFilters): string {
+  const conditions: string[] = ['project_id = ?'];
+  if (filters?.from) conditions.push('created_at >= ?');
+  if (filters?.to) conditions.push('created_at <= ?');
+  if (filters?.targetUrl) conditions.push("LOWER(target_url) LIKE ? ESCAPE '\\'");
+  if (withCursor) conditions.push('(created_at, id) < (?, ?)');
+  return `SELECT ${SCAN_LIST_COLUMNS} FROM scans WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`;
 }
 
 export interface IScansRepository {
@@ -54,7 +80,7 @@ export interface IScansRepository {
     ip: string | null
   ): Promise<void>;
   
-  getScans(projectId: string, limit: number, before?: ScansCursor): Promise<{ scans: any[]; next: ScansCursor | null }>;
+  getScans(projectId: string, limit: number, before?: ScansCursor, filters?: ScansListFilters): Promise<{ scans: any[]; next: ScansCursor | null }>;
   getUnfinishedScans(projectId: string, limit: number): Promise<any[]>;
   getScan(scanId: string): Promise<any | null>;
   updateScan(scanId: string, fields: Record<string, any>): Promise<any>;
@@ -264,11 +290,19 @@ export class ScansRepository extends BaseService implements IScansRepository {
     ).run();
   }
 
-  async getScans(projectId: string, limit: number, before?: ScansCursor): Promise<{ scans: any[]; next: ScansCursor | null }> {
+  async getScans(projectId: string, limit: number, before?: ScansCursor, filters?: ScansListFilters): Promise<{ scans: any[]; next: ScansCursor | null }> {
+    const activeFilters = filters && (filters.from || filters.to || filters.targetUrl) ? filters : undefined;
+    const params: any[] = [projectId];
+    if (activeFilters?.from) params.push(activeFilters.from);
+    if (activeFilters?.to) params.push(activeFilters.to);
+    if (activeFilters?.targetUrl) {
+      params.push(`%${escapeLikePattern(toAsciiLowerCase(activeFilters.targetUrl))}%`);
+    }
+    if (before) params.push(before.createdAt, before.id);
     // One more than the page, to tell whether another one follows.
-    const stmt = before
-      ? this.db.prepare(scansPageSql(true)).bind(projectId, before.createdAt, before.id, limit + 1)
-      : this.db.prepare(scansPageSql(false)).bind(projectId, limit + 1);
+    params.push(limit + 1);
+
+    const stmt = this.db.prepare(scansPageSql(Boolean(before), activeFilters)).bind(...params);
     const { results } = await stmt.all<any>();
     const scans = results || [];
     if (scans.length <= limit) return { scans, next: null };
