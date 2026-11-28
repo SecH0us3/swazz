@@ -138,7 +138,7 @@ Generic "be secure" prompting and generic OWASP-style checklists measurably unde
 - **Validate outputs like inputs**: any attacker-influenced value the code returns, stores, or logs (e.g. `og:*` metadata, fuzz payloads and target responses landing in SARIF/JSON/HTML reports) is live input to whatever consumes it next. Don't scope a threat model to inbound requests only.
 - **Fail closed**: on parse error, ambiguity, or unexpected state, deny rather than allow. Set explicit timeouts, size caps, and iteration limits.
 - **Name non-goals**: state explicitly what a security-relevant component does *not* defend against, so the next change doesn't assume it does.
-- **Cross-model check for high-stakes diffs**: for changes to `internal/safenet`, `internal/security`, agent authentication, or payload/report rendering, the review step must be done by a different model family than the one that wrote the code (already the shape of `scripts/vibe-review.sh`, which reviews Antigravity/Claude-authored diffs with Mistral) — don't let a model grade its own homework on SSRF- or auth-adjacent code.
+- **Cross-model check for high-stakes diffs**: for changes to `internal/safenet`, `internal/security`, agent authentication, or payload/report rendering, the review step must be done by a different model family than the one that wrote the code (fulfilled by Antigravity/Gemini implementing and Orca `Review Bot` on Claude reviewing — do NOT use `scripts/vibe-review.sh`) — don't let a model grade its own homework on SSRF- or auth-adjacent code.
 
 ---
 
@@ -169,14 +169,17 @@ To maintain clean architecture, the application is strictly modular:
 - **Payloads (Backend):** Static wordlists and payload definitions should be placed in `packages/container/internal/generator/payloads/`.
 
 ## 🤖 Autonomous Task Execution Protocol
-When the user asks to "Do Task N" (e.g., "Сделай задачу 5") referencing the GitHub Project board (Project #7, owner `SecH0us3`), run the following Human-in-the-Loop workflow. Planning and final review are owned by **Claude Code**; implementation is delegated to **Antigravity CLI** (`/swazz-toolkit:swazz-workflows`) as the execution engine.
+When the user assigns a task or says "Do Task N" (e.g., "Сделай задачу 5") referencing GitHub Project #7 (owner `SecH0us3`), use the **End-to-End Delivery Protocol (Risk-Gated Auto-Proceed)**. A single Delivery agent (**Antigravity Orchestrator** — heavy model for planning/decisions, fast model for execution) owns the task end-to-end; independent Orca **`Review Bot`** (Claude) owns cross-model code & security review.
 
-1. **Find, Branch & Start** *(Claude Code)*: Find the task on the GitHub Project board (`rtk gh project item-list 7 --owner SecH0us3 --format json`), locate its item ID, and immediately update its status to "In Progress" (option ID `47fc9ee4` for field `Status` `PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0` in project `PVT_kwHOAFg2Ls4BdsI1`):
+1. **Find, Branch & Start**: If referencing GitHub Project #7, find the task via `swazz_list_github_tasks` (or `rtk gh project item-list 7 --owner SecH0us3 --format json`), locate its item ID, and update its status to "In Progress" (option ID `47fc9ee4` for field `Status` `PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0` in project `PVT_kwHOAFg2Ls4BdsI1`):
    `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 47fc9ee4`
-   Create a new git branch (e.g., `feature/task-N`).
-2. **Plan** *(Claude Code)*: Research the codebase and generate an `implementation_plan.md` artifact — write it at spec-level detail (exact files, function signatures, edge cases, what NOT to touch), since Antigravity implements directly from it without re-planning. If the task touches network I/O, auth, or output rendering, first run the **threat-model-first pass** from "Security Review Standards" above and fold its trust-boundary/invariant output into the plan as the acceptance criteria — don't hand Antigravity a generic "be secure" note. **STOP** and wait for the user's explicit approval.
-3. **Delegate & Execute** *(Antigravity CLI)*: Hand off the approved `implementation_plan.md` to Antigravity and instruct it to implement directly from the plan (it must not regenerate its own plan). Antigravity writes the code and tests, runs `scripts/test-backend.sh`, and validates E2E against the Vulnerable Demo API, then commits.
-4. **Review** *(Claude Code)*: Review the resulting `git diff` against `implementation_plan.md` for correctness, security, and scope creep. Generate a `walkthrough.md` artifact summarizing the changes and any findings. **STOP** and request final human review.
-5. **Complete**: After the user approves the walkthrough, set the task status to "Done" (option ID `98236657`):
-   `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 98236657`
-   and merge/commit changes.
+   Create a new feature branch from fresh `master` (e.g., `feat/task-N`).
+2. **Plan (Risk-Gated Auto-Proceed)**: Research the codebase and formulate a concrete plan. If the task touches network I/O, auth, or output rendering, first run the **threat-model-first pass** from "Security Review Standards" above and fold its trust-boundary/invariant output into the plan. **Proceed straight to implementation by default.** Pause and ask the user ONLY when:
+   - the user explicitly requested planning/discussion (`/plan`, `/grill-me`),
+   - there is an irreversible architectural, API, or D1-schema fork or a non-obvious security/UX trade-off, or
+   - requirements are genuinely ambiguous.
+3. **Implement, Test & Document**: Write code and unit tests (`-race` and `-count=100+` for randomized/generator logic), run `scripts/add-copyright-headers.sh`, `scripts/test-backend.sh`, frontend `vitest`/`tsc`/`build` if touched, and targeted E2E tests (never full E2E automatically). Update `docs/` and `README.md` in the same PR for user-facing or architecture changes, then run `self-critical-review`.
+4. **Open PR (with Schematic Diagram)**: Follow `.github/PULL_REQUEST_TEMPLATE.md` and `.agents/AGENTS.md` (mandatory Mermaid diagram for non-trivial changes, `Docs` status, verification output, no AI attribution).
+5. **Cross-Model Review Loop (`Review Bot`)**: Send the PR to Orca `Review Bot` (Claude), fix all `[BLOCKER]` and safe non-regressing `[WORTH FIXING]` findings, and request round 2 with incremental commit SHAs (max 2 rounds; escalate to the user if still blocked).
+6. **CI Green & Completion**: Wait for `gh pr checks --watch`, auto-fix CI failures (max 2 rounds), and report the PR URL, concise summary, `Review Bot` verdict, and CI status. **Stop before merge** unless the user explicitly authorized auto-merge for this task. After merge, set the GitHub Project task status to "Done" (`98236657` / `swazz_update_task_status`):
+   `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 98236657`.

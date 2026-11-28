@@ -1,9 +1,10 @@
 # Swazz Project Rules
 
 ## PR Workflow
-- **NEVER merge a PR without explicit user approval.** Always create the PR, then stop and wait for the user to review and confirm before merging.
-- Do NOT run gh pr merge or pass the --auto flag automatically.
-- After creating a PR, report the URL and wait for the user to say "merge" or similar confirmation.
+- **NEVER merge a PR without explicit user approval** — either in the user's task prompt (e.g., `"сливай сам, если зелёное"` / explicit auto-merge authorization, and only after green CI + `Review Bot` approval) or after reporting the PR URL and receiving `"merge"` / `"сливай"` confirmation.
+- Do NOT pass `--auto` to `gh pr merge`.
+- **PR Description Standard**: Follow [.github/PULL_REQUEST_TEMPLATE.md](file://../.github/PULL_REQUEST_TEMPLATE.md). Every non-trivial PR (new feature, refactor, or data-flow/architecture change) MUST include a schematic Mermaid diagram (`sequenceDiagram` or `flowchart LR`, preferably showing Before → After or the new end-to-end flow); omit only for trivial PRs (typos, dependency bumps, 1-line fixes).
+- **Docs Gate**: Any PR adding or changing user-visible behavior, settings, CLI flags, UI controls, analyzers, or architecture MUST update the relevant `docs/` page(s) and `README.md` in the same PR (or explicitly state `Docs: N/A — internal refactor` in the PR body).
 
 ## Security & Environment Config Guardrails
 - **No dev-mode auth/security overrides in commits**: Never commit dev-mode overrides to `wrangler.toml` or security settings (e.g. `AUTH_ENABLED="false"`, `LIMIT_ANONYMOUS="false"`). Always audit `git diff` on infrastructure and environment files before committing to prevent accidentally pushing disabled authentication to production.
@@ -35,7 +36,7 @@
 - **Running complete test suite**: Before finishing or reviewing any branch, verify compilation, unit/integration tests, and frontend build. Do NOT run the full E2E test suite automatically. Instead, ask the user before running full E2E tests, or run only targeted tests covering the changed functionality (e.g., `bash tests/e2e/run-e2e.sh tests/e2e/<targeted>.spec.ts`).
 - **Running frontend unit tests**: When running `vitest` unit tests for the frontend (`packages/web`), always run the test command with the working directory set to `packages/web/` (e.g. command `rtk npx vitest run src/components/UserSettings.test.tsx` with Cwd `packages/web`). Running from the root directory will cause JSDOM environment errors (like `window is not defined`).
 - **Checking branch metadata**: To get current branch status, default branch, merge base, and changed files in JSON format, run `bash scripts/git-meta.sh`.
-- **Final Diff Review**: Do NOT run `scripts/vibe-review.sh` (Vibe/Mistral) as part of finishing a branch. When work was planned by Claude Code, hand control back to it for the diff review instead — see [CLAUDE.md](file://../CLAUDE.md) Autonomous Task Execution Protocol and [swazz-workflows SKILL.md](file://plugins/swazz-toolkit/skills/swazz-workflows/SKILL.md).
+- **Final Diff Review**: Do NOT run `scripts/vibe-review.sh` (Vibe/Mistral) as part of finishing a branch. Use Orca `Review Bot` (Claude) for independent cross-model diff review instead — see [CLAUDE.md](file://../CLAUDE.md) Autonomous End-to-End Delivery Protocol and [swazz-workflows SKILL.md](file://plugins/swazz-toolkit/skills/swazz-workflows/SKILL.md).
 ## Git and Tracking
 - **Never track docs/superpowers/**: The `docs/superpowers/` folder contains plan and design files that are gitignored. Do NOT run `git add -f` or track any files under `docs/superpowers/` in Git. Keep them local and untracked.
 - **Never track docs/reviews/**: The `docs/reviews/` folder contains local automated code review reports (like `vibe-review.md`) that are gitignored. Do NOT run `git add -f` or track any files under `docs/reviews/` in Git. Keep them local and untracked.
