@@ -75,7 +75,7 @@ npm run dev
 
 ### Docker & Compose
 
-We publish two container images, tagged with the commit SHA (`latest` follows every push to `master`, so pin a SHA for anything you rely on):
+We publish two container images, tagged `sha-<short-sha>` (for example `sha-b50b89a`; `latest` follows every push to `master`, so pin a `sha-` tag for anything you rely on):
 - **Headless CLI Fuzzer / Scanner**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
 - **Runner Agent**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz) — connects out to the coordinator over WebSocket and listens on no port.
 
@@ -85,14 +85,16 @@ For detailed instructions on running the entire Web UI, coordinator, and runner 
 
 #### Running the Headless CLI
 ```bash
-docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
+docker pull ghcr.io/sech0us3/swazz-cli:sha-<short-sha>
 # Run fuzzing directly (mount your config file using a volume):
-docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> start --config /app/swazz.config.json
+docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:sha-<short-sha> start --config /app/swazz.config.json
 ```
 
-If you use this repository's Compose setup, you can launch the complete dashboard, Cloudflare coordinator, and runner agent stack with a single command:
+If you use this repository's Compose setup, you can launch the complete dashboard, Cloudflare coordinator, and runner agent stack. Compose refuses to start until `SWAZZ_RUNNER_TOKEN` is set, so create `.env` first:
 ```bash
-docker compose up --build
+cp .env.example .env
+echo "SWAZZ_RUNNER_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose up --build   # dashboard: http://localhost:3000, coordinator: http://localhost:8081
 ```
 See [DOCKER.md](https://github.com/SecH0us3/swazz/blob/master/DOCKER.md) for configuration details.
 

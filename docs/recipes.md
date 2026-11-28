@@ -2,6 +2,8 @@
 
 Welcome to the Swazz recipes catalog. Below you will find production-ready configurations and commands for common use-cases.
 
+> **License note:** CLI `--sarif`, `--html`, `--junit`, `--markdown` and `--waf-patch` exports require a license with the `report_exports` feature (`SWAZZ_LICENSE_KEY`). `--json` and `--fail-on-severity` are free; without a license the paid exports are skipped and the run exits `1` (or `2` when `--fail-on-severity` is met).
+
 ---
 
 ## ⚡️ Recipe 1: CI/CD Pipeline Automation (GitHub Actions)
@@ -23,8 +25,10 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       
       - name: Run Swazz Fuzzer
-        # Pin to verified commit hash
-        uses: docker://ghcr.io/sech0us3/swazz-cli:7d8123ae45b1480f2d12f170f3f3c7e73d8123ae
+        # Pin to a published sha-<short-sha> tag, or to the image digest (@sha256:<digest>)
+        uses: docker://ghcr.io/sech0us3/swazz-cli:sha-<short-sha>
+        env:
+          SWAZZ_LICENSE_KEY: ${{ secrets.SWAZZ_LICENSE_KEY }} # SARIF needs report_exports
         with:
           args: start --config swazz.config.json --sarif results.sarif
 

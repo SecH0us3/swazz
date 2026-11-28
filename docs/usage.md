@@ -68,7 +68,7 @@ The CLI is ideal for CI/CD pipelines, headless testing, and automation workflows
 
 ### Interactive Configuration Wizard ⚡
 
-You can fully configure advanced settings (Base settings, Authentication & Multi-Identity, SSRF Security Policy, Concurrency, Rate Limiting, Custom Dictionaries, and Endpoint Filters) without manually editing JSON by running:
+You can fully configure advanced settings (Base settings, Authentication & Multi-Identity, SSRF Security Policy, Concurrency, Rate Limiting, Custom Dictionaries, and Endpoint Filters) without manually editing JSON by running the command below. Ignore/severity `rules` are not covered by the wizard; add them to `swazz.config.json` by hand.
 
 ```bash
 cd packages/container
@@ -88,8 +88,8 @@ go run . start --config swazz.config.json
 
 Common `start` flags:
 - **`--config <path>`**: Path to `swazz.config.json` (default `swazz.config.json`).
-- **`--sarif` / `--json` / `--html` / `--junit` / `--markdown <path>`**: Export scan results to the chosen report format.
-- **`--fail-on-severity <level>`**: Exit with code `2` if findings meet the threshold (`error`, `warning`, `note`, or `none`).
+- **`--sarif` / `--json` / `--html` / `--junit` / `--markdown <path>`**: Export scan results to the chosen report format. `--json` is free; the other formats (and `--waf-patch`) need a license with the `report_exports` feature (`SWAZZ_LICENSE_KEY` or `license_key` in the config). Without it, those exports are skipped, every free report is still written, and the run exits with code `1` — or `2` when `--fail-on-severity` is met.
+- **`--fail-on-severity <level>`**: Exit with code `2` if findings meet the threshold (`error`, `warning`, `note`, or `none`). It is evaluated even when a paid export was refused, and takes precedence over exit code `1`.
 - **`--log-level <level>`** / **`--debug`** / **`--quiet` (`-q`)** / **`--progress-on-change`**: Control log verbosity and progress output.
 - **`--no-color`**: Disable ANSI color codes in CLI text logs (also respects `NO_COLOR`).
 - **`--no-auto-chain`**: Disable automatic request chaining DAG and live ID pooling (overrides `settings.enable_auto_chaining`).
