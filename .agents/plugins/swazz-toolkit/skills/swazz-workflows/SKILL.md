@@ -19,11 +19,13 @@ This skill defines how to work with the `swazz` project.
 - Run `scripts/test-backend.sh` to execute the Go backend unit tests, compiler checks (`go vet`), and SAST security scans (`gosec`).
 
 ## 🔍 Code Navigation & RAG Search
-- **MANDATORY RAG tools usage**: You MUST use the MCP tools `swazz_search_code` (for semantic and keyword search) and `swazz_get_file_context` (for structured outlines of files) as your primary methods for code navigation and search. Do not use generic grep search or view full files using `view_file` unless the RAG tools are not applicable, have failed, or you explicitly need to read the entire file. This keeps token usage optimal.
+- **Prefer RAG tools when available**: When the `swazz-rag` MCP server is connected, prefer `swazz_search_code` and `swazz_get_file_context` to conserve tokens; if the MCP server is unavailable in the current session, fall back to `rg`/`grep` and targeted line-range reads.
 
 ## 🔄 Development Architecture
-- **Backend**: `packages/container/`. Contains fuzzing logic.
-- **Frontend**: `packages/web/`. Contains React 19 UI. Use `modern-web-guidance`.
+- **Backend**: `packages/container/` (Go engine: analyzers, payload generators, runner, agent, output formatters).
+- **Frontend**: `packages/web/` (React 19 + Zustand UI; use `modern-web-guidance`).
+- **Edge**: `packages/edge/` (Cloudflare Workers + Hono + D1 + R2 coordinator).
+- **Extension**: `packages/extension/` (Chrome MV3 extension).
 
 ## 🤖 Autonomous End-to-End Delivery Flow (Risk-Gated)
 A single Delivery agent (**Antigravity Orchestrator**) owns a task end-to-end from planning through CI-green PR; independent Orca **`Review Bot`** (Claude) owns cross-model code & security review. When helpful, delegate focused slices to specialized subagents:
@@ -34,9 +36,9 @@ A single Delivery agent (**Antigravity Orchestrator**) owns a task end-to-end fr
 
 **Definition of Done (8-Step Delivery Checklist):**
 1. **Plan & Threat-Model (Risk-Gated Auto-Proceed)**: Research the codebase, run a threat-model pass for network I/O, auth, storage, or output rendering, and proceed straight to implementation by default. Pause for user confirmation ONLY if the user asked for `/plan` or `/grill-me`, there is an irreversible architectural/API/D1-schema fork or risky trade-off, or requirements are ambiguous.
-2. **Implement & Tests**: Write code and sandboxed unit tests (`-race` on concurrent packages, `-count=100+` on randomized/generator tests). Run `bash scripts/add-copyright-headers.sh`, `scripts/test-backend.sh`, frontend `vitest` (with Cwd `packages/web/`), `tsc --noEmit`, `npm run build`, and **targeted** E2E tests (`bash tests/e2e/run-e2e.sh tests/e2e/<targeted>.spec.ts`) — never run the full E2E suite automatically.
-3. **Test Audit & Integration Check**: Invoke `test_auditor` to verify coverage, and verify new backend features are wired into `main.go` / `api/handlers.go` and aligned with frontend constraints.
-4. **Docs Gate**: Update `docs/` and `README.md` in the same PR whenever user-facing behavior, settings, CLI flags, UI, analyzers, or architecture change (or state `Docs: N/A — internal refactor` in the PR).
+2. **Implement & Tests**: Write code and sandboxed unit tests (`-race` on concurrent packages, `-count=100+` on randomized/generator tests). Run `bash scripts/add-copyright-headers.sh`, `scripts/test-backend.sh`, frontend `vitest` (with Cwd `packages/web/`), `tsc --noEmit`, `npm run build`, `cd packages/extension && npm test` (when touching the extension), and **targeted** E2E tests (`bash tests/e2e/run-e2e.sh tests/e2e/<targeted>.spec.ts`) — never run the full E2E suite automatically.
+3. **Test Audit & Integration Check**: Invoke `test_auditor` to verify coverage, and verify new backend features are wired into `main.go`, `internal/agent/`, and `internal/runner/` and aligned with frontend constraints.
+4. **Docs Gate (Mandatory Acceptance Criterion)**: Update `docs/` and `README.md` in the same PR whenever user-facing behavior, settings, CLI flags, UI, analyzers, or architecture change (or explain why in `## Docs`, e.g., `N/A — internal refactor`), and refresh `AGENTS.md` if packages/scripts/workflows changed. Enforced by `.github/workflows/pr-docs-gate.yml` and `Review Bot`.
 5. **Self-Critical Review**: Invoke `self-critical-review` to check for dead code, unused CSS, UTC compliance, leaks, and rule alignment.
 6. **Open PR**: Push branch and open PR per `.github/PULL_REQUEST_TEMPLATE.md` and `AGENTS.md` (with a Mermaid diagram for non-trivial changes, `Docs` section, verification output, and no AI attribution).
 7. **Cross-Model Review (`Review Bot`)**: Request review from Orca `Review Bot` (Claude) — do NOT run `scripts/vibe-review.sh`. Fix `[BLOCKER]` and safe non-regressing `[WORTH FIXING]` items, then send round 2 with incremental commit SHAs (max 2 rounds; escalate if still blocked).

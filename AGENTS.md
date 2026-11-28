@@ -8,7 +8,8 @@ This file is the single source of truth for project rules, development conventio
 - **NEVER merge a PR without explicit user approval** — either in the user's task prompt (e.g., `"сливай сам, если зелёное"` / explicit auto-merge authorization, and only after green CI + `Review Bot` approval) or after reporting the PR URL and receiving `"merge"` / `"сливай"` confirmation.
 - Do NOT pass `--auto` to `gh pr merge`.
 - **PR Description Standard**: Follow [.github/PULL_REQUEST_TEMPLATE.md](file://.github/PULL_REQUEST_TEMPLATE.md). Every non-trivial PR (new feature, refactor, or data-flow/architecture change) MUST include a schematic Mermaid diagram (`sequenceDiagram` or `flowchart LR`, preferably showing Before → After or the new end-to-end flow); omit only for trivial PRs (typos, dependency bumps, 1-line fixes).
-- **Docs Gate**: Any PR adding or changing user-visible behavior, settings, CLI flags, UI controls, analyzers, or architecture MUST update the relevant `docs/` page(s) and `README.md` in the same PR (or explicitly state `Docs: N/A — internal refactor` in the PR body).
+- **Docs Gate (Mandatory Acceptance Criterion)**: Any PR adding or changing user-visible behavior, settings, CLI flags, UI controls, analyzers, or architecture MUST update the relevant `docs/` page(s) and `README.md` in the same PR (or explicitly explain why in the PR's `## Docs` section, e.g., `N/A — internal refactor`). Enforced by `Review Bot` and `.github/workflows/pr-docs-gate.yml`.
+- **Keep `AGENTS.md` Fresh**: When adding or renaming packages, output formats, scripts, or workflows, update `AGENTS.md` in the same PR so agent instructions never go stale.
 
 ---
 
@@ -62,11 +63,11 @@ Generic "be secure" prompting and generic OWASP-style checklists measurably unde
 - **Never track docs/reviews/**: The `docs/reviews/` folder contains local automated code review reports (like `vibe-review.md`) that are gitignored. Do NOT run `git add -f` or track any files under `docs/reviews/` in Git. Keep them local and untracked.
 
 ## Task Discovery & Roadmap Management
-- **Finding available tasks**: When the user asks what tasks are available, what to work on next, or requests a list of tasks — always fetch the GitHub Project board using the **`swazz_list_github_tasks` MCP tool** from the `swazz-rag` server. By default, it returns tasks in "Todo" status. Do not use raw `gh project` CLI commands.
-- **Roadmap updates on task completion**: When a task from the GitHub Project board is completed/implemented, always update its status to "Done" by invoking the **`swazz_update_task_status` MCP tool** from the `swazz-rag` server, passing the task's ID as `item_id`. Do not use raw `gh project` CLI commands.
+- **Finding available tasks**: When the `swazz-rag` MCP server is connected, prefer `swazz_list_github_tasks` to fetch GitHub Project #7 tasks; if unavailable in the current session, fall back to `rtk gh project item-list 7 --owner SecH0us3 --format json`.
+- **Roadmap updates on task completion**: When a task from the GitHub Project board is completed, update its status to "Done" (`98236657`) via `swazz_update_task_status` (when `swazz-rag` is connected) or `rtk gh project item-edit`.
 
-## Code Navigation & Search (RAG)
-- **Prefer custom RAG tools**: For searching code or retrieving file structures/outlines, always prefer the custom MCP tools `swazz_search_code` and `swazz_get_file_context` over generic grep, find, or complete file views where possible (conserves token usage).
+## Code Search & Exploration (RAG)
+- **Prefer custom RAG tools when available**: If the `swazz-rag` MCP server is connected, prefer `swazz_search_code` and `swazz_get_file_context` over generic grep/find or full-file reads; otherwise fall back to `rg`/`grep` and targeted line-range reads.
 
 ---
 
@@ -90,7 +91,7 @@ Generic "be secure" prompting and generic OWASP-style checklists measurably unde
 - **Design System Reference**: Refer to [.agents/DESIGN.md](file://.agents/DESIGN.md) for global design system tokens, color palettes, typography guidelines, and UI component standards.
 
 ### CLI & Output
-- **Output Formats**: When adding findings or classifications, ensure they are reflected in `packages/container/internal/output/` (SARIF, JSON, HTML).
+- **Output Formats**: When adding findings or classifications, ensure they are reflected in `packages/container/internal/output/` (SARIF, JSON, HTML, JUnit, Markdown).
 
 ### CI/CD & Documentation
 - **Selective Triggers**: GitHub Actions use path-based filters. `ci.yml` ignores meta files (README, etc.) and docs. `release.yml` conditionally builds components based on changes in `packages/`.
@@ -102,10 +103,12 @@ Generic "be secure" prompting and generic OWASP-style checklists measurably unde
 **swazz** is a Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities (like XSS or injection) by parsing Swagger/OpenAPI specifications and executing automated fuzzing runs.
 
 ### Core Architecture
-The project is a hybrid repository using **npm workspaces** for the frontend and **Go modules** for the backend engine:
-- **`packages/container`**: The core Go engine. Contains the runner agent that serves the web dashboard over the coordinator WebSocket (`swazz-engine run-agent`), the CLI runner (`swazz-engine start`), the Smart Payload Generator, and output formatters.
-- **`packages/web`**: A React 19 dashboard. Features a real-time Endpoint × Status heatmap, request inspector, and configuration management.
-- **`packages/edge`**: Cloudflare integration (if applicable).
+The project is a hybrid monorepo using **npm workspaces** for JS/TS packages and **Go modules** for the backend engine:
+- **`packages/container`**: The core Go engine (`swazz-engine`). Contains the runner agent (`swazz-engine run-agent`), CLI runner (`swazz-engine start`), Smart Payload Generator, analyzers, auto-chaining, and output formatters.
+- **`packages/web`**: React 19 + Vite + Zustand dashboard. Features a real-time Endpoint × Status heatmap, request inspector, and configuration management (`prebuild` bundles `public/swazz-extension.zip` and syncs `docs/llms*.txt`).
+- **`packages/edge`**: Cloudflare Workers + Hono + D1 + R2 coordinator.
+- **`packages/extension`**: Chrome MV3 browser extension for traffic capture, HTML form/HAR import, and page crawling (`vitest` tests + `build-zip.mjs`).
+- **`packages/shared`**, **`packages/rag`**, **`demo/`**, **`docs/`**: Shared TS types/utilities, optional RAG MCP server, vulnerable demo targets (HTTP/gRPC/WS), and VitePress docs.
 
 ## 🏗 Swagger Cache & Fuzzing Architecture
 We use a **hybrid caching design** to allow instant loading of endpoint trees on the frontend while avoiding SQLite (D1) database bloat from large Swagger specification files:
@@ -166,20 +169,21 @@ graph TD
 ```
 
 ## 🛠 Tech Stack
-- **Language**: Go (Backend), TypeScript/ESM (Frontend)
-- **Frontend**: React 19, Vite, Vanilla CSS (CSS Variables)
-- **Backend API**: Cloudflare Workers + Hono (`packages/edge`); the Go engine uses the standard library `net/http` and `nhooyr.io/websocket`
-- **Testing**: `go test` (Backend), Vitest (Frontend if any)
+- **Language**: Go (Backend), TypeScript/ESM (Frontend, Edge, Extension)
+- **Frontend**: React 19, Vite, Zustand, Vanilla CSS (CSS Variables)
+- **Backend API**: Cloudflare Workers + Hono + D1 + R2 (`packages/edge`); the Go engine uses `net/http` and `nhooyr.io/websocket`
+- **Testing**: `go test` (Backend), `Vitest` (`packages/web` — 100+ test files, and `packages/extension`), `Playwright` (targeted E2E in `tests/e2e/`)
 
 ## 🚀 Key Commands
 
 ### Root Commands
-- `npm install`: Install frontend dependencies.
+- `npm install`: Install workspace dependencies.
 - `npm run dev`: Starts the edge coordinator (Wrangler) and the Vite frontend concurrently. It does **not** start the Go engine.
 - `bash scripts/start-local-dev.sh`: **Full local stack** — edge coordinator (8787), web dashboard (5173), the vulnerable HTTP (8788), gRPC (50051) and WebSocket (50052) demo targets, and the Go runner agent connected to the coordinator. Use this rather than `npm run dev` when a change needs the runner or a demo target.
 - `bash scripts/stop-local-dev.sh`: Stops everything the above starts. Prefer it over `pkill`: `go run` execs a compiled temporary binary, so killing by process name leaves the gRPC and WebSocket demos holding their ports.
-- `npm run build`: Build the web dashboard.
-- `npm run deploy:web`: Deploy the dashboard to Cloudflare Pages.
+- `npm run build`: Build the web dashboard (also bundles `public/swazz-extension.zip` and syncs `docs/llms*.txt`).
+- `npm run deploy:web`: Build and deploy the web dashboard via `wrangler deploy`.
+- `cd packages/extension && npm test`: Run Chrome extension Vitest suite when touching `packages/extension/`.
 - `bash scripts/setup-dev.sh`: **One-time setup.** Symlinks the `swazz-toolkit` plugin.
 
 ### Backend Commands (in `packages/container`)
@@ -188,22 +192,19 @@ graph TD
 - `go test ./...`: Run all backend tests.
 
 ## 📁 Directory Structure
-- `packages/container/main.go`: Entrypoint for both the server and CLI.
-- `packages/container/internal/generator/`: Fuzz payload generation (`generator.go`) and static payloads (`payloads/`).
-- `packages/container/internal/runner/`: The concurrent fuzz execution engine.
-- `packages/container/internal/agent/`: Runner agent — coordinator WebSocket client and job dispatcher.
-- `packages/web/src/components/`: React UI components (Dashboard, Heatmap, Inspector).
+- `packages/container/main.go`: CLI and runner-agent entrypoint (`start`, `run-agent`).
+- `packages/container/internal/`: Core Go packages (`agent`, `analyzer`, `autochain`, `bola`, `crawler`, `generator`, `graphql`, `grpc`, `har`, `mcp`, `oob`, `output`, `runner`, `safenet`, `security`, `swagger`, `triage`, `wafcheck`, `ws`, etc.).
+- `packages/web/src/`: React 19 UI (`components/`, `hooks/`, `services/`, `store/`, `utils/`).
+- `packages/edge/`: Cloudflare Worker + Durable Object coordinator + D1 migrations.
+- `packages/extension/`: Chrome MV3 extension (`src/`, `tests/`, `build-zip.mjs`).
 
 ## 📊 Grouped Errors & Finding Categories
-Findings detected by the backend analyzers are classified and grouped in the Web UI ("Grouped Errors" tab) and reports using the following rules defined in `packages/web/src/utils/findings.ts` and `packages/container/internal/analyzer/`:
-- **`swazz/reflected-xss`**: Displays as **Reflected XSS** (Severity: `error`, Red). Triggered when a fuzzed XSS payload is reflected unescaped in the response.
-- **`swazz/null-pointer-exception`**: Displays as **Null Reference Exception: [Language]** (Severity: `error`, Red). Detects language-specific null pointer dereferences (Java, Go, Python, C#/.NET, JS/Node, PHP, Ruby).
-- **`swazz/sql-error-leak`**: Displays as **SQLi Error: [Database]** (Severity: `error`, Red). Detects database-specific SQL syntax errors (MySQL, Postgres, SQLite, MSSQL, Oracle).
-- **`swazz/stack-trace-leak`**: Displays as **Stack Trace Leak: [Language]** (Severity: `warning`, Yellow). Detects stack traces from various framework call stacks.
-- **`swazz/sensitive-data-leak`**: Displays as **Sensitive Data: [Category]** (Severity: `warning`, Yellow). Detects leaks of JWTs, AWS keys, private keys, API keys, or internal IPs.
-- **`swazz/crlf-injection`**: Displays as **CRLF / Header Injection** (Severity: `error`, Red). Detects response header splitting.
-- **`swazz/cors-misconfig`**: Displays as **CORS Misconfiguration** (Severity: `warning`, Yellow). Detects wildcard/reflected CORS origins.
-- **`swazz/response-size-anomaly`**: Displays as **Response Size Anomaly** (Severity: `warning`, Yellow). Detects large variations in response size.
+Findings detected by backend analyzers are defined and grouped across three sources of truth (do not maintain a duplicate list in docs):
+- **Backend rules (`40+` `swazz/*` rule IDs)**: [`packages/container/internal/analyzer/`](file:///Users/alex/src/swazz/packages/container/internal/analyzer/)
+- **Web UI grouping & severity**: [`packages/web/src/utils/findings.ts`](file:///Users/alex/src/swazz/packages/web/src/utils/findings.ts)
+- **Report formatters**: [`packages/container/internal/output/`](file:///Users/alex/src/swazz/packages/container/internal/output/) (SARIF, JSON, HTML, JUnit, Markdown)
+
+Any new analyzer rule MUST be wired in `internal/analyzer/`, mapped in `findings.ts`, and reflected in `internal/output/`.
 
 ## Project Architecture & Refactoring Notes (Updated)
 To maintain clean architecture, the application is strictly modular:
