@@ -1,0 +1,90 @@
+name: PR Docs Gate
+
+on:
+  pull_request:
+    branches: [ master ]
+    types: [ opened, edited, synchronize, reopened ]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-gate:
+    name: Enforce Docs Gate
+    runs-on: ubuntu-latest
+    steps:
+      # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+
+      - name: Check docs update or explicit N/A rationale
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_ACTOR: ${{ github.actor }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          import sys
+
+          actor = os.environ.get("PR_ACTOR", "")
+          title = os.environ.get("PR_TITLE", "").strip()
+          body = os.environ.get("PR_BODY", "")
+
+          if actor == "dependabot[bot]" or re.match(r"^(chore\(deps\)|docs:|chore\(release\))", title):
+              print(f"Skipping Docs Gate for {actor or 'PR'} ({title})")
+              sys.exit(0)
+
+          has_parent = subprocess.run(
+              ["git", "rev-parse", "--verify", "HEAD^1"],
+              stdout=subprocess.DEVNULL,
+              stderr=subprocess.DEVNULL,
+          ).returncode == 0
+
+          if has_parent:
+              diff_out = subprocess.check_output(
+                  ["git", "diff", "--name-only", "HEAD^1", "HEAD"], text=True
+              )
+          else:
+              diff_out = subprocess.check_output(
+                  ["git", "show", "--name-only", "--pretty="], text=True
+              )
+
+          changed = [line.strip() for line in diff_out.splitlines() if line.strip()]
+          print("Changed files:", changed)
+
+          runtime_re = re.compile(r"^packages/(container|web|edge|extension)/")
+          test_re = re.compile(r"(_test\.go|\.test\.(ts|tsx|js|mjs)|/testdata/)")
+          docs_re = re.compile(r"^(docs/|README\.md$|AGENTS\.md$)")
+
+          runtime_changed = [f for f in changed if runtime_re.match(f) and not test_re.search(f)]
+          docs_changed = [f for f in changed if docs_re.match(f)]
+
+          if not runtime_changed:
+              print("No runtime package files changed — Docs Gate passed.")
+              sys.exit(0)
+
+          if docs_changed:
+              print(f"Docs updated ({docs_changed}) — Docs Gate passed.")
+              sys.exit(0)
+
+          match = re.search(r"^##\s+Docs\b(.*)$", body, flags=re.MULTILINE | re.IGNORECASE)
+          if match:
+              rest = body[match.end():]
+              next_heading = re.search(r"^##\s+", rest, flags=re.MULTILINE)
+              section = rest[:next_heading.start()] if next_heading else rest
+              cleaned = re.sub(r"<!--.*?-->", "", section, flags=re.DOTALL).strip()
+              if len(cleaned) >= 3:
+                  print(f"Explicit Docs rationale provided: {cleaned!r} — Docs Gate passed.")
+                  sys.exit(0)
+
+          print(
+              "::error::Docs Gate failed: runtime files changed without updating docs/, README.md, "
+              "or AGENTS.md, and no rationale was found under `## Docs` in the PR description. "
+              "Update documentation or explain why under `## Docs` (e.g., `N/A — internal refactor`)."
+          )
+          sys.exit(1)
+          PY

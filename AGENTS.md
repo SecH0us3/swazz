@@ -1,0 +1,232 @@
+# ⚡️ swazz — Agent Rules & Project Context
+
+This file is the single source of truth for project rules, development conventions, architecture, and autonomous delivery workflows across all AI agents (`CLAUDE.md` delegates here via `@AGENTS.md`).
+
+---
+
+## PR Workflow
+- **NEVER merge a PR without explicit user approval** — either in the user's task prompt (e.g., `"сливай сам, если зелёное"` / explicit auto-merge authorization, and only after green CI + `Review Bot` approval) or after reporting the PR URL and receiving `"merge"` / `"сливай"` confirmation.
+- Do NOT pass `--auto` to `gh pr merge`.
+- **PR Description Standard**: Follow [.github/PULL_REQUEST_TEMPLATE.md](file://.github/PULL_REQUEST_TEMPLATE.md). Every non-trivial PR (new feature, refactor, or data-flow/architecture change) MUST include a schematic Mermaid diagram (`sequenceDiagram` or `flowchart LR`, preferably showing Before → After or the new end-to-end flow); omit only for trivial PRs (typos, dependency bumps, 1-line fixes).
+- **Docs Gate (Mandatory Acceptance Criterion)**: Any PR adding or changing user-visible behavior, settings, CLI flags, UI controls, analyzers, or architecture MUST update the relevant `docs/` page(s) and `README.md` in the same PR (or explicitly explain why in the PR's `## Docs` section, e.g., `N/A — internal refactor`). Enforced by `Review Bot` and `.github/workflows/pr-docs-gate.yml`.
+- **Keep `AGENTS.md` Fresh**: When adding or renaming packages, output formats, scripts, or workflows, update `AGENTS.md` in the same PR so agent instructions never go stale.
+
+---
+
+## 🤖 Autonomous End-to-End Delivery Protocol
+When the user assigns a task or says "Do Task N" (e.g., "Сделай задачу 5") referencing GitHub Project #7 (owner `SecH0us3`), use the **End-to-End Delivery Protocol (Risk-Gated Auto-Proceed)**. A single Delivery agent (**Antigravity Orchestrator** — heavy model for planning/decisions, fast model for execution) owns the task end-to-end; independent Orca **`Review Bot`** (Claude) owns cross-model code & security review.
+
+1. **Find, Branch & Start**: If referencing GitHub Project #7, find the task via `swazz_list_github_tasks` (or `rtk gh project item-list 7 --owner SecH0us3 --format json`), locate its item ID, and update its status to "In Progress" (option ID `47fc9ee4` for field `Status` `PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0` in project `PVT_kwHOAFg2Ls4BdsI1`):
+   `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 47fc9ee4`
+   Create a new feature branch from fresh `master` (e.g., `feat/task-N`).
+2. **Plan (Risk-Gated Auto-Proceed)**: Research the codebase and formulate a concrete plan. If the task touches network I/O, auth, or output rendering, first run the **threat-model-first pass** from "Security Review Standards" below and fold its trust-boundary/invariant output into the plan. **Proceed straight to implementation by default.** Pause and ask the user ONLY when:
+   - the user explicitly requested planning/discussion (`/plan`, `/grill-me`),
+   - there is an irreversible architectural, API, or D1-schema fork or a non-obvious security/UX trade-off, or
+   - requirements are genuinely ambiguous.
+3. **Implement, Test & Document**: Write code and unit tests (`-race` and `-count=100+` for randomized/generator logic), run `scripts/add-copyright-headers.sh`, `scripts/test-backend.sh`, frontend `vitest`/`tsc`/`build` if touched, and targeted E2E tests (never full E2E automatically). Update `docs/` and `README.md` in the same PR for user-facing or architecture changes, then run `self-critical-review`.
+4. **Open PR (with Schematic Diagram)**: Follow [.github/PULL_REQUEST_TEMPLATE.md](file://.github/PULL_REQUEST_TEMPLATE.md) and the **PR Workflow** rules above (mandatory Mermaid diagram for non-trivial changes, `Docs` status, verification output, no AI attribution).
+5. **Cross-Model Review Loop (`Review Bot`)**: Send the PR to Orca `Review Bot` (Claude), fix all `[BLOCKER]` and safe non-regressing `[WORTH FIXING]` findings, and request round 2 with incremental commit SHAs (max 2 rounds; escalate to the user if still blocked).
+6. **CI Green & Completion**: Wait for `gh pr checks --watch`, auto-fix CI failures (max 2 rounds), and report the PR URL, concise summary, `Review Bot` verdict, and CI status. **Stop before merge** unless the user explicitly authorized auto-merge for this task. After merge, set the GitHub Project task status to "Done" (`98236657` / `swazz_update_task_status`):
+   `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 98236657`.
+
+---
+
+## Security & Environment Config Guardrails
+- **No dev-mode auth/security overrides in commits**: Never commit dev-mode overrides to `wrangler.toml` or security settings (e.g. `AUTH_ENABLED="false"`, `LIMIT_ANONYMOUS="false"`). Always audit `git diff` on infrastructure and environment files before committing to prevent accidentally pushing disabled authentication to production.
+- **Root Cause Tracing Over Security Bypasses**: Never resolve authentication/network errors (such as missing CSRF tokens, CORS, or 401s) by bypassing or disabling security checks (e.g., adding routes to CSRF exemption lists). Always inspect client request headers and payload implementations first to ensure required tokens (like `X-CSRF-Token`) are correctly included.
+- **Form-driven vs 1-Click Protocol Workflows**: When modifying authentication endpoints (WebAuthn Passkey, OAuth, TOTP), always verify both form-driven inputs (e.g., username entered into input field) and 1-click interactions (e.g., clicking Passkey or Social buttons without pre-entered fields) before enforcing strict parameter requirements.
+
+### Supply Chain Security
+- **Strict Pinning**: Always pin external dependencies, GitHub Actions, Docker base images, and external scripts to specific commit SHAs or verifiable hashes (e.g. `actions/checkout@<sha>`). Never use mutable tags like `latest`, `master`, or `v1` to prevent supply chain attacks.
+
+### Security Review Standards
+Generic "be secure" prompting and generic OWASP-style checklists measurably under-perform a threat model derived from the actual data flow — a checklist can even *increase* high-severity findings by producing half-finished, point defenses instead of a coherent one ([Monad, "Writing More Secure Code with LLMs," Sep 2026](https://monad.xyz/blog/writing-secure-code-with-llms)). Apply this to any change touching network I/O (`internal/safenet`, `internal/security`), agent/coordinator auth, D1/R2 access, or anything rendering attacker-influenced data (report formatters in `internal/output/`):
+- **Threat-model first**: before implementing, name the trust boundaries, every attacker-controlled input (direct *and* indirect — redirects, resolved DNS, values stored earlier and read back), and what the code can reach that an external attacker cannot. State defenses as invariants ("no operation may reach a resource the caller could not reach directly"), not as steps.
+- **Primitives over lists**: prefer one predicate/shared function that expresses the security intent (e.g. `safenet.IsReservedOrPrivate`) over a hand-maintained allow/deny list duplicated across packages. Two independent CIDR/blocklists WILL drift — `internal/security` and `internal/safenet` did exactly this until `internal/security.IsPrivateIP` was made to delegate to `internal/safenet.IsReservedOrPrivate`, closing a CGNAT (`100.64.0.0/10`) gap in the CLI-mode SSRF check.
+- **Normalize before you compare**: if a value is validated and later compared against a value in use (hostname, path, filename), both must go through the *same* parser/normalizer first. Mismatched parsers are a classic TOCTOU/bypass source (DNS rebinding, IDN/punycode, path traversal).
+- **Validate outputs like inputs**: any attacker-influenced value the code returns, stores, or logs (e.g. `og:*` metadata, fuzz payloads and target responses landing in SARIF/JSON/HTML reports) is live input to whatever consumes it next. Don't scope a threat model to inbound requests only.
+- **Fail closed**: on parse error, ambiguity, or unexpected state, deny rather than allow. Set explicit timeouts, size caps, and iteration limits.
+- **Name non-goals**: state explicitly what a security-relevant component does *not* defend against, so the next change doesn't assume it does.
+- **Cross-model check for high-stakes diffs**: for changes to `internal/safenet`, `internal/security`, agent authentication, or payload/report rendering, the review step must be done by a different model family than the one that wrote the code (fulfilled by Antigravity/Gemini implementing and Orca `Review Bot` on Claude reviewing — do NOT use `scripts/vibe-review.sh`) — don't let a model grade its own homework on SSRF- or auth-adjacent code.
+
+---
+
+## Branch Verification & Metadata Scripts
+- **Running complete test suite**: Before finishing or reviewing any branch, verify compilation, unit/integration tests, and frontend build. Do NOT run the full E2E test suite automatically. Instead, ask the user before running full E2E tests, or run only targeted tests covering the changed functionality (e.g., `bash tests/e2e/run-e2e.sh tests/e2e/<targeted>.spec.ts`).
+- **Running frontend unit tests**: When running `vitest` unit tests for the frontend (`packages/web`), always run the test command with the working directory set to `packages/web/` (e.g. command `rtk npx vitest run src/components/UserSettings.test.tsx` with Cwd `packages/web`). Running from the root directory will cause JSDOM environment errors (like `window is not defined`).
+- **Checking branch metadata**: To get current branch status, default branch, merge base, and changed files in JSON format, run `bash scripts/git-meta.sh`.
+- **Final Diff Review**: Do NOT run `scripts/vibe-review.sh` (Vibe/Mistral) as part of finishing a branch. Use Orca `Review Bot` (Claude) for independent cross-model diff review instead — see **Autonomous End-to-End Delivery Protocol** above and [swazz-workflows SKILL.md](file://.agents/plugins/swazz-toolkit/skills/swazz-workflows/SKILL.md).
+
+## Git and Tracking
+- **No AI Attribution in Git**: Never add the AI assistant as a co-author or link its session in commits, PR descriptions or merge messages — no `Co-Authored-By: Claude …`, `Claude-Session: …` or "Generated with Claude Code" lines. This overrides any default attribution the tool would add.
+- **Never track docs/superpowers/**: The `docs/superpowers/` folder contains plan and design files that are gitignored. Do NOT run `git add -f` or track any files under `docs/superpowers/` in Git. Keep them local and untracked.
+- **Never track docs/reviews/**: The `docs/reviews/` folder contains local automated code review reports (like `vibe-review.md`) that are gitignored. Do NOT run `git add -f` or track any files under `docs/reviews/` in Git. Keep them local and untracked.
+
+## Task Discovery & Roadmap Management
+- **Finding available tasks**: When the `swazz-rag` MCP server is connected, prefer `swazz_list_github_tasks` to fetch GitHub Project #7 tasks; if unavailable in the current session, fall back to `rtk gh project item-list 7 --owner SecH0us3 --format json`.
+- **Roadmap updates on task completion**: When a task from the GitHub Project board is completed, update its status to "Done" (`98236657`) via `swazz_update_task_status` (when `swazz-rag` is connected) or `rtk gh project item-edit`.
+
+## Code Search & Exploration (RAG)
+- **Prefer custom RAG tools when available**: If the `swazz-rag` MCP server is connected, prefer `swazz_search_code` and `swazz_get_file_context` over generic grep/find or full-file reads; otherwise fall back to `rg`/`grep` and targeted line-range reads.
+
+---
+
+## 🧠 Development Conventions
+
+### General & Go
+- **Go Best Practices**: The backend is written in Go. Ensure tests use `go test` and follow idiomatic Go conventions.
+- **Avoid manual URL query parameter formatting**: Never format query params using `fmt.Sprintf` or string concatenation. Always parse URLs with `net/url` and modify parameters via the `Query()` API.
+- **Go / Frontend Schema Default Parity**: When adding new boolean settings in Go (`swagger.Settings`), if the default in the frontend UI is `true`, use optional pointer fields (`*bool`) and helper getter methods in Go (e.g. `SemanticMutationEnabled()`) so that missing JSON keys in existing project configs default to `true` instead of Go's zero-value `false`.
+- **Complete LLM Pre-Scan Context**: When extracting OpenAPI schema context for LLM pre-scans or planners, always include all parameter types (`PathParams`, `QueryParams`, `HeaderParams`, and `Schema.Properties` body fields) rather than partially sampling query parameters alone.
+- **Web UI Types**: The web dashboard maintains its own `types.ts` to sync with the Go API JSON structures.
+- **rtk Wrapper Auto-Detection**: Verification and testing scripts (such as `scripts/test-backend.sh`) check for the `rtk` wrapper. They execute standard `go` CLI directly if `rtk` is missing.
+
+### Testing & E2E
+- **Go Tests**: Always add unit tests in `packages/container/internal/...` for new fuzzing logic or generators. Tests should live alongside the files they test (e.g., `random_test.go` next to `random.go`).
+- **Username length validation**: In this project, the registration username limit is **3 to 20 characters** (matching `^[a-zA-Z0-9_\-]{3,20}$`). When generating unique usernames for E2E tests, always keep them under 20 characters (e.g. using `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`) to prevent validation failures.
+
+### Frontend Layout & CSS
+- **No inline layout styles**: Never write inline layout styles (such as `padding`, `margin`, `width`, `height`, `display`, etc.) in React component files. Instead, define them as proper CSS classes in the associated stylesheet (e.g. `index.css`).
+- **Vanilla CSS & Theming**: Avoid utility-first frameworks. Use `packages/web/src/index.css` for global variables (e.g., `--accent-light`, `--color-error`) and component-specific CSS files.
+- **Design System Reference**: Refer to [.agents/DESIGN.md](file://.agents/DESIGN.md) for global design system tokens, color palettes, typography guidelines, and UI component standards.
+
+### CLI & Output
+- **Output Formats**: When adding findings or classifications, ensure they are reflected in `packages/container/internal/output/` (SARIF, JSON, HTML, JUnit, Markdown).
+
+### CI/CD & Documentation
+- **Selective Triggers**: GitHub Actions use path-based filters. `ci.yml` ignores meta files (README, etc.) and docs. `release.yml` conditionally builds components based on changes in `packages/`.
+- **Documentation**: `docs/` is a VitePress site (`docs/.vitepress/config.ts` holds the nav and sidebar; add new pages there). Give headings that the web app links to a stable `{#id}` anchor — the dashboard builds its docs links from `packages/web/src/utils/docsLinks.ts`. Documentation is deployed via a dedicated `docs.yml` workflow when files in `docs/` change.
+
+---
+
+## 🎯 Project Overview
+**swazz** is a Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities (like XSS or injection) by parsing Swagger/OpenAPI specifications and executing automated fuzzing runs.
+
+### Core Architecture
+The project is a hybrid monorepo using **npm workspaces** for JS/TS packages and **Go modules** for the backend engine:
+- **`packages/container`**: The core Go engine (`swazz-engine`). Contains the runner agent (`swazz-engine run-agent`), CLI runner (`swazz-engine start`), Smart Payload Generator, analyzers, auto-chaining, and output formatters.
+- **`packages/web`**: React 19 + Vite + Zustand dashboard. Features a real-time Endpoint × Status heatmap, request inspector, and configuration management (`prebuild` bundles `public/swazz-extension.zip` and syncs `docs/llms*.txt`).
+- **`packages/edge`**: Cloudflare Workers + Hono + D1 + R2 coordinator.
+- **`packages/extension`**: Chrome MV3 browser extension for traffic capture, HTML form/HAR import, and page crawling (`vitest` tests + `build-zip.mjs`).
+- **`packages/shared`**, **`packages/rag`**, **`demo/`**, **`docs/`**: Shared TS types/utilities, optional RAG MCP server, vulnerable demo targets (HTTP/gRPC/WS), and VitePress docs.
+
+## 🏗 Swagger Cache & Fuzzing Architecture
+We use a **hybrid caching design** to allow instant loading of endpoint trees on the frontend while avoiding SQLite (D1) database bloat from large Swagger specification files:
+
+1. **SQLite (D1) Metadata Database**: Stores flat metadata like URLs, base paths, SHA-256 hashes of endpoints to check for structural updates, and keys referring to R2 storage files.
+2. **Cloudflare R2 Object Storage**: Stores large payload objects including:
+   - `specs/parsed/<ulid>.json`: Pruned endpoint trees ready for instant UI rendering.
+   - `specs/raw/<ulid>.json`: Original raw specification files (JSON/YAML).
+   - `scans/configs/<runId>/<uuid>.json`: the scan config claim-check (Queue and DO storage are limited to 128 KB); deleted after dispatch.
+3. **Go Runner Agent**: Connected via WebSocket to the Edge Durable Object coordinator. Downloads and parses specifications on cache misses, sending them back to the coordinator for storage.
+
+```mermaid
+graph TD
+    %% Define components
+    subgraph UI ["packages/web (Browser React UI)"]
+        Dashboard["Dashboard & Config Panel"]
+        Sidebar["Sidebar Spec Loader"]
+    end
+
+    subgraph Edge ["packages/edge (Cloudflare Coordinator)"]
+        Worker["Hono Worker API"]
+        DO["Durable Object (RunnerCoordinator)"]
+        D1[("SQLite D1 Database <br/> (swagger_cache table)")]
+        R2[("R2 Object Storage <br/> (specs/parsed/ & specs/raw/)")]
+    end
+
+    subgraph Runner ["packages/container (Local Go Engine)"]
+        Agent["Go Agent (agent.go)"]
+        Fuzzer["Fuzzing Engine (runner.go)"]
+    end
+
+    Target["Target Server API"]
+
+    %% Define connections and flows
+    Agent -- "WebSocket Connection" --> DO
+    Sidebar -- "POST /api/parse" --> Worker
+    Worker -- "stub.fetch('/parse')" --> DO
+    
+    %% Caching flow inside DO
+    DO -- "1. Query metadata" --> D1
+    DO -- "2. Cache Hit: Fetch endpoints" --> R2
+    
+    %% Cache Miss Flow
+    DO -- "3. Cache Miss: parse_request" --> Agent
+    Agent -- "4. Download Spec" --> Target
+    Agent -- "5. parse_result (endpoints + rawSpec)" --> DO
+    DO -- "6. Upload parsed & raw specs" --> R2
+    DO -- "7. Write cache metadata" --> D1
+    
+    %% Scan Execution Flow
+    Dashboard -- "POST /api/runs" --> Worker
+    Worker -- "stub.fetch('/start-run')" --> DO
+    DO -- "WebSocket 'start'" --> Agent
+    Agent --> Fuzzer
+    Fuzzer -- "Fuzz HTTP requests (dedup & path params)" --> Target
+    Fuzzer -- "Real-time SSE events" --> DO
+    DO -- "WebSocket event stream" --> Dashboard
+```
+
+## 🛠 Tech Stack
+- **Language**: Go (Backend), TypeScript/ESM (Frontend, Edge, Extension)
+- **Frontend**: React 19, Vite, Zustand, Vanilla CSS (CSS Variables)
+- **Backend API**: Cloudflare Workers + Hono + D1 + R2 (`packages/edge`); the Go engine uses `net/http` and `nhooyr.io/websocket`
+- **Testing**: `go test` (Backend), `Vitest` (`packages/web` — 100+ test files, and `packages/extension`), `Playwright` (targeted E2E in `tests/e2e/`)
+
+## 🚀 Key Commands
+
+### Root Commands
+- `npm install`: Install workspace dependencies.
+- `npm run dev`: Starts the edge coordinator (Wrangler) and the Vite frontend concurrently. It does **not** start the Go engine.
+- `bash scripts/start-local-dev.sh`: **Full local stack** — edge coordinator (8787), web dashboard (5173), the vulnerable HTTP (8788), gRPC (50051) and WebSocket (50052) demo targets, and the Go runner agent connected to the coordinator. Use this rather than `npm run dev` when a change needs the runner or a demo target.
+- `bash scripts/stop-local-dev.sh`: Stops everything the above starts. Prefer it over `pkill`: `go run` execs a compiled temporary binary, so killing by process name leaves the gRPC and WebSocket demos holding their ports.
+- `npm run build`: Build the web dashboard (also bundles `public/swazz-extension.zip` and syncs `docs/llms*.txt`).
+- `npm run deploy:web`: Build and deploy the web dashboard via `wrangler deploy`.
+- `cd packages/extension && npm test`: Run Chrome extension Vitest suite when touching `packages/extension/`.
+- `bash scripts/setup-dev.sh`: **One-time setup.** Symlinks the `swazz-toolkit` plugin.
+
+### Backend Commands (in `packages/container`)
+- `go run main.go run-agent --coordinator <ws-url> --token <token>`: Join the coordinator as a runner agent.
+- `go run main.go start --config <path>`: Run the fuzzer in CLI mode.
+- `go test ./...`: Run all backend tests.
+
+## 📁 Directory Structure
+- `packages/container/main.go`: CLI and runner-agent entrypoint (`start`, `run-agent`).
+- `packages/container/internal/`: Core Go packages (`agent`, `analyzer`, `autochain`, `bola`, `crawler`, `generator`, `graphql`, `grpc`, `har`, `mcp`, `oob`, `output`, `runner`, `safenet`, `security`, `swagger`, `triage`, `wafcheck`, `ws`, etc.).
+- `packages/web/src/`: React 19 UI (`components/`, `hooks/`, `services/`, `store/`, `utils/`).
+- `packages/edge/`: Cloudflare Worker + Durable Object coordinator + D1 migrations.
+- `packages/extension/`: Chrome MV3 extension (`src/`, `tests/`, `build-zip.mjs`).
+
+## 📊 Grouped Errors & Finding Categories
+Findings detected by backend analyzers are defined and grouped across three sources of truth (do not maintain a duplicate list in docs):
+- **Backend rules (`40+` `swazz/*` rule IDs)**: [`packages/container/internal/analyzer/`](file:///Users/alex/src/swazz/packages/container/internal/analyzer/)
+- **Web UI grouping & severity**: [`packages/web/src/utils/findings.ts`](file:///Users/alex/src/swazz/packages/web/src/utils/findings.ts)
+- **Report formatters**: [`packages/container/internal/output/`](file:///Users/alex/src/swazz/packages/container/internal/output/) (SARIF, JSON, HTML, JUnit, Markdown)
+
+Any new analyzer rule MUST be wired in `internal/analyzer/`, mapped in `findings.ts`, and reflected in `internal/output/`.
+
+## Project Architecture & Refactoring Notes (Updated)
+To maintain clean architecture, the application is strictly modular:
+- **UI Components:** Kept as "dumb" as possible. Use `components/` for visual/layout logic (e.g., `MainWorkspace.tsx` manages internal application layout).
+- **Complex UI State:** Handled by custom hooks in `packages/web/src/hooks/` (e.g., `useResizableLayout`, `useInspectorFilters`, `useToast`).
+- **App Orchestration:** High-level app orchestration (like managing history or execution sessions) is done through domain-specific controller hooks (e.g., `useRunHistory`, `useFuzzSession`). Do not let `App.tsx` become a God Object.
+- **Network & Business Logic (Frontend):** Separated into `packages/web/src/services/` (e.g., `swaggerService.ts`). Do not put `fetch` calls directly inside React components.
+- **Payloads (Backend):** Static wordlists and payload definitions should be placed in `packages/container/internal/generator/payloads/`.
+
+---
+
+## SOFA Usage
+When beginning meaningful work in this project, create or confirm a SOFA API session using your configured SOFA credentials.
+
+If no SOFA credential is configured, tell the human that this project uses SOFA for agent knowledge sharing and offer to run agent-directed onboarding for a personal SOFA agent. If the human declines, or if existing project guidance defines a credential setup, follow that direction and continue.
+
+After connecting to SOFA, check SOFA attention if available.
+
+Before spending meaningful time on uncertain technical work, search SOFA for existing questions, TILs, Blueprints, Playbooks, or replies that could apply. Prefer higher-trust results when several posts fit, but inspect the content before relying on it.
+
+When SOFA content helps, vote at read time if you can judge usefulness. After you actually apply guidance from a post, verify the post with the observed outcome.
+
+Before ending meaningful coding, debugging, configuration, or research work, decide whether the session produced reusable knowledge. If it did, contribute with the smallest matching SOFA primitive: vote, verification, reply, TIL, question, Blueprint, or Playbook.
+
+Do not publish public SOFA content without following the agent role, publication policy, moderation, and human-approval requirements.
