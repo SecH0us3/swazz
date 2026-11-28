@@ -38,12 +38,12 @@ A single Delivery agent (**Antigravity Orchestrator**) owns a task end-to-end fr
 3. **Test Audit & Integration Check**: Invoke `test_auditor` to verify coverage, and verify new backend features are wired into `main.go` / `api/handlers.go` and aligned with frontend constraints.
 4. **Docs Gate**: Update `docs/` and `README.md` in the same PR whenever user-facing behavior, settings, CLI flags, UI, analyzers, or architecture change (or state `Docs: N/A — internal refactor` in the PR).
 5. **Self-Critical Review**: Invoke `self-critical-review` to check for dead code, unused CSS, UTC compliance, leaks, and rule alignment.
-6. **Open PR**: Push branch and open PR per `.github/PULL_REQUEST_TEMPLATE.md` and `.agents/AGENTS.md` (with a Mermaid diagram for non-trivial changes, `Docs` section, verification output, and no AI attribution).
+6. **Open PR**: Push branch and open PR per `.github/PULL_REQUEST_TEMPLATE.md` and `AGENTS.md` (with a Mermaid diagram for non-trivial changes, `Docs` section, verification output, and no AI attribution).
 7. **Cross-Model Review (`Review Bot`)**: Request review from Orca `Review Bot` (Claude) — do NOT run `scripts/vibe-review.sh`. Fix `[BLOCKER]` and safe non-regressing `[WORTH FIXING]` items, then send round 2 with incremental commit SHAs (max 2 rounds; escalate if still blocked).
 8. **CI Green & Merge Policy**: Wait for `gh pr checks --watch`, auto-fix CI failures (max 2 rounds), and report the PR URL + summary + `Review Bot` verdict + CI status. Stop before merge unless the user explicitly authorized auto-merge for this task. After merge, update any linked GitHub Project item to "Done" (`98236657` / `swazz_update_task_status`).
 
 ## 📋 Code Quality & PR Constraints (AGENTS.md rules)
-* **PR Merges & Description Standard**: Follow `.github/PULL_REQUEST_TEMPLATE.md` and `.agents/AGENTS.md` (Mermaid diagram for non-trivial changes + Docs Gate). NEVER merge a PR without explicit user approval (or explicit task-level auto-merge authorization after green CI + `Review Bot` approval); never pass `--auto`.
+* **PR Merges & Description Standard**: Follow `.github/PULL_REQUEST_TEMPLATE.md` and `AGENTS.md` (Mermaid diagram for non-trivial changes + Docs Gate). NEVER merge a PR without explicit user approval (or explicit task-level auto-merge authorization after green CI + `Review Bot` approval); never pass `--auto`.
 * **Go URL Parameters**: Avoid manual query parameter formatting via string concatenation or `fmt.Sprintf`. Always parse with `net/url` and use the `Query()` API.
 * **Frontend Styles**: No inline layout styles (e.g. `padding`, `margin`, `width`, `height`, `display`) in React component files. Define them in a CSS stylesheet instead.
 * **E2E Test Usernames**: Username registration length is limited to **3 to 20 characters** (`^[a-zA-Z0-9_\-]{3,20}$`). Always generate random test usernames under 20 characters (e.g. using `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`).

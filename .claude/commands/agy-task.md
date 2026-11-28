@@ -41,7 +41,7 @@ Antigravity is driven headlessly through the `agy` CLI (`~/.local/bin/agy`), not
    ```
    Re-run step 4 after each round. After 3 rounds with issues still open, STOP — hand the remaining list to the user instead of continuing to loop.
 
-6. **Complete** *(Claude Code)*: Once the diff is clean, write `walkthrough.md` summarizing the changes and the review/fix history, and **STOP** for final human review. Only after explicit approval, set the task status to "Done" (option ID `98236657`, same field/project IDs as step 1) and merge/commit per the PR rules in `.agents/AGENTS.md` — never merge without explicit user approval.
+6. **Complete** *(Claude Code)*: Once the diff is clean, write `walkthrough.md` summarizing the changes and the review/fix history, and **STOP** for final human review. Only after explicit approval, set the task status to "Done" (option ID `98236657`, same field/project IDs as step 1) and merge/commit per the PR rules in `AGENTS.md` — never merge without explicit user approval.
 
 ## Safety notes
 - `--dangerously-skip-permissions` + `--sandbox` is what makes unattended delegation possible at all — every `agy` call in this flow can run arbitrary shell commands inside the sandbox with no one watching in real time. Keep both flags on every call, never widen `--add-dir` beyond this repo.
