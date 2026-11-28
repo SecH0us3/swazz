@@ -9310,6 +9310,10 @@ kbd {
     min-width: 0;
 }
 
+.history-page > * {
+    flex-shrink: 0;
+}
+
 .history-page-header {
     border-bottom: 1px solid var(--border-default);
     padding-bottom: var(--space-4);
@@ -9349,7 +9353,7 @@ kbd {
 }
 
 .history-empty-wrapper {
-    flex: 1;
+    flex: 1 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -9709,6 +9713,7 @@ kbd {
 }
 
 .history-table-card {
+    flex-shrink: 0;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
     overflow-x: auto;

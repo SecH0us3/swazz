@@ -41,7 +41,7 @@ import { matchesFinding } from './utils/findings.js';
 import { useWebMcp } from './hooks/useWebMcp.js';
 import { scheduledFailureIssue } from './utils/scheduledFailures.js';
 import { UNKNOWN_FAILURE } from './services/runStream.js';
-import { fetchScansPage, fetchOlderScans, parseServerTimestamp, serverScanToScanRun } from './services/scansService.js';
+import { fetchScansPage, fetchOlderScans, parseServerTimestamp, reconcileServerScan } from './services/scansService.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -355,13 +355,9 @@ export default function App() {
             for (const s of scans) {
                 if (!active) return;
                 const localRun = runsRef.current.find((r: any) => r.id === s.id);
-                const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
-
-                const failureReason = s.status === 'failed' ? (s.failure_reason || UNKNOWN_FAILURE) : undefined;
-                const lacksReason = !!failureReason && localRun?.failureReason !== failureReason;
-                if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer) || lacksReason) {
-                    const scanRun: ScanRun = serverScanToScanRun(s);
-                    await saveRun(localRun && localRun.completedAt > 0 ? { ...localRun, failureReason } : scanRun);
+                const updated = reconcileServerScan(s, localRun);
+                if (updated) {
+                    await saveRun(updated);
                 }
             }
         };

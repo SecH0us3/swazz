@@ -95,6 +95,7 @@ describe('scan list', () => {
     await seedScan('filter-p', 'f2', '2026-11-01 23:59:59', 'completed', 'https://staging.example.com/100%_test\\path');
     await seedScan('filter-p', 'f3', '2026-11-02 00:00:00', 'completed', 'https://api.example.com/v2');
     await seedScan('filter-p', 'f4', '2026-11-03 12:00:00', 'completed', 'https://other.service.io');
+    await seedScan('filter-p', 'f5', '2026-11-03 13:00:00', 'completed', 'https://ÄPI.example.com/über');
     await seedScan('filter-other', 'fx', '2026-11-01 12:00:00', 'completed', 'https://api.example.com/secret');
 
     const repo = new ScansRepository(env);
@@ -109,6 +110,14 @@ describe('scan list', () => {
     // Case-insensitive target_url substring match, isolated to filter-p (fx from filter-other excluded)
     const byUrl = await repo.getScans('filter-p', 50, undefined, { targetUrl: 'API.EXAMPLE.COM' });
     expect(byUrl.scans.map(s => s.id)).toEqual(['f3', 'f1']);
+
+    // Non-ASCII characters are preserved verbatim (matching SQLite LOWER/LIKE ASCII-only folding)
+    const nonAsciiUpper = await repo.getScans('filter-p', 50, undefined, { targetUrl: 'ÄPI' });
+    expect(nonAsciiUpper.scans.map(s => s.id)).toEqual(['f5']);
+    const nonAsciiMixed = await repo.getScans('filter-p', 50, undefined, { targetUrl: 'Äpi.Example.COM/über' });
+    expect(nonAsciiMixed.scans.map(s => s.id)).toEqual(['f5']);
+    const nonAsciiLower = await repo.getScans('filter-p', 50, undefined, { targetUrl: 'äpi' });
+    expect(nonAsciiLower.scans.map(s => s.id)).toEqual([]);
 
     // Escapes %, _, and \ literally rather than matching wildcards
     const literalWildcards = await repo.getScans('filter-p', 50, undefined, { targetUrl: '100%_test\\path' });

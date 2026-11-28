@@ -118,7 +118,7 @@ describe('ScansRepository Unit Tests', () => {
       'p-1',
       20,
       { createdAt: '2026-10-03 00:00:00', id: 's-9' },
-      { from: '2026-10-01 00:00:00', to: '2026-10-05 23:59:59', targetUrl: 'API_%\\v1' }
+      { from: '2026-10-01 00:00:00', to: '2026-10-05 23:59:59', targetUrl: 'ÄPI_%\\v1' }
     );
     const sql = mockPrepare.mock.calls.at(-1)[0];
     expect(sql).toContain("WHERE project_id = ? AND created_at >= ? AND created_at <= ? AND LOWER(target_url) LIKE ? ESCAPE '\\' AND (created_at, id) < (?, ?)");
@@ -126,7 +126,7 @@ describe('ScansRepository Unit Tests', () => {
       'p-1',
       '2026-10-01 00:00:00',
       '2026-10-05 23:59:59',
-      '%api\\_\\%\\\\v1%',
+      '%Äpi\\_\\%\\\\v1%',
       '2026-10-03 00:00:00',
       's-9',
       21

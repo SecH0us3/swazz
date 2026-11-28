@@ -9,6 +9,7 @@ import {
     fetchOlderScans,
     parseServerTimestamp,
     serverScanToScanRun,
+    reconcileServerScan,
     MAX_SCAN_PAGES,
     SCANS_PAGE_SIZE,
 } from './scansService';
@@ -110,6 +111,39 @@ describe('parseServerTimestamp & serverScanToScanRun', () => {
         });
         expect(badStats.stats).toBeNull();
         expect(badStats.completedAt).toBe(0);
+    });
+
+    it('reconcileServerScan migrates drifted local startedAt/completedAt timestamps to UTC while preserving local stats', () => {
+        const serverScan = {
+            id: 'scan-1',
+            project_id: 'p1',
+            target_url: 'https://api.example.com',
+            status: 'completed',
+            created_at: '2026-10-01 10:00:00',
+            completed_at: '2026-10-01 10:05:00',
+            summary_stats: null,
+        };
+        const utcStart = Date.UTC(2026, 9, 1, 10, 0, 0);
+        const utcEnd = Date.UTC(2026, 9, 1, 10, 5, 0);
+
+        // Cached run saved previously with a +2h local-timezone drift
+        const cachedDrifted = {
+            id: 'scan-1',
+            projectId: 'p1',
+            baseUrl: 'https://api.example.com',
+            startedAt: utcStart - 2 * 3600_000,
+            completedAt: utcEnd - 2 * 3600_000,
+            stats: { totalRequests: 99, statusCounts: { '200': 99 } } as any,
+        };
+
+        const migrated = reconcileServerScan(serverScan, cachedDrifted);
+        expect(migrated).not.toBeNull();
+        expect(migrated?.startedAt).toBe(utcStart);
+        expect(migrated?.completedAt).toBe(utcEnd);
+        expect(migrated?.stats).toEqual(cachedDrifted.stats);
+
+        // Already synchronized run needs no IndexedDB write
+        expect(reconcileServerScan(serverScan, migrated!)).toBeNull();
     });
 });
 

@@ -446,10 +446,16 @@ export function HistoryPage({
                                                                 id={`select-run-${r.id}`}
                                                                 type="checkbox"
                                                                 className="premium-checkbox"
-                                                                checked={selectedIds.includes(r.id)}
-                                                                disabled={selectedIds.length >= 2 && !selectedIds.includes(r.id)}
-                                                                aria-label={`Select scan ${r.baseUrl || r.id} from ${formatDate(r.startedAt)}`}
+                                                                checked={existsLocally && selectedIds.includes(r.id)}
+                                                                disabled={!existsLocally || (selectedIds.length >= 2 && !selectedIds.includes(r.id))}
+                                                                title={!existsLocally ? 'Comparison requires locally synced scan results' : undefined}
+                                                                aria-label={
+                                                                    !existsLocally
+                                                                        ? `Cannot compare archived scan ${r.baseUrl || r.id}: local scan data not cached`
+                                                                        : `Select scan ${r.baseUrl || r.id} from ${formatDate(r.startedAt)}`
+                                                                }
                                                                 onChange={() => {
+                                                                    if (!existsLocally) return;
                                                                     setSelectedIds(prev =>
                                                                         prev.includes(r.id)
                                                                             ? prev.filter(id => id !== r.id)
@@ -634,8 +640,9 @@ export function HistoryPage({
                                     showToast(gateCloudHistory.lockMessage, 'error');
                                     return;
                                 }
-                                const runA = filteredRuns.find(r => r.id === selectedIds[0]) ?? runs.find(r => r.id === selectedIds[0]);
-                                const runB = filteredRuns.find(r => r.id === selectedIds[1]) ?? runs.find(r => r.id === selectedIds[1]);
+                                const runA = runs.find(r => r.id === selectedIds[0]);
+                                const runB = runs.find(r => r.id === selectedIds[1]);
+                                if (!runA || !runB) return;
                                 const timeA = runA?.startedAt || 0;
                                 const timeB = runB?.startedAt || 0;
                                 const sortedIds = timeA <= timeB

@@ -378,5 +378,15 @@ describe('HistoryPage', () => {
         // Clicking Load Run on a server-only scan passes the scan object fallback
         fireEvent.click(screen.getAllByRole('button', { name: 'Load Run' })[0]);
         expect(p.onLoadRun).toHaveBeenCalledWith('srv-1', expect.objectContaining({ id: 'srv-1', baseUrl: 'https://archive.example.com/v1' }));
+
+        // Server-only scans without local cached results cannot be selected for Compare
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes).toHaveLength(2);
+        for (const cb of checkboxes) {
+            expect(cb).toBeDisabled();
+            expect(cb).toHaveAttribute('title', 'Comparison requires locally synced scan results');
+            expect(cb).toHaveAttribute('aria-label', expect.stringMatching(/Cannot compare archived scan/i));
+        }
+        expect(screen.queryByText(/scans selected for comparison/)).not.toBeInTheDocument();
     });
 });

@@ -78,6 +78,46 @@ export function serverScanToScanRun(s: any): ScanRun {
     };
 }
 
+/**
+ * Reconciles a server scan row against a cached local IndexedDB ScanRun.
+ * Returns the updated ScanRun to persist, or null when local state is already current.
+ * Migrates previously cached runs whose startedAt/completedAt drifted from UTC parsing.
+ */
+export function reconcileServerScan(s: any, localRun: ScanRun | undefined): ScanRun | null {
+    const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
+    const serverStartedAt = parseServerTimestamp(s.created_at);
+    const serverCompletedAt = parseServerTimestamp(s.completed_at);
+    const failureReason = s.status === 'failed' ? (s.failure_reason || UNKNOWN_FAILURE) : undefined;
+
+    if (!localRun) {
+        return serverScanToScanRun(s);
+    }
+
+    const justCompleted = localRun.completedAt === 0 && isCompletedOnServer;
+    const lacksReason = !!failureReason && localRun.failureReason !== failureReason;
+    const startedAtDrifted = serverStartedAt !== null && localRun.startedAt !== serverStartedAt;
+    const completedAtDrifted = isCompletedOnServer && serverCompletedAt !== null && localRun.completedAt !== serverCompletedAt;
+
+    if (!justCompleted && !lacksReason && !startedAtDrifted && !completedAtDrifted) {
+        return null;
+    }
+
+    if (justCompleted) {
+        const fresh = serverScanToScanRun(s);
+        return {
+            ...fresh,
+            stats: fresh.stats ?? localRun.stats,
+        };
+    }
+
+    return {
+        ...localRun,
+        ...(serverStartedAt !== null ? { startedAt: serverStartedAt } : {}),
+        ...(isCompletedOnServer && serverCompletedAt !== null ? { completedAt: serverCompletedAt } : {}),
+        ...(failureReason ? { failureReason } : {}),
+    };
+}
+
 /** One page of a project's scans, or with active its scans that have not ended. */
 export async function fetchScansPage(
     token: string,

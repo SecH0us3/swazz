@@ -91,14 +91,22 @@ export function localDateEndIso(dateStr: string): string | undefined {
     return ms === null ? undefined : new Date(ms).toISOString();
 }
 
+/**
+ * Folds ASCII uppercase letters (A-Z) to lowercase (a-z) to match SQLite LOWER() semantics
+ * used by GET /api/scans so client and server Target Base URL filtering behave identically.
+ */
+export function toAsciiLowerCase(value: string): string {
+    return value.replace(/[A-Z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 32));
+}
+
 /** Checks whether a ScanRun matches the Target Base URL substring and inclusive local date range. */
 export function matchesHistoryFilters(
     run: ScanRun,
     criteria: { targetUrl: string; dateFrom: string; dateTo: string }
 ): boolean {
-    const needle = criteria.targetUrl.trim().toLowerCase();
+    const needle = toAsciiLowerCase(criteria.targetUrl.trim());
     if (needle) {
-        const haystack = (run.baseUrl || '').toLowerCase();
+        const haystack = toAsciiLowerCase(run.baseUrl || '');
         if (!haystack.includes(needle)) return false;
     }
 
@@ -219,7 +227,8 @@ export function useHistoryFilters({ runs, liveRunId, projectId, token }: UseHist
 
     const hasActiveFilters = Boolean(searchQuery.trim() || dateFrom || dateTo);
     const hasDebouncedFilters = Boolean(debouncedSearch.trim() || dateFrom || dateTo);
-    const activePreset = useMemo(() => detectActivePreset(dateFrom, dateTo), [dateFrom, dateTo]);
+    // Compute directly (no useMemo) so activePreset stays accurate if the tab remains open past midnight.
+    const activePreset = detectActivePreset(dateFrom, dateTo);
 
     // Sync filter state to URL query params.
     useEffect(() => {
@@ -236,12 +245,12 @@ export function useHistoryFilters({ runs, liveRunId, projectId, token }: UseHist
     useEffect(() => {
         loadMoreAbortRef.current?.abort();
         loadMoreAbortRef.current = null;
+        setIsLoadingMoreServer(false);
 
         if (!token || !projectId || !hasDebouncedFilters || dateRangeError) {
             setServerRuns(null);
             setServerNextCursor(undefined);
             setIsLoadingServer(false);
-            setIsLoadingMoreServer(false);
             setServerError(null);
             return;
         }
@@ -275,6 +284,7 @@ export function useHistoryFilters({ runs, liveRunId, projectId, token }: UseHist
             controller.abort();
             loadMoreAbortRef.current?.abort();
             loadMoreAbortRef.current = null;
+            setIsLoadingMoreServer(false);
         };
     }, [token, projectId, hasDebouncedFilters, debouncedSearch, dateFrom, dateTo, dateRangeError]);
 
@@ -314,13 +324,15 @@ export function useHistoryFilters({ runs, liveRunId, projectId, token }: UseHist
             if (controller.signal.aborted || err?.name === 'AbortError') return;
             setServerError('Failed to load older matching scans from server.');
         } finally {
-            if (!controller.signal.aborted) {
+            if (loadMoreAbortRef.current === controller) {
+                loadMoreAbortRef.current = null;
                 setIsLoadingMoreServer(false);
             }
         }
     }, [token, projectId, serverNextCursor, isLoadingMoreServer, dateRangeError, dateFrom, dateTo, debouncedSearch]);
 
-    // Merge server-filtered results with matching local runs (e.g. CLI imports or richer local stats).
+    // Merge server-filtered results with matching local runs (preserving richer local stats and
+    // newly created/completed scans not yet present in the last server response).
     const filteredRuns = useMemo(() => {
         if (dateRangeError) return [];
         if (!hasActiveFilters) return runs;
@@ -333,19 +345,24 @@ export function useHistoryFilters({ runs, liveRunId, projectId, token }: UseHist
 
             for (const sRun of serverRuns) {
                 const local = localById.get(sRun.id);
-                const candidate = local && local.stats ? { ...sRun, stats: local.stats } : sRun;
+                const candidate = local
+                    ? {
+                        ...sRun,
+                        ...(local.stats ? { stats: local.stats } : {}),
+                        ...(sRun.completedAt === 0 && local.completedAt > 0 ? { completedAt: local.completedAt } : {}),
+                    }
+                    : sRun;
                 // Apply immediate searchQuery check in case user typed since debouncedSearch fired
                 if (matchesHistoryFilters(candidate, criteria)) {
                     mergedById.set(candidate.id, candidate);
                 }
             }
 
-            // Preserve locally imported CLI runs or active live runs that match the filters
+            // Include all matching local runs (CLI imports, active runs, and freshly completed runs)
+            // that are not yet in serverRuns, deduplicated by id.
             for (const localRun of runs) {
-                if (!mergedById.has(localRun.id) && (localRun.id.startsWith('cli-') || localRun.id === liveRunId)) {
-                    if (matchesHistoryFilters(localRun, criteria)) {
-                        mergedById.set(localRun.id, localRun);
-                    }
+                if (!mergedById.has(localRun.id) && matchesHistoryFilters(localRun, criteria)) {
+                    mergedById.set(localRun.id, localRun);
                 }
             }
 
@@ -353,7 +370,7 @@ export function useHistoryFilters({ runs, liveRunId, projectId, token }: UseHist
         }
 
         return runs.filter((r) => matchesHistoryFilters(r, criteria));
-    }, [runs, serverRuns, hasActiveFilters, dateRangeError, searchQuery, dateFrom, dateTo, liveRunId]);
+    }, [runs, serverRuns, hasActiveFilters, dateRangeError, searchQuery, dateFrom, dateTo]);
 
     const activeRuns = useMemo(
         () => filteredRuns.filter((r) => r.completedAt === 0 && r.id === liveRunId),

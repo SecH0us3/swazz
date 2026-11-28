@@ -34,6 +34,14 @@ export function escapeLikePattern(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
+/**
+ * Folds ASCII uppercase letters (A-Z) to lowercase (a-z), matching SQLite LOWER() semantics so
+ * non-ASCII characters (e.g. Ä) are not folded on the query side while left untouched by SQLite.
+ */
+export function toAsciiLowerCase(value: string): string {
+  return value.replace(/[A-Z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 32));
+}
+
 // The scan list leaves out what only one scan's page needs and can be large (the WAF patch report,
 // the resume checkpoint).
 const SCAN_LIST_COLUMNS = 'id, project_id, target_url, profile, status, summary_stats, report_url, is_encrypted, ' +
@@ -288,7 +296,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     if (activeFilters?.from) params.push(activeFilters.from);
     if (activeFilters?.to) params.push(activeFilters.to);
     if (activeFilters?.targetUrl) {
-      params.push(`%${escapeLikePattern(activeFilters.targetUrl.toLowerCase())}%`);
+      params.push(`%${escapeLikePattern(toAsciiLowerCase(activeFilters.targetUrl))}%`);
     }
     if (before) params.push(before.createdAt, before.id);
     // One more than the page, to tell whether another one follows.
