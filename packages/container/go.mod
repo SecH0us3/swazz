@@ -11,7 +11,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/securego/gosec/v2 v2.30.0
 	github.com/stretchr/testify v1.12.1
-	github.com/tidwall/gjson v1.20.5
+	github.com/tidwall/gjson v1.20.6
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.63.0
 	golang.org/x/term v0.48.0
